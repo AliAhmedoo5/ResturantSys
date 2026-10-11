@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 
 /// Typography hierarchy and text styles for the Warm Counter theme.

@@ -16,7 +16,7 @@ abstract final class WarmCounterTheme {
   // Light Mode Theme Builder
   // ---------------------------------------------------------------------------
   static ThemeData get lightTheme {
-    final colorScheme = const ColorScheme(
+    const colorScheme = ColorScheme(
       brightness: Brightness.light,
       primary: WarmCounterColors.lightPrimaryAction,
       onPrimary: WarmCounterColors.lightTextOnPrimary,
@@ -200,7 +200,7 @@ abstract final class WarmCounterTheme {
           color: WarmCounterColors.lightSecondaryText,
         ),
       ),
-      dialogTheme: const DialogTheme(
+      dialogTheme: const DialogThemeData(
         backgroundColor: WarmCounterColors.lightCardBackground,
         elevation: 0.0,
         shape: RoundedRectangleBorder(
@@ -223,7 +223,7 @@ abstract final class WarmCounterTheme {
   // Dark Mode Theme Builder
   // ---------------------------------------------------------------------------
   static ThemeData get darkTheme {
-    final colorScheme = const ColorScheme(
+    const colorScheme = ColorScheme(
       brightness: Brightness.dark,
       primary: WarmCounterColors.darkPrimaryAction,
       onPrimary: WarmCounterColors.darkTextOnPrimary,
@@ -407,7 +407,7 @@ abstract final class WarmCounterTheme {
           color: WarmCounterColors.darkSecondaryText,
         ),
       ),
-      dialogTheme: const DialogTheme(
+      dialogTheme: const DialogThemeData(
         backgroundColor: WarmCounterColors.darkCardBackground,
         elevation: 0.0,
         shape: RoundedRectangleBorder(

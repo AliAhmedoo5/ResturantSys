@@ -32,7 +32,7 @@ void main() {
 
     testWidgets('AppHeader displays active user name and department with 1-tap lock button', (tester) async {
       bool lockClicked = false;
-      final staff = Staff(
+      const staff = Staff(
         id: 1,
         name: 'Zeeshan Khan',
         departmentId: 1,
@@ -47,7 +47,7 @@ void main() {
           theme: WarmCounterTheme.lightTheme,
           home: Scaffold(
             appBar: PreferredSize(
-              preferredSize: Size.fromHeight(64),
+              preferredSize: const Size.fromHeight(64),
               child: AppHeader(
                 activeStaff: staff,
                 onLock: () => lockClicked = true,
@@ -79,7 +79,7 @@ void main() {
             session: session,
             onAuthenticatePin: (pin) async {
               if (pin == '1234') {
-                return Staff(
+                return const Staff(
                   id: 2,
                   name: 'Manager Ali',
                   departmentId: 3,

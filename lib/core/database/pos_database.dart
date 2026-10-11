@@ -81,8 +81,6 @@ class PosDatabase {
   }
 
   Future<void> _onCreate(Database db, int version) async {
-    final now = DateTime.now().toUtc().toIso8601String();
-
     await db.execute('''
       CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableDepartments} (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

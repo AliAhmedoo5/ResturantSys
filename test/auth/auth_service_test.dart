@@ -111,7 +111,7 @@ void main() {
       expect(session.isAuthenticated, isFalse);
       expect(session.currentStaff, isNull);
 
-      final dummyStaff = Staff(
+      const dummyStaff = Staff(
         id: 1,
         name: 'Test Staff',
         departmentId: 1,

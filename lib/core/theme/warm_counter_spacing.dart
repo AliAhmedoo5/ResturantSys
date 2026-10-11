@@ -3,8 +3,9 @@ import 'package:flutter/material.dart';
 /// Spacing, dimension, corner radii, and touch target tokens for the Warm Counter theme.
 abstract final class WarmCounterSpacing {
   // ---------------------------------------------------------------------------
-  // Base Spacing Scale (8, 12, 16, 24, 32px)
+  // Base Spacing Scale (4, 8, 12, 16, 24, 32px)
   // ---------------------------------------------------------------------------
+  static const double space4 = 4.0;
   static const double space8 = 8.0;
   static const double space12 = 12.0;
   static const double space16 = 16.0;

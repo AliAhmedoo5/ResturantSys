@@ -1,4 +1,6 @@
 /// Barrel export for the Warm Counter restaurant design system.
+library;
+
 export 'warm_counter_colors.dart';
 export 'warm_counter_color_tokens.dart';
 export 'warm_counter_spacing.dart';

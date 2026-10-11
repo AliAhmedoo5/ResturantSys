@@ -44,7 +44,7 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
               Container(
                 width: 38,
                 height: 38,
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   color: WarmCounterColors.lightPrimaryAction,
                   borderRadius: WarmCounterSpacing.controlBorderRadius,
                 ),
@@ -121,7 +121,7 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
                   ),
                   Text(
                     '$department • $roleName',
-                    style: WarmCounterTypography.caption.copyWith(
+                    style: WarmCounterTypography.secondaryLabel.copyWith(
                       color: WarmCounterColors.lightSecondaryText,
                       height: 1.1,
                     ),

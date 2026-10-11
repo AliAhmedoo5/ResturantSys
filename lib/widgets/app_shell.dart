@@ -88,7 +88,7 @@ class AppShell extends StatelessWidget {
               children: [
                 Container(
                   padding: const EdgeInsets.all(WarmCounterSpacing.space12),
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     color: WarmCounterColors.lightActiveNavHighlight,
                     borderRadius: WarmCounterSpacing.controlBorderRadius,
                   ),
