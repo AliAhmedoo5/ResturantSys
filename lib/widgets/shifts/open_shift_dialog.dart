@@ -136,9 +136,9 @@ class _OpenShiftDialogState extends State<OpenShiftDialog> {
                 errorText: _errorMessage,
                 filled: true,
                 fillColor: WarmCounterColors.lightPageBackground,
-                border: OutlineInputBorder(
+                border: const OutlineInputBorder(
                   borderRadius: WarmCounterSpacing.controlBorderRadius,
-                  borderSide: const BorderSide(color: WarmCounterColors.lightBorder),
+                  borderSide: BorderSide(color: WarmCounterColors.lightBorder),
                 ),
               ),
             ),

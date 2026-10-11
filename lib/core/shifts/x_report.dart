@@ -58,7 +58,7 @@ class XReport {
     const subDivider = '------------------------------------------';
 
     void line(String left, String right) {
-      final totalWidth = 42;
+      const totalWidth = 42;
       final spaceCount = totalWidth - left.length - right.length;
       if (spaceCount > 0) {
         buffer.writeln('$left${' ' * spaceCount}$right');

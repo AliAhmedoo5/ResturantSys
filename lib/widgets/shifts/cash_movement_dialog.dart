@@ -234,14 +234,14 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
             const SizedBox(height: WarmCounterSpacing.space8),
             DropdownButtonFormField<String>(
               key: const ValueKey('cash_movement_category_dropdown'),
-              value: _selectedCategory,
-              decoration: InputDecoration(
+              initialValue: _selectedCategory,
+              decoration: const InputDecoration(
                 filled: true,
                 fillColor: WarmCounterColors.lightPageBackground,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 border: OutlineInputBorder(
                   borderRadius: WarmCounterSpacing.controlBorderRadius,
-                  borderSide: const BorderSide(color: WarmCounterColors.lightBorder),
+                  borderSide: BorderSide(color: WarmCounterColors.lightBorder),
                 ),
               ),
               items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
@@ -268,9 +268,9 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
                 errorText: _amountError,
                 filled: true,
                 fillColor: WarmCounterColors.lightPageBackground,
-                border: OutlineInputBorder(
+                border: const OutlineInputBorder(
                   borderRadius: WarmCounterSpacing.controlBorderRadius,
-                  borderSide: const BorderSide(color: WarmCounterColors.lightBorder),
+                  borderSide: BorderSide(color: WarmCounterColors.lightBorder),
                 ),
               ),
             ),
@@ -291,9 +291,9 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
                 errorText: _notesError,
                 filled: true,
                 fillColor: WarmCounterColors.lightPageBackground,
-                border: OutlineInputBorder(
+                border: const OutlineInputBorder(
                   borderRadius: WarmCounterSpacing.controlBorderRadius,
-                  borderSide: const BorderSide(color: WarmCounterColors.lightBorder),
+                  borderSide: BorderSide(color: WarmCounterColors.lightBorder),
                 ),
               ),
             ),

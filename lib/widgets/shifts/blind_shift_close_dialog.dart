@@ -292,14 +292,14 @@ class _BlindShiftCloseDialogState extends State<BlindShiftCloseDialog> {
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           style: WarmCounterTypography.tabularNumbers.copyWith(fontSize: 22, fontWeight: FontWeight.bold),
           onChanged: (_) => setState(() {}),
-          decoration: InputDecoration(
+          decoration: const InputDecoration(
             prefixText: 'Rs ',
             hintText: '0.00',
             filled: true,
             fillColor: WarmCounterColors.lightPageBackground,
             border: OutlineInputBorder(
               borderRadius: WarmCounterSpacing.controlBorderRadius,
-              borderSide: const BorderSide(color: WarmCounterColors.lightBorder),
+              borderSide: BorderSide(color: WarmCounterColors.lightBorder),
             ),
           ),
         ),

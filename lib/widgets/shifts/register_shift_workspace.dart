@@ -67,7 +67,7 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
   }
 
   void _showOpenBusinessDayDialog() {
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (ctx) => OpenBusinessDayDialog(
         supervisorName: widget.currentStaff.name,
@@ -128,7 +128,7 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
   }
 
   void _showOpenShiftDialog() {
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (ctx) => OpenShiftDialog(
         onOpenShift: (float) async {
@@ -146,7 +146,7 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
     final shift = _activeShift;
     if (shift == null) return;
 
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (ctx) => CashMovementDialog(
         onRecordMovement: (type, amount, category, notes) async {
@@ -171,7 +171,7 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
     final report = await widget.controller.generateXReport(shift.id);
     if (!mounted) return;
 
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (ctx) => XReportDialog(report: report),
     );
@@ -181,7 +181,7 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
     final shift = _activeShift;
     if (shift == null) return;
 
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (ctx) => BlindShiftCloseDialog(
         shiftId: shift.id,
@@ -196,7 +196,7 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
           if (mounted) {
             final report = await widget.controller.generateXReport(closedShift.id);
             if (mounted) {
-              showDialog(
+              showDialog<void>(
                 context: context,
                 builder: (ctx) => XReportDialog(report: report),
               );
@@ -211,7 +211,7 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
     final flagged = await widget.controller.getFlaggedShifts();
     if (!mounted) return;
 
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (ctx) => DiscrepancyReviewDialog(
         flaggedShifts: flagged,
@@ -406,7 +406,7 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text('Opening Float', style: WarmCounterTypography.caption),
+                      const Text('Opening Float', style: WarmCounterTypography.caption),
                       Text(
                         'Rs ${_currencyFormat.format(shift.openingFloat)}',
                         style: WarmCounterTypography.tabularNumbers.copyWith(

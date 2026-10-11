@@ -49,9 +49,9 @@ class BusinessDayBar extends StatelessWidget {
         horizontal: WarmCounterSpacing.space16,
         vertical: WarmCounterSpacing.space8,
       ),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: WarmCounterColors.lightCardBackground,
-        border: const Border(
+        border: Border(
           bottom: BorderSide(color: WarmCounterColors.lightBorder, width: 1.0),
         ),
       ),
