@@ -298,7 +298,7 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
           ),
           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
-        const SizedBox(height: WarmCounterSpacing.space20),
+        const SizedBox(height: WarmCounterSpacing.space16),
 
         // Large Return Change Display
         Container(
@@ -310,8 +310,8 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
             borderRadius: WarmCounterSpacing.panelBorderRadius,
             border: Border.all(
               color: isShort
-                  ? WarmCounterColors.lightWarningStatus
-                  : WarmCounterColors.lightSuccessStatus,
+                  ? WarmCounterColors.lightWarning
+                  : WarmCounterColors.lightPrimaryAction,
               width: 1.5,
             ),
           ),
@@ -425,7 +425,7 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
         const SizedBox(height: WarmCounterSpacing.space12),
 
         // Cash Portion
-        Text('1. Cash Portion Amount:', style: WarmCounterTypography.secondaryLabel),
+        const Text('1. Cash Portion Amount:', style: WarmCounterTypography.secondaryLabel),
         const SizedBox(height: 4),
         TextField(
           key: const ValueKey('split_cash_input'),
@@ -440,7 +440,7 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('2. Electronic Portion Method:', style: WarmCounterTypography.secondaryLabel),
+            const Text('2. Electronic Portion Method:', style: WarmCounterTypography.secondaryLabel),
             DropdownButton<PaymentMethod>(
               value: _splitElectronicMethod,
               items: const [

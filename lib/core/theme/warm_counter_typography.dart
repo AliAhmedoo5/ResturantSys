@@ -106,6 +106,9 @@ abstract final class WarmCounterTypography {
   /// Tabular numbers text style for aligned monetary and quantity figures.
   static const TextStyle tabularNumbers = tableAmount;
 
+  /// Tabular price text style alias.
+  static const TextStyle tabularPrice = tabularNumbers;
+
   /// Secondary metadata and small caption style.
   static const TextStyle caption = secondaryLabel;
 

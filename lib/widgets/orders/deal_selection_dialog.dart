@@ -4,7 +4,6 @@ import '../../core/catalog/menu_item.dart';
 import '../../core/orders/cart_item.dart';
 import '../../core/orders/deal.dart';
 import '../../core/orders/deal_item.dart';
-import '../../core/orders/deal_item_option.dart';
 import '../../core/theme/theme.dart';
 
 /// Fast 1-tap modal for configuring customer choices and upgrades within a Deal.
