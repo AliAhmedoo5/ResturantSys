@@ -80,7 +80,7 @@ class _DealSelectionDialogState extends State<DealSelectionDialog> {
       shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.panelBorderRadius),
       backgroundColor: WarmCounterColors.lightCardBackground,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 580, maxHeight: 680),
+        constraints: const BoxConstraints(maxWidth: 600, maxHeight: 680),
         child: Padding(
           padding: const EdgeInsets.all(WarmCounterSpacing.space24),
           child: Column(
@@ -134,25 +134,28 @@ class _DealSelectionDialogState extends State<DealSelectionDialog> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Total Package Price:',
-                        style: WarmCounterTypography.secondaryLabel.copyWith(
-                          color: WarmCounterColors.lightSecondaryText,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Total Package Price:',
+                          style: WarmCounterTypography.secondaryLabel.copyWith(
+                            color: WarmCounterColors.lightSecondaryText,
+                          ),
                         ),
-                      ),
-                      Text(
-                        'Rs ${_currencyFormat.format(_currentTotalPrice)}',
-                        style: WarmCounterTypography.pageHeading.copyWith(
-                          fontSize: 22,
-                          color: WarmCounterColors.lightPrimaryAction,
-                          fontWeight: FontWeight.bold,
+                        Text(
+                          'Rs ${_currencyFormat.format(_currentTotalPrice)}',
+                          style: WarmCounterTypography.pageHeading.copyWith(
+                            fontSize: 22,
+                            color: WarmCounterColors.lightPrimaryAction,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
+                  const SizedBox(width: WarmCounterSpacing.space12),
                   ElevatedButton.icon(
                     key: const ValueKey('add_deal_to_order_button'),
                     icon: const Icon(Icons.check_circle_outline_rounded),

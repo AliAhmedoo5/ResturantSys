@@ -114,11 +114,13 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      'Grand Total Payable:',
-                      style: WarmCounterTypography.bodyMedium.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: WarmCounterColors.lightSecondaryText,
+                    Expanded(
+                      child: Text(
+                        'Grand Total Payable:',
+                        style: WarmCounterTypography.bodyMedium.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: WarmCounterColors.lightSecondaryText,
+                        ),
                       ),
                     ),
                     Text(

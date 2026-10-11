@@ -40,7 +40,7 @@ class _ModifierSelectionDialogState extends State<ModifierSelectionDialog> {
       shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.panelBorderRadius),
       backgroundColor: WarmCounterColors.lightCardBackground,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520, maxHeight: 620),
+        constraints: const BoxConstraints(maxWidth: 580, maxHeight: 620),
         child: Padding(
           padding: const EdgeInsets.all(WarmCounterSpacing.space24),
           child: Column(
@@ -130,15 +130,17 @@ class _ModifierSelectionDialogState extends State<ModifierSelectionDialog> {
                     child: const Text('Cancel'),
                   ),
                   const SizedBox(width: WarmCounterSpacing.space12),
-                  ElevatedButton.icon(
-                    key: const ValueKey('apply_modifiers_button'),
-                    icon: const Icon(Icons.check_rounded),
-                    label: const Text('Apply Customizations'),
-                    onPressed: _handleApply,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: WarmCounterColors.lightPrimaryAction,
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size(180, WarmCounterSpacing.touchTargetMin),
+                  Flexible(
+                    child: ElevatedButton.icon(
+                      key: const ValueKey('apply_modifiers_button'),
+                      icon: const Icon(Icons.check_rounded),
+                      label: const Text('Apply Customizations'),
+                      onPressed: _handleApply,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: WarmCounterColors.lightPrimaryAction,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(140, WarmCounterSpacing.touchTargetMin),
+                      ),
                     ),
                   ),
                 ],

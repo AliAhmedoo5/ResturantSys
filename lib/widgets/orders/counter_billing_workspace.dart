@@ -484,11 +484,15 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
         ),
 
         // Hotkey Tooltip Hint
-        Text(
-          '[Space] Tender | [Numpad Enter] Exact | [Esc] Clear',
-          style: WarmCounterTypography.caption.copyWith(
-            color: WarmCounterColors.lightSecondaryText,
-            fontWeight: FontWeight.w600,
+        Flexible(
+          child: Text(
+            '[Space] Tender | [Numpad Enter] Exact | [Esc] Clear',
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.end,
+            style: WarmCounterTypography.caption.copyWith(
+              color: WarmCounterColors.lightSecondaryText,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       ],
@@ -827,9 +831,11 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      'Grand Total:',
-                      style: WarmCounterTypography.pageHeading.copyWith(fontSize: 18),
+                    Expanded(
+                      child: Text(
+                        'Grand Total:',
+                        style: WarmCounterTypography.pageHeading.copyWith(fontSize: 18),
+                      ),
                     ),
                     Text(
                       'Rs ${_currencyFormat.format(totals.grandTotal)}',
@@ -988,7 +994,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(title, style: WarmCounterTypography.bodyMedium.copyWith(color: color)),
+          Expanded(child: Text(title, style: WarmCounterTypography.bodyMedium.copyWith(color: color))),
           Text(value, style: WarmCounterTypography.tabularPrice.copyWith(color: color)),
         ],
       ),
