@@ -71,19 +71,37 @@ void main() {
       expect(names, containsAll(['Front Counter', 'Kitchen', 'Management']));
     });
 
-    test('seeds initial Owner/Supervisor with valid 4-digit PIN hash', () async {
+    test('seeds initial staff accounts for Supervisor, Cashier, and Kitchen Cook', () async {
       final db = await posDb.initialize();
 
       final staffMembers = await db.query('staff');
-      expect(staffMembers, isNotEmpty);
+      expect(staffMembers.length, equals(3));
 
-      final supervisor = staffMembers.firstWhere(
-        (s) => s['role'] == 'SUPERVISOR' || s['role'] == 'OWNER',
+      final roles = staffMembers.map((s) => s['role']).toList();
+      expect(roles, containsAll(['SUPERVISOR', 'CASHIER', 'KITCHEN']));
+
+      for (final s in staffMembers) {
+        expect((s['pin_hash'] as String).length, equals(64));
+        expect(s['is_active'], equals(1));
+      }
+    });
+
+    test('enforces UNIQUE constraint on staff.pin_hash', () async {
+      final db = await posDb.initialize();
+      final existingStaff = await db.query('staff', limit: 1);
+      final existingHash = existingStaff.first['pin_hash'] as String;
+
+      expect(
+        () async => db.insert('staff', {
+          'name': 'Duplicate PIN Staff',
+          'department_id': 1,
+          'pin_hash': existingHash, // duplicate hash
+          'role': 'CASHIER',
+          'is_active': 1,
+          'created_at': '2026-10-11 12:00:00',
+        }),
+        throwsA(isA<DatabaseException>()),
       );
-      expect(supervisor['name'], isNotNull);
-      expect(supervisor['pin_hash'], isNotNull);
-      expect((supervisor['pin_hash'] as String).length, equals(64)); // SHA-256 hash length
-      expect(supervisor['is_active'], equals(1));
     });
 
     test('seeds default system settings and supports idempotent initialization', () async {

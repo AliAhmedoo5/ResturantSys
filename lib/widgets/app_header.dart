@@ -147,22 +147,20 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
         const SizedBox(width: WarmCounterSpacing.space12),
 
         // 1-Tap Lock Register Button
-        ElevatedButton.icon(
+        OutlinedButton.icon(
           key: const ValueKey('lock_register_button'),
           onPressed: onLock,
           icon: const Icon(Icons.lock_outline_rounded, size: 18),
           label: const Text('Lock Register'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: WarmCounterColors.lightDestructive.withValues(alpha: 0.1),
-            foregroundColor: WarmCounterColors.lightDestructive,
-            elevation: 0.0,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: WarmCounterColors.lightPrimaryText,
             minimumSize: const Size(120, WarmCounterSpacing.minTouchTargetSize),
+            side: const BorderSide(
+              color: WarmCounterColors.lightBorder,
+              width: 1.0,
+            ),
             shape: const RoundedRectangleBorder(
               borderRadius: WarmCounterSpacing.controlBorderRadius,
-              side: BorderSide(
-                color: WarmCounterColors.lightBorder,
-                width: 1.0,
-              ),
             ),
           ),
         ),

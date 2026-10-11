@@ -62,30 +62,34 @@ void main() {
       expect(await authService.authenticateWithPin(''), isNull);
     });
 
-    test('authenticates cashier and verifies cashier-specific capabilities', () async {
-      final db = await posDb.initialize();
-      // Insert a front counter cashier with PIN 2222
-      final deptResult = await db.query('departments', where: 'name = ?', whereArgs: ['Front Counter']);
-      final deptId = deptResult.first['id'] as int;
-
-      await db.insert('staff', {
-        'name': 'Hamza Cashier',
-        'department_id': deptId,
-        'pin_hash': PinHasher.hashPin('2222'),
-        'role': 'CASHIER',
-        'is_active': 1,
-        'created_at': DateTime.now().toUtc().toIso8601String(),
-      });
-
-      final staff = await authService.authenticateWithPin('2222');
+    test('authenticates default seeded cashier (PIN 1111) and verifies cashier capabilities', () async {
+      final staff = await authService.authenticateWithPin('1111');
       expect(staff, isNotNull);
-      expect(staff!.name, equals('Hamza Cashier'));
+      expect(staff!.name, equals(PosDatabaseConstants.defaultCashierName));
       expect(staff.role, equals(StaffRole.cashier));
       expect(staff.departmentName, equals('Front Counter'));
       expect(staff.canAccessRegister, isTrue);
       expect(staff.canAccessSupervisorPortal, isFalse);
       expect(staff.canAuthorizeOverrides, isFalse);
       expect(staff.canVoidOrders, isFalse);
+    });
+
+    test('authenticates default seeded kitchen cook (PIN 2222) and verifies capabilities', () async {
+      final staff = await authService.authenticateWithPin('2222');
+      expect(staff, isNotNull);
+      expect(staff!.name, equals(PosDatabaseConstants.defaultKitchenName));
+      expect(staff.role, equals(StaffRole.kitchen));
+      expect(staff.departmentName, equals('Kitchen'));
+      expect(staff.canAccessKitchen, isTrue);
+      expect(staff.canAccessRegister, isFalse);
+    });
+
+    test('authenticateAndLogin establishes active session on authService.session', () async {
+      expect(authService.session.isAuthenticated, isFalse);
+      final staff = await authService.authenticateAndLogin('1234');
+      expect(staff, isNotNull);
+      expect(authService.session.isAuthenticated, isTrue);
+      expect(authService.session.currentStaff?.id, equals(staff!.id));
     });
 
     test('rejects inactive staff even with correct PIN', () async {

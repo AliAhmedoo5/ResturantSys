@@ -107,6 +107,29 @@ class _PinLockScreenState extends State<PinLockScreen> {
     }
   }
 
+  static const Map<LogicalKeyboardKey, String> _digitKeyMap = {
+    LogicalKeyboardKey.digit0: '0',
+    LogicalKeyboardKey.numpad0: '0',
+    LogicalKeyboardKey.digit1: '1',
+    LogicalKeyboardKey.numpad1: '1',
+    LogicalKeyboardKey.digit2: '2',
+    LogicalKeyboardKey.numpad2: '2',
+    LogicalKeyboardKey.digit3: '3',
+    LogicalKeyboardKey.numpad3: '3',
+    LogicalKeyboardKey.digit4: '4',
+    LogicalKeyboardKey.numpad4: '4',
+    LogicalKeyboardKey.digit5: '5',
+    LogicalKeyboardKey.numpad5: '5',
+    LogicalKeyboardKey.digit6: '6',
+    LogicalKeyboardKey.numpad6: '6',
+    LogicalKeyboardKey.digit7: '7',
+    LogicalKeyboardKey.numpad7: '7',
+    LogicalKeyboardKey.digit8: '8',
+    LogicalKeyboardKey.numpad8: '8',
+    LogicalKeyboardKey.digit9: '9',
+    LogicalKeyboardKey.numpad9: '9',
+  };
+
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) {
       return KeyEventResult.ignored;
@@ -114,38 +137,13 @@ class _PinLockScreenState extends State<PinLockScreen> {
 
     final key = event.logicalKey;
 
-    // Physical numbers 0-9
-    if (key == LogicalKeyboardKey.digit0 || key == LogicalKeyboardKey.numpad0) {
-      _handleDigit('0');
+    final digit = _digitKeyMap[key];
+    if (digit != null) {
+      _handleDigit(digit);
       return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.digit1 || key == LogicalKeyboardKey.numpad1) {
-      _handleDigit('1');
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.digit2 || key == LogicalKeyboardKey.numpad2) {
-      _handleDigit('2');
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.digit3 || key == LogicalKeyboardKey.numpad3) {
-      _handleDigit('3');
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.digit4 || key == LogicalKeyboardKey.numpad4) {
-      _handleDigit('4');
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.digit5 || key == LogicalKeyboardKey.numpad5) {
-      _handleDigit('5');
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.digit6 || key == LogicalKeyboardKey.numpad6) {
-      _handleDigit('6');
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.digit7 || key == LogicalKeyboardKey.numpad7) {
-      _handleDigit('7');
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.digit8 || key == LogicalKeyboardKey.numpad8) {
-      _handleDigit('8');
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.digit9 || key == LogicalKeyboardKey.numpad9) {
-      _handleDigit('9');
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.backspace) {
+    }
+
+    if (key == LogicalKeyboardKey.backspace) {
       _handleBackspace();
       return KeyEventResult.handled;
     } else if (key == LogicalKeyboardKey.escape) {

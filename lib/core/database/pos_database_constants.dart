@@ -17,8 +17,16 @@ abstract final class PosDatabaseConstants {
     'Management',
   ];
 
-  // Default Initial Supervisor
+  // Default Initial Staff Accounts
   static const String defaultSupervisorName = 'Supervisor';
   static const String defaultSupervisorPin = '1234';
   static const String defaultSupervisorDepartment = 'Management';
+
+  static const String defaultCashierName = 'Counter Cashier';
+  static const String defaultCashierPin = '1111';
+  static const String defaultCashierDepartment = 'Front Counter';
+
+  static const String defaultKitchenName = 'Kitchen Cook';
+  static const String defaultKitchenPin = '2222';
+  static const String defaultKitchenDepartment = 'Kitchen';
 }

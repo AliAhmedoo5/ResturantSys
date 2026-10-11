@@ -94,7 +94,7 @@ class PosDatabase {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         department_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableDepartments}(id),
-        pin_hash TEXT NOT NULL,
+        pin_hash TEXT NOT NULL UNIQUE,
         role TEXT NOT NULL,
         is_active INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL
@@ -114,8 +114,14 @@ class PosDatabase {
     // Future schema migrations will go here
   }
 
+  static String _formatTimestamp(DateTime dt) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    return '${dt.year}-${twoDigits(dt.month)}-${twoDigits(dt.day)} '
+        '${twoDigits(dt.hour)}:${twoDigits(dt.minute)}:${twoDigits(dt.second)}';
+  }
+
   Future<void> _seedDefaults(Database db) async {
-    final now = DateTime.now().toUtc().toIso8601String();
+    final now = _formatTimestamp(DateTime.now());
 
     // 1. Seed departments idempotently
     for (final dept in PosDatabaseConstants.defaultDepartments) {
@@ -125,7 +131,7 @@ class PosDatabase {
       ''', [dept, now]);
     }
 
-    // 2. Seed initial Owner/Supervisor if no staff exist
+    // 2. Seed initial staff accounts if no staff exist (Supervisor, Cashier, Kitchen Cook)
     final staffCountResult = await db.rawQuery(
       'SELECT COUNT(*) as count FROM ${PosDatabaseConstants.tableStaff};',
     );
@@ -135,24 +141,40 @@ class PosDatabase {
         0;
 
     if (count == 0) {
-      final deptResult = await db.query(
-        PosDatabaseConstants.tableDepartments,
-        where: 'name = ?',
-        whereArgs: [PosDatabaseConstants.defaultSupervisorDepartment],
-        limit: 1,
-      );
+      final deptRows = await db.query(PosDatabaseConstants.tableDepartments);
+      final deptMap = {for (final row in deptRows) row['name'] as String: row['id'] as int};
 
-      final deptId = deptResult.isNotEmpty ? deptResult.first['id'] as int : 1;
-      final hashedPin = PinHasher.hashPin(PosDatabaseConstants.defaultSupervisorPin);
+      final staffSeeds = [
+        (
+          name: PosDatabaseConstants.defaultSupervisorName,
+          dept: PosDatabaseConstants.defaultSupervisorDepartment,
+          pin: PosDatabaseConstants.defaultSupervisorPin,
+          role: 'SUPERVISOR',
+        ),
+        (
+          name: PosDatabaseConstants.defaultCashierName,
+          dept: PosDatabaseConstants.defaultCashierDepartment,
+          pin: PosDatabaseConstants.defaultCashierPin,
+          role: 'CASHIER',
+        ),
+        (
+          name: PosDatabaseConstants.defaultKitchenName,
+          dept: PosDatabaseConstants.defaultKitchenDepartment,
+          pin: PosDatabaseConstants.defaultKitchenPin,
+          role: 'KITCHEN',
+        ),
+      ];
 
-      await db.insert(PosDatabaseConstants.tableStaff, {
-        'name': PosDatabaseConstants.defaultSupervisorName,
-        'department_id': deptId,
-        'pin_hash': hashedPin,
-        'role': 'SUPERVISOR',
-        'is_active': 1,
-        'created_at': now,
-      });
+      for (final seed in staffSeeds) {
+        final deptId = deptMap[seed.dept] ?? 1;
+        final hashedPin = PinHasher.hashPin(seed.pin);
+
+        await db.rawInsert('''
+          INSERT OR IGNORE INTO ${PosDatabaseConstants.tableStaff} 
+          (name, department_id, pin_hash, role, is_active, created_at)
+          VALUES (?, ?, ?, ?, 1, ?);
+        ''', [seed.name, deptId, hashedPin, seed.role, now]);
+      }
     }
 
     // 3. Seed default system settings

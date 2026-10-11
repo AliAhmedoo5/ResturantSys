@@ -8,14 +8,12 @@ class PinNumpad extends StatelessWidget {
     required this.onDigitPressed,
     required this.onClearPressed,
     required this.onBackspacePressed,
-    this.onSubmitPressed,
     this.isEnabled = true,
   });
 
   final ValueChanged<String> onDigitPressed;
   final VoidCallback onClearPressed;
   final VoidCallback onBackspacePressed;
-  final VoidCallback? onSubmitPressed;
   final bool isEnabled;
 
   @override

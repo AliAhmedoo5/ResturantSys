@@ -56,8 +56,14 @@ class AuthService {
     return staff;
   }
 
-  /// Changes a staff member's 4-digit PIN after verifying their current PIN.
-  Future<bool> changePin({
+  /// Authenticates a staff member and establishes an active user session.
+  Future<Staff?> authenticateAndLogin(String pin) async {
+    final staff = await authenticateWithPin(pin);
+    if (staff != null) {
+      session.login(staff);
+    }
+    return staff;
+  }
     required int staffId,
     required String oldPin,
     required String newPin,
