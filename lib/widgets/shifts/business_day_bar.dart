@@ -51,139 +51,158 @@ class BusinessDayBar extends StatelessWidget {
           bottom: BorderSide(color: WarmCounterColors.lightBorder, width: 1.0),
         ),
       ),
-      child: Row(
-        children: [
-          // Business Day Status Chip
-          _buildStatusChip(
-            icon: Icons.calendar_today_rounded,
-            label: isDayOpen
-                ? 'Day #${activeBusinessDay!.id}'
-                : 'Business Day Closed',
-            isActive: isDayOpen,
-          ),
-          const SizedBox(width: WarmCounterSpacing.space12),
-
-          // Shift Status Chip
-          _buildStatusChip(
-            icon: Icons.point_of_sale_rounded,
-            label: isShiftOpen
-                ? 'Shift #${activeShift!.id}: ${activeShift!.staffName ?? currentStaff.name}'
-                : 'No Active Shift',
-            isActive: isShiftOpen,
-          ),
-
-          const Spacer(),
-
-          // Actions
-          if (!isDayOpen) ...[
-            if (isSupervisor)
-              ElevatedButton.icon(
-                key: const ValueKey('btn_open_business_day'),
-                icon: const Icon(Icons.wb_sunny_outlined, size: 18),
-                label: const Text('Open Business Day'),
-                onPressed: onOpenBusinessDayTap,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: WarmCounterColors.lightPrimaryAction,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
-                ),
-              ),
-          ] else if (!isShiftOpen) ...[
-            ElevatedButton.icon(
-              key: const ValueKey('btn_open_shift'),
-              icon: const Icon(Icons.lock_open_rounded, size: 18),
-              label: const Text('Open Cashier Shift'),
-              onPressed: onOpenShiftTap,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: WarmCounterColors.lightPrimaryAction,
-                foregroundColor: Colors.white,
-                minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
-              ),
-            ),
-            if (isSupervisor) ...[
-              const SizedBox(width: WarmCounterSpacing.space8),
-              OutlinedButton.icon(
-                key: const ValueKey('btn_close_business_day'),
-                icon: const Icon(Icons.nightlight_round, size: 18),
-                label: const Text('Close Business Day'),
-                onPressed: onCloseBusinessDayTap,
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
-                ),
-              ),
-            ],
-          ] else ...[
-            // Shift is Active
-            OutlinedButton.icon(
-              key: const ValueKey('btn_cash_movement'),
-              icon: const Icon(Icons.compare_arrows_rounded, size: 18),
-              label: const Text('Cash Movement'),
-              onPressed: onCashMovementTap,
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
-              ),
-            ),
-            const SizedBox(width: WarmCounterSpacing.space8),
-            OutlinedButton.icon(
-              key: const ValueKey('btn_interim_xreport'),
-              icon: const Icon(Icons.receipt_long_rounded, size: 18),
-              label: const Text('Interim X-Report'),
-              onPressed: onInterimXReportTap,
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
-              ),
-            ),
-            const SizedBox(width: WarmCounterSpacing.space8),
-            ElevatedButton.icon(
-              key: const ValueKey('btn_close_shift'),
-              icon: const Icon(Icons.inventory_2_outlined, size: 18),
-              label: const Text('Handover / Close Shift'),
-              onPressed: onCloseShiftTap,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF9B1C1C),
-                foregroundColor: Colors.white,
-                minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
-              ),
-            ),
-          ],
-
-          if (isSupervisor) ...[
-            const SizedBox(width: WarmCounterSpacing.space12),
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                IconButton(
-                  key: const ValueKey('btn_discrepancy_queue'),
-                  icon: const Icon(Icons.notification_important_outlined),
-                  tooltip: 'Discrepancy Review Queue',
-                  onPressed: onDiscrepancyQueueTap,
-                ),
-                if (flaggedShiftsCount > 0)
-                  Positioned(
-                    right: 4,
-                    top: 4,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFC81E1E),
-                        shape: BoxShape.circle,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minWidth: constraints.maxWidth),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Business Day Status Chip
+                      _buildStatusChip(
+                        icon: Icons.calendar_today_rounded,
+                        label: isDayOpen
+                            ? 'Day #${activeBusinessDay!.id}'
+                            : 'Business Day Closed',
+                        isActive: isDayOpen,
                       ),
-                      constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
-                      child: Text(
-                        '$flaggedShiftsCount',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        textAlign: TextAlign.center,
+                      const SizedBox(width: WarmCounterSpacing.space12),
+
+                      // Shift Status Chip
+                      _buildStatusChip(
+                        icon: Icons.point_of_sale_rounded,
+                        label: isShiftOpen
+                            ? 'Shift #${activeShift!.id}: ${activeShift!.staffName ?? currentStaff.name}'
+                            : 'No Active Shift',
+                        isActive: isShiftOpen,
                       ),
-                    ),
+                    ],
                   ),
-              ],
+                  const SizedBox(width: WarmCounterSpacing.space16),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Actions
+                      if (!isDayOpen) ...[
+                        if (isSupervisor)
+                          ElevatedButton.icon(
+                            key: const ValueKey('btn_open_business_day'),
+                            icon: const Icon(Icons.wb_sunny_outlined, size: 18),
+                            label: const Text('Open Business Day'),
+                            onPressed: onOpenBusinessDayTap,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: WarmCounterColors.lightPrimaryAction,
+                              foregroundColor: Colors.white,
+                              minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
+                            ),
+                          ),
+                      ] else if (!isShiftOpen) ...[
+                        ElevatedButton.icon(
+                          key: const ValueKey('btn_open_shift'),
+                          icon: const Icon(Icons.lock_open_rounded, size: 18),
+                          label: const Text('Open Cashier Shift'),
+                          onPressed: onOpenShiftTap,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: WarmCounterColors.lightPrimaryAction,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
+                          ),
+                        ),
+                        if (isSupervisor) ...[
+                          const SizedBox(width: WarmCounterSpacing.space8),
+                          OutlinedButton.icon(
+                            key: const ValueKey('btn_close_business_day'),
+                            icon: const Icon(Icons.nightlight_round, size: 18),
+                            label: const Text('Close Business Day'),
+                            onPressed: onCloseBusinessDayTap,
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
+                            ),
+                          ),
+                        ],
+                      ] else ...[
+                        // Shift is Active
+                        OutlinedButton.icon(
+                          key: const ValueKey('btn_cash_movement'),
+                          icon: const Icon(Icons.compare_arrows_rounded, size: 18),
+                          label: const Text('Cash Movement'),
+                          onPressed: onCashMovementTap,
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
+                          ),
+                        ),
+                        const SizedBox(width: WarmCounterSpacing.space8),
+                        OutlinedButton.icon(
+                          key: const ValueKey('btn_interim_xreport'),
+                          icon: const Icon(Icons.receipt_long_rounded, size: 18),
+                          label: const Text('Interim X-Report'),
+                          onPressed: onInterimXReportTap,
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
+                          ),
+                        ),
+                        const SizedBox(width: WarmCounterSpacing.space8),
+                        ElevatedButton.icon(
+                          key: const ValueKey('btn_close_shift'),
+                          icon: const Icon(Icons.inventory_2_outlined, size: 18),
+                          label: const Text('Handover / Close Shift'),
+                          onPressed: onCloseShiftTap,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF9B1C1C),
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
+                          ),
+                        ),
+                      ],
+
+                      if (isSupervisor) ...[
+                        const SizedBox(width: WarmCounterSpacing.space12),
+                        Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            IconButton(
+                              key: const ValueKey('btn_discrepancy_queue'),
+                              icon: const Icon(Icons.notification_important_outlined),
+                              tooltip: 'Discrepancy Review Queue',
+                              onPressed: onDiscrepancyQueueTap,
+                            ),
+                            if (flaggedShiftsCount > 0)
+                              Positioned(
+                                right: 4,
+                                top: 4,
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFFC81E1E),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                                  child: Text(
+                                    '$flaggedShiftsCount',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ],
-        ],
+          );
+        },
       ),
     );
   }

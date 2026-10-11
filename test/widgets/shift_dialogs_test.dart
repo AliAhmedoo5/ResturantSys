@@ -271,7 +271,7 @@ void main() {
     });
 
     testWidgets('BusinessDayBar shows active shift and triggers actions', (tester) async {
-      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.physicalSize = const Size(1920, 1080);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
 
@@ -330,13 +330,22 @@ void main() {
       expect(find.textContaining('Day #1'), findsOneWidget);
       expect(find.textContaining('Shift #5: Zeeshan Cashier'), findsOneWidget);
 
-      await tester.tap(find.byKey(const ValueKey('btn_cash_movement')), warnIfMissed: false);
+      final cashMovementBtn = find.byKey(const ValueKey('btn_cash_movement'));
+      await tester.ensureVisible(cashMovementBtn);
+      await tester.tap(cashMovementBtn);
+      await tester.pump();
       expect(cashMovementClicked, isTrue);
 
-      await tester.tap(find.byKey(const ValueKey('btn_interim_xreport')), warnIfMissed: false);
+      final xReportBtn = find.byKey(const ValueKey('btn_interim_xreport'));
+      await tester.ensureVisible(xReportBtn);
+      await tester.tap(xReportBtn);
+      await tester.pump();
       expect(xReportClicked, isTrue);
 
-      await tester.tap(find.byKey(const ValueKey('btn_close_shift')), warnIfMissed: false);
+      final closeShiftBtn = find.byKey(const ValueKey('btn_close_shift'));
+      await tester.ensureVisible(closeShiftBtn);
+      await tester.tap(closeShiftBtn);
+      await tester.pump();
       expect(closeShiftClicked, isTrue);
     });
   });
