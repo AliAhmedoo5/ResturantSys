@@ -4,6 +4,9 @@ import 'package:resturant_sys/core/auth/session_state.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/auth/staff_role.dart';
 import 'package:resturant_sys/core/theme/warm_counter_theme.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:resturant_sys/core/database/pos_database.dart';
+import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
 import 'package:resturant_sys/widgets/app_header.dart';
 import 'package:resturant_sys/widgets/app_shell.dart';
 
@@ -133,6 +136,47 @@ void main() {
       // Back to locked
       expect(find.text('Register Locked'), findsOneWidget);
       expect(find.byKey(const ValueKey('pin_lock_screen')), findsOneWidget);
+    });
+
+    testWidgets('AppShell renders RegisterShiftWorkspace when shiftController is provided', (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+      final posDb = PosDatabase(customPath: inMemoryDatabasePath, factory: databaseFactoryFfi);
+      final db = await posDb.initialize();
+      addTearDown(posDb.close);
+
+      final controller = ShiftAndCashController(database: db);
+      final session = SessionState();
+
+      const supervisor = Staff(
+        id: 1,
+        name: 'Supervisor Ali',
+        departmentId: 3,
+        departmentName: 'Management',
+        pinHash: 'dummy',
+        role: StaffRole.supervisor,
+        isActive: true,
+      );
+      session.login(supervisor);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: WarmCounterTheme.lightTheme,
+          home: AppShell(
+            session: session,
+            onAuthenticatePin: (_) async => null,
+            shiftController: controller,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Business Day Closed'), findsOneWidget);
+      expect(find.byKey(const ValueKey('btn_open_business_day')), findsOneWidget);
     });
   });
 }

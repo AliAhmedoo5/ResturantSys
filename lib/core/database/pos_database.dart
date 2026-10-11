@@ -108,10 +108,88 @@ class PosDatabase {
         updated_at TEXT NOT NULL
       );
     ''');
+
+    await _createOperationalAccountingTables(db);
+  }
+
+  Future<void> _createOperationalAccountingTables(DatabaseExecutor executor) async {
+    await executor.execute('''
+      CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableBusinessDays} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        opened_at TEXT NOT NULL,
+        closed_at TEXT,
+        opened_by_staff_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableStaff}(id),
+        closed_by_staff_id INTEGER REFERENCES ${PosDatabaseConstants.tableStaff}(id),
+        status TEXT NOT NULL
+      );
+    ''');
+
+    await executor.execute('''
+      CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableShifts} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_day_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableBusinessDays}(id),
+        staff_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableStaff}(id),
+        opened_at TEXT NOT NULL,
+        closed_at TEXT,
+        opening_float REAL NOT NULL,
+        counted_cash REAL,
+        expected_cash REAL,
+        discrepancy REAL,
+        discrepancy_status TEXT NOT NULL DEFAULT 'CLEAN',
+        status TEXT NOT NULL,
+        resolved_by_staff_id INTEGER REFERENCES ${PosDatabaseConstants.tableStaff}(id),
+        resolution_notes TEXT,
+        resolved_at TEXT
+      );
+    ''');
+
+    await executor.execute('''
+      CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableCashMovements} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        shift_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableShifts}(id),
+        staff_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableStaff}(id),
+        type TEXT NOT NULL,
+        amount REAL NOT NULL,
+        category TEXT NOT NULL,
+        notes TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+    ''');
+
+    await executor.execute('''
+      CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableOrders} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_day_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableBusinessDays}(id),
+        shift_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableShifts}(id),
+        cashier_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableStaff}(id),
+        token_number INTEGER NOT NULL,
+        dining_type TEXT NOT NULL,
+        subtotal REAL NOT NULL,
+        discount_amount REAL NOT NULL DEFAULT 0.0,
+        discount_id INTEGER,
+        tax_amount REAL NOT NULL DEFAULT 0.0,
+        grand_total REAL NOT NULL,
+        payment_status TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+    ''');
+
+    await executor.execute('''
+      CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableOrderPayments} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableOrders}(id),
+        payment_method TEXT NOT NULL,
+        amount_tendered REAL NOT NULL,
+        change_returned REAL NOT NULL DEFAULT 0.0,
+        reference_code TEXT
+      );
+    ''');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    // Future schema migrations will go here
+    if (oldVersion < 2) {
+      await _createOperationalAccountingTables(db);
+    }
   }
 
   static String _formatTimestamp(DateTime dt) {
@@ -182,6 +260,7 @@ class PosDatabase {
       'schema_version': '${PosDatabaseConstants.schemaVersion}',
       'app_name': 'ResturantPOS',
       'paper_width': '80mm',
+      PosDatabaseConstants.settingDiscrepancyThreshold: PosDatabaseConstants.defaultDiscrepancyThreshold,
     };
 
     for (final entry in defaultSettings.entries) {

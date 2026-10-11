@@ -48,7 +48,7 @@ void main() {
       );
     });
 
-    test('creates core tables: departments, staff, and system_settings', () async {
+    test('creates core tables: departments, staff, system_settings, business_days, shifts, cash_movements', () async {
       final db = await posDb.initialize();
 
       final tablesResult = await db.rawQuery(
@@ -59,6 +59,11 @@ void main() {
       expect(tableNames, contains('departments'));
       expect(tableNames, contains('staff'));
       expect(tableNames, contains('system_settings'));
+      expect(tableNames, contains('business_days'));
+      expect(tableNames, contains('shifts'));
+      expect(tableNames, contains('cash_movements'));
+      expect(tableNames, contains('orders'));
+      expect(tableNames, contains('order_payments'));
     });
 
     test('seeds default departments: Front Counter, Kitchen, Management', () async {
@@ -109,6 +114,14 @@ void main() {
 
       final settings = await db.query('system_settings');
       expect(settings, isNotEmpty);
+
+      final thresholdRow = await db.query(
+        'system_settings',
+        where: 'key = ?',
+        whereArgs: ['discrepancy_threshold'],
+      );
+      expect(thresholdRow, isNotEmpty);
+      expect(thresholdRow.first['value'], equals('100.00'));
 
       // Running initialize again should not throw or duplicate default data
       await posDb.initialize();

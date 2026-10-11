@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:resturant_sys/core/auth/session_state.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
+import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
 import 'package:resturant_sys/core/theme/theme.dart';
 import 'app_header.dart';
 import 'pin_lock_screen.dart';
+import 'shifts/register_shift_workspace.dart';
 
 /// Top-level desktop application shell coordinating authentication gating,
 /// active workspace presentation, and header state.
@@ -12,11 +14,13 @@ class AppShell extends StatelessWidget {
     super.key,
     required this.session,
     required this.onAuthenticatePin,
+    this.shiftController,
     this.child,
   });
 
   final SessionState session;
   final Future<Staff?> Function(String pin) onAuthenticatePin;
+  final ShiftAndCashController? shiftController;
   final Widget? child;
 
   @override
@@ -59,7 +63,13 @@ class AppShell extends StatelessWidget {
               onLock: () => session.lock(),
             ),
           ),
-          body: child ?? _buildDefaultWorkspace(context, staff),
+          body: child ??
+              (shiftController != null
+                  ? RegisterShiftWorkspace(
+                      controller: shiftController!,
+                      currentStaff: staff,
+                    )
+                  : _buildDefaultWorkspace(context, staff)),
         );
       },
     );

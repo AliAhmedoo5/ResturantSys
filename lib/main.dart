@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'core/database/pos_database.dart';
 import 'core/auth/auth_service.dart';
+import 'core/shifts/shift_and_cash_controller.dart';
 import 'core/theme/warm_counter_theme.dart';
 import 'widgets/app_shell.dart';
 
@@ -19,8 +20,12 @@ void main() async {
   final posDatabase = PosDatabase();
   final database = await posDatabase.initialize();
   final authService = AuthService(database: database);
+  final shiftController = ShiftAndCashController(database: database);
 
-  runApp(RestaurantPosApp(authService: authService));
+  runApp(RestaurantPosApp(
+    authService: authService,
+    shiftController: shiftController,
+  ));
 }
 
 /// Root widget of the Restaurant POS desktop application.
@@ -28,9 +33,11 @@ class RestaurantPosApp extends StatelessWidget {
   const RestaurantPosApp({
     super.key,
     required this.authService,
+    this.shiftController,
   });
 
   final AuthService authService;
+  final ShiftAndCashController? shiftController;
 
   @override
   Widget build(BuildContext context) {
@@ -43,6 +50,7 @@ class RestaurantPosApp extends StatelessWidget {
       home: AppShell(
         session: authService.session,
         onAuthenticatePin: authService.authenticateWithPin,
+        shiftController: shiftController,
       ),
     );
   }
