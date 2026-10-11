@@ -167,5 +167,46 @@ void main() {
       expect(find.text('Custom Workspace Content'), findsOneWidget);
       expect(find.text('Supervisor Ali'), findsOneWidget);
     });
+
+    testWidgets('AppShell shows workspace switcher for supervisor and switches to Catalog & BOM workspace', (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final session = SessionState();
+      const supervisor = Staff(
+        id: 1,
+        name: 'Supervisor Ali',
+        departmentId: 3,
+        departmentName: 'Management',
+        pinHash: 'dummy',
+        role: StaffRole.supervisor,
+        isActive: true,
+      );
+      session.login(supervisor);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: WarmCounterTheme.lightTheme,
+          home: AppShell(
+            session: session,
+            onAuthenticatePin: (_) async => null,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Verify workspace tab buttons are present
+      expect(find.byKey(const ValueKey('workspace_tab_register')), findsOneWidget);
+      expect(find.byKey(const ValueKey('workspace_tab_catalog')), findsOneWidget);
+
+      // Tap Catalog & BOM tab
+      await tester.tap(find.byKey(const ValueKey('workspace_tab_catalog')));
+      await tester.pumpAndSettle();
+
+      // Switches back to Register & Shifts tab
+      await tester.tap(find.byKey(const ValueKey('workspace_tab_register')));
+      await tester.pumpAndSettle();
+    });
   });
 }

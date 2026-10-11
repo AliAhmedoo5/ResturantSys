@@ -110,6 +110,7 @@ class PosDatabase {
     ''');
 
     await _createOperationalAccountingTables(db);
+    await _createCatalogAndRecipeTables(db);
   }
 
   Future<void> _createOperationalAccountingTables(DatabaseExecutor executor) async {
@@ -186,9 +187,84 @@ class PosDatabase {
     ''');
   }
 
+  Future<void> _createCatalogAndRecipeTables(DatabaseExecutor executor) async {
+    await executor.execute('''
+      CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableCategories} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        display_order INTEGER NOT NULL DEFAULT 0,
+        color_hex TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+    ''');
+
+    await executor.execute('''
+      CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableMenuItems} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        category_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableCategories}(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        base_price REAL NOT NULL,
+        tax_rate REAL NOT NULL DEFAULT 0.0,
+        is_tax_inclusive INTEGER NOT NULL DEFAULT 1,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL
+      );
+    ''');
+
+    await executor.execute('''
+      CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableRawIngredients} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        storage_unit TEXT NOT NULL,
+        current_stock REAL NOT NULL DEFAULT 0.0,
+        low_stock_threshold REAL NOT NULL DEFAULT 0.0,
+        cost_per_recipe_unit REAL NOT NULL DEFAULT 0.0,
+        created_at TEXT NOT NULL
+      );
+    ''');
+
+    await executor.execute('''
+      CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableRecipes} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        menu_item_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableMenuItems}(id) ON DELETE CASCADE,
+        raw_ingredient_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableRawIngredients}(id) ON DELETE RESTRICT,
+        quantity_per_recipe_unit REAL NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE(menu_item_id, raw_ingredient_id)
+      );
+    ''');
+
+    await executor.execute('''
+      CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableModifiers} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        menu_item_id INTEGER REFERENCES ${PosDatabaseConstants.tableMenuItems}(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        price_delta REAL NOT NULL DEFAULT 0.0,
+        raw_ingredient_id INTEGER REFERENCES ${PosDatabaseConstants.tableRawIngredients}(id) ON DELETE SET NULL,
+        ingredient_qty_delta REAL NOT NULL DEFAULT 0.0,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL
+      );
+    ''');
+
+    await executor.execute('''
+      CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableDiscountPresets} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL,
+        value REAL NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL
+      );
+    ''');
+  }
+
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await _createOperationalAccountingTables(db);
+    }
+    if (oldVersion < 3) {
+      await _createCatalogAndRecipeTables(db);
     }
   }
 

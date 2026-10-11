@@ -2,18 +2,32 @@ import 'package:flutter/material.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/theme/theme.dart';
 
+/// Operational workspaces selectable in the application header.
+enum AppWorkspaceTab {
+  register('Register & Shifts', Icons.point_of_sale_rounded),
+  catalog('Catalog & BOM', Icons.restaurant_menu_rounded);
+
+  const AppWorkspaceTab(this.label, this.icon);
+  final String label;
+  final IconData icon;
+}
+
 /// Top application navigation bar displaying system branding, active staff session details,
-/// and a 1-tap Lock Register button.
+/// workspace switching tabs for supervisors, and a 1-tap Lock Register button.
 class AppHeader extends StatelessWidget implements PreferredSizeWidget {
   const AppHeader({
     super.key,
     required this.activeStaff,
     required this.onLock,
+    this.selectedWorkspace,
+    this.onWorkspaceSelected,
     this.title = 'ResturantPOS',
   });
 
   final Staff? activeStaff;
   final VoidCallback? onLock;
+  final AppWorkspaceTab? selectedWorkspace;
+  final ValueChanged<AppWorkspaceTab>? onWorkspaceSelected;
   final String title;
 
   @override
@@ -68,6 +82,27 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
               ),
             ],
           ),
+
+          // Middle: Workspace Switcher for Supervisors/Owners
+          if (activeStaff != null &&
+              activeStaff!.canAccessSupervisorPortal &&
+              onWorkspaceSelected != null)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildWorkspaceTabButton(
+                  context,
+                  tab: AppWorkspaceTab.register,
+                  isSelected: selectedWorkspace == AppWorkspaceTab.register,
+                ),
+                const SizedBox(width: WarmCounterSpacing.space8),
+                _buildWorkspaceTabButton(
+                  context,
+                  tab: AppWorkspaceTab.catalog,
+                  isSelected: selectedWorkspace == AppWorkspaceTab.catalog,
+                ),
+              ],
+            ),
 
           // Right: Active Session / Locked Status & Actions
           Flexible(
@@ -200,6 +235,55 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildWorkspaceTabButton(
+    BuildContext context, {
+    required AppWorkspaceTab tab,
+    required bool isSelected,
+  }) {
+    return InkWell(
+      key: ValueKey('workspace_tab_${tab.name}'),
+      onTap: () => onWorkspaceSelected?.call(tab),
+      borderRadius: WarmCounterSpacing.controlBorderRadius,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? WarmCounterColors.lightActiveNavHighlight
+              : Colors.transparent,
+          borderRadius: WarmCounterSpacing.controlBorderRadius,
+          border: Border.all(
+            color: isSelected
+                ? WarmCounterColors.lightPrimaryAction
+                : WarmCounterColors.lightBorder,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              tab.icon,
+              size: 18,
+              color: isSelected
+                  ? WarmCounterColors.lightPrimaryAction
+                  : WarmCounterColors.lightSecondaryText,
+            ),
+            const SizedBox(width: WarmCounterSpacing.space8),
+            Text(
+              tab.label,
+              style: TextStyle(
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected
+                    ? WarmCounterColors.lightPrimaryAction
+                    : WarmCounterColors.lightPrimaryText,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

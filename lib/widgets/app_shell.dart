@@ -3,32 +3,43 @@ import 'package:resturant_sys/core/auth/session_state.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
 import 'package:resturant_sys/core/theme/theme.dart';
+import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
 import 'app_header.dart';
+import 'catalog/supervisor_catalog_workspace.dart';
 import 'pin_lock_screen.dart';
 import 'shifts/register_shift_workspace.dart';
 
 /// Top-level desktop application shell coordinating authentication gating,
 /// active workspace presentation, and header state.
-class AppShell extends StatelessWidget {
+class AppShell extends StatefulWidget {
   const AppShell({
     super.key,
     required this.session,
     required this.onAuthenticatePin,
     this.shiftController,
+    this.catalogController,
     this.child,
   });
 
   final SessionState session;
   final Future<Staff?> Function(String pin) onAuthenticatePin;
   final ShiftAndCashController? shiftController;
+  final CatalogAndRecipeController? catalogController;
   final Widget? child;
+
+  @override
+  State<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends State<AppShell> {
+  AppWorkspaceTab _selectedWorkspace = AppWorkspaceTab.register;
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: session,
+      listenable: widget.session,
       builder: (context, _) {
-        final staff = session.currentStaff;
+        final staff = widget.session.currentStaff;
 
         if (staff == null) {
           return Scaffold(
@@ -43,9 +54,9 @@ class AppShell extends StatelessWidget {
             body: PinLockScreen(
               key: const ValueKey('pin_lock_screen'),
               onPinSubmitted: (pin) async {
-                final authenticated = await onAuthenticatePin(pin);
+                final authenticated = await widget.onAuthenticatePin(pin);
                 if (authenticated != null) {
-                  session.login(authenticated);
+                  widget.session.login(authenticated);
                   return true;
                 }
                 return false;
@@ -60,19 +71,30 @@ class AppShell extends StatelessWidget {
             preferredSize: const Size.fromHeight(64),
             child: AppHeader(
               activeStaff: staff,
-              onLock: () => session.lock(),
+              onLock: () => widget.session.lock(),
+              selectedWorkspace: _selectedWorkspace,
+              onWorkspaceSelected: (tab) => setState(() => _selectedWorkspace = tab),
             ),
           ),
-          body: child ??
-              (shiftController != null
-                  ? RegisterShiftWorkspace(
-                      controller: shiftController!,
-                      currentStaff: staff,
-                    )
-                  : _buildDefaultWorkspace(context, staff)),
+          body: widget.child ?? _buildWorkspaceBody(context, staff),
         );
       },
     );
+  }
+
+  Widget _buildWorkspaceBody(BuildContext context, Staff staff) {
+    if (_selectedWorkspace == AppWorkspaceTab.catalog && widget.catalogController != null) {
+      return SupervisorCatalogWorkspace(controller: widget.catalogController!);
+    }
+
+    if (widget.shiftController != null) {
+      return RegisterShiftWorkspace(
+        controller: widget.shiftController!,
+        currentStaff: staff,
+      );
+    }
+
+    return _buildDefaultWorkspace(context, staff);
   }
 
   Widget _buildDefaultWorkspace(BuildContext context, Staff staff) {
