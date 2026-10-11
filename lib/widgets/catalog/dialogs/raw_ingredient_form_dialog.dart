@@ -122,6 +122,7 @@ class _RawIngredientFormDialogState extends State<RawIngredientFormDialog> {
                 DropdownButtonFormField<StorageUnit>(
                   key: const ValueKey('ingredient_unit_dropdown'),
                   initialValue: _selectedUnit,
+                  isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Base Storage Unit'),
                   items: StorageUnit.values.map((u) {
                     return DropdownMenuItem<StorageUnit>(

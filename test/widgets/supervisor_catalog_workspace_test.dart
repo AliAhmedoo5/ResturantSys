@@ -13,7 +13,7 @@ import 'package:resturant_sys/widgets/catalog/supervisor_catalog_workspace.dart'
 void main() {
   group('SupervisorCatalogWorkspace Widget Tests', () {
     testWidgets('renders all 5 catalog tabs and supports tab switching', (tester) async {
-      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.physicalSize = const Size(1920, 1080);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
 
@@ -74,12 +74,12 @@ void main() {
       // Switch to Discounts tab
       await tester.tap(find.byKey(const ValueKey('tab_discounts')));
       await tester.pumpAndSettle();
-      expect(find.text('Pre-Approved Discounts'), findsOneWidget);
+      expect(find.descendant(of: find.byType(SingleChildScrollView), matching: find.text('Pre-Approved Discounts')), findsOneWidget);
       expect(find.byKey(const ValueKey('add_discount_preset_button')), findsOneWidget);
     });
 
     testWidgets('creates a Category through CategoryFormDialog and displays it in list', (tester) async {
-      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.physicalSize = const Size(1920, 1080);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
 
@@ -99,7 +99,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('add_category_button')));
       await tester.pumpAndSettle();
 
-      expect(find.text('Add Menu Category'), findsOneWidget);
+      expect(find.descendant(of: find.byType(AlertDialog), matching: find.text('Add Menu Category')), findsOneWidget);
 
       // Fill in category name and order
       await tester.enterText(find.byKey(const ValueKey('category_name_field')), 'Crispy Chicken');
@@ -116,7 +116,7 @@ void main() {
     });
 
     testWidgets('creates Menu Item and opens BOM Recipe Builder dialog', (tester) async {
-      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.physicalSize = const Size(1920, 1080);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
 
@@ -157,7 +157,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('add_menu_item_button')));
       await tester.pumpAndSettle();
 
-      expect(find.text('Add Menu Item'), findsOneWidget);
+      expect(find.descendant(of: find.byType(AlertDialog), matching: find.text('Add Menu Item')), findsOneWidget);
 
       await tester.enterText(find.byKey(const ValueKey('menu_item_name_field')), 'Zinger Classic');
       await tester.enterText(find.byKey(const ValueKey('menu_item_price_field')), '580.00');
@@ -173,7 +173,7 @@ void main() {
     });
 
     testWidgets('RecipeBuilderDialog renders BOM breakdown with fractional quantities and live cost', (tester) async {
-      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.physicalSize = const Size(1920, 1080);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
 
@@ -228,7 +228,7 @@ void main() {
     });
 
     testWidgets('shows LOW STOCK badge for ingredients below threshold and supports low stock filter', (tester) async {
-      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.physicalSize = const Size(1920, 1080);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
 
@@ -279,7 +279,7 @@ void main() {
     });
 
     testWidgets('creates a modifier with price delta and ingredient quantity delta', (tester) async {
-      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.physicalSize = const Size(1920, 1080);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
 
@@ -303,7 +303,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('add_modifier_button')));
       await tester.pumpAndSettle();
 
-      expect(find.text('Add Modifier'), findsOneWidget);
+      expect(find.descendant(of: find.byType(AlertDialog), matching: find.text('Add Modifier')), findsOneWidget);
 
       await tester.enterText(find.byKey(const ValueKey('modifier_name_field')), '+Extra Jalapenos');
       await tester.enterText(find.byKey(const ValueKey('modifier_price_delta_field')), '60.00');
@@ -318,7 +318,7 @@ void main() {
     });
 
     testWidgets('creates Pre-Approved Discount presets and displays them', (tester) async {
-      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.physicalSize = const Size(1920, 1080);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
 
@@ -342,7 +342,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('add_discount_preset_button')));
       await tester.pumpAndSettle();
 
-      expect(find.text('Add Discount Preset'), findsOneWidget);
+      expect(find.descendant(of: find.byType(AlertDialog), matching: find.text('Add Discount Preset')), findsOneWidget);
 
       await tester.enterText(find.byKey(const ValueKey('discount_name_field')), 'Staff Courtesy 25%');
       await tester.enterText(find.byKey(const ValueKey('discount_value_field')), '25');

@@ -701,16 +701,19 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Menu Categories', style: WarmCounterTypography.pageHeading),
-                  Text(
-                    'Configure customer-facing category tabs, ordering, and display colors.',
-                    style: WarmCounterTypography.caption.copyWith(color: WarmCounterColors.lightSecondaryText),
-                  ),
-                ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Menu Categories', style: WarmCounterTypography.pageHeading),
+                    Text(
+                      'Configure customer-facing category tabs, ordering, and display colors.',
+                      style: WarmCounterTypography.caption.copyWith(color: WarmCounterColors.lightSecondaryText),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: WarmCounterSpacing.space16),
               ElevatedButton.icon(
                 key: const ValueKey('add_category_button'),
                 icon: const Icon(Icons.add, size: 18),
@@ -1152,16 +1155,19 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Modifiers & Add-ons', style: WarmCounterTypography.pageHeading),
-                  Text(
-                    'Options that adjust item retail prices and recipe raw ingredient deductions.',
-                    style: WarmCounterTypography.caption.copyWith(color: WarmCounterColors.lightSecondaryText),
-                  ),
-                ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Modifiers & Add-ons', style: WarmCounterTypography.pageHeading),
+                    Text(
+                      'Options that adjust item retail prices and recipe raw ingredient deductions.',
+                      style: WarmCounterTypography.caption.copyWith(color: WarmCounterColors.lightSecondaryText),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: WarmCounterSpacing.space16),
               ElevatedButton.icon(
                 key: const ValueKey('add_modifier_button'),
                 icon: const Icon(Icons.add, size: 18),
@@ -1264,16 +1270,19 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Pre-Approved Discounts', style: WarmCounterTypography.pageHeading),
-                  Text(
-                    'Promotions cashiers can apply at the counter without requiring a supervisor PIN (ADR-0004).',
-                    style: WarmCounterTypography.caption.copyWith(color: WarmCounterColors.lightSecondaryText),
-                  ),
-                ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Pre-Approved Discounts', style: WarmCounterTypography.pageHeading),
+                    Text(
+                      'Promotions cashiers can apply at the counter without requiring a supervisor PIN (ADR-0004).',
+                      style: WarmCounterTypography.caption.copyWith(color: WarmCounterColors.lightSecondaryText),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: WarmCounterSpacing.space16),
               ElevatedButton.icon(
                 key: const ValueKey('add_discount_preset_button'),
                 icon: const Icon(Icons.add, size: 18),

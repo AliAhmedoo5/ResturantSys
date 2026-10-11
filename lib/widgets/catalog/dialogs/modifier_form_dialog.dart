@@ -123,6 +123,7 @@ class _ModifierFormDialogState extends State<ModifierFormDialog> {
                 DropdownButtonFormField<int?>(
                   key: const ValueKey('modifier_item_dropdown'),
                   initialValue: _selectedMenuItemId,
+                  isExpanded: true,
                   decoration: const InputDecoration(
                     labelText: 'Target Menu Item (Optional)',
                     hintText: 'Leave empty for global modifier',
@@ -179,6 +180,7 @@ class _ModifierFormDialogState extends State<ModifierFormDialog> {
                       child: DropdownButtonFormField<int?>(
                         key: const ValueKey('modifier_ingredient_dropdown'),
                         initialValue: _selectedRawIngredientId,
+                        isExpanded: true,
                         decoration: const InputDecoration(labelText: 'Raw Ingredient (BOM)'),
                         items: [
                           const DropdownMenuItem<int?>(
