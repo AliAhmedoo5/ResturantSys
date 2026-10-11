@@ -85,17 +85,6 @@ class _CategoryFormDialogState extends State<CategoryFormDialog> {
     }
   }
 
-  Color _parseColor(String hex) {
-    final buffer = StringBuffer();
-    if (hex.length == 7) buffer.write('ff');
-    buffer.write(hex.replaceFirst('#', ''));
-    try {
-      return Color(int.parse(buffer.toString(), radix: 16));
-    } catch (_) {
-      return WarmCounterColors.lightPrimaryAction;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final isEditing = widget.category != null;
@@ -144,28 +133,32 @@ class _CategoryFormDialogState extends State<CategoryFormDialog> {
               const Text('Tile Color Coding', style: WarmCounterTypography.secondaryLabel),
               const SizedBox(height: WarmCounterSpacing.space8),
               Wrap(
-                spacing: 8,
-                runSpacing: 8,
+                spacing: 4,
+                runSpacing: 4,
                 children: _palette.map((hex) {
-                  final color = _parseColor(hex);
+                  final color = WarmCounterColors.parseHex(hex);
                   final isSelected = _selectedColorHex.toUpperCase() == hex.toUpperCase();
                   return InkWell(
                     onTap: () => setState(() => _selectedColorHex = hex),
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(24),
                     child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: color,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: isSelected ? Colors.black : Colors.transparent,
-                          width: isSelected ? 3.0 : 1.0,
+                      constraints: WarmCounterSpacing.minTouchTargetConstraints,
+                      alignment: Alignment.center,
+                      child: Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: isSelected ? Colors.black : Colors.transparent,
+                            width: isSelected ? 3.0 : 1.0,
+                          ),
                         ),
+                        child: isSelected
+                            ? const Icon(Icons.check, size: 20, color: Colors.white)
+                            : null,
                       ),
-                      child: isSelected
-                          ? const Icon(Icons.check, size: 20, color: Colors.white)
-                          : null,
                     ),
                   );
                 }).toList(),

@@ -99,17 +99,6 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
     }
   }
 
-  Color _parseHex(String hex) {
-    final buffer = StringBuffer();
-    if (hex.length == 7) buffer.write('ff');
-    buffer.write(hex.replaceFirst('#', ''));
-    try {
-      return Color(int.parse(buffer.toString(), radix: 16));
-    } catch (_) {
-      return WarmCounterColors.lightPrimaryAction;
-    }
-  }
-
   // ---------------------------------------------------------------------------
   // Category Actions
   // ---------------------------------------------------------------------------
@@ -324,6 +313,20 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
           _menuItems.removeWhere((m) => m.id == item.id);
         });
       }
+    }
+  }
+
+  Future<void> _toggleMenuItemActive(MenuItem item, bool active) async {
+    if (widget.controller != null) {
+      await widget.controller!.toggleMenuItemActive(item.id, active);
+      await _loadAllCatalogData();
+    } else {
+      setState(() {
+        final idx = _menuItems.indexWhere((m) => m.id == item.id);
+        if (idx != -1) {
+          _menuItems[idx] = item.copyWith(isActive: active);
+        }
+      });
     }
   }
 
@@ -737,7 +740,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
               separatorBuilder: (_, __) => const SizedBox(height: 8),
               itemBuilder: (context, index) {
                 final cat = _categories[index];
-                final color = _parseHex(cat.colorHex);
+                final color = WarmCounterColors.parseHex(cat.colorHex);
 
                 return Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -924,7 +927,10 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                             const SizedBox(height: 4),
                             Text(
                               'Net Base: Rs ${_currencyFormat.format(item.netPrice)} • Tax (${item.taxRate.toStringAsFixed(1)}%): Rs ${_currencyFormat.format(item.taxAmount)}',
-                              style: WarmCounterTypography.caption.copyWith(color: WarmCounterColors.lightSecondaryText),
+                              style: WarmCounterTypography.tabularNumbers.copyWith(
+                                color: WarmCounterColors.lightSecondaryText,
+                                fontSize: 12,
+                              ),
                             ),
                           ],
                         ),
@@ -946,6 +952,16 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                         ],
                       ),
                       const SizedBox(width: 16),
+                      // Inline active toggle switch
+                      Tooltip(
+                        message: item.isActive ? 'Active on counter register' : 'Inactive (hidden from cashiers)',
+                        child: Switch(
+                          key: ValueKey('toggle_menu_item_active_${item.id}'),
+                          value: item.isActive,
+                          onChanged: (val) => _toggleMenuItemActive(item, val),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
                       // BOM recipe button
                       OutlinedButton.icon(
                         key: ValueKey('edit_bom_button_${item.id}'),
@@ -1102,7 +1118,10 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                             const SizedBox(height: 4),
                             Text(
                               'Base Unit: ${ing.storageUnit.displayName} • Cost: Rs ${_currencyFormat.format(ing.costPerRecipeUnit)} / $unit',
-                              style: WarmCounterTypography.caption.copyWith(color: WarmCounterColors.lightSecondaryText),
+                              style: WarmCounterTypography.tabularNumbers.copyWith(
+                                color: WarmCounterColors.lightSecondaryText,
+                                fontSize: 12,
+                              ),
                             ),
                           ],
                         ),
@@ -1226,7 +1245,10 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                             const SizedBox(height: 4),
                             Text(
                               'Target: ${mod.menuItemName ?? 'All Items (Global)'} • BOM: ${mod.rawIngredientName ?? 'None'} (${mod.ingredientQtyDelta >= 0 ? '+' : ''}${mod.ingredientQtyDelta} ${mod.storageUnit?.code ?? ''})',
-                              style: WarmCounterTypography.caption.copyWith(color: WarmCounterColors.lightSecondaryText),
+                              style: WarmCounterTypography.tabularNumbers.copyWith(
+                                color: WarmCounterColors.lightSecondaryText,
+                                fontSize: 12,
+                              ),
                             ),
                           ],
                         ),

@@ -82,4 +82,20 @@ abstract final class WarmCounterColors {
 
   /// Active section highlight: Muted deep green tint for active sidebar items.
   static const Color darkActiveNavHighlight = Color(0xFF1C3324);
+
+  // ---------------------------------------------------------------------------
+  // Hex Utility Helper
+  // ---------------------------------------------------------------------------
+  /// Safely parses a hex color string (e.g. '#2E7D32' or '2E7D32') into a [Color].
+  static Color parseHex(String hex, {Color fallback = WarmCounterColors.lightPrimaryAction}) {
+    final clean = hex.replaceFirst('#', '').trim();
+    if (clean.length == 6) {
+      final value = int.tryParse('FF$clean', radix: 16);
+      if (value != null) return Color(value);
+    } else if (clean.length == 8) {
+      final value = int.tryParse(clean, radix: 16);
+      if (value != null) return Color(value);
+    }
+    return fallback;
+  }
 }

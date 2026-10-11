@@ -249,6 +249,8 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
       onTap: () => onWorkspaceSelected?.call(tab),
       borderRadius: WarmCounterSpacing.controlBorderRadius,
       child: Container(
+        constraints: WarmCounterSpacing.minTouchTargetConstraints,
+        alignment: Alignment.center,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
           color: isSelected

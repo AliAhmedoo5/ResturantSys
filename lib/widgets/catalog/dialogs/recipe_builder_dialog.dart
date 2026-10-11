@@ -180,7 +180,10 @@ class _RecipeBuilderDialogState extends State<RecipeBuilderDialog> {
                 ),
                 Text(
                   'Category: ${widget.menuItem.categoryName ?? 'General'} • Retail Price: Rs ${_currencyFormat.format(retail)}',
-                  style: WarmCounterTypography.caption.copyWith(color: WarmCounterColors.lightSecondaryText),
+                  style: WarmCounterTypography.tabularNumbers.copyWith(
+                    color: WarmCounterColors.lightSecondaryText,
+                    fontSize: 12,
+                  ),
                 ),
               ],
             ),
@@ -328,7 +331,10 @@ class _RecipeBuilderDialogState extends State<RecipeBuilderDialog> {
                                           ),
                                           Text(
                                             '${item.quantityPerRecipeUnit} $unit • Rs ${_currencyFormat.format(item.costPerRecipeUnit)} per $unit',
-                                            style: WarmCounterTypography.caption,
+                                            style: WarmCounterTypography.tabularNumbers.copyWith(
+                                              color: WarmCounterColors.lightSecondaryText,
+                                              fontSize: 12,
+                                            ),
                                           ),
                                         ],
                                       ),
