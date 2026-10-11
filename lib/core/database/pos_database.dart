@@ -111,6 +111,7 @@ class PosDatabase {
 
     await _createOperationalAccountingTables(db);
     await _createCatalogAndRecipeTables(db);
+    await _createOrderItemsAndDealsTables(db);
   }
 
   Future<void> _createOperationalAccountingTables(DatabaseExecutor executor) async {
@@ -259,12 +260,65 @@ class PosDatabase {
     ''');
   }
 
+  Future<void> _createOrderItemsAndDealsTables(DatabaseExecutor executor) async {
+    await executor.execute('''
+      CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableDeals} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        base_price REAL NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL
+      );
+    ''');
+
+    await executor.execute('''
+      CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableDealItems} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        deal_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableDeals}(id) ON DELETE CASCADE,
+        group_name TEXT NOT NULL,
+        category_id INTEGER REFERENCES ${PosDatabaseConstants.tableCategories}(id) ON DELETE SET NULL,
+        default_menu_item_id INTEGER REFERENCES ${PosDatabaseConstants.tableMenuItems}(id) ON DELETE SET NULL,
+        is_upgradeable INTEGER NOT NULL DEFAULT 0,
+        upgrade_price REAL NOT NULL DEFAULT 0.0
+      );
+    ''');
+
+    await executor.execute('''
+      CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableDealItemOptions} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        deal_item_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableDealItems}(id) ON DELETE CASCADE,
+        menu_item_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableMenuItems}(id) ON DELETE CASCADE,
+        is_default INTEGER NOT NULL DEFAULT 0,
+        upgrade_price REAL NOT NULL DEFAULT 0.0
+      );
+    ''');
+
+    await executor.execute('''
+      CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableOrderItems} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableOrders}(id) ON DELETE CASCADE,
+        menu_item_id INTEGER REFERENCES ${PosDatabaseConstants.tableMenuItems}(id) ON DELETE SET NULL,
+        deal_id INTEGER REFERENCES ${PosDatabaseConstants.tableDeals}(id) ON DELETE SET NULL,
+        name TEXT NOT NULL,
+        quantity INTEGER NOT NULL DEFAULT 1,
+        unit_price REAL NOT NULL,
+        total_price REAL NOT NULL,
+        modifiers_json TEXT,
+        deal_choices_json TEXT,
+        created_at TEXT NOT NULL
+      );
+    ''');
+  }
+
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await _createOperationalAccountingTables(db);
     }
     if (oldVersion < 3) {
       await _createCatalogAndRecipeTables(db);
+    }
+    if (oldVersion < 4) {
+      await _createOrderItemsAndDealsTables(db);
     }
   }
 

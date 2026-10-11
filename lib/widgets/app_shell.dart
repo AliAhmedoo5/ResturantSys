@@ -4,6 +4,7 @@ import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
 import 'package:resturant_sys/core/theme/theme.dart';
 import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
+import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
 import 'app_header.dart';
 import 'catalog/supervisor_catalog_workspace.dart';
 import 'pin_lock_screen.dart';
@@ -18,6 +19,7 @@ class AppShell extends StatefulWidget {
     required this.onAuthenticatePin,
     this.shiftController,
     this.catalogController,
+    this.orderController,
     this.child,
   });
 
@@ -25,6 +27,7 @@ class AppShell extends StatefulWidget {
   final Future<Staff?> Function(String pin) onAuthenticatePin;
   final ShiftAndCashController? shiftController;
   final CatalogAndRecipeController? catalogController;
+  final OrderAndCheckoutController? orderController;
   final Widget? child;
 
   @override
@@ -91,6 +94,8 @@ class _AppShellState extends State<AppShell> {
       return RegisterShiftWorkspace(
         controller: widget.shiftController!,
         currentStaff: staff,
+        orderController: widget.orderController,
+        catalogController: widget.catalogController,
       );
     }
 

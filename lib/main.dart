@@ -6,6 +6,7 @@ import 'core/database/pos_database.dart';
 import 'core/auth/auth_service.dart';
 import 'core/shifts/shift_and_cash_controller.dart';
 import 'core/catalog/catalog_and_recipe_controller.dart';
+import 'core/orders/order_and_checkout_controller.dart';
 import 'core/theme/warm_counter_theme.dart';
 import 'widgets/app_shell.dart';
 
@@ -23,11 +24,13 @@ void main() async {
   final authService = AuthService(database: database);
   final shiftController = ShiftAndCashController(database: database);
   final catalogController = CatalogAndRecipeController(database: database);
+  final orderController = OrderAndCheckoutController(database: database);
 
   runApp(RestaurantPosApp(
     authService: authService,
     shiftController: shiftController,
     catalogController: catalogController,
+    orderController: orderController,
   ));
 }
 
@@ -38,11 +41,13 @@ class RestaurantPosApp extends StatelessWidget {
     required this.authService,
     this.shiftController,
     this.catalogController,
+    this.orderController,
   });
 
   final AuthService authService;
   final ShiftAndCashController? shiftController;
   final CatalogAndRecipeController? catalogController;
+  final OrderAndCheckoutController? orderController;
 
   @override
   Widget build(BuildContext context) {
@@ -57,6 +62,7 @@ class RestaurantPosApp extends StatelessWidget {
         onAuthenticatePin: authService.authenticateWithPin,
         shiftController: shiftController,
         catalogController: catalogController,
+        orderController: orderController,
       ),
     );
   }

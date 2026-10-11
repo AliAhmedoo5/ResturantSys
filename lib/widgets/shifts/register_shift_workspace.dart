@@ -13,6 +13,9 @@ import 'discrepancy_review_dialog.dart';
 import 'open_business_day_dialog.dart';
 import 'open_shift_dialog.dart';
 import 'x_report_dialog.dart';
+import '../../core/orders/order_and_checkout_controller.dart';
+import '../../core/catalog/catalog_and_recipe_controller.dart';
+import '../orders/counter_billing_workspace.dart';
 
 /// Counter register operational workspace coordinating Business Day and Shift lifecycles.
 class RegisterShiftWorkspace extends StatefulWidget {
@@ -20,10 +23,14 @@ class RegisterShiftWorkspace extends StatefulWidget {
     super.key,
     required this.controller,
     required this.currentStaff,
+    this.orderController,
+    this.catalogController,
   });
 
   final ShiftAndCashController controller;
   final Staff currentStaff;
+  final OrderAndCheckoutController? orderController;
+  final CatalogAndRecipeController? catalogController;
 
   @override
   State<RegisterShiftWorkspace> createState() => _RegisterShiftWorkspaceState();
@@ -35,6 +42,7 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
   List<CashMovement> _activeMovements = [];
   int _flaggedCount = 0;
   bool _isLoading = true;
+  bool _showShiftDetails = false;
 
   final NumberFormat _currencyFormat = NumberFormat('#,##0.00', 'en_US');
   final DateFormat _timeFormat = DateFormat('HH:mm');
@@ -238,6 +246,14 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
       );
     }
 
+    final isDayOpen = _activeBusinessDay != null && _activeBusinessDay!.isOpen;
+    final isShiftOpen = _activeShift != null && _activeShift!.isOpen;
+    final showBilling = isDayOpen &&
+        isShiftOpen &&
+        widget.orderController != null &&
+        widget.catalogController != null &&
+        !_showShiftDetails;
+
     return Column(
       children: [
         BusinessDayBar(
@@ -253,11 +269,35 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
           onCloseShiftTap: _showBlindShiftCloseDialog,
           onDiscrepancyQueueTap: _showDiscrepancyReviewDialog,
         ),
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(WarmCounterSpacing.space24),
-            child: _buildWorkspaceBody(),
+        if (isShiftOpen && widget.orderController != null && widget.catalogController != null)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            color: WarmCounterColors.lightPageBackground,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton.icon(
+                  icon: Icon(_showShiftDetails ? Icons.point_of_sale_rounded : Icons.info_outline_rounded, size: 16),
+                  label: Text(_showShiftDetails ? 'Switch to Counter Billing Grid' : 'View Shift Details & Drawer Movements'),
+                  onPressed: () => setState(() => _showShiftDetails = !_showShiftDetails),
+                ),
+              ],
+            ),
           ),
+        Expanded(
+          child: showBilling
+              ? CounterBillingWorkspace(
+                  orderController: widget.orderController!,
+                  catalogController: widget.catalogController!,
+                  currentStaff: widget.currentStaff,
+                  businessDayId: _activeBusinessDay!.id,
+                  shiftId: _activeShift!.id,
+                  onOrderCompleted: _refreshState,
+                )
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.all(WarmCounterSpacing.space24),
+                  child: _buildWorkspaceBody(),
+                ),
         ),
       ],
     );
