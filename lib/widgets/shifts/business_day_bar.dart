@@ -136,16 +136,18 @@ class BusinessDayBar extends StatelessWidget {
                             minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
                           ),
                         ),
-                        const SizedBox(width: WarmCounterSpacing.space8),
-                        OutlinedButton.icon(
-                          key: const ValueKey('btn_interim_xreport'),
-                          icon: const Icon(Icons.receipt_long_rounded, size: 18),
-                          label: const Text('Interim X-Report'),
-                          onPressed: onInterimXReportTap,
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
+                        if (isSupervisor) ...[
+                          const SizedBox(width: WarmCounterSpacing.space8),
+                          OutlinedButton.icon(
+                            key: const ValueKey('btn_interim_xreport'),
+                            icon: const Icon(Icons.receipt_long_rounded, size: 18),
+                            label: const Text('Interim X-Report'),
+                            onPressed: onInterimXReportTap,
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
+                            ),
                           ),
-                        ),
+                        ],
                         const SizedBox(width: WarmCounterSpacing.space8),
                         ElevatedButton.icon(
                           key: const ValueKey('btn_close_shift'),
@@ -153,7 +155,7 @@ class BusinessDayBar extends StatelessWidget {
                           label: const Text('Handover / Close Shift'),
                           onPressed: onCloseShiftTap,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF9B1C1C),
+                            backgroundColor: WarmCounterColors.lightDestructiveAction,
                             foregroundColor: Colors.white,
                             minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
                           ),
@@ -178,7 +180,7 @@ class BusinessDayBar extends StatelessWidget {
                                 child: Container(
                                   padding: const EdgeInsets.all(4),
                                   decoration: const BoxDecoration(
-                                    color: Color(0xFFC81E1E),
+                                    color: WarmCounterColors.lightDestructiveAction,
                                     shape: BoxShape.circle,
                                   ),
                                   constraints: const BoxConstraints(minWidth: 18, minHeight: 18),

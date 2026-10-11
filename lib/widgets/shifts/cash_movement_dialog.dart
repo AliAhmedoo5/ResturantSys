@@ -119,7 +119,7 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
                   decoration: BoxDecoration(
                     color: _selectedType == CashMovementType.payIn
                         ? WarmCounterColors.lightActiveNavHighlight
-                        : const Color(0xFFFDE8E8),
+                        : WarmCounterColors.lightDestructiveHighlight,
                     borderRadius: WarmCounterSpacing.controlBorderRadius,
                   ),
                   child: Icon(
@@ -128,7 +128,7 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
                         : Icons.remove_circle_outline_rounded,
                     color: _selectedType == CashMovementType.payIn
                         ? WarmCounterColors.lightPrimaryAction
-                        : const Color(0xFF9B1C1C),
+                        : WarmCounterColors.lightDestructiveAction,
                     size: 28,
                   ),
                 ),
@@ -199,11 +199,11 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
                       height: 48,
                       decoration: BoxDecoration(
                         color: _selectedType == CashMovementType.payOut
-                            ? const Color(0xFFFDE8E8)
+                            ? WarmCounterColors.lightDestructiveHighlight
                             : WarmCounterColors.lightPageBackground,
                         border: Border.all(
                           color: _selectedType == CashMovementType.payOut
-                              ? const Color(0xFF9B1C1C)
+                              ? WarmCounterColors.lightDestructiveAction
                               : WarmCounterColors.lightBorder,
                           width: _selectedType == CashMovementType.payOut ? 2 : 1,
                         ),
@@ -215,7 +215,7 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
                         style: WarmCounterTypography.bodyMedium.copyWith(
                           fontWeight: FontWeight.bold,
                           color: _selectedType == CashMovementType.payOut
-                              ? const Color(0xFF9B1C1C)
+                              ? WarmCounterColors.lightDestructiveAction
                               : WarmCounterColors.lightSecondaryText,
                         ),
                       ),
@@ -302,7 +302,7 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
               const SizedBox(height: WarmCounterSpacing.space12),
               Text(
                 _generalError!,
-                style: const TextStyle(color: Color(0xFFC81E1E), fontSize: 13, fontWeight: FontWeight.w600),
+                style: const TextStyle(color: WarmCounterColors.lightDestructiveAction, fontSize: 13, fontWeight: FontWeight.w600),
               ),
             ],
 
@@ -327,7 +327,7 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _selectedType == CashMovementType.payIn
                           ? WarmCounterColors.lightPrimaryAction
-                          : const Color(0xFF9B1C1C),
+                          : WarmCounterColors.lightDestructiveAction,
                       foregroundColor: Colors.white,
                       minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
                       shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),

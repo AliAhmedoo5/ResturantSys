@@ -85,12 +85,12 @@ class _DiscrepancyReviewDialogState extends State<DiscrepancyReviewDialog> {
                 Container(
                   padding: const EdgeInsets.all(WarmCounterSpacing.space8),
                   decoration: const BoxDecoration(
-                    color: Color(0xFFFDE8E8),
+                    color: WarmCounterColors.lightDestructiveHighlight,
                     borderRadius: WarmCounterSpacing.controlBorderRadius,
                   ),
                   child: const Icon(
                     Icons.warning_amber_rounded,
-                    color: Color(0xFF9B1C1C),
+                    color: WarmCounterColors.lightDestructiveAction,
                     size: 28,
                   ),
                 ),
@@ -104,7 +104,7 @@ class _DiscrepancyReviewDialogState extends State<DiscrepancyReviewDialog> {
                         style: WarmCounterTypography.pageHeading.copyWith(fontSize: 20),
                       ),
                       Text(
-                        'Asynchronous supervisor audit for flagged cashier drawer variances',
+                        'Asynchronous supervisor audit for flagged cashier drawer discrepancies',
                         style: WarmCounterTypography.caption.copyWith(
                           color: WarmCounterColors.lightSecondaryText,
                         ),
@@ -130,7 +130,7 @@ class _DiscrepancyReviewDialogState extends State<DiscrepancyReviewDialog> {
                             style: WarmCounterTypography.bodyLarge.copyWith(fontWeight: FontWeight.bold),
                           ),
                           Text(
-                            'No shifts currently require supervisor variance review.',
+                            'No shifts currently require supervisor discrepancy review.',
                             style: WarmCounterTypography.caption.copyWith(color: WarmCounterColors.lightSecondaryText),
                           ),
                         ],
@@ -151,7 +151,7 @@ class _DiscrepancyReviewDialogState extends State<DiscrepancyReviewDialog> {
                             color: WarmCounterColors.lightPageBackground,
                             borderRadius: WarmCounterSpacing.controlBorderRadius,
                             border: Border.all(
-                              color: isShortage ? const Color(0xFFF98080) : const Color(0xFFFACA15),
+                              color: isShortage ? WarmCounterColors.lightDestructiveAction : WarmCounterColors.lightWarning,
                               width: 1.5,
                             ),
                           ),
@@ -168,13 +168,13 @@ class _DiscrepancyReviewDialogState extends State<DiscrepancyReviewDialog> {
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                     decoration: BoxDecoration(
-                                      color: isShortage ? const Color(0xFFFDE8E8) : const Color(0xFFFEF08A),
+                                      color: isShortage ? WarmCounterColors.lightDestructiveHighlight : WarmCounterColors.lightWarningHighlight,
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Text(
-                                      '${isShortage ? "Shortage: " : "Overage: "}Rs ${_currencyFormat.format(variance)}',
+                                      'Discrepancy: Rs ${_currencyFormat.format(variance)}',
                                       style: TextStyle(
-                                        color: isShortage ? const Color(0xFF9B1C1C) : const Color(0xFF723B10),
+                                        color: isShortage ? WarmCounterColors.lightDestructiveAction : WarmCounterColors.lightWarning,
                                         fontWeight: FontWeight.bold,
                                         fontSize: 13,
                                       ),
@@ -235,6 +235,7 @@ class _DiscrepancyReviewDialogState extends State<DiscrepancyReviewDialog> {
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: WarmCounterColors.lightPrimaryAction,
                                         foregroundColor: Colors.white,
+                                        minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
                                       ),
                                       child: Text(_isSubmitting ? 'Resolving...' : 'Confirm Resolution'),
                                     ),
@@ -256,6 +257,7 @@ class _DiscrepancyReviewDialogState extends State<DiscrepancyReviewDialog> {
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: WarmCounterColors.lightSurfaceMuted,
                                       foregroundColor: WarmCounterColors.lightPrimaryText,
+                                      minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
                                     ),
                                     child: const Text('Audit & Resolve'),
                                   ),

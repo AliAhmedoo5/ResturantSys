@@ -35,6 +35,15 @@ abstract final class WarmCounterColors {
   /// Destructive: Muted red for voids, cart discards, and cancellations.
   static const Color lightDestructive = Color(0xFFDC2626);
 
+  /// Destructive action button background.
+  static const Color lightDestructiveAction = lightDestructive;
+
+  /// Destructive container / background tint: Soft pale red background for badges, chips, and error banners.
+  static const Color lightDestructiveHighlight = Color(0xFFFEE2E2);
+
+  /// Warning container / background tint: Soft pale amber background for warning chips.
+  static const Color lightWarningHighlight = Color(0xFFFEF3C7);
+
   /// Active section highlight: Pale green background for selected navigation items.
   static const Color lightActiveNavHighlight = Color(0xFFE3EFE7);
 

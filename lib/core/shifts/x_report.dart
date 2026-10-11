@@ -107,11 +107,11 @@ class XReport {
     line('Expected Drawer:', 'Rs ${_currencyFormat.format(expectedDrawerCash)}');
     if (countedCash != null) {
       line('Counted Cash:', 'Rs ${_currencyFormat.format(countedCash!)}');
-      line('Variance:', 'Rs ${_currencyFormat.format(discrepancy ?? 0.0)}');
+      line('Discrepancy:', 'Rs ${_currencyFormat.format(discrepancy ?? 0.0)}');
       line('Discrepancy Status:', discrepancyStatus.dbValue);
     } else {
       line('Counted Cash:', 'N/A (Active Shift)');
-      line('Variance:', 'N/A');
+      line('Discrepancy:', 'N/A');
     }
 
     if (cashMovements.isNotEmpty) {

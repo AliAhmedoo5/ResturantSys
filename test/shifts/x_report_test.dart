@@ -104,7 +104,7 @@ void main() {
       expect(printable, contains('SHIFT CLOSING X-REPORT'));
       expect(printable, contains('Counted Cash:'));
       expect(printable, contains('3,700.00'));
-      expect(printable, contains('Variance:'));
+      expect(printable, contains('Discrepancy:'));
       expect(printable, contains('-50.00'));
     });
   });

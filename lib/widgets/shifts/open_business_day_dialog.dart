@@ -109,7 +109,7 @@ class _OpenBusinessDayDialogState extends State<OpenBusinessDayDialog> {
               const SizedBox(height: 12),
               Text(
                 _errorMessage!,
-                style: const TextStyle(color: Color(0xFFC81E1E), fontSize: 13, fontWeight: FontWeight.w600),
+                style: const TextStyle(color: WarmCounterColors.lightDestructiveAction, fontSize: 13, fontWeight: FontWeight.w600),
               ),
             ],
             const SizedBox(height: WarmCounterSpacing.space24),

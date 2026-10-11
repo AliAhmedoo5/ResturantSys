@@ -119,7 +119,7 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(e.toString().replaceFirst('StateError: ', '')),
-              backgroundColor: const Color(0xFFC81E1E),
+              backgroundColor: WarmCounterColors.lightDestructiveAction,
             ),
           );
         }
@@ -307,7 +307,7 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
               else
                 Text(
                   'Supervisor authorization is required to open the Business Day.',
-                  style: WarmCounterTypography.caption.copyWith(color: const Color(0xFFC81E1E)),
+                  style: WarmCounterTypography.caption.copyWith(color: WarmCounterColors.lightDestructiveAction),
                 ),
             ],
           ),
@@ -474,13 +474,13 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
-                            color: m.isPayIn ? WarmCounterColors.lightActiveNavHighlight : const Color(0xFFFDE8E8),
+                            color: m.isPayIn ? WarmCounterColors.lightActiveNavHighlight : WarmCounterColors.lightDestructiveHighlight,
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
                             m.isPayIn ? '+ PAY-IN' : '- PAY-OUT',
                             style: TextStyle(
-                              color: m.isPayIn ? WarmCounterColors.lightPrimaryAction : const Color(0xFF9B1C1C),
+                              color: m.isPayIn ? WarmCounterColors.lightPrimaryAction : WarmCounterColors.lightDestructiveAction,
                               fontWeight: FontWeight.bold,
                               fontSize: 11,
                             ),
@@ -510,32 +510,39 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
               ),
 
             const SizedBox(height: WarmCounterSpacing.space24),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.receipt_long_rounded),
-                    label: const Text('Generate Interim X-Report'),
-                    onPressed: _showInterimXReportDialog,
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
+            Builder(
+              builder: (context) {
+                final isSupervisor = widget.currentStaff.canAccessSupervisorPortal || widget.currentStaff.canAuthorizeOverrides;
+                return Row(
+                  children: [
+                    if (isSupervisor) ...[
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.receipt_long_rounded),
+                          label: const Text('Generate Interim X-Report'),
+                          onPressed: _showInterimXReportDialog,
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: WarmCounterSpacing.space12),
+                    ],
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.inventory_2_outlined),
+                        label: const Text('Blind Shift Handover'),
+                        onPressed: _showBlindShiftCloseDialog,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: WarmCounterColors.lightDestructiveAction,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: WarmCounterSpacing.space12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.inventory_2_outlined),
-                    label: const Text('Blind Shift Handover'),
-                    onPressed: _showBlindShiftCloseDialog,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF9B1C1C),
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
-                    ),
-                  ),
-                ),
-              ],
+                  ],
+                );
+              },
             ),
           ],
         ),

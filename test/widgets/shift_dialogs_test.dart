@@ -336,17 +336,77 @@ void main() {
       await tester.pump();
       expect(cashMovementClicked, isTrue);
 
-      final xReportBtn = find.byKey(const ValueKey('btn_interim_xreport'));
-      await tester.ensureVisible(xReportBtn);
-      await tester.tap(xReportBtn);
-      await tester.pump();
-      expect(xReportClicked, isTrue);
+      // Cashier must NOT see Interim X-Report to prevent peeking expected totals prior to blind handover
+      expect(find.byKey(const ValueKey('btn_interim_xreport')), findsNothing);
 
       final closeShiftBtn = find.byKey(const ValueKey('btn_close_shift'));
       await tester.ensureVisible(closeShiftBtn);
       await tester.tap(closeShiftBtn);
       await tester.pump();
       expect(closeShiftClicked, isTrue);
+    });
+
+    testWidgets('BusinessDayBar shows Interim X-Report for supervisor and triggers it', (tester) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      bool xReportClicked = false;
+
+      const supervisor = Staff(
+        id: 2,
+        name: 'Manager Ali',
+        departmentId: 3,
+        departmentName: 'Management',
+        pinHash: 'dummy',
+        role: StaffRole.supervisor,
+        isActive: true,
+      );
+
+      final businessDay = BusinessDay(
+        id: 1,
+        openedAt: DateTime(2026, 10, 11, 8, 0),
+        openedByStaffId: 2,
+        status: BusinessDayStatus.open,
+      );
+
+      final shift = Shift(
+        id: 5,
+        businessDayId: 1,
+        staffId: 1,
+        openedAt: DateTime(2026, 10, 11, 8, 30),
+        openingFloat: 5000.0,
+        status: ShiftStatus.open,
+        staffName: 'Zeeshan Cashier',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: WarmCounterTheme.lightTheme,
+          home: Scaffold(
+            body: BusinessDayBar(
+              currentStaff: supervisor,
+              activeBusinessDay: businessDay,
+              activeShift: shift,
+              flaggedShiftsCount: 0,
+              onOpenBusinessDayTap: () {},
+              onCloseBusinessDayTap: () {},
+              onOpenShiftTap: () {},
+              onCashMovementTap: () {},
+              onInterimXReportTap: () => xReportClicked = true,
+              onCloseShiftTap: () {},
+              onDiscrepancyQueueTap: () {},
+            ),
+          ),
+        ),
+      );
+
+      final xReportBtn = find.byKey(const ValueKey('btn_interim_xreport'));
+      expect(xReportBtn, findsOneWidget);
+      await tester.ensureVisible(xReportBtn);
+      await tester.tap(xReportBtn);
+      await tester.pump();
+      expect(xReportClicked, isTrue);
     });
   });
 }
