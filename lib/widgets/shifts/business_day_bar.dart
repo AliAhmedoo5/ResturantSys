@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/shifts/business_day.dart';
 import 'package:resturant_sys/core/shifts/shift.dart';
@@ -34,9 +33,6 @@ class BusinessDayBar extends StatelessWidget {
   final VoidCallback onInterimXReportTap;
   final VoidCallback onCloseShiftTap;
   final VoidCallback onDiscrepancyQueueTap;
-
-  static final NumberFormat _currencyFormat = NumberFormat('#,##0.00', 'en_US');
-  static final DateFormat _timeFormat = DateFormat('HH:mm');
 
   @override
   Widget build(BuildContext context) {

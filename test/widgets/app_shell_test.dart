@@ -172,6 +172,7 @@ void main() {
             shiftController: controller,
           ),
         ),
+      );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
 
