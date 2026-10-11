@@ -135,7 +135,7 @@ class _MenuItemFormDialogState extends State<MenuItemFormDialog> {
               children: [
                 DropdownButtonFormField<int>(
                   key: const ValueKey('menu_item_category_dropdown'),
-                  value: _selectedCategoryId,
+                  initialValue: _selectedCategoryId,
                   decoration: const InputDecoration(labelText: 'Category'),
                   items: widget.categories.map((c) {
                     return DropdownMenuItem<int>(

@@ -129,12 +129,12 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
 
       // Seed a category and ingredient
-      final category = await controller.createCategory(
+      await controller.createCategory(
         name: 'Burgers',
         displayOrder: 1,
         colorHex: '#E53935',
       );
-      final bun = await controller.createRawIngredient(
+      await controller.createRawIngredient(
         name: 'Sesame Bun',
         storageUnit: StorageUnit.count,
         currentStock: 100.0,

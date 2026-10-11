@@ -107,7 +107,7 @@ class _DiscountPresetFormDialogState extends State<DiscountPresetFormDialog> {
               const SizedBox(height: WarmCounterSpacing.space16),
               DropdownButtonFormField<DiscountType>(
                 key: const ValueKey('discount_type_dropdown'),
-                value: _selectedType,
+                initialValue: _selectedType,
                 decoration: const InputDecoration(labelText: 'Discount Calculation Type'),
                 items: DiscountType.values.map((t) {
                   return DropdownMenuItem<DiscountType>(

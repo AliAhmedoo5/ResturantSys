@@ -47,7 +47,7 @@ void main() {
         displayOrder: 1,
         colorHex: '#E53935',
       );
-      final cat3 = await controller.createCategory(
+      await controller.createCategory(
         name: 'Desserts',
         displayOrder: 3,
         colorHex: '#8E24AA',

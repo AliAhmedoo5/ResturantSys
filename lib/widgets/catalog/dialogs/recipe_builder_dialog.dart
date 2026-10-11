@@ -199,7 +199,7 @@ class _RecipeBuilderDialogState extends State<RecipeBuilderDialog> {
                           flex: 3,
                           child: DropdownButtonFormField<int>(
                             key: const ValueKey('recipe_ingredient_dropdown'),
-                            value: _selectedIngredientId,
+                            initialValue: _selectedIngredientId,
                             decoration: const InputDecoration(labelText: 'Select Ingredient'),
                             isExpanded: true,
                             items: _allIngredients.map((i) {
@@ -250,7 +250,7 @@ class _RecipeBuilderDialogState extends State<RecipeBuilderDialog> {
                         ? Center(
                             child: Container(
                               padding: const EdgeInsets.all(WarmCounterSpacing.space24),
-                              decoration: BoxDecoration(
+                              decoration: const BoxDecoration(
                                 color: WarmCounterColors.lightPageBackground,
                                 borderRadius: WarmCounterSpacing.controlBorderRadius,
                               ),
