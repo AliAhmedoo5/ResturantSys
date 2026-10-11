@@ -276,7 +276,6 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
 
       bool cashMovementClicked = false;
-      bool xReportClicked = false;
       bool closeShiftClicked = false;
 
       const cashier = Staff(
@@ -319,7 +318,7 @@ void main() {
               onCloseBusinessDayTap: () {},
               onOpenShiftTap: () {},
               onCashMovementTap: () => cashMovementClicked = true,
-              onInterimXReportTap: () => xReportClicked = true,
+              onInterimXReportTap: () {},
               onCloseShiftTap: () => closeShiftClicked = true,
               onDiscrepancyQueueTap: () {},
             ),
