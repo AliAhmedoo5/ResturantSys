@@ -107,7 +107,7 @@ class _PinLockScreenState extends State<PinLockScreen> {
     }
   }
 
-  static const Map<LogicalKeyboardKey, String> _digitKeyMap = {
+  static final Map<LogicalKeyboardKey, String> _digitKeyMap = {
     LogicalKeyboardKey.digit0: '0',
     LogicalKeyboardKey.numpad0: '0',
     LogicalKeyboardKey.digit1: '1',

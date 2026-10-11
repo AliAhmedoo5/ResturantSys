@@ -64,6 +64,9 @@ class AuthService {
     }
     return staff;
   }
+
+  /// Changes a staff member's 4-digit PIN after verifying their current PIN.
+  Future<bool> changePin({
     required int staffId,
     required String oldPin,
     required String newPin,
