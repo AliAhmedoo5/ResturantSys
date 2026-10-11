@@ -208,8 +208,9 @@ class _BlindShiftCloseDialogState extends State<BlindShiftCloseDialog> {
                 borderRadius: WarmCounterSpacing.controlBorderRadius,
                 border: Border.all(color: WarmCounterColors.lightBorder),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              child: Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   Text(
                     'Total Physical Counted:',
@@ -260,13 +261,7 @@ class _BlindShiftCloseDialogState extends State<BlindShiftCloseDialog> {
                       minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
                       shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
                     ),
-                    child: _isSubmitting
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                          )
-                        : const Text('Submit Blind Count & Close'),
+                    child: Text(_isSubmitting ? 'Closing Shift...' : 'Submit Blind Count & Close'),
                   ),
                 ),
               ],

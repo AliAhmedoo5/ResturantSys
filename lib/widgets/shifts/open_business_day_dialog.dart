@@ -136,13 +136,7 @@ class _OpenBusinessDayDialogState extends State<OpenBusinessDayDialog> {
                       minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
                       shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
                     ),
-                    child: _isSubmitting
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                          )
-                        : const Text('Open Business Day'),
+                    child: Text(_isSubmitting ? 'Opening Day...' : 'Start Operating Day'),
                   ),
                 ),
               ],

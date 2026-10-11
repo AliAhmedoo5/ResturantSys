@@ -230,7 +230,12 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(
+        child: Text(
+          'Loading POS Workspace...',
+          style: TextStyle(color: WarmCounterColors.lightSecondaryText),
+        ),
+      );
     }
 
     return Column(

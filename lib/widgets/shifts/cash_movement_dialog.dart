@@ -332,13 +332,9 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
                       minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
                       shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
                     ),
-                    child: _isSubmitting
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                          )
-                        : Text(_selectedType == CashMovementType.payIn ? 'Record Pay-In' : 'Record Pay-Out'),
+                    child: Text(_isSubmitting
+                        ? 'Recording...'
+                        : (_selectedType == CashMovementType.payIn ? 'Record Pay-In' : 'Record Pay-Out')),
                   ),
                 ),
               ],

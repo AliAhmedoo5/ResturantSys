@@ -185,13 +185,7 @@ class _OpenShiftDialogState extends State<OpenShiftDialog> {
                       minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
                       shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
                     ),
-                    child: _isSubmitting
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                          )
-                        : const Text('Open Shift'),
+                    child: Text(_isSubmitting ? 'Opening Shift...' : 'Open Shift'),
                   ),
                 ),
               ],

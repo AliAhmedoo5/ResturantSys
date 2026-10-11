@@ -172,8 +172,8 @@ void main() {
             shiftController: controller,
           ),
         ),
-      );
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
 
       expect(find.text('Business Day Closed'), findsOneWidget);
       expect(find.byKey(const ValueKey('btn_open_business_day')), findsOneWidget);

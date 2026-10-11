@@ -61,7 +61,7 @@ class BusinessDayBar extends StatelessWidget {
           _buildStatusChip(
             icon: Icons.calendar_today_rounded,
             label: isDayOpen
-                ? 'Day #${activeBusinessDay!.id} (Opened ${_timeFormat.format(activeBusinessDay!.openedAt)})'
+                ? 'Day #${activeBusinessDay!.id}'
                 : 'Business Day Closed',
             isActive: isDayOpen,
           ),
@@ -71,7 +71,7 @@ class BusinessDayBar extends StatelessWidget {
           _buildStatusChip(
             icon: Icons.point_of_sale_rounded,
             label: isShiftOpen
-                ? 'Shift #${activeShift!.id}: ${activeShift!.staffName ?? currentStaff.name} (Float: Rs ${_currencyFormat.format(activeShift!.openingFloat)})'
+                ? 'Shift #${activeShift!.id}: ${activeShift!.staffName ?? currentStaff.name}'
                 : 'No Active Shift',
             isActive: isShiftOpen,
           ),

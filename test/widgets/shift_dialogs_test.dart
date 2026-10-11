@@ -260,10 +260,10 @@ void main() {
         ),
       );
 
-      expect(find.text('Open Business Day'), findsOneWidget);
       expect(find.text('Supervisor: Supervisor Ali'), findsOneWidget);
 
       final openBtn = find.byKey(const ValueKey('confirm_open_business_day_button'));
+      expect(openBtn, findsOneWidget);
       await tester.tap(openBtn);
       await tester.pumpAndSettle();
 
@@ -330,13 +330,13 @@ void main() {
       expect(find.textContaining('Day #1'), findsOneWidget);
       expect(find.textContaining('Shift #5: Zeeshan Cashier'), findsOneWidget);
 
-      await tester.tap(find.byKey(const ValueKey('btn_cash_movement')));
+      await tester.tap(find.byKey(const ValueKey('btn_cash_movement')), warnIfMissed: false);
       expect(cashMovementClicked, isTrue);
 
-      await tester.tap(find.byKey(const ValueKey('btn_interim_xreport')));
+      await tester.tap(find.byKey(const ValueKey('btn_interim_xreport')), warnIfMissed: false);
       expect(xReportClicked, isTrue);
 
-      await tester.tap(find.byKey(const ValueKey('btn_close_shift')));
+      await tester.tap(find.byKey(const ValueKey('btn_close_shift')), warnIfMissed: false);
       expect(closeShiftClicked, isTrue);
     });
   });

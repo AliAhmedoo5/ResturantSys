@@ -188,14 +188,14 @@ class _DiscrepancyReviewDialogState extends State<DiscrepancyReviewDialog> {
                                 style: WarmCounterTypography.caption.copyWith(color: WarmCounterColors.lightSecondaryText),
                               ),
                               const SizedBox(height: 8),
-                              Row(
+                              Wrap(
+                                spacing: 16,
+                                runSpacing: 4,
                                 children: [
                                   Text('Opening Float: Rs ${_currencyFormat.format(shift.openingFloat)}',
                                       style: WarmCounterTypography.caption),
-                                  const SizedBox(width: 16),
                                   Text('Expected: Rs ${_currencyFormat.format(shift.expectedCash ?? 0.0)}',
                                       style: WarmCounterTypography.caption),
-                                  const SizedBox(width: 16),
                                   Text('Counted: Rs ${_currencyFormat.format(shift.countedCash ?? 0.0)}',
                                       style: WarmCounterTypography.caption.copyWith(fontWeight: FontWeight.bold)),
                                 ],
@@ -236,13 +236,7 @@ class _DiscrepancyReviewDialogState extends State<DiscrepancyReviewDialog> {
                                         backgroundColor: WarmCounterColors.lightPrimaryAction,
                                         foregroundColor: Colors.white,
                                       ),
-                                      child: _isSubmitting
-                                          ? const SizedBox(
-                                              height: 16,
-                                              width: 16,
-                                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                            )
-                                          : const Text('Confirm Resolution'),
+                                      child: Text(_isSubmitting ? 'Resolving...' : 'Confirm Resolution'),
                                     ),
                                   ],
                                 ),
