@@ -1,0 +1,3 @@
+# Non-Blocking Shift Discrepancy Logging
+
+During shift handover, if a cashier's blind physical cash count reveals a variance exceeding the supervisor's discrepancy threshold, locking the POS until a manager arrives could paralyze counter service during a peak dining rush. We decided that the system will record the variance immediately as an active Discrepancy Flag linked to the cashier's ID and shift record without freezing or blocking register operations. The incoming cashier can open their shift immediately, while the flagged discrepancy remains highlighted in the Supervisor Portal for asynchronous investigation and resolution.

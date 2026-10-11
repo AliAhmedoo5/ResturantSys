@@ -30,6 +30,10 @@ node_modules/
 dist/
 build/
 *.log
+.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
 
 # Scratch
 .scratch/

@@ -1,0 +1,3 @@
+# Pre-Approved Discounts Without Cashier PIN Friction
+
+Fast-food counter checkout requires minimal keystrokes during peak queues, but unrestricted cashier discounting invites financial shrinkage. We decided that all promotional and staff discounts must be pre-configured by the supervisor or owner in the management portal with defined parameters (fixed percentage or flat amount). Cashiers can select these pre-approved discount buttons directly during order checkout without requiring a supervisor PIN, while every applied discount is permanently logged with the cashier ID and order record for end-of-day audit verification.

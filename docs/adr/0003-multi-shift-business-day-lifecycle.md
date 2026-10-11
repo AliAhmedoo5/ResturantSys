@@ -1,0 +1,3 @@
+# Multi-Shift Lifecycle per Business Day
+
+A fast-food restaurant may operate 14 to 18 hours daily across distinct morning and evening cashier shifts, while kitchen tokens and inventory consumption run continuously across the entire operating day. We decided to structure the system with an overarching Business Day that contains multiple sequential Cashier Shifts. Each cashier shift generates an independent X-Report with a blind drawer count to isolate cash discrepancies to that individual cashier, while the final closing supervisor executes the master Z-Report to finalize daily revenue, token sequences, and accounting snapshots.
