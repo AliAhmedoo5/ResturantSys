@@ -242,7 +242,7 @@ class _MenuItemFormDialogState extends State<MenuItemFormDialog> {
                         children: [
                           const Text('Retail Price', style: WarmCounterTypography.caption),
                           Text(
-                            'Rs ${_currencyFormat.format(_currentPrice)}',
+                            'Rs ${_currencyFormat.format(_isTaxInclusive ? _currentPrice : _currentPrice + _calculatedTax)}',
                             style: WarmCounterTypography.tabularNumbers.copyWith(
                               fontWeight: FontWeight.bold,
                               color: WarmCounterColors.lightPrimaryAction,

@@ -933,7 +933,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Text(
-                            'Rs ${_currencyFormat.format(item.basePrice)}',
+                            'Rs ${_currencyFormat.format(item.grossPrice)}',
                             style: WarmCounterTypography.tabularNumbers.copyWith(
                               fontWeight: FontWeight.bold,
                               fontSize: 16,
