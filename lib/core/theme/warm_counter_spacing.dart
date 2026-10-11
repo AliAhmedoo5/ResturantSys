@@ -37,6 +37,9 @@ abstract final class WarmCounterSpacing {
   /// Minimum touch target dimension (48px × 48px) ensuring practical, mistake-free tapping.
   static const double minTouchTargetSize = 48.0;
 
+  /// Alias for minTouchTargetSize (48.0).
+  static const double touchTargetMin = minTouchTargetSize;
+
   /// Box constraints ensuring a minimum 48px square touch target.
   static const BoxConstraints minTouchTargetConstraints = BoxConstraints(
     minWidth: minTouchTargetSize,

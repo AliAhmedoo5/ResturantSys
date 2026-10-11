@@ -38,6 +38,9 @@ abstract final class WarmCounterColors {
   /// Active section highlight: Pale green background for selected navigation items.
   static const Color lightActiveNavHighlight = Color(0xFFE3EFE7);
 
+  /// Muted container surface for secondary panels and subtle chips.
+  static const Color lightSurfaceMuted = Color(0xFFECEAE4);
+
   // ---------------------------------------------------------------------------
   // Dark Mode Palette
   // ---------------------------------------------------------------------------

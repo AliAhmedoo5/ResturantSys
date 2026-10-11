@@ -103,6 +103,15 @@ abstract final class WarmCounterTypography {
     fontFeatures: tabularFigures,
   );
 
+  /// Tabular numbers text style for aligned monetary and quantity figures.
+  static const TextStyle tabularNumbers = tableAmount;
+
+  /// Secondary metadata and small caption style.
+  static const TextStyle caption = secondaryLabel;
+
+  /// Large body text style.
+  static const TextStyle bodyLarge = body;
+
   /// Factory creating the standard Material [TextTheme] bound to [textColor].
   static TextTheme createTextTheme(Color textColor, Color secondaryTextColor) {
     return TextTheme(

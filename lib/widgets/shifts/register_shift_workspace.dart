@@ -440,7 +440,7 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
             if (_activeMovements.isEmpty)
               Container(
                 padding: const EdgeInsets.all(WarmCounterSpacing.space16),
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   color: WarmCounterColors.lightPageBackground,
                   borderRadius: WarmCounterSpacing.controlBorderRadius,
                 ),
@@ -460,7 +460,7 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
                   final m = _activeMovements[index];
                   return Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
+                    decoration: const BoxDecoration(
                       color: WarmCounterColors.lightPageBackground,
                       borderRadius: WarmCounterSpacing.controlBorderRadius,
                     ),
