@@ -74,7 +74,7 @@ void main() {
       // Switch to Discounts tab
       await tester.tap(find.byKey(const ValueKey('tab_discounts')));
       await tester.pumpAndSettle();
-      expect(find.descendant(of: find.byType(SingleChildScrollView), matching: find.text('Pre-Approved Discounts')), findsOneWidget);
+      expect(find.text('Promotions cashiers can apply at the counter without requiring a supervisor PIN (ADR-0004).'), findsOneWidget);
       expect(find.byKey(const ValueKey('add_discount_preset_button')), findsOneWidget);
     });
 
