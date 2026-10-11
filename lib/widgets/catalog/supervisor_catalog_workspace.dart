@@ -22,10 +22,20 @@ import 'dialogs/recipe_builder_dialog.dart';
 class SupervisorCatalogWorkspace extends StatefulWidget {
   const SupervisorCatalogWorkspace({
     super.key,
-    required this.controller,
+    this.controller,
+    this.initialCategories,
+    this.initialMenuItems,
+    this.initialRawIngredients,
+    this.initialModifiers,
+    this.initialDiscounts,
   });
 
-  final CatalogAndRecipeController controller;
+  final CatalogAndRecipeController? controller;
+  final List<MenuCategory>? initialCategories;
+  final List<MenuItem>? initialMenuItems;
+  final List<RawIngredient>? initialRawIngredients;
+  final List<Modifier>? initialModifiers;
+  final List<DiscountPreset>? initialDiscounts;
 
   @override
   State<SupervisorCatalogWorkspace> createState() => _SupervisorCatalogWorkspaceState();
@@ -52,12 +62,30 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
   }
 
   Future<void> _loadAllCatalogData() async {
+    if (widget.initialCategories != null || widget.controller == null) {
+      if (mounted) {
+        setState(() {
+          _categories = List.from(widget.initialCategories ?? []);
+          _menuItems = List.from(widget.initialMenuItems ?? []);
+          var ings = List<RawIngredient>.from(widget.initialRawIngredients ?? []);
+          if (_lowStockFilterOnly) {
+            ings = ings.where((i) => i.isLowStock).toList();
+          }
+          _rawIngredients = ings;
+          _modifiers = List.from(widget.initialModifiers ?? []);
+          _discounts = List.from(widget.initialDiscounts ?? []);
+          _isLoading = false;
+        });
+      }
+      return;
+    }
+
     setState(() => _isLoading = true);
-    final categories = await widget.controller.getCategories();
-    final items = await widget.controller.getMenuItems(categoryId: _menuItemCategoryFilter);
-    final ingredients = await widget.controller.getRawIngredients(lowStockOnly: _lowStockFilterOnly ? true : null);
-    final modifiers = await widget.controller.getModifiers();
-    final discounts = await widget.controller.getDiscountPresets();
+    final categories = await widget.controller!.getCategories();
+    final items = await widget.controller!.getMenuItems(categoryId: _menuItemCategoryFilter);
+    final ingredients = await widget.controller!.getRawIngredients(lowStockOnly: _lowStockFilterOnly ? true : null);
+    final modifiers = await widget.controller!.getModifiers();
+    final discounts = await widget.controller!.getDiscountPresets();
 
     if (mounted) {
       setState(() {
@@ -91,12 +119,23 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
       context: context,
       builder: (ctx) => CategoryFormDialog(
         onSave: ({required name, required displayOrder, required colorHex}) async {
-          await widget.controller.createCategory(
-            name: name,
-            displayOrder: displayOrder,
-            colorHex: colorHex,
-          );
-          await _loadAllCatalogData();
+          if (widget.controller != null) {
+            await widget.controller!.createCategory(
+              name: name,
+              displayOrder: displayOrder,
+              colorHex: colorHex,
+            );
+            await _loadAllCatalogData();
+          } else {
+            setState(() {
+              _categories.add(MenuCategory(
+                id: _categories.length + 1,
+                name: name,
+                displayOrder: displayOrder,
+                colorHex: colorHex,
+              ));
+            });
+          }
         },
       ),
     );
@@ -108,14 +147,27 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
       builder: (ctx) => CategoryFormDialog(
         category: category,
         onSave: ({required name, required displayOrder, required colorHex}) async {
-          await widget.controller.updateCategory(
-            category.copyWith(
-              name: name,
-              displayOrder: displayOrder,
-              colorHex: colorHex,
-            ),
-          );
-          await _loadAllCatalogData();
+          if (widget.controller != null) {
+            await widget.controller!.updateCategory(
+              category.copyWith(
+                name: name,
+                displayOrder: displayOrder,
+                colorHex: colorHex,
+              ),
+            );
+            await _loadAllCatalogData();
+          } else {
+            setState(() {
+              final idx = _categories.indexWhere((c) => c.id == category.id);
+              if (idx != -1) {
+                _categories[idx] = category.copyWith(
+                  name: name,
+                  displayOrder: displayOrder,
+                  colorHex: colorHex,
+                );
+              }
+            });
+          }
         },
       ),
     );
@@ -139,8 +191,454 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
     );
 
     if (confirmed == true) {
-      await widget.controller.deleteCategory(category.id);
-      await _loadAllCatalogData();
+      if (widget.controller != null) {
+        await widget.controller!.deleteCategory(category.id);
+        await _loadAllCatalogData();
+      } else {
+        setState(() {
+          _categories.removeWhere((c) => c.id == category.id);
+        });
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Menu Item Actions
+  // ---------------------------------------------------------------------------
+
+  void _showAddMenuItemDialog() {
+    if (_categories.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please create at least one category before adding menu items.')),
+      );
+      return;
+    }
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => MenuItemFormDialog(
+        categories: _categories,
+        onSave: ({required categoryId, required name, required basePrice, required taxRate, required isTaxInclusive, required isActive}) async {
+          if (widget.controller != null) {
+            await widget.controller!.createMenuItem(
+              categoryId: categoryId,
+              name: name,
+              basePrice: basePrice,
+              taxRate: taxRate,
+              isTaxInclusive: isTaxInclusive,
+              isActive: isActive,
+            );
+            await _loadAllCatalogData();
+          } else {
+            final cat = _categories.firstWhere((c) => c.id == categoryId);
+            setState(() {
+              _menuItems.add(MenuItem(
+                id: _menuItems.length + 1,
+                categoryId: categoryId,
+                categoryName: cat.name,
+                name: name,
+                basePrice: basePrice,
+                taxRate: taxRate,
+                isTaxInclusive: isTaxInclusive,
+                isActive: isActive,
+              ));
+            });
+          }
+        },
+      ),
+    );
+  }
+
+  void _showEditMenuItemDialog(MenuItem item) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => MenuItemFormDialog(
+        item: item,
+        categories: _categories,
+        onSave: ({required categoryId, required name, required basePrice, required taxRate, required isTaxInclusive, required isActive}) async {
+          if (widget.controller != null) {
+            await widget.controller!.updateMenuItem(
+              item.copyWith(
+                categoryId: categoryId,
+                name: name,
+                basePrice: basePrice,
+                taxRate: taxRate,
+                isTaxInclusive: isTaxInclusive,
+                isActive: isActive,
+              ),
+            );
+            await _loadAllCatalogData();
+          } else {
+            setState(() {
+              final idx = _menuItems.indexWhere((m) => m.id == item.id);
+              if (idx != -1) {
+                _menuItems[idx] = item.copyWith(
+                  categoryId: categoryId,
+                  name: name,
+                  basePrice: basePrice,
+                  taxRate: taxRate,
+                  isTaxInclusive: isTaxInclusive,
+                  isActive: isActive,
+                );
+              }
+            });
+          }
+        },
+      ),
+    );
+  }
+
+  void _showRecipeBuilderDialog(MenuItem item) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => RecipeBuilderDialog(
+        menuItem: item,
+        controller: widget.controller,
+      ),
+    );
+  }
+
+  Future<void> _confirmDeleteMenuItem(MenuItem item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Menu Item'),
+        content: Text('Delete "${item.name}"? Linked BOM recipes and modifiers will be deleted.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: WarmCounterColors.lightDestructiveAction, foregroundColor: Colors.white),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      if (widget.controller != null) {
+        await widget.controller!.deleteMenuItem(item.id);
+        await _loadAllCatalogData();
+      } else {
+        setState(() {
+          _menuItems.removeWhere((m) => m.id == item.id);
+        });
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Raw Ingredient Actions
+  // ---------------------------------------------------------------------------
+
+  void _showAddRawIngredientDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => RawIngredientFormDialog(
+        onSave: ({required name, required storageUnit, required currentStock, required lowStockThreshold, required costPerRecipeUnit}) async {
+          if (widget.controller != null) {
+            await widget.controller!.createRawIngredient(
+              name: name,
+              storageUnit: storageUnit,
+              currentStock: currentStock,
+              lowStockThreshold: lowStockThreshold,
+              costPerRecipeUnit: costPerRecipeUnit,
+            );
+            await _loadAllCatalogData();
+          } else {
+            setState(() {
+              _rawIngredients.add(RawIngredient(
+                id: _rawIngredients.length + 1,
+                name: name,
+                storageUnit: storageUnit,
+                currentStock: currentStock,
+                lowStockThreshold: lowStockThreshold,
+                costPerRecipeUnit: costPerRecipeUnit,
+              ));
+            });
+          }
+        },
+      ),
+    );
+  }
+
+  void _showEditRawIngredientDialog(RawIngredient ingredient) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => RawIngredientFormDialog(
+        ingredient: ingredient,
+        onSave: ({required name, required storageUnit, required currentStock, required lowStockThreshold, required costPerRecipeUnit}) async {
+          if (widget.controller != null) {
+            await widget.controller!.updateRawIngredient(
+              ingredient.copyWith(
+                name: name,
+                storageUnit: storageUnit,
+                currentStock: currentStock,
+                lowStockThreshold: lowStockThreshold,
+                costPerRecipeUnit: costPerRecipeUnit,
+              ),
+            );
+            await _loadAllCatalogData();
+          } else {
+            setState(() {
+              final idx = _rawIngredients.indexWhere((i) => i.id == ingredient.id);
+              if (idx != -1) {
+                _rawIngredients[idx] = ingredient.copyWith(
+                  name: name,
+                  storageUnit: storageUnit,
+                  currentStock: currentStock,
+                  lowStockThreshold: lowStockThreshold,
+                  costPerRecipeUnit: costPerRecipeUnit,
+                );
+              }
+            });
+          }
+        },
+      ),
+    );
+  }
+
+  Future<void> _confirmDeleteRawIngredient(RawIngredient ingredient) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Raw Ingredient'),
+        content: Text('Delete "${ingredient.name}" from kitchen inventory? Cannot be deleted if used in an active recipe.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: WarmCounterColors.lightDestructiveAction, foregroundColor: Colors.white),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      if (widget.controller != null) {
+        try {
+          await widget.controller!.deleteRawIngredient(ingredient.id);
+          await _loadAllCatalogData();
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Cannot delete ingredient: it is linked to one or more active recipes.'),
+                backgroundColor: WarmCounterColors.lightDestructiveAction,
+              ),
+            );
+          }
+        }
+      } else {
+        setState(() {
+          _rawIngredients.removeWhere((i) => i.id == ingredient.id);
+        });
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Modifier Actions
+  // ---------------------------------------------------------------------------
+
+  void _showAddModifierDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => ModifierFormDialog(
+        menuItems: _menuItems,
+        rawIngredients: _rawIngredients,
+        onSave: ({menuItemId, required name, required priceDelta, rawIngredientId, required ingredientQtyDelta, required bool isActive}) async {
+          if (widget.controller != null) {
+            await widget.controller!.createModifier(
+              menuItemId: menuItemId,
+              name: name,
+              priceDelta: priceDelta,
+              rawIngredientId: rawIngredientId,
+              ingredientQtyDelta: ingredientQtyDelta,
+              isActive: isActive,
+            );
+            await _loadAllCatalogData();
+          } else {
+            setState(() {
+              _modifiers.add(Modifier(
+                id: _modifiers.length + 1,
+                menuItemId: menuItemId,
+                name: name,
+                priceDelta: priceDelta,
+                rawIngredientId: rawIngredientId,
+                ingredientQtyDelta: ingredientQtyDelta,
+                isActive: isActive,
+              ));
+            });
+          }
+        },
+      ),
+    );
+  }
+
+  void _showEditModifierDialog(Modifier modifier) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => ModifierFormDialog(
+        modifier: modifier,
+        menuItems: _menuItems,
+        rawIngredients: _rawIngredients,
+        onSave: ({menuItemId, required name, required priceDelta, rawIngredientId, required ingredientQtyDelta, required bool isActive}) async {
+          if (widget.controller != null) {
+            await widget.controller!.updateModifier(
+              modifier.copyWith(
+                menuItemId: menuItemId,
+                name: name,
+                priceDelta: priceDelta,
+                rawIngredientId: rawIngredientId,
+                ingredientQtyDelta: ingredientQtyDelta,
+                isActive: isActive,
+              ),
+            );
+            await _loadAllCatalogData();
+          } else {
+            setState(() {
+              final idx = _modifiers.indexWhere((m) => m.id == modifier.id);
+              if (idx != -1) {
+                _modifiers[idx] = modifier.copyWith(
+                  menuItemId: menuItemId,
+                  name: name,
+                  priceDelta: priceDelta,
+                  rawIngredientId: rawIngredientId,
+                  ingredientQtyDelta: ingredientQtyDelta,
+                  isActive: isActive,
+                );
+              }
+            });
+          }
+        },
+      ),
+    );
+  }
+
+  Future<void> _confirmDeleteModifier(Modifier modifier) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Modifier'),
+        content: Text('Delete modifier "${modifier.name}"?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: WarmCounterColors.lightDestructiveAction, foregroundColor: Colors.white),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      if (widget.controller != null) {
+        await widget.controller!.deleteModifier(modifier.id);
+        await _loadAllCatalogData();
+      } else {
+        setState(() {
+          _modifiers.removeWhere((m) => m.id == modifier.id);
+        });
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Discount Preset Actions
+  // ---------------------------------------------------------------------------
+
+  void _showAddDiscountDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => DiscountPresetFormDialog(
+        onSave: ({required name, required type, required value, required bool isActive}) async {
+          if (widget.controller != null) {
+            await widget.controller!.createDiscountPreset(
+              name: name,
+              type: type,
+              value: value,
+              isActive: isActive,
+            );
+            await _loadAllCatalogData();
+          } else {
+            setState(() {
+              _discounts.add(DiscountPreset(
+                id: _discounts.length + 1,
+                name: name,
+                type: type,
+                value: value,
+                isActive: isActive,
+              ));
+            });
+          }
+        },
+      ),
+    );
+  }
+
+  void _showEditDiscountDialog(DiscountPreset preset) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => DiscountPresetFormDialog(
+        preset: preset,
+        onSave: ({required name, required type, required value, required bool isActive}) async {
+          if (widget.controller != null) {
+            await widget.controller!.updateDiscountPreset(
+              preset.copyWith(
+                name: name,
+                type: type,
+                value: value,
+                isActive: isActive,
+              ),
+            );
+            await _loadAllCatalogData();
+          } else {
+            setState(() {
+              final idx = _discounts.indexWhere((d) => d.id == preset.id);
+              if (idx != -1) {
+                _discounts[idx] = preset.copyWith(
+                  name: name,
+                  type: type,
+                  value: value,
+                  isActive: isActive,
+                );
+              }
+            });
+          }
+        },
+      ),
+    );
+  }
+
+  Future<void> _confirmDeleteDiscount(DiscountPreset preset) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Discount Preset'),
+        content: Text('Delete discount preset "${preset.name}"?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: WarmCounterColors.lightDestructiveAction, foregroundColor: Colors.white),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      if (widget.controller != null) {
+        await widget.controller!.deleteDiscountPreset(preset.id);
+        await _loadAllCatalogData();
+      } else {
+        setState(() {
+          _discounts.removeWhere((d) => d.id == preset.id);
+        });
+      }
     }
   }
 

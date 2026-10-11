@@ -12,11 +12,19 @@ class RecipeBuilderDialog extends StatefulWidget {
   const RecipeBuilderDialog({
     super.key,
     required this.menuItem,
-    required this.controller,
+    this.controller,
+    this.initialRecipeItems,
+    this.initialAllIngredients,
+    this.onAddOrUpdateItem,
+    this.onRemoveItem,
   });
 
   final MenuItem menuItem;
-  final CatalogAndRecipeController controller;
+  final CatalogAndRecipeController? controller;
+  final List<RecipeItem>? initialRecipeItems;
+  final List<RawIngredient>? initialAllIngredients;
+  final Future<void> Function(int rawIngredientId, double quantity)? onAddOrUpdateItem;
+  final Future<void> Function(int rawIngredientId)? onRemoveItem;
 
   @override
   State<RecipeBuilderDialog> createState() => _RecipeBuilderDialogState();
@@ -45,9 +53,25 @@ class _RecipeBuilderDialogState extends State<RecipeBuilderDialog> {
   }
 
   Future<void> _loadData() async {
+    if (widget.initialRecipeItems != null || widget.controller == null) {
+      final items = widget.initialRecipeItems ?? [];
+      final ingredients = widget.initialAllIngredients ?? [];
+      if (mounted) {
+        setState(() {
+          _recipeItems = List.from(items);
+          _allIngredients = List.from(ingredients);
+          if (_selectedIngredientId == null && ingredients.isNotEmpty) {
+            _selectedIngredientId = ingredients.first.id;
+          }
+          _isLoading = false;
+        });
+      }
+      return;
+    }
+
     setState(() => _isLoading = true);
-    final items = await widget.controller.getRecipeForMenuItem(widget.menuItem.id);
-    final ingredients = await widget.controller.getRawIngredients();
+    final items = await widget.controller!.getRecipeForMenuItem(widget.menuItem.id);
+    final ingredients = await widget.controller!.getRawIngredients();
 
     if (mounted) {
       setState(() {
@@ -87,11 +111,15 @@ class _RecipeBuilderDialogState extends State<RecipeBuilderDialog> {
 
     setState(() => _isAdding = true);
     try {
-      await widget.controller.addOrUpdateRecipeItem(
-        menuItemId: widget.menuItem.id,
-        rawIngredientId: ingId,
-        quantity: qty,
-      );
+      if (widget.onAddOrUpdateItem != null) {
+        await widget.onAddOrUpdateItem!(ingId, qty);
+      } else if (widget.controller != null) {
+        await widget.controller!.addOrUpdateRecipeItem(
+          menuItemId: widget.menuItem.id,
+          rawIngredientId: ingId,
+          quantity: qty,
+        );
+      }
       _qtyController.clear();
       await _loadData();
     } catch (e) {
@@ -110,10 +138,14 @@ class _RecipeBuilderDialogState extends State<RecipeBuilderDialog> {
 
   Future<void> _handleRemoveItem(int rawIngredientId) async {
     try {
-      await widget.controller.removeRecipeItem(
-        menuItemId: widget.menuItem.id,
-        rawIngredientId: rawIngredientId,
-      );
+      if (widget.onRemoveItem != null) {
+        await widget.onRemoveItem!(rawIngredientId);
+      } else if (widget.controller != null) {
+        await widget.controller!.removeRecipeItem(
+          menuItemId: widget.menuItem.id,
+          rawIngredientId: rawIngredientId,
+        );
+      }
       await _loadData();
     } catch (e) {
       if (mounted) {

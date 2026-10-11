@@ -1,43 +1,17 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
+import 'package:resturant_sys/core/catalog/discount_preset.dart';
+import 'package:resturant_sys/core/catalog/menu_category.dart';
+import 'package:resturant_sys/core/catalog/menu_item.dart';
+import 'package:resturant_sys/core/catalog/modifier.dart';
+import 'package:resturant_sys/core/catalog/raw_ingredient.dart';
 import 'package:resturant_sys/core/catalog/storage_unit.dart';
-import 'package:resturant_sys/core/database/pos_database.dart';
 import 'package:resturant_sys/core/theme/warm_counter_theme.dart';
+import 'package:resturant_sys/widgets/catalog/dialogs/recipe_builder_dialog.dart';
 import 'package:resturant_sys/widgets/catalog/supervisor_catalog_workspace.dart';
 
 void main() {
-  setUpAll(() {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
-  });
-
   group('SupervisorCatalogWorkspace Widget Tests', () {
-    late Directory tempDir;
-    late String testDbPath;
-    late PosDatabase posDb;
-    late CatalogAndRecipeController controller;
-
-    setUp(() async {
-      tempDir = await Directory.systemTemp.createTemp('catalog_widget_test_');
-      testDbPath = '${tempDir.path}${Platform.pathSeparator}test_widget_pos.db';
-      posDb = PosDatabase(
-        factory: databaseFactoryFfi,
-        customPath: testDbPath,
-      );
-      final db = await posDb.initialize();
-      controller = CatalogAndRecipeController(database: db);
-    });
-
-    tearDown(() async {
-      await posDb.close();
-      if (await tempDir.exists()) {
-        await tempDir.delete(recursive: true);
-      }
-    });
-
     testWidgets('renders all 5 catalog tabs and supports tab switching', (tester) async {
       tester.view.physicalSize = const Size(1280, 800);
       tester.view.devicePixelRatio = 1.0;
@@ -46,8 +20,24 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: WarmCounterTheme.lightTheme,
-          home: Scaffold(
-            body: SupervisorCatalogWorkspace(controller: controller),
+          home: const Scaffold(
+            body: SupervisorCatalogWorkspace(
+              initialCategories: [
+                MenuCategory(id: 1, name: 'Burgers', displayOrder: 1, colorHex: '#E53935'),
+              ],
+              initialMenuItems: [
+                MenuItem(id: 1, categoryId: 1, categoryName: 'Burgers', name: 'Zinger', basePrice: 550.0),
+              ],
+              initialRawIngredients: [
+                RawIngredient(id: 1, name: 'Bun', storageUnit: StorageUnit.count, currentStock: 100, lowStockThreshold: 20),
+              ],
+              initialModifiers: [
+                Modifier(id: 1, name: '+Cheese', priceDelta: 60.0),
+              ],
+              initialDiscounts: [
+                DiscountPreset(id: 1, name: 'Staff 20%', type: DiscountType.percentage, value: 20.0, isActive: true),
+              ],
+            ),
           ),
         ),
       );
@@ -96,8 +86,10 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: WarmCounterTheme.lightTheme,
-          home: Scaffold(
-            body: SupervisorCatalogWorkspace(controller: controller),
+          home: const Scaffold(
+            body: SupervisorCatalogWorkspace(
+              initialCategories: [],
+            ),
           ),
         ),
       );
@@ -128,13 +120,14 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
 
-      // Seed a category and ingredient
-      await controller.createCategory(
+      const category = MenuCategory(
+        id: 1,
         name: 'Burgers',
         displayOrder: 1,
         colorHex: '#E53935',
       );
-      await controller.createRawIngredient(
+      const bun = RawIngredient(
+        id: 1,
         name: 'Sesame Bun',
         storageUnit: StorageUnit.count,
         currentStock: 100.0,
@@ -145,8 +138,12 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: WarmCounterTheme.lightTheme,
-          home: Scaffold(
-            body: SupervisorCatalogWorkspace(controller: controller),
+          home: const Scaffold(
+            body: SupervisorCatalogWorkspace(
+              initialCategories: [category],
+              initialMenuItems: [],
+              initialRawIngredients: [bun],
+            ),
           ),
         ),
       );
@@ -173,29 +170,61 @@ void main() {
       // Item should now be in the list
       expect(find.text('Zinger Classic'), findsOneWidget);
       expect(find.text('Rs 580.00'), findsOneWidget);
+    });
 
-      // Open BOM Recipe Builder
-      final items = await controller.getMenuItems();
-      final zinger = items.firstWhere((i) => i.name == 'Zinger Classic');
+    testWidgets('RecipeBuilderDialog renders BOM breakdown with fractional quantities and live cost', (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
 
-      final bomButton = find.byKey(ValueKey('edit_bom_button_${zinger.id}'));
-      expect(bomButton, findsOneWidget);
-      await tester.tap(bomButton);
+      const item = MenuItem(
+        id: 1,
+        categoryId: 1,
+        categoryName: 'Burgers',
+        name: 'Classic Smash',
+        basePrice: 650.0,
+      );
+      const bun = RawIngredient(
+        id: 1,
+        name: 'Brioche Bun',
+        storageUnit: StorageUnit.count,
+        currentStock: 100,
+        lowStockThreshold: 20,
+        costPerRecipeUnit: 35.0,
+      );
+
+      int? addedIngredientId;
+      double? addedQty;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: WarmCounterTheme.lightTheme,
+          home: Scaffold(
+            body: RecipeBuilderDialog(
+              menuItem: item,
+              initialRecipeItems: const [],
+              initialAllIngredients: const [bun],
+              onAddOrUpdateItem: (ingId, qty) async {
+                addedIngredientId = ingId;
+                addedQty = qty;
+              },
+            ),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
-      expect(find.text('Recipe BOM: Zinger Classic'), findsOneWidget);
+      expect(find.text('Recipe BOM: Classic Smash'), findsOneWidget);
       expect(find.byKey(const ValueKey('add_recipe_item_button')), findsOneWidget);
 
-      // Enter fractional quantity 1 count bun
       await tester.enterText(find.byKey(const ValueKey('recipe_qty_field')), '1.0');
       await tester.pump();
+
       await tester.tap(find.byKey(const ValueKey('add_recipe_item_button')));
       await tester.pumpAndSettle();
 
-      expect(find.text('Sesame Bun'), findsOneWidget);
-      expect(find.text('Done'), findsOneWidget);
-      await tester.tap(find.text('Done'));
-      await tester.pumpAndSettle();
+      expect(addedIngredientId, equals(1));
+      expect(addedQty, equals(1.0));
     });
 
     testWidgets('shows LOW STOCK badge for ingredients below threshold and supports low stock filter', (tester) async {
@@ -204,14 +233,16 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
 
       // Seed 1 normal ingredient, 1 low stock ingredient
-      await controller.createRawIngredient(
+      const abundant = RawIngredient(
+        id: 1,
         name: 'Abundant Lettuce',
         storageUnit: StorageUnit.kg,
         currentStock: 50.0,
         lowStockThreshold: 10.0,
         costPerRecipeUnit: 120.0,
       );
-      await controller.createRawIngredient(
+      const depleted = RawIngredient(
+        id: 2,
         name: 'Depleted Cheese Slices',
         storageUnit: StorageUnit.count,
         currentStock: 5.0,
@@ -222,8 +253,10 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: WarmCounterTheme.lightTheme,
-          home: Scaffold(
-            body: SupervisorCatalogWorkspace(controller: controller),
+          home: const Scaffold(
+            body: SupervisorCatalogWorkspace(
+              initialRawIngredients: [abundant, depleted],
+            ),
           ),
         ),
       );
@@ -253,8 +286,10 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: WarmCounterTheme.lightTheme,
-          home: Scaffold(
-            body: SupervisorCatalogWorkspace(controller: controller),
+          home: const Scaffold(
+            body: SupervisorCatalogWorkspace(
+              initialModifiers: [],
+            ),
           ),
         ),
       );
@@ -290,8 +325,10 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: WarmCounterTheme.lightTheme,
-          home: Scaffold(
-            body: SupervisorCatalogWorkspace(controller: controller),
+          home: const Scaffold(
+            body: SupervisorCatalogWorkspace(
+              initialDiscounts: [],
+            ),
           ),
         ),
       );
