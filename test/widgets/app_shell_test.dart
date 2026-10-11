@@ -10,6 +10,10 @@ import 'package:resturant_sys/widgets/app_shell.dart';
 void main() {
   group('AppHeader & AppShell Widget Tests', () {
     testWidgets('AppHeader displays Locked status when unauthenticated', (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
       await tester.pumpWidget(
         MaterialApp(
           theme: WarmCounterTheme.lightTheme,
@@ -31,6 +35,10 @@ void main() {
     });
 
     testWidgets('AppHeader displays active user name and department with 1-tap lock button', (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
       bool lockClicked = false;
       const staff = Staff(
         id: 1,
@@ -70,6 +78,10 @@ void main() {
     });
 
     testWidgets('AppShell shows lock screen when locked and switches to workspace on login', (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
       final session = SessionState();
 
       await tester.pumpWidget(

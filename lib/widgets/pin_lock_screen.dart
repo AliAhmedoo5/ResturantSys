@@ -176,8 +176,8 @@ class _PinLockScreenState extends State<PinLockScreen> {
             children: [
               // Lock Icon & Header
               Container(
-                width: 64,
-                height: 64,
+                width: 48,
+                height: 48,
                 decoration: BoxDecoration(
                   color: WarmCounterColors.lightActiveNavHighlight,
                   shape: BoxShape.circle,
@@ -188,20 +188,20 @@ class _PinLockScreenState extends State<PinLockScreen> {
                 ),
                 child: const Icon(
                   Icons.lock_rounded,
-                  size: 32,
+                  size: 24,
                   color: WarmCounterColors.lightPrimaryAction,
                 ),
               ),
-              const SizedBox(height: WarmCounterSpacing.space16),
+              const SizedBox(height: WarmCounterSpacing.space12),
 
               Text(
                 widget.title,
                 style: WarmCounterTypography.pageHeading.copyWith(
                   fontWeight: FontWeight.w700,
-                  fontSize: 24,
+                  fontSize: 22,
                 ),
               ),
-              const SizedBox(height: WarmCounterSpacing.space8),
+              const SizedBox(height: WarmCounterSpacing.space4),
 
               Text(
                 widget.subtitle,
@@ -210,15 +210,15 @@ class _PinLockScreenState extends State<PinLockScreen> {
                 ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: WarmCounterSpacing.space24),
+              const SizedBox(height: WarmCounterSpacing.space16),
 
               // 4 PIN Dots Indicator
               _buildPinDots(),
-              const SizedBox(height: WarmCounterSpacing.space16),
+              const SizedBox(height: WarmCounterSpacing.space12),
 
               // Error or Status Message
               _buildStatusFeedback(),
-              const SizedBox(height: WarmCounterSpacing.space24),
+              const SizedBox(height: WarmCounterSpacing.space16),
 
               // On-Screen Touch Numpad
               PinNumpad(

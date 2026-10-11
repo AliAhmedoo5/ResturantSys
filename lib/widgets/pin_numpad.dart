@@ -26,11 +26,11 @@ class PinNumpad extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           _buildRow(['1', '2', '3']),
-          const SizedBox(height: WarmCounterSpacing.space12),
+          const SizedBox(height: WarmCounterSpacing.space8),
           _buildRow(['4', '5', '6']),
-          const SizedBox(height: WarmCounterSpacing.space12),
+          const SizedBox(height: WarmCounterSpacing.space8),
           _buildRow(['7', '8', '9']),
-          const SizedBox(height: WarmCounterSpacing.space12),
+          const SizedBox(height: WarmCounterSpacing.space8),
           _buildBottomRow(),
         ],
       ),
@@ -72,7 +72,7 @@ class PinNumpad extends StatelessWidget {
       color: Colors.transparent,
       child: Ink(
         width: 88,
-        height: 72,
+        height: 62,
         decoration: BoxDecoration(
           color: WarmCounterColors.lightCardBackground,
           borderRadius: WarmCounterSpacing.controlBorderRadius,
@@ -113,7 +113,7 @@ class PinNumpad extends StatelessWidget {
         color: Colors.transparent,
         child: Ink(
           width: 88,
-          height: 72,
+          height: 62,
           decoration: BoxDecoration(
             color: color,
             borderRadius: WarmCounterSpacing.controlBorderRadius,

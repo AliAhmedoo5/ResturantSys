@@ -5,15 +5,21 @@ import 'package:resturant_sys/core/theme/warm_counter_theme.dart';
 import 'package:resturant_sys/widgets/pin_lock_screen.dart';
 
 void main() {
-  Widget buildTestWidget({
+  Future<void> pumpTestWidget(
+    WidgetTester tester, {
     required Future<bool> Function(String) onPinSubmitted,
-    String? errorMessage,
-  }) {
-    return MaterialApp(
-      theme: WarmCounterTheme.lightTheme,
-      home: Scaffold(
-        body: PinLockScreen(
-          onPinSubmitted: onPinSubmitted,
+  }) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: WarmCounterTheme.lightTheme,
+        home: Scaffold(
+          body: PinLockScreen(
+            onPinSubmitted: onPinSubmitted,
+          ),
         ),
       ),
     );
@@ -21,9 +27,7 @@ void main() {
 
   group('PinLockScreen Widget Tests', () {
     testWidgets('renders all 10 numpad digits, clear, and backspace buttons', (tester) async {
-      await tester.pumpWidget(
-        buildTestWidget(onPinSubmitted: (_) async => true),
-      );
+      await pumpTestWidget(tester, onPinSubmitted: (_) async => true);
 
       for (int i = 0; i <= 9; i++) {
         expect(find.text('$i'), findsOneWidget);
@@ -34,13 +38,12 @@ void main() {
 
     testWidgets('entering 4 digits via on-screen numpad triggers onPinSubmitted callback', (tester) async {
       String? submittedPin;
-      await tester.pumpWidget(
-        buildTestWidget(
-          onPinSubmitted: (pin) async {
-            submittedPin = pin;
-            return true;
-          },
-        ),
+      await pumpTestWidget(
+        tester,
+        onPinSubmitted: (pin) async {
+          submittedPin = pin;
+          return true;
+        },
       );
 
       // Tap 1, 2, 3, 4
@@ -57,9 +60,7 @@ void main() {
     });
 
     testWidgets('clear button resets entered PIN digits', (tester) async {
-      await tester.pumpWidget(
-        buildTestWidget(onPinSubmitted: (_) async => true),
-      );
+      await pumpTestWidget(tester, onPinSubmitted: (_) async => true);
 
       // Tap 1, 2
       await tester.tap(find.text('1'));
@@ -71,16 +72,15 @@ void main() {
       await tester.tap(find.text('C'));
       await tester.pump();
 
-      // Verify dots are cleared
+      // Verify dots container exists
       final dotsFinder = find.byKey(const ValueKey('pin_dots_container'));
       expect(dotsFinder, findsOneWidget);
     });
 
     testWidgets('displays error feedback when onPinSubmitted returns false', (tester) async {
-      await tester.pumpWidget(
-        buildTestWidget(
-          onPinSubmitted: (pin) async => false, // Invalid PIN
-        ),
+      await pumpTestWidget(
+        tester,
+        onPinSubmitted: (pin) async => false, // Invalid PIN
       );
 
       // Tap 9, 9, 9, 9
@@ -95,13 +95,12 @@ void main() {
 
     testWidgets('supports physical keyboard input for digits and backspace', (tester) async {
       String? submittedPin;
-      await tester.pumpWidget(
-        buildTestWidget(
-          onPinSubmitted: (pin) async {
-            submittedPin = pin;
-            return true;
-          },
-        ),
+      await pumpTestWidget(
+        tester,
+        onPinSubmitted: (pin) async {
+          submittedPin = pin;
+          return true;
+        },
       );
 
       // Send physical keyboard events

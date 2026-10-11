@@ -149,12 +149,15 @@ class AppShell extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            title,
-            style: WarmCounterTypography.bodyMedium.copyWith(
-              color: WarmCounterColors.lightSecondaryText,
+          Expanded(
+            child: Text(
+              title,
+              style: WarmCounterTypography.bodyMedium.copyWith(
+                color: WarmCounterColors.lightSecondaryText,
+              ),
             ),
           ),
+          const SizedBox(width: WarmCounterSpacing.space8),
           Text(
             value,
             style: WarmCounterTypography.bodyMedium.copyWith(

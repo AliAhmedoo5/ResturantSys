@@ -40,6 +40,7 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
         children: [
           // Left: App Brand & Logo
           Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Container(
                 width: 38,
@@ -69,10 +70,11 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
           ),
 
           // Right: Active Session / Locked Status & Actions
-          if (activeStaff != null)
-            _buildActiveStaffBar(context, activeStaff!)
-          else
-            _buildLockedStatusBar(context),
+          Flexible(
+            child: activeStaff != null
+                ? _buildActiveStaffBar(context, activeStaff!)
+                : _buildLockedStatusBar(context),
+          ),
         ],
       ),
     );
@@ -84,54 +86,65 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
 
     return Row(
       mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.end,
       children: [
         // Staff Info Pill
-        Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: WarmCounterSpacing.space16,
-            vertical: WarmCounterSpacing.space8,
-          ),
-          decoration: BoxDecoration(
-            color: WarmCounterColors.lightActiveNavHighlight,
-            borderRadius: WarmCounterSpacing.controlBorderRadius,
-            border: Border.all(
-              color: WarmCounterColors.lightBorder,
-              width: 1.0,
+        Flexible(
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: WarmCounterSpacing.space12,
+              vertical: WarmCounterSpacing.space8,
+            ),
+            decoration: BoxDecoration(
+              color: WarmCounterColors.lightActiveNavHighlight,
+              borderRadius: WarmCounterSpacing.controlBorderRadius,
+              border: Border.all(
+                color: WarmCounterColors.lightBorder,
+                width: 1.0,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.account_circle_rounded,
+                  size: 22,
+                  color: WarmCounterColors.lightPrimaryAction,
+                ),
+                const SizedBox(width: WarmCounterSpacing.space8),
+                Flexible(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        staff.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: WarmCounterTypography.bodyMedium.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: WarmCounterColors.lightPrimaryText,
+                          height: 1.1,
+                        ),
+                      ),
+                      Text(
+                        '$department • $roleName',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: WarmCounterTypography.secondaryLabel.copyWith(
+                          color: WarmCounterColors.lightSecondaryText,
+                          height: 1.1,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.account_circle_rounded,
-                size: 22,
-                color: WarmCounterColors.lightPrimaryAction,
-              ),
-              const SizedBox(width: WarmCounterSpacing.space8),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    staff.name,
-                    style: WarmCounterTypography.bodyMedium.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: WarmCounterColors.lightPrimaryText,
-                      height: 1.1,
-                    ),
-                  ),
-                  Text(
-                    '$department • $roleName',
-                    style: WarmCounterTypography.secondaryLabel.copyWith(
-                      color: WarmCounterColors.lightSecondaryText,
-                      height: 1.1,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
         ),
-        const SizedBox(width: WarmCounterSpacing.space16),
+        const SizedBox(width: WarmCounterSpacing.space12),
 
         // 1-Tap Lock Register Button
         ElevatedButton.icon(
@@ -143,7 +156,7 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
             backgroundColor: WarmCounterColors.lightDestructive.withValues(alpha: 0.1),
             foregroundColor: WarmCounterColors.lightDestructive,
             elevation: 0.0,
-            minimumSize: const Size(140, WarmCounterSpacing.minTouchTargetSize),
+            minimumSize: const Size(120, WarmCounterSpacing.minTouchTargetSize),
             shape: const RoundedRectangleBorder(
               borderRadius: WarmCounterSpacing.controlBorderRadius,
               side: BorderSide(
