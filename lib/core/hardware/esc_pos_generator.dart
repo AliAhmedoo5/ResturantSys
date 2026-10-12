@@ -27,7 +27,7 @@ class EscPosGenerator {
     final cols = paperWidth.columns;
 
     void addText(String text) {
-      bytes.addAll(latin1.encode(text));
+      bytes.addAll(_encodeText(text));
     }
 
     void addLine(String text) {
@@ -91,7 +91,7 @@ class EscPosGenerator {
           final choiceName = choice['menu_item_name'] ?? '';
           final upgrade = (choice['upgrade_price'] as num?)?.toDouble() ?? 0.0;
           final upgradeText = upgrade > 0 ? ' (+Rs ${_currencyFormat.format(upgrade)})' : '';
-          addLine('   • $choiceName$upgradeText');
+          addLine('   - $choiceName$upgradeText');
         }
       }
 
@@ -195,7 +195,7 @@ class EscPosGenerator {
     final cols = paperWidth.columns;
 
     void addText(String text) {
-      bytes.addAll(latin1.encode(text));
+      bytes.addAll(_encodeText(text));
     }
 
     void addLine(String text) {
@@ -285,7 +285,7 @@ class EscPosGenerator {
     final cols = paperWidth.columns;
 
     void addText(String text) {
-      bytes.addAll(latin1.encode(text));
+      bytes.addAll(_encodeText(text));
     }
 
     void addLine(String text) {
@@ -331,7 +331,7 @@ class EscPosGenerator {
     bytes.addAll(EscPosConstants.boldOff);
 
     for (final item in order.items) {
-      addLine(' • ${item.quantity}x ${item.name}');
+      addLine(' - ${item.quantity}x ${item.name}');
     }
 
     addDivider();
@@ -355,6 +355,27 @@ class EscPosGenerator {
   // ---------------------------------------------------------------------------
   // Format Helper Methods
   // ---------------------------------------------------------------------------
+
+  static List<int> _encodeText(String text) {
+    final sanitized = text
+        .replaceAll('•', '-')
+        .replaceAll('—', '-')
+        .replaceAll('–', '-')
+        .replaceAll('“', '"')
+        .replaceAll('”', '"')
+        .replaceAll('‘', "'")
+        .replaceAll('’', "'");
+
+    final buffer = StringBuffer();
+    for (final rune in sanitized.runes) {
+      if (rune <= 255) {
+        buffer.writeCharCode(rune);
+      } else {
+        buffer.write('?');
+      }
+    }
+    return latin1.encode(buffer.toString());
+  }
 
   static String _formatLineItemHeader(int cols) {
     if (cols <= 32) {
