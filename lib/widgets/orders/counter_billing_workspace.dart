@@ -883,7 +883,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
           children: [
             InkWell(
               onTap: () => _decrementCartItem(index),
-              borderRadius: BorderRadius.circular( WarmCounterSpacing.radiusControl),
+              borderRadius: WarmCounterSpacing.controlBorderRadius,
               child: const SizedBox(
                 width: WarmCounterSpacing.touchTargetMin,
                 height: WarmCounterSpacing.touchTargetMin,
@@ -901,7 +901,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
             ),
             InkWell(
               onTap: () => _incrementCartItem(index),
-              borderRadius: BorderRadius.circular(WarmCounterSpacing.radiusControl),
+              borderRadius: WarmCounterSpacing.controlBorderRadius,
               child: const SizedBox(
                 width: WarmCounterSpacing.touchTargetMin,
                 height: WarmCounterSpacing.touchTargetMin,
@@ -981,7 +981,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
         // Delete button
         InkWell(
           onTap: () => _removeCartItem(index),
-          borderRadius: BorderRadius.circular(WarmCounterSpacing.radiusControl),
+          borderRadius: WarmCounterSpacing.controlBorderRadius,
           child: const SizedBox(
             width: WarmCounterSpacing.touchTargetMin,
             height: WarmCounterSpacing.touchTargetMin,

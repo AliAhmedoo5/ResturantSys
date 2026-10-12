@@ -21,6 +21,10 @@ abstract final class WarmCounterSpacing {
   /// 12px corner radius for panels (cards, side sheets, modals, dialogs).
   static const double panelCornerRadius = 12.0;
 
+  /// Convenience aliases for corner radii.
+  static const double radiusControl = controlCornerRadius;
+  static const double radiusPanel = panelCornerRadius;
+
   /// Control border radius object.
   static const BorderRadius controlBorderRadius = BorderRadius.all(
     Radius.circular(controlCornerRadius),
