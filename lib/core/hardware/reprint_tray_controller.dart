@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../database/pos_database_constants.dart';
 import '../orders/order.dart';
-import '../orders/payment_method.dart';
 import 'esc_pos_generator.dart';
 import 'hardware_device_adapter.dart';
 import 'paper_width.dart';
@@ -106,7 +105,7 @@ class ReprintTrayController extends ChangeNotifier {
     }
 
     // 2. Customer Tax Receipt
-    final receiptTarget = PrinterTarget.counter;
+    const receiptTarget = PrinterTarget.counter;
     final receiptBytes = generator.generateCustomerTaxReceipt(
       order: order,
       paperWidth: paperWidth,

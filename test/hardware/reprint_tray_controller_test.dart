@@ -2,7 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:resturant_sys/core/hardware/in_memory_hardware_adapter.dart';
 import 'package:resturant_sys/core/hardware/paper_width.dart';
 import 'package:resturant_sys/core/hardware/print_job.dart';
-import 'package:resturant_sys/core/hardware/printer_target.dart';
 import 'package:resturant_sys/core/hardware/printer_topology.dart';
 import 'package:resturant_sys/core/hardware/reprint_tray_controller.dart';
 import 'package:resturant_sys/core/orders/dining_type.dart';
