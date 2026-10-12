@@ -839,9 +839,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
                     ),
                     Text(
                       'Rs ${_currencyFormat.format(totals.grandTotal)}',
-                      style: WarmCounterTypography.pageHeading.copyWith(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
+                      style: WarmCounterTypography.orderTotal.copyWith(
                         color: WarmCounterColors.lightPrimaryAction,
                       ),
                     ),
@@ -854,8 +852,8 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
                   key: const ValueKey('proceed_to_tender_button'),
                   icon: const Icon(Icons.point_of_sale_rounded, size: 24),
                   label: const Text(
-                    'Tender / Checkout [Space]',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    'Charge [Space]',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   onPressed: _cartItems.isEmpty ? null : _openTenderCheckout,
                   style: ElevatedButton.styleFrom(
@@ -885,23 +883,31 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
           children: [
             InkWell(
               onTap: () => _decrementCartItem(index),
-              child: const Padding(
-                padding: EdgeInsets.all(4.0),
-                child: Icon(Icons.remove_circle_outline, size: 20),
+              borderRadius: BorderRadius.circular( WarmCounterSpacing.radiusControl),
+              child: const SizedBox(
+                width: WarmCounterSpacing.touchTargetMin,
+                height: WarmCounterSpacing.touchTargetMin,
+                child: Center(
+                  child: Icon(Icons.remove_circle_outline, size: 22),
+                ),
               ),
             ),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4.0),
+              padding: const EdgeInsets.symmetric(horizontal: 2.0),
               child: Text(
                 '${item.quantity}',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
               ),
             ),
             InkWell(
               onTap: () => _incrementCartItem(index),
-              child: const Padding(
-                padding: EdgeInsets.all(4.0),
-                child: Icon(Icons.add_circle_outline, size: 20),
+              borderRadius: BorderRadius.circular(WarmCounterSpacing.radiusControl),
+              child: const SizedBox(
+                width: WarmCounterSpacing.touchTargetMin,
+                height: WarmCounterSpacing.touchTargetMin,
+                child: Center(
+                  child: Icon(Icons.add_circle_outline, size: 22),
+                ),
               ),
             ),
           ],
@@ -975,9 +981,13 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
         // Delete button
         InkWell(
           onTap: () => _removeCartItem(index),
-          child: const Padding(
-            padding: EdgeInsets.all(4.0),
-            child: Icon(Icons.close, size: 16, color: WarmCounterColors.lightSecondaryText),
+          borderRadius: BorderRadius.circular(WarmCounterSpacing.radiusControl),
+          child: const SizedBox(
+            width: WarmCounterSpacing.touchTargetMin,
+            height: WarmCounterSpacing.touchTargetMin,
+            child: Center(
+              child: Icon(Icons.close, size: 18, color: WarmCounterColors.lightSecondaryText),
+            ),
           ),
         ),
       ],

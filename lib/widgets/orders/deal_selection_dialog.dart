@@ -51,7 +51,7 @@ class _DealSelectionDialogState extends State<DealSelectionDialog> {
         _selectedChoices[item.id] = (
           menuItemId: item.defaultMenuItemId!,
           menuItemName: name,
-          upgradePrice: item.upgradePrice,
+          upgradePrice: 0.0,
         );
       }
     }
@@ -146,7 +146,7 @@ class _DealSelectionDialogState extends State<DealSelectionDialog> {
                         ),
                         Text(
                           'Rs ${_currencyFormat.format(_currentTotalPrice)}',
-                          style: WarmCounterTypography.pageHeading.copyWith(
+                          style: WarmCounterTypography.tabularPrice.copyWith(
                             fontSize: 22,
                             color: WarmCounterColors.lightPrimaryAction,
                             fontWeight: FontWeight.bold,

@@ -336,8 +336,8 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
                     : 'Rs ${_currencyFormat.format(change)}',
                 key: const ValueKey('return_change_display'),
                 style: WarmCounterTypography.tokenAndChange.copyWith(
-                  fontSize: 32,
-                  color: Colors.black87,
+                  fontSize: 36,
+                  color: WarmCounterColors.lightPrimaryText,
                 ),
               ),
             ],
