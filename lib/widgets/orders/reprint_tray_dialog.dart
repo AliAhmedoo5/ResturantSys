@@ -39,7 +39,7 @@ class _ReprintTrayDialogState extends State<ReprintTrayDialog> {
             borderRadius: WarmCounterSpacing.panelBorderRadius,
           ),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 680, maxHeight: 650),
+            constraints: const BoxConstraints(maxWidth: 640, maxHeight: 520),
             child: Padding(
               padding: const EdgeInsets.all(WarmCounterSpacing.space24),
               child: Column(
@@ -49,41 +49,47 @@ class _ReprintTrayDialogState extends State<ReprintTrayDialog> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(WarmCounterSpacing.space8),
-                            decoration: BoxDecoration(
-                              color: failedJobs.isNotEmpty
-                                  ? Colors.red.shade50
-                                  : WarmCounterColors.lightActiveNavHighlight,
-                              borderRadius: WarmCounterSpacing.controlBorderRadius,
-                            ),
-                            child: Icon(
-                              Icons.print_rounded,
-                              size: 26,
-                              color: failedJobs.isNotEmpty
-                                  ? WarmCounterColors.lightDestructiveAction
-                                  : WarmCounterColors.lightPrimaryAction,
-                            ),
-                          ),
-                          const SizedBox(width: WarmCounterSpacing.space12),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Hardware & Reprint Tray',
-                                style: WarmCounterTypography.pageHeading.copyWith(fontSize: 18),
+                      Expanded(
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(WarmCounterSpacing.space8),
+                              decoration: BoxDecoration(
+                                color: failedJobs.isNotEmpty
+                                    ? Colors.red.shade50
+                                    : WarmCounterColors.lightActiveNavHighlight,
+                                borderRadius: WarmCounterSpacing.controlBorderRadius,
                               ),
-                              Text(
-                                '${widget.controller.topology.label} • ${widget.controller.paperWidth.label}',
-                                style: WarmCounterTypography.caption.copyWith(
-                                  color: WarmCounterColors.lightSecondaryText,
-                                ),
+                              child: Icon(
+                                Icons.print_rounded,
+                                size: 26,
+                                color: failedJobs.isNotEmpty
+                                    ? WarmCounterColors.lightDestructiveAction
+                                    : WarmCounterColors.lightPrimaryAction,
                               ),
-                            ],
-                          ),
-                        ],
+                            ),
+                            const SizedBox(width: WarmCounterSpacing.space12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Hardware & Reprint Tray',
+                                    style: WarmCounterTypography.pageHeading.copyWith(fontSize: 18),
+                                  ),
+                                  Text(
+                                    '${widget.controller.topology.label} • ${widget.controller.paperWidth.label}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: WarmCounterTypography.caption.copyWith(
+                                      color: WarmCounterColors.lightSecondaryText,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                       IconButton(
                         key: const ValueKey('close_reprint_tray_button'),
@@ -105,24 +111,30 @@ class _ReprintTrayDialogState extends State<ReprintTrayDialog> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          children: [
-                            Icon(
-                              widget.controller.cashDrawerEnabled
-                                  ? Icons.savings_outlined
-                                  : Icons.lock_clock_outlined,
-                              size: 20,
-                              color: WarmCounterColors.lightPrimaryText,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              widget.controller.cashDrawerEnabled
-                                  ? 'RJ11 Cash Drawer: Enabled'
-                                  : 'RJ11 Cash Drawer: Manual Unplugged',
-                              style: WarmCounterTypography.bodyMedium.copyWith(fontSize: 13),
-                            ),
-                          ],
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Icon(
+                                widget.controller.cashDrawerEnabled
+                                    ? Icons.savings_outlined
+                                    : Icons.lock_clock_outlined,
+                                size: 20,
+                                color: WarmCounterColors.lightPrimaryText,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  widget.controller.cashDrawerEnabled
+                                      ? 'RJ11 Cash Drawer: Enabled'
+                                      : 'RJ11 Cash Drawer: Manual Unplugged',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: WarmCounterTypography.bodyMedium.copyWith(fontSize: 13),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
+                        const SizedBox(width: 8),
                         ElevatedButton.icon(
                           key: const ValueKey('kick_drawer_button'),
                           icon: const Icon(Icons.sensor_door_outlined, size: 16),
@@ -267,56 +279,67 @@ class _ReprintTrayDialogState extends State<ReprintTrayDialog> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: isFailed
-                      ? WarmCounterColors.lightDestructiveAction
-                      : WarmCounterColors.lightPrimaryAction,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  job.tokenDisplay,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
+          Expanded(
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isFailed
+                        ? WarmCounterColors.lightDestructiveAction
+                        : WarmCounterColors.lightPrimaryAction,
+                    borderRadius: BorderRadius.circular(4),
                   ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    job.type.label,
-                    style: WarmCounterTypography.bodyMedium.copyWith(
+                  child: Text(
+                    job.tokenDisplay,
+                    style: const TextStyle(
+                      color: Colors.white,
                       fontWeight: FontWeight.bold,
-                      fontSize: 13,
+                      fontSize: 12,
                     ),
                   ),
-                  Text(
-                    '${job.target.label} • ${_timeFormat.format(job.createdAt)}'
-                    '${job.attempts > 1 ? ' • Attempt ${job.attempts}' : ''}',
-                    style: WarmCounterTypography.caption.copyWith(
-                      color: WarmCounterColors.lightSecondaryText,
-                      fontSize: 11,
-                    ),
-                  ),
-                  if (job.errorMessage != null && isFailed)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        job.errorMessage!,
-                        style: const TextStyle(fontSize: 11, color: Colors.red),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        job.type.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: WarmCounterTypography.bodyMedium.copyWith(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
                       ),
-                    ),
-                ],
-              ),
-            ],
+                      Text(
+                        '${job.target.label} • ${_timeFormat.format(job.createdAt)}'
+                        '${job.attempts > 1 ? ' • Attempt ${job.attempts}' : ''}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: WarmCounterTypography.caption.copyWith(
+                          color: WarmCounterColors.lightSecondaryText,
+                          fontSize: 11,
+                        ),
+                      ),
+                      if (job.errorMessage != null && isFailed)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            job.errorMessage!,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 11, color: Colors.red),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
+          const SizedBox(width: 8),
 
           // Actions
           if (isFailed)

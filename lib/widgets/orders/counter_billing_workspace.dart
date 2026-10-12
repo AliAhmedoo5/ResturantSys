@@ -505,23 +505,28 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
         ),
 
         // Actions & Hotkey Tooltip Hint
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (widget.reprintTrayController != null) ...[
-              _buildReprintTrayButton(),
-              const SizedBox(width: WarmCounterSpacing.space12),
-            ],
-            Text(
-              '[Space] Tender | [Numpad Enter] Exact | [Esc] Clear',
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.end,
-              style: WarmCounterTypography.caption.copyWith(
-                color: WarmCounterColors.lightSecondaryText,
-                fontWeight: FontWeight.w600,
+        Flexible(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              if (widget.reprintTrayController != null) ...[
+                _buildReprintTrayButton(),
+                const SizedBox(width: WarmCounterSpacing.space8),
+              ],
+              Flexible(
+                child: Text(
+                  '[Space] Tender | [Numpad Enter] Exact | [Esc] Clear',
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
+                  style: WarmCounterTypography.caption.copyWith(
+                    color: WarmCounterColors.lightSecondaryText,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ],
     );
