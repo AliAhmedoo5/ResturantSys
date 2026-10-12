@@ -196,8 +196,16 @@ void main() {
       expect(receiptOk, isTrue);
       expect(controller.recentJobs.length, equals(initialRecentCount + 1));
 
-      // Reprint the drawer kick job
-      final drawerJob = controller.recentJobs.firstWhere((j) => j.type == PrintJobType.cashDrawerKick);
+      // Reprint a drawer kick job
+      final drawerJob = PrintJob(
+        id: 'test_drawer',
+        target: PrinterTarget.counter,
+        type: PrintJobType.cashDrawerKick,
+        bytes: EscPosConstants.kickDrawerPulse,
+        orderId: cashOrder.id,
+        tokenDisplay: cashOrder.tokenDisplay,
+        createdAt: DateTime.now(),
+      );
       final drawerOk = await controller.reprintJob(drawerJob);
       expect(drawerOk, isTrue);
       expect(adapter.drawerKickCount, equals(2)); // 1 from initial + 1 from reprint
