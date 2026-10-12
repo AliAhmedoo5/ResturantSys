@@ -223,9 +223,9 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
                     ),
                   ),
                   style: OutlinedButton.styleFrom(
-                    backgroundColor: hasFailures ? Colors.red.shade50 : null,
+                    backgroundColor: hasFailures ? WarmCounterColors.lightDestructiveHighlight : null,
                     side: BorderSide(
-                      color: hasFailures ? Colors.red.shade300 : WarmCounterColors.lightBorder,
+                      color: hasFailures ? WarmCounterColors.lightDestructive : WarmCounterColors.lightBorder,
                     ),
                     minimumSize: const Size(110, WarmCounterSpacing.minTouchTargetSize),
                     shape: const RoundedRectangleBorder(

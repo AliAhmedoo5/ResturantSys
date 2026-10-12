@@ -112,7 +112,7 @@ void main() {
       expect(receiptBytes.sublist(0, 2), equals(EscPosConstants.initPrinter));
       expect(receiptBytes.sublist(receiptBytes.length - 3), equals(EscPosConstants.cutPaperFull));
       final decodedReceipt = latin1.decode(receiptBytes);
-      expect(decodedReceipt, contains('TAX INVOICE / CUSTOMER RECEIPT'));
+      expect(decodedReceipt, contains('CUSTOMER RECEIPT'));
       expect(decodedReceipt, contains('2x Zinger Burger'));
       expect(decodedReceipt, contains('GRAND TOTAL:'));
       expect(decodedReceipt, contains('1,000.00'));

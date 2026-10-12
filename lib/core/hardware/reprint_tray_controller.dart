@@ -104,52 +104,14 @@ class ReprintTrayController extends ChangeNotifier {
       }
     }
 
-    // 2. Customer Tax Receipt
-    const receiptTarget = PrinterTarget.counter;
-    final receiptBytes = generator.generateCustomerTaxReceipt(
-      order: order,
-      paperWidth: paperWidth,
-      storeName: storeName,
-      storeTagline: storeTagline,
-      storeAddress: storeAddress,
-      storePhone: storePhone,
-      storeTaxId: storeTaxId,
-    );
-
-    final receiptJob = PrintJob(
-      id: 'receipt_${order.id}_${DateTime.now().millisecondsSinceEpoch}',
-      target: receiptTarget,
-      type: PrintJobType.customerReceipt,
-      bytes: receiptBytes,
-      orderId: order.id,
-      tokenDisplay: order.tokenDisplay,
-      createdAt: DateTime.now(),
-    );
-
+    // 2. Customer Receipt
+    final receiptJob = createCustomerReceiptJob(order);
     await _executeJob(receiptJob);
 
     // 3. Kitchen Order Ticket (KOT)
     // In Single Printer topology, KOT routes sequentially to Counter printer.
     // In Dual Printer topology, KOT routes to Kitchen printer.
-    final kotTarget = topology == PrinterTopology.single
-        ? PrinterTarget.counter
-        : PrinterTarget.kitchen;
-
-    final kotBytes = generator.generateKitchenOrderTicket(
-      order: order,
-      paperWidth: paperWidth,
-    );
-
-    final kotJob = PrintJob(
-      id: 'kot_${order.id}_${DateTime.now().millisecondsSinceEpoch}',
-      target: kotTarget,
-      type: PrintJobType.kitchenOrderTicket,
-      bytes: kotBytes,
-      orderId: order.id,
-      tokenDisplay: order.tokenDisplay,
-      createdAt: DateTime.now(),
-    );
-
+    final kotJob = createKitchenOrderTicketJob(order);
     await _executeJob(kotJob);
   }
 
@@ -248,8 +210,8 @@ class ReprintTrayController extends ChangeNotifier {
     return successCount;
   }
 
-  /// Reprints a customer receipt on demand for duplicate request or manual reprint.
-  Future<bool> reprintCustomerReceipt(Order order) async {
+  /// Creates a Customer Receipt print job.
+  PrintJob createCustomerReceiptJob(Order order, {String? idPrefix}) {
     final receiptBytes = generator.generateCustomerTaxReceipt(
       order: order,
       paperWidth: paperWidth,
@@ -260,8 +222,9 @@ class ReprintTrayController extends ChangeNotifier {
       storeTaxId: storeTaxId,
     );
 
-    final job = PrintJob(
-      id: 'reprint_receipt_${order.id}_${DateTime.now().millisecondsSinceEpoch}',
+    final prefix = idPrefix ?? 'receipt';
+    return PrintJob(
+      id: '${prefix}_${order.id}_${DateTime.now().millisecondsSinceEpoch}',
       target: PrinterTarget.counter,
       type: PrintJobType.customerReceipt,
       bytes: receiptBytes,
@@ -269,12 +232,10 @@ class ReprintTrayController extends ChangeNotifier {
       tokenDisplay: order.tokenDisplay,
       createdAt: DateTime.now(),
     );
-
-    return await _executeJob(job);
   }
 
-  /// Reprints a Kitchen Order Ticket on demand.
-  Future<bool> reprintKitchenOrderTicket(Order order) async {
+  /// Creates a Kitchen Order Ticket (KOT) print job routed according to active topology.
+  PrintJob createKitchenOrderTicketJob(Order order, {String? idPrefix}) {
     final kotTarget = topology == PrinterTopology.single
         ? PrinterTarget.counter
         : PrinterTarget.kitchen;
@@ -284,8 +245,9 @@ class ReprintTrayController extends ChangeNotifier {
       paperWidth: paperWidth,
     );
 
-    final job = PrintJob(
-      id: 'reprint_kot_${order.id}_${DateTime.now().millisecondsSinceEpoch}',
+    final prefix = idPrefix ?? 'kot';
+    return PrintJob(
+      id: '${prefix}_${order.id}_${DateTime.now().millisecondsSinceEpoch}',
       target: kotTarget,
       type: PrintJobType.kitchenOrderTicket,
       bytes: kotBytes,
@@ -293,8 +255,47 @@ class ReprintTrayController extends ChangeNotifier {
       tokenDisplay: order.tokenDisplay,
       createdAt: DateTime.now(),
     );
+  }
 
+  /// Reprints a customer receipt on demand for duplicate request or manual reprint.
+  Future<bool> reprintCustomerReceipt(Order order) async {
+    final job = createCustomerReceiptJob(order, idPrefix: 'reprint_receipt');
     return await _executeJob(job);
+  }
+
+  /// Reprints a Kitchen Order Ticket on demand.
+  Future<bool> reprintKitchenOrderTicket(Order order) async {
+    final job = createKitchenOrderTicketJob(order, idPrefix: 'reprint_kot');
+    return await _executeJob(job);
+  }
+
+  /// Reprints an existing print job, routing cash drawer pulses or printer bytes safely.
+  Future<bool> reprintJob(PrintJob job) async {
+    final newJob = PrintJob(
+      id: 'reprint_${job.type.name}_${job.orderId}_${DateTime.now().millisecondsSinceEpoch}',
+      target: job.target,
+      type: job.type,
+      bytes: job.bytes,
+      orderId: job.orderId,
+      tokenDisplay: job.tokenDisplay,
+      createdAt: DateTime.now(),
+    );
+
+    if (newJob.type == PrintJobType.cashDrawerKick) {
+      try {
+        await hardwareAdapter.kickCashDrawer();
+        newJob.markSuccess();
+        _recordRecent(newJob);
+        notifyListeners();
+        return true;
+      } catch (e) {
+        newJob.markFailed('Cash drawer kick failed: $e');
+        _enqueueFailed(newJob);
+        return false;
+      }
+    } else {
+      return await _executeJob(newJob);
+    }
   }
 
   /// Clears a resolved or ignored failed job from the tray.

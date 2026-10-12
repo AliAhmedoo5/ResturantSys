@@ -49,7 +49,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Hardware & Reprint Tray'), findsOneWidget);
-      expect(find.text('No tickets printed in this session.'), findsOneWidget);
+      expect(find.text('No receipts or KOTs printed in this session.'), findsOneWidget);
       expect(find.byKey(const ValueKey('kick_drawer_button')), findsOneWidget);
     });
 
@@ -70,6 +70,33 @@ void main() {
 
       expect(adapter.drawerKickCount, equals(1));
       expect(find.text('Cash drawer pulse emitted.'), findsOneWidget);
+    });
+
+    testWidgets('Kick Drawer button rejects non-supervisor cashier', (tester) async {
+      const cashierStaff = Staff(
+        id: 2,
+        name: 'Cashier Bilal',
+        departmentId: 1,
+        pinHash: 'hash',
+        role: StaffRole.cashier,
+        isActive: true,
+        departmentName: 'Front Counter',
+      );
+
+      await tester.pumpWidget(createTestApp(
+        ReprintTrayDialog(
+          controller: controller,
+          currentStaff: cashierStaff,
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      final kickButton = find.byKey(const ValueKey('kick_drawer_button'));
+      await tester.tap(kickButton);
+      await tester.pumpAndSettle();
+
+      expect(adapter.drawerKickCount, equals(0));
+      expect(find.text('Supervisor authorization required for manual drawer kick.'), findsOneWidget);
     });
 
     testWidgets('Displays failed print jobs with error text and 1-tap retry button', (tester) async {

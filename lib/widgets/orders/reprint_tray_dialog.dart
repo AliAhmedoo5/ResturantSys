@@ -56,7 +56,7 @@ class _ReprintTrayDialogState extends State<ReprintTrayDialog> {
                               padding: const EdgeInsets.all(WarmCounterSpacing.space8),
                               decoration: BoxDecoration(
                                 color: failedJobs.isNotEmpty
-                                    ? Colors.red.shade50
+                                    ? WarmCounterColors.lightDestructiveHighlight
                                     : WarmCounterColors.lightActiveNavHighlight,
                                 borderRadius: WarmCounterSpacing.controlBorderRadius,
                               ),
@@ -94,6 +94,7 @@ class _ReprintTrayDialogState extends State<ReprintTrayDialog> {
                       IconButton(
                         key: const ValueKey('close_reprint_tray_button'),
                         icon: const Icon(Icons.close_rounded),
+                        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                         onPressed: () => Navigator.of(context).pop(),
                       ),
                     ],
@@ -143,9 +144,23 @@ class _ReprintTrayDialogState extends State<ReprintTrayDialog> {
                             backgroundColor: WarmCounterColors.lightActiveNavHighlight,
                             foregroundColor: WarmCounterColors.lightPrimaryAction,
                             elevation: 0,
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            minimumSize: const Size(120, 48),
                           ),
                           onPressed: () async {
+                            final staff = widget.currentStaff;
+                            if (staff != null &&
+                                !(staff.canAuthorizeOverrides || staff.canAccessSupervisorPortal)) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Supervisor authorization required for manual drawer kick.'),
+                                    duration: Duration(seconds: 2),
+                                  ),
+                                );
+                              }
+                              return;
+                            }
                             final success = await widget.controller.triggerSupervisorDrawerOverride();
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
@@ -204,6 +219,7 @@ class _ReprintTrayDialogState extends State<ReprintTrayDialog> {
                                 label: const Text('Retry All'),
                                 style: TextButton.styleFrom(
                                   foregroundColor: WarmCounterColors.lightPrimaryAction,
+                                  minimumSize: const Size(80, 48),
                                 ),
                                 onPressed: _isRetrying
                                     ? null
@@ -230,7 +246,7 @@ class _ReprintTrayDialogState extends State<ReprintTrayDialog> {
                             ),
                             const SizedBox(width: 6),
                             Text(
-                              'Recent Printed Tickets',
+                              'Recent Receipts & KOTs',
                               style: WarmCounterTypography.bodyMedium.copyWith(
                                 fontWeight: FontWeight.bold,
                                 color: WarmCounterColors.lightPrimaryText,
@@ -244,7 +260,7 @@ class _ReprintTrayDialogState extends State<ReprintTrayDialog> {
                             padding: const EdgeInsets.symmetric(vertical: 24),
                             child: Center(
                               child: Text(
-                                'No tickets printed in this session.',
+                                'No receipts or KOTs printed in this session.',
                                 style: WarmCounterTypography.caption.copyWith(
                                   color: WarmCounterColors.lightSecondaryText,
                                 ),
@@ -270,10 +286,14 @@ class _ReprintTrayDialogState extends State<ReprintTrayDialog> {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(WarmCounterSpacing.space12),
       decoration: BoxDecoration(
-        color: isFailed ? Colors.red.shade50 : WarmCounterColors.lightPageBackground,
+        color: isFailed
+            ? WarmCounterColors.lightDestructiveHighlight
+            : WarmCounterColors.lightPageBackground,
         borderRadius: WarmCounterSpacing.controlBorderRadius,
         border: Border.all(
-          color: isFailed ? Colors.red.shade200 : WarmCounterColors.lightBorder,
+          color: isFailed
+              ? WarmCounterColors.lightDestructive
+              : WarmCounterColors.lightBorder,
         ),
       ),
       child: Row(
@@ -296,6 +316,7 @@ class _ReprintTrayDialogState extends State<ReprintTrayDialog> {
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
                       fontSize: 12,
+                      fontFeatures: WarmCounterTypography.tabularFigures,
                     ),
                   ),
                 ),
@@ -330,7 +351,10 @@ class _ReprintTrayDialogState extends State<ReprintTrayDialog> {
                             job.errorMessage!,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 11, color: Colors.red),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: WarmCounterColors.lightDestructive,
+                            ),
                           ),
                         ),
                     ],
@@ -348,6 +372,7 @@ class _ReprintTrayDialogState extends State<ReprintTrayDialog> {
                 IconButton(
                   icon: const Icon(Icons.close_rounded, size: 18),
                   tooltip: 'Dismiss',
+                  constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                   onPressed: () => widget.controller.dismissFailedJob(job.id),
                 ),
                 ElevatedButton.icon(
@@ -358,7 +383,7 @@ class _ReprintTrayDialogState extends State<ReprintTrayDialog> {
                     backgroundColor: WarmCounterColors.lightPrimaryAction,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    minimumSize: const Size(80, 36),
+                    minimumSize: const Size(80, 48),
                   ),
                   onPressed: () async {
                     await widget.controller.retryJob(job.id);
@@ -372,16 +397,19 @@ class _ReprintTrayDialogState extends State<ReprintTrayDialog> {
               label: const Text('Reprint'),
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                minimumSize: const Size(80, 34),
+                minimumSize: const Size(80, 48),
               ),
               onPressed: () async {
-                // Re-send bytes for recent job
-                await widget.controller.hardwareAdapter.sendBytes(job.target, job.bytes);
+                final success = await widget.controller.reprintJob(job);
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Reprint sent to printer.'),
-                      duration: Duration(seconds: 2),
+                    SnackBar(
+                      content: Text(
+                        success
+                            ? 'Reprint sent to printer.'
+                            : 'Reprint failed. Added to failed jobs queue.',
+                      ),
+                      duration: const Duration(seconds: 2),
                     ),
                   );
                 }

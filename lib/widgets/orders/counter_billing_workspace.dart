@@ -559,11 +559,12 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
             ),
           ),
           style: OutlinedButton.styleFrom(
-            backgroundColor: hasFailures ? Colors.red.shade50 : null,
+            backgroundColor: hasFailures ? WarmCounterColors.lightDestructiveHighlight : null,
             side: BorderSide(
-              color: hasFailures ? Colors.red.shade300 : WarmCounterColors.lightBorder,
+              color: hasFailures ? WarmCounterColors.lightDestructive : WarmCounterColors.lightBorder,
             ),
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            minimumSize: const Size(110, WarmCounterSpacing.minTouchTargetSize),
           ),
           onPressed: _openReprintTray,
         );

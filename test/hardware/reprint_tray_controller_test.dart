@@ -185,5 +185,33 @@ void main() {
       expect(adapter.kitchenPrintedBytes.length, equals(1));
       expect(controller.recentJobs.first.type, equals(PrintJobType.kitchenVoidSlip));
     });
+
+    test('reprintJob successfully reprints job and routes cash drawer kick', () async {
+      await controller.dispatchOrderPrinting(order: cashOrder, isCashPaid: true);
+      final initialRecentCount = controller.recentJobs.length;
+
+      // Reprint the receipt job
+      final receiptJob = controller.recentJobs.firstWhere((j) => j.type == PrintJobType.customerReceipt);
+      final receiptOk = await controller.reprintJob(receiptJob);
+      expect(receiptOk, isTrue);
+      expect(controller.recentJobs.length, equals(initialRecentCount + 1));
+
+      // Reprint the drawer kick job
+      final drawerJob = controller.recentJobs.firstWhere((j) => j.type == PrintJobType.cashDrawerKick);
+      final drawerOk = await controller.reprintJob(drawerJob);
+      expect(drawerOk, isTrue);
+      expect(adapter.drawerKickCount, equals(2)); // 1 from initial + 1 from reprint
+    });
+
+    test('reprintJob safely enqueues failed reprint without throwing', () async {
+      await controller.dispatchOrderPrinting(order: cashOrder, isCashPaid: false);
+      final receiptJob = controller.recentJobs.firstWhere((j) => j.type == PrintJobType.customerReceipt);
+
+      adapter.shouldFailCounterPrint = true;
+      final ok = await controller.reprintJob(receiptJob);
+      expect(ok, isFalse);
+      expect(controller.hasFailures, isTrue);
+      expect(controller.failedJobs.first.type, equals(PrintJobType.customerReceipt));
+    });
   });
 }

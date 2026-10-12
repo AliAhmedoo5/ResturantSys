@@ -57,7 +57,7 @@ class EscPosGenerator {
     // 3. Receipt Title Banner
     addDivider(char: '=');
     bytes.addAll(EscPosConstants.boldOn);
-    addLine('TAX INVOICE / CUSTOMER RECEIPT');
+    addLine('CUSTOMER RECEIPT');
     bytes.addAll(EscPosConstants.boldOff);
     addDivider(char: '=');
 
@@ -122,7 +122,7 @@ class EscPosGenerator {
 
     if (order.taxAmount > 0) {
       addLine(_formatTwoColumns(
-        'Tax (Inclusive):',
+        'Tax:',
         'Rs ${_currencyFormat.format(order.taxAmount)}',
         cols,
       ));

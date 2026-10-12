@@ -111,7 +111,7 @@ void main() {
 
       // Branding
       expect(decoded, contains('WARM GRILL POS'));
-      expect(decoded, contains('TAX INVOICE / CUSTOMER RECEIPT'));
+      expect(decoded, contains('CUSTOMER RECEIPT'));
 
       // Order metadata
       expect(decoded, contains('Order #: #42'));
@@ -132,7 +132,7 @@ void main() {
       expect(decoded, contains('2,600.00'));
       expect(decoded, contains('Discount:'));
       expect(decoded, contains('-Rs 200.00'));
-      expect(decoded, contains('Tax (Inclusive):'));
+      expect(decoded, contains('Tax:'));
       expect(decoded, contains('360.00'));
       expect(decoded, contains('GRAND TOTAL:'));
       expect(decoded, contains('2,400.00'));
