@@ -5,6 +5,7 @@ import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
 import 'package:resturant_sys/core/theme/theme.dart';
 import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
 import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
+import 'package:resturant_sys/core/hardware/reprint_tray_controller.dart';
 import 'app_header.dart';
 import 'catalog/supervisor_catalog_workspace.dart';
 import 'pin_lock_screen.dart';
@@ -20,6 +21,7 @@ class AppShell extends StatefulWidget {
     this.shiftController,
     this.catalogController,
     this.orderController,
+    this.reprintTrayController,
     this.child,
   });
 
@@ -28,6 +30,7 @@ class AppShell extends StatefulWidget {
   final ShiftAndCashController? shiftController;
   final CatalogAndRecipeController? catalogController;
   final OrderAndCheckoutController? orderController;
+  final ReprintTrayController? reprintTrayController;
   final Widget? child;
 
   @override
@@ -77,6 +80,7 @@ class _AppShellState extends State<AppShell> {
               onLock: () => widget.session.lock(),
               selectedWorkspace: _selectedWorkspace,
               onWorkspaceSelected: (tab) => setState(() => _selectedWorkspace = tab),
+              reprintTrayController: widget.reprintTrayController,
             ),
           ),
           body: widget.child ?? _buildWorkspaceBody(context, staff),
@@ -96,6 +100,7 @@ class _AppShellState extends State<AppShell> {
         currentStaff: staff,
         orderController: widget.orderController,
         catalogController: widget.catalogController,
+        reprintTrayController: widget.reprintTrayController,
       );
     }
 

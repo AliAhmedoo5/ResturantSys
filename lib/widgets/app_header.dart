@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
+import 'package:resturant_sys/core/hardware/reprint_tray_controller.dart';
 import 'package:resturant_sys/core/theme/theme.dart';
+import 'orders/reprint_tray_dialog.dart';
 
 /// Operational workspaces selectable in the application header.
 enum AppWorkspaceTab {
@@ -21,6 +23,7 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
     required this.onLock,
     this.selectedWorkspace,
     this.onWorkspaceSelected,
+    this.reprintTrayController,
     this.title = 'ResturantPOS',
   });
 
@@ -28,6 +31,7 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onLock;
   final AppWorkspaceTab? selectedWorkspace;
   final ValueChanged<AppWorkspaceTab>? onWorkspaceSelected;
+  final ReprintTrayController? reprintTrayController;
   final String title;
 
   @override
@@ -180,6 +184,59 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
           ),
         ),
         const SizedBox(width: WarmCounterSpacing.space12),
+
+        // Reprint Tray Button with Failure Badge
+        if (reprintTrayController != null) ...[
+          ListenableBuilder(
+            listenable: reprintTrayController!,
+            builder: (context, _) {
+              final hasFailures = reprintTrayController!.hasFailures;
+              final failedCount = reprintTrayController!.failedCount;
+
+              return Padding(
+                padding: const EdgeInsets.only(right: WarmCounterSpacing.space12),
+                child: OutlinedButton.icon(
+                  key: const ValueKey('header_reprint_tray_button'),
+                  onPressed: () {
+                    showDialog<void>(
+                      context: context,
+                      builder: (ctx) => ReprintTrayDialog(
+                        controller: reprintTrayController!,
+                        currentStaff: staff,
+                      ),
+                    );
+                  },
+                  icon: Icon(
+                    Icons.print_rounded,
+                    size: 18,
+                    color: hasFailures
+                        ? WarmCounterColors.lightDestructiveAction
+                        : WarmCounterColors.lightPrimaryText,
+                  ),
+                  label: Text(
+                    hasFailures ? 'Reprint Tray ($failedCount)' : 'Reprint Tray',
+                    style: TextStyle(
+                      color: hasFailures
+                          ? WarmCounterColors.lightDestructiveAction
+                          : WarmCounterColors.lightPrimaryText,
+                      fontWeight: hasFailures ? FontWeight.bold : FontWeight.w500,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    backgroundColor: hasFailures ? Colors.red.shade50 : null,
+                    side: BorderSide(
+                      color: hasFailures ? Colors.red.shade300 : WarmCounterColors.lightBorder,
+                    ),
+                    minimumSize: const Size(110, WarmCounterSpacing.minTouchTargetSize),
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: WarmCounterSpacing.controlBorderRadius,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
 
         // 1-Tap Lock Register Button
         OutlinedButton.icon(

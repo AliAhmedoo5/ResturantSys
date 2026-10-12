@@ -12,9 +12,11 @@ import '../../core/orders/deal.dart';
 import '../../core/orders/dining_type.dart';
 import '../../core/orders/order_and_checkout_controller.dart';
 import '../../core/orders/payment_method.dart';
+import '../../core/hardware/reprint_tray_controller.dart';
 import '../../core/theme/theme.dart';
 import 'deal_selection_dialog.dart';
 import 'modifier_selection_dialog.dart';
+import 'reprint_tray_dialog.dart';
 import 'tender_checkout_dialog.dart';
 
 /// High-speed touch grid billing and checkout interface for counter cashiers.
@@ -23,6 +25,7 @@ class CounterBillingWorkspace extends StatefulWidget {
     super.key,
     this.orderController,
     this.catalogController,
+    this.reprintTrayController,
     required this.currentStaff,
     required this.businessDayId,
     required this.shiftId,
@@ -37,6 +40,7 @@ class CounterBillingWorkspace extends StatefulWidget {
 
   final OrderAndCheckoutController? orderController;
   final CatalogAndRecipeController? catalogController;
+  final ReprintTrayController? reprintTrayController;
   final Staff currentStaff;
   final int businessDayId;
   final int shiftId;
@@ -260,21 +264,30 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
       builder: (ctx) => TenderCheckoutDialog(
         grandTotal: totals.grandTotal,
         onCompleteCheckout: (tenders) async {
-          if (widget.orderController != null) {
-            final result = await widget.orderController!.checkoutOrder(
-              businessDayId: widget.businessDayId,
-              shiftId: widget.shiftId,
-              cashierId: widget.currentStaff.id,
-              diningType: _selectedDiningType,
-              items: List.of(_cartItems),
-              discount: _selectedDiscount,
-              payments: tenders,
-            );
+            if (widget.orderController != null) {
+              final result = await widget.orderController!.checkoutOrder(
+                businessDayId: widget.businessDayId,
+                shiftId: widget.shiftId,
+                cashierId: widget.currentStaff.id,
+                diningType: _selectedDiningType,
+                items: List.of(_cartItems),
+                discount: _selectedDiscount,
+                payments: tenders,
+              );
 
-            if (mounted) {
-              _showCheckoutSuccessBanner(result);
+              // Decoupled hardware printing executed strictly AFTER transaction commit
+              if (widget.reprintTrayController != null) {
+                final isCashPaid = tenders.any((t) => t.method == PaymentMethod.cash);
+                await widget.reprintTrayController!.dispatchOrderPrinting(
+                  order: result.order,
+                  isCashPaid: isCashPaid,
+                );
+              }
+
+              if (mounted) {
+                _showCheckoutSuccessBanner(result);
+              }
             }
-          }
         },
       ),
     );
@@ -308,6 +321,14 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
             ),
           ],
         );
+
+        // Decoupled hardware printing executed strictly AFTER transaction commit
+        if (widget.reprintTrayController != null) {
+          await widget.reprintTrayController!.dispatchOrderPrinting(
+            order: result.order,
+            isCashPaid: true,
+          );
+        }
 
         if (mounted) {
           _showCheckoutSuccessBanner(result);
@@ -483,19 +504,76 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
           }).toList(),
         ),
 
-        // Hotkey Tooltip Hint
-        Flexible(
-          child: Text(
-            '[Space] Tender | [Numpad Enter] Exact | [Esc] Clear',
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.end,
-            style: WarmCounterTypography.caption.copyWith(
-              color: WarmCounterColors.lightSecondaryText,
-              fontWeight: FontWeight.w600,
+        // Actions & Hotkey Tooltip Hint
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (widget.reprintTrayController != null) ...[
+              _buildReprintTrayButton(),
+              const SizedBox(width: WarmCounterSpacing.space12),
+            ],
+            Text(
+              '[Space] Tender | [Numpad Enter] Exact | [Esc] Clear',
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.end,
+              style: WarmCounterTypography.caption.copyWith(
+                color: WarmCounterColors.lightSecondaryText,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-          ),
+          ],
         ),
       ],
+    );
+  }
+
+  Widget _buildReprintTrayButton() {
+    return ListenableBuilder(
+      listenable: widget.reprintTrayController!,
+      builder: (context, _) {
+        final hasFailures = widget.reprintTrayController!.hasFailures;
+        final failedCount = widget.reprintTrayController!.failedCount;
+
+        return OutlinedButton.icon(
+          key: const ValueKey('open_reprint_tray_button'),
+          icon: Icon(
+            Icons.print_rounded,
+            size: 16,
+            color: hasFailures
+                ? WarmCounterColors.lightDestructiveAction
+                : WarmCounterColors.lightPrimaryText,
+          ),
+          label: Text(
+            hasFailures ? 'Reprint Tray ($failedCount)' : 'Reprint Tray',
+            style: TextStyle(
+              color: hasFailures
+                  ? WarmCounterColors.lightDestructiveAction
+                  : WarmCounterColors.lightPrimaryText,
+              fontWeight: hasFailures ? FontWeight.bold : FontWeight.w500,
+              fontSize: 12,
+            ),
+          ),
+          style: OutlinedButton.styleFrom(
+            backgroundColor: hasFailures ? Colors.red.shade50 : null,
+            side: BorderSide(
+              color: hasFailures ? Colors.red.shade300 : WarmCounterColors.lightBorder,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          ),
+          onPressed: _openReprintTray,
+        );
+      },
+    );
+  }
+
+  void _openReprintTray() {
+    if (widget.reprintTrayController == null) return;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => ReprintTrayDialog(
+        controller: widget.reprintTrayController!,
+        currentStaff: widget.currentStaff,
+      ),
     );
   }
 

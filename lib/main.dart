@@ -7,6 +7,8 @@ import 'core/auth/auth_service.dart';
 import 'core/shifts/shift_and_cash_controller.dart';
 import 'core/catalog/catalog_and_recipe_controller.dart';
 import 'core/orders/order_and_checkout_controller.dart';
+import 'core/hardware/reprint_tray_controller.dart';
+import 'core/hardware/in_memory_hardware_adapter.dart';
 import 'core/theme/warm_counter_theme.dart';
 import 'widgets/app_shell.dart';
 
@@ -26,11 +28,17 @@ void main() async {
   final catalogController = CatalogAndRecipeController(database: database);
   final orderController = OrderAndCheckoutController(database: database);
 
+  final reprintTrayController = ReprintTrayController(
+    hardwareAdapter: InMemoryHardwareAdapter(),
+  );
+  await reprintTrayController.loadSettings(database);
+
   runApp(RestaurantPosApp(
     authService: authService,
     shiftController: shiftController,
     catalogController: catalogController,
     orderController: orderController,
+    reprintTrayController: reprintTrayController,
   ));
 }
 
@@ -42,12 +50,14 @@ class RestaurantPosApp extends StatelessWidget {
     this.shiftController,
     this.catalogController,
     this.orderController,
+    this.reprintTrayController,
   });
 
   final AuthService authService;
   final ShiftAndCashController? shiftController;
   final CatalogAndRecipeController? catalogController;
   final OrderAndCheckoutController? orderController;
+  final ReprintTrayController? reprintTrayController;
 
   @override
   Widget build(BuildContext context) {
@@ -63,6 +73,7 @@ class RestaurantPosApp extends StatelessWidget {
         shiftController: shiftController,
         catalogController: catalogController,
         orderController: orderController,
+        reprintTrayController: reprintTrayController,
       ),
     );
   }
