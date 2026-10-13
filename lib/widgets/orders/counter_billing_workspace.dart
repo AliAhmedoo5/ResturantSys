@@ -487,8 +487,11 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
   // ---------------------------------------------------------------------------
 
   Widget _buildTopControlBar() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Wrap(
+      alignment: WrapAlignment.spaceBetween,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: WarmCounterSpacing.space8,
+      runSpacing: WarmCounterSpacing.space8,
       children: [
         // Dining Type Selector
         Row(
@@ -511,32 +514,28 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
         ),
 
         // Actions & Hotkey Tooltip Hint
-        Flexible(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              if (widget.orderController != null) ...[
-                _buildVoidOrderButton(),
-                const SizedBox(width: WarmCounterSpacing.space8),
-              ],
-              if (widget.reprintTrayController != null) ...[
-                _buildReprintTrayButton(),
-                const SizedBox(width: WarmCounterSpacing.space8),
-              ],
-              Flexible(
-                child: Text(
-                  '[Space] Tender | [Numpad Enter] Exact | [Esc] Clear',
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.end,
-                  style: WarmCounterTypography.caption.copyWith(
-                    color: WarmCounterColors.lightSecondaryText,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            if (widget.orderController != null) ...[
+              _buildVoidOrderButton(),
+              const SizedBox(width: WarmCounterSpacing.space8),
             ],
-          ),
+            if (widget.reprintTrayController != null) ...[
+              _buildReprintTrayButton(),
+              const SizedBox(width: WarmCounterSpacing.space8),
+            ],
+            Text(
+              '[Space] Tender | [Numpad Enter] Exact | [Esc] Clear',
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.end,
+              style: WarmCounterTypography.caption.copyWith(
+                color: WarmCounterColors.lightSecondaryText,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -942,28 +941,34 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: WarmCounterColors.lightActiveNavHighlight,
-                        borderRadius: BorderRadius.circular(6),
+                Expanded(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: WarmCounterColors.lightActiveNavHighlight,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'Token $tokenFormatted',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
                       ),
-                      child: Text(
-                        'Token $tokenFormatted',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          _selectedDiningType.displayName,
+                          overflow: TextOverflow.ellipsis,
+                          style: WarmCounterTypography.caption.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: WarmCounterColors.lightSecondaryText,
+                          ),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      _selectedDiningType.displayName,
-                      style: WarmCounterTypography.caption.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: WarmCounterColors.lightSecondaryText,
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
                 if (_cartItems.isNotEmpty)
                   IconButton(
