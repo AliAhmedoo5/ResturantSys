@@ -14,6 +14,7 @@ import '../../core/orders/dining_type.dart';
 import '../../core/orders/order.dart';
 import '../../core/orders/order_and_checkout_controller.dart';
 import '../../core/orders/payment_method.dart';
+import '../../core/hardware/in_memory_hardware_adapter.dart';
 import '../../core/hardware/reprint_tray_controller.dart';
 import '../../core/theme/theme.dart';
 import 'deal_selection_dialog.dart';

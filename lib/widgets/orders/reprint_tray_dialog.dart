@@ -512,7 +512,7 @@ class _ReprintTrayDialogState extends State<ReprintTrayDialog> {
                           }
                           return;
                         }
-                        if (!context.mounted) return;
+                        if (!mounted) return;
                         await showDialog<void>(
                           context: context,
                           builder: (ctx) => SupervisorVoidDialog(
