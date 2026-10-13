@@ -99,10 +99,24 @@ void main() {
     test('order_voids persists audit record immutably linking order, supervisor, and cashier', () async {
       final db = await posDb.initialize();
 
+      // Create prerequisite business day & shift for FK integrity
+      final bDayId = await db.insert(PosDatabaseConstants.tableBusinessDays, {
+        'opened_by_staff_id': 1,
+        'opened_at': '2026-10-12 09:00:00',
+        'status': 'OPEN',
+      });
+      final sId = await db.insert(PosDatabaseConstants.tableShifts, {
+        'business_day_id': bDayId,
+        'staff_id': 2,
+        'opened_at': '2026-10-12 09:00:00',
+        'opening_float': 1000.0,
+        'status': 'OPEN',
+      });
+
       // Create an order
       final orderId = await db.insert(PosDatabaseConstants.tableOrders, {
-        'business_day_id': 1,
-        'shift_id': 1,
+        'business_day_id': bDayId,
+        'shift_id': sId,
         'cashier_id': 2,
         'token_number': 1,
         'dining_type': 'DINE_IN',

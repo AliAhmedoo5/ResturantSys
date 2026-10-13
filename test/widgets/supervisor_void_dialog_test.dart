@@ -7,6 +7,8 @@ import 'package:resturant_sys/core/auth/staff_role.dart';
 import 'package:resturant_sys/core/hardware/in_memory_hardware_adapter.dart';
 import 'package:resturant_sys/core/hardware/print_job.dart';
 import 'package:resturant_sys/core/hardware/reprint_tray_controller.dart';
+import 'package:resturant_sys/core/catalog/discount_preset.dart';
+import 'package:resturant_sys/core/orders/cart_item.dart';
 import 'package:resturant_sys/core/orders/dining_type.dart';
 import 'package:resturant_sys/core/orders/order.dart';
 import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
@@ -125,6 +127,19 @@ class FakeOrderController implements OrderAndCheckoutController {
     int? limit,
   }) async {
     return [testOrder];
+  }
+
+  @override
+  CartTotals calculateCartTotals({
+    required List<CartItem> items,
+    DiscountPreset? discount,
+  }) {
+    return const CartTotals(
+      subtotal: 0.0,
+      discountAmount: 0.0,
+      taxAmount: 0.0,
+      grandTotal: 0.0,
+    );
   }
 
   @override

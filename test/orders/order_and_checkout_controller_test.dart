@@ -563,7 +563,7 @@ void main() {
       expect(curBeef.currentStock, equals(46.0)); // 50 - 4 = 46
 
       var curCheese = await catalogController.getRawIngredient(cheese.id);
-      expect(curCheese.currentStock, equals(37.0)); // 40 - 3 = 37
+      expect(curCheese.currentStock, equals(36.0)); // 40 - 4 = 36 (2 burgers * 2 cheese each)
 
       var curPackaging = await catalogController.getRawIngredient(packaging.id);
       expect(curPackaging.currentStock, equals(29.0)); // 30 - 1 = 29

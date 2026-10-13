@@ -145,41 +145,49 @@ class _SupervisorVoidDialogState extends State<SupervisorVoidDialog> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(WarmCounterSpacing.space8),
-                        decoration: const BoxDecoration(
-                          color: WarmCounterColors.lightDestructiveHighlight,
-                          borderRadius: WarmCounterSpacing.controlBorderRadius,
-                        ),
-                        child: const Icon(
-                          Icons.cancel_outlined,
-                          size: 26,
-                          color: WarmCounterColors.lightDestructiveAction,
-                        ),
-                      ),
-                      const SizedBox(width: WarmCounterSpacing.space12),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Supervisor Void Authorization',
-                            style: WarmCounterTypography.pageHeading.copyWith(
-                              fontSize: 18,
-                              color: WarmCounterColors.lightDestructiveAction,
-                            ),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(WarmCounterSpacing.space8),
+                          decoration: const BoxDecoration(
+                            color: WarmCounterColors.lightDestructiveHighlight,
+                            borderRadius: WarmCounterSpacing.controlBorderRadius,
                           ),
-                          Text(
-                            'Order #${widget.order.id} • Token ${widget.order.tokenDisplay} • Rs ${_currencyFormat.format(widget.order.grandTotal)}',
-                            style: WarmCounterTypography.tabularNumbers.copyWith(
-                              color: WarmCounterColors.lightSecondaryText,
-                              fontSize: 12,
-                            ),
+                          child: const Icon(
+                            Icons.cancel_outlined,
+                            size: 26,
+                            color: WarmCounterColors.lightDestructiveAction,
                           ),
-                        ],
-                      ),
-                    ],
+                        ),
+                        const SizedBox(width: WarmCounterSpacing.space12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Supervisor Void Authorization',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: WarmCounterTypography.pageHeading.copyWith(
+                                  fontSize: 18,
+                                  color: WarmCounterColors.lightDestructiveAction,
+                                ),
+                              ),
+                              Text(
+                                'Order #${widget.order.id} • Token ${widget.order.tokenDisplay} • Rs ${_currencyFormat.format(widget.order.grandTotal)}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: WarmCounterTypography.tabularNumbers.copyWith(
+                                  color: WarmCounterColors.lightSecondaryText,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   IconButton(
                     key: const ValueKey('close_void_dialog_button'),
@@ -216,10 +224,15 @@ class _SupervisorVoidDialogState extends State<SupervisorVoidDialog> {
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Text(
-                                        'Dining: ${widget.order.diningType.displayName}',
-                                        style: WarmCounterTypography.caption.copyWith(fontWeight: FontWeight.bold),
+                                      Expanded(
+                                        child: Text(
+                                          'Dining: ${widget.order.diningType.displayName}',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: WarmCounterTypography.caption.copyWith(fontWeight: FontWeight.bold),
+                                        ),
                                       ),
+                                      const SizedBox(width: 8),
                                       Text(
                                         '${widget.order.items.length} item(s)',
                                         style: WarmCounterTypography.caption,
