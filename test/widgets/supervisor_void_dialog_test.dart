@@ -7,7 +7,6 @@ import 'package:resturant_sys/core/auth/staff_role.dart';
 import 'package:resturant_sys/core/hardware/in_memory_hardware_adapter.dart';
 import 'package:resturant_sys/core/hardware/print_job.dart';
 import 'package:resturant_sys/core/hardware/reprint_tray_controller.dart';
-import 'package:resturant_sys/core/orders/cart_item.dart';
 import 'package:resturant_sys/core/orders/dining_type.dart';
 import 'package:resturant_sys/core/orders/order.dart';
 import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
@@ -49,6 +48,9 @@ class FakeAuthService implements AuthService {
 
   @override
   Future<Staff?> authenticateWithPin(String pin) async => null;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class FakeOrderController implements OrderAndCheckoutController {
@@ -120,31 +122,9 @@ class FakeOrderController implements OrderAndCheckoutController {
   Future<List<Order>> getOrders({
     int? businessDayId,
     int? shiftId,
-    int? cashierId,
-    String? status,
-    int limit = 50,
+    int? limit,
   }) async {
     return [testOrder];
-  }
-
-  @override
-  Future<int> getNextTokenNumber(int businessDayId) async => 1;
-
-  @override
-  Future<List<dynamic>> getDeals({bool activeOnly = false}) async => [];
-
-  @override
-  OrderCalculation calculateCartTotals({
-    required List<CartItem> items,
-    DiningType diningType = DiningType.dineIn,
-    dynamic discount,
-  }) {
-    return const OrderCalculation(
-      subtotal: 1000.0,
-      packagingCharges: 0.0,
-      discountAmount: 0.0,
-      grandTotal: 1000.0,
-    );
   }
 
   @override
