@@ -11,6 +11,7 @@ import 'dining_type.dart';
 import 'order.dart';
 import 'order_item.dart';
 import 'order_payment.dart';
+import 'order_void.dart';
 import 'payment_method.dart';
 
 /// Draft definition when creating or configuring a deal item slot.
@@ -705,5 +706,224 @@ class OrderAndCheckoutController {
       orderBy: 'id ASC',
     );
     return rows.map((r) => OrderPayment.fromMap(r)).toList();
+  }
+
+  // ===========================================================================
+  // SUPERVISOR ORDER VOID & INVENTORY REVERSAL
+  // ===========================================================================
+
+  /// Reads whether cashier-initiated void requests are currently enabled from system settings.
+  Future<bool> isCashierVoidEnabled() async {
+    final rows = await database.query(
+      PosDatabaseConstants.tableSystemSettings,
+      where: 'key = ?',
+      whereArgs: [PosDatabaseConstants.settingCashierVoidRequestsEnabled],
+    );
+    if (rows.isNotEmpty) {
+      return (rows.first['value'] as String).toLowerCase() == 'true';
+    }
+    return true; // Default enabled
+  }
+
+  /// Sets whether cashier-initiated void requests are enabled in system settings.
+  Future<void> setCashierVoidEnabled(bool enabled) async {
+    final now = _formatTimestamp(DateTime.now());
+    await database.insert(
+      PosDatabaseConstants.tableSystemSettings,
+      {
+        'key': PosDatabaseConstants.settingCashierVoidRequestsEnabled,
+        'value': enabled ? 'true' : 'false',
+        'updated_at': now,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Voids a settled order with supervisor authorization:
+  /// 1. Verifies the order exists and is currently 'SETTLED'.
+  /// 2. Validates mandatory cancellation reason.
+  /// 3. Updates order status to 'VOIDED' in SQLite.
+  /// 4. Immutably records audit entry in order_voids (cashier ID, supervisor ID, reason, timestamp).
+  /// 5. Accurately reverses all BOM ingredient deductions, restoring raw ingredient stock.
+  Future<OrderVoid> voidOrder({
+    required int orderId,
+    required int supervisorStaffId,
+    required int cashierStaffId,
+    required String reason,
+  }) async {
+    if (!VoidReason.isValid(reason)) {
+      throw ArgumentError(
+        'Invalid cancellation reason "$reason". Mandatory reasons: ${VoidReason.mandatoryReasons.join(', ')}',
+      );
+    }
+
+    final order = await getOrder(orderId);
+    if (order.isVoided) {
+      throw StateError('Order #$orderId is already voided.');
+    }
+    if (!order.isSettled) {
+      throw StateError('Only settled orders can be voided (current status: ${order.paymentStatus}).');
+    }
+
+    final now = DateTime.now();
+    final formattedNow = _formatTimestamp(now);
+
+    return await database.transaction((txn) async {
+      // 1. Mark order as VOIDED
+      await txn.update(
+        PosDatabaseConstants.tableOrders,
+        {'payment_status': 'VOIDED'},
+        where: 'id = ?',
+        whereArgs: [orderId],
+      );
+
+      // 2. Insert immutable order_voids audit row
+      final voidId = await txn.insert(
+        PosDatabaseConstants.tableOrderVoids,
+        {
+          'order_id': orderId,
+          'voided_by_supervisor_id': supervisorStaffId,
+          'cashier_id': cashierStaffId,
+          'reason': reason,
+          'voided_at': formattedNow,
+        },
+      );
+
+      // 3. Reverses BOM ingredient consumption
+      final reversals = <int, double>{};
+      for (final item in order.items) {
+        await _accumulateOrderItemReversals(
+          item: item,
+          reversals: reversals,
+          executor: txn,
+        );
+      }
+
+      // Reverse packaging if Takeaway or Delivery
+      if (order.diningType.requiresPackaging) {
+        final packagingRows = await txn.rawQuery('''
+          SELECT id FROM ${PosDatabaseConstants.tableRawIngredients}
+          WHERE LOWER(name) LIKE '%packaging%' OR LOWER(name) LIKE '%takeaway%'
+          LIMIT 1;
+        ''');
+
+        if (packagingRows.isNotEmpty) {
+          final packagingId = packagingRows.first['id'] as int;
+          reversals[packagingId] = (reversals[packagingId] ?? 0.0) + 1.0;
+        }
+      }
+
+      // Apply stock reversals: adds stock back
+      for (final entry in reversals.entries) {
+        await txn.rawUpdate('''
+          UPDATE ${PosDatabaseConstants.tableRawIngredients}
+          SET current_stock = current_stock + ?
+          WHERE id = ?;
+        ''', [entry.value, entry.key]);
+      }
+
+      // Lookup staff names for audit result
+      final supervisorRows = await txn.query(
+        PosDatabaseConstants.tableStaff,
+        columns: ['name'],
+        where: 'id = ?',
+        whereArgs: [supervisorStaffId],
+      );
+      final cashierRows = await txn.query(
+        PosDatabaseConstants.tableStaff,
+        columns: ['name'],
+        where: 'id = ?',
+        whereArgs: [cashierStaffId],
+      );
+
+      return OrderVoid(
+        id: voidId,
+        orderId: orderId,
+        voidedBySupervisorId: supervisorStaffId,
+        cashierId: cashierStaffId,
+        reason: reason,
+        voidedAt: now,
+        supervisorName: supervisorRows.isNotEmpty ? supervisorRows.first['name'] as String? : null,
+        cashierName: cashierRows.isNotEmpty ? cashierRows.first['name'] as String? : null,
+      );
+    });
+  }
+
+  Future<void> _accumulateOrderItemReversals({
+    required OrderItem item,
+    required Map<int, double> reversals,
+    required DatabaseExecutor executor,
+  }) async {
+    final modifiers = item.decodedModifiers;
+    final removedIngredientIds = <int>{};
+    final positiveModifiers = <(int rawIngredientId, double delta)>[];
+
+    for (final mod in modifiers) {
+      final rawIngredientId = mod['raw_ingredient_id'] as int?;
+      final name = (mod['name'] as String? ?? '').toLowerCase();
+      final delta = (mod['ingredient_qty_delta'] as num?)?.toDouble() ?? 0.0;
+
+      if (rawIngredientId != null) {
+        if (delta == 0.0 || name.contains('no ')) {
+          removedIngredientIds.add(rawIngredientId);
+        } else if (delta > 0.0) {
+          positiveModifiers.add((rawIngredientId, delta));
+        }
+      }
+    }
+
+    Future<void> reverseMenuItem(int menuItemId) async {
+      final recipes = await executor.query(
+        PosDatabaseConstants.tableRecipes,
+        where: 'menu_item_id = ?',
+        whereArgs: [menuItemId],
+      );
+
+      for (final recipe in recipes) {
+        final ingredientId = recipe['raw_ingredient_id'] as int;
+        final recipeQty = (recipe['quantity_per_recipe_unit'] as num).toDouble();
+
+        if (removedIngredientIds.contains(ingredientId)) {
+          continue; // 0g removal was consumed, nothing to reverse
+        }
+
+        reversals[ingredientId] = (reversals[ingredientId] ?? 0.0) + (recipeQty * item.quantity);
+      }
+
+      for (final mod in positiveModifiers) {
+        if (!removedIngredientIds.contains(mod.$1)) {
+          reversals[mod.$1] = (reversals[mod.$1] ?? 0.0) + (mod.$2 * item.quantity);
+        }
+      }
+    }
+
+    if (item.menuItemId != null) {
+      await reverseMenuItem(item.menuItemId!);
+    } else if (item.dealId != null) {
+      for (final choice in item.decodedDealChoices) {
+        final menuItemId = choice['menu_item_id'] as int?;
+        if (menuItemId != null) {
+          await reverseMenuItem(menuItemId);
+        }
+      }
+    }
+  }
+
+  /// Retrieves the immutable void audit record for a voided order, if any.
+  Future<OrderVoid?> getOrderVoid(int orderId) async {
+    final rows = await database.rawQuery('''
+      SELECT ov.*, 
+             s1.name as supervisor_name, 
+             s2.name as cashier_name
+      FROM ${PosDatabaseConstants.tableOrderVoids} ov
+      LEFT JOIN ${PosDatabaseConstants.tableStaff} s1 ON ov.voided_by_supervisor_id = s1.id
+      LEFT JOIN ${PosDatabaseConstants.tableStaff} s2 ON ov.cashier_id = s2.id
+      WHERE ov.order_id = ?
+      ORDER BY ov.id DESC
+      LIMIT 1;
+    ''', [orderId]);
+
+    if (rows.isEmpty) return null;
+    return OrderVoid.fromMap(rows.first);
   }
 }

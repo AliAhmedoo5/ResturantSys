@@ -31,12 +31,13 @@ void main() {
       }
     });
 
-    test('Schema version is 4 and creates deals, deal_items, and order_items tables', () async {
+    test('Schema version is 5 and creates deals, deal_items, order_items, and order_voids tables', () async {
       final db = await posDb.initialize();
 
       // Check schema version
       final versionResult = await db.rawQuery('PRAGMA user_version;');
-      expect(versionResult.first.values.first, equals(4));
+      expect(versionResult.first.values.first, equals(PosDatabaseConstants.schemaVersion));
+      expect(versionResult.first.values.first, equals(5));
 
       // Check tables exist
       final tables = await db.rawQuery(
@@ -50,6 +51,7 @@ void main() {
       expect(tableNames.contains(PosDatabaseConstants.tableOrderItems), isTrue);
       expect(tableNames.contains(PosDatabaseConstants.tableOrders), isTrue);
       expect(tableNames.contains(PosDatabaseConstants.tableOrderPayments), isTrue);
+      expect(tableNames.contains(PosDatabaseConstants.tableOrderVoids), isTrue);
     });
 
     test('Foreign key cascades work for deals and order items', () async {
@@ -92,6 +94,48 @@ void main() {
         whereArgs: [dealItemId],
       );
       expect(dealItemsAfter, isEmpty);
+    });
+
+    test('order_voids persists audit record immutably linking order, supervisor, and cashier', () async {
+      final db = await posDb.initialize();
+
+      // Create an order
+      final orderId = await db.insert(PosDatabaseConstants.tableOrders, {
+        'business_day_id': 1,
+        'shift_id': 1,
+        'cashier_id': 2,
+        'token_number': 1,
+        'dining_type': 'DINE_IN',
+        'subtotal': 500.0,
+        'discount_amount': 0.0,
+        'tax_amount': 0.0,
+        'grand_total': 500.0,
+        'payment_status': 'SETTLED',
+        'created_at': '2026-10-12 12:00:00',
+      });
+
+      // Insert void audit record
+      final voidId = await db.insert(PosDatabaseConstants.tableOrderVoids, {
+        'order_id': orderId,
+        'voided_by_supervisor_id': 1,
+        'cashier_id': 2,
+        'reason': 'Customer Cancelled',
+        'voided_at': '2026-10-12 12:05:00',
+      });
+
+      expect(voidId, greaterThan(0));
+
+      final voidRows = await db.query(
+        PosDatabaseConstants.tableOrderVoids,
+        where: 'id = ?',
+        whereArgs: [voidId],
+      );
+      expect(voidRows.length, equals(1));
+      expect(voidRows.first['order_id'], equals(orderId));
+      expect(voidRows.first['voided_by_supervisor_id'], equals(1));
+      expect(voidRows.first['cashier_id'], equals(2));
+      expect(voidRows.first['reason'], equals('Customer Cancelled'));
+      expect(voidRows.first['voided_at'], equals('2026-10-12 12:05:00'));
     });
   });
 }

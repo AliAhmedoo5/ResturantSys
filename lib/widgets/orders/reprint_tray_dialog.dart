@@ -1,21 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../../core/auth/auth_service.dart';
 import '../../core/auth/staff.dart';
 import '../../core/hardware/print_job.dart';
 import '../../core/hardware/reprint_tray_controller.dart';
+import '../../core/orders/order_and_checkout_controller.dart';
 import '../../core/theme/theme.dart';
+import 'supervisor_void_dialog.dart';
 
-/// Modal dialog displaying failed and recent thermal print jobs with 1-tap retry
-/// and supervisor manual cash drawer override.
+/// Modal dialog displaying failed and recent thermal print jobs with 1-tap retry,
+/// supervisor order voiding, and manual cash drawer override.
 class ReprintTrayDialog extends StatefulWidget {
   const ReprintTrayDialog({
     super.key,
     required this.controller,
     this.currentStaff,
+    this.orderController,
+    this.authService,
   });
 
   final ReprintTrayController controller;
   final Staff? currentStaff;
+  final OrderAndCheckoutController? orderController;
+  final AuthService? authService;
 
   @override
   State<ReprintTrayDialog> createState() => _ReprintTrayDialogState();
@@ -24,6 +31,17 @@ class ReprintTrayDialog extends StatefulWidget {
 class _ReprintTrayDialogState extends State<ReprintTrayDialog> {
   final DateFormat _timeFormat = DateFormat('HH:mm:ss');
   bool _isRetrying = false;
+  bool _cashierVoidEnabled = true;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.orderController != null) {
+      widget.orderController!.isCashierVoidEnabled().then((enabled) {
+        if (mounted) setState(() => _cashierVoidEnabled = enabled);
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -179,6 +197,47 @@ class _ReprintTrayDialogState extends State<ReprintTrayDialog> {
                       ],
                     ),
                   ),
+                  if (widget.orderController != null &&
+                      (widget.currentStaff?.canAccessSupervisorPortal == true ||
+                          widget.currentStaff?.canAuthorizeOverrides == true)) ...[
+                    const SizedBox(height: WarmCounterSpacing.space8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: WarmCounterColors.lightPageBackground,
+                        borderRadius: WarmCounterSpacing.controlBorderRadius,
+                        border: Border.all(color: WarmCounterColors.lightBorder),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.toggle_on_outlined,
+                                size: 20,
+                                color: WarmCounterColors.lightPrimaryText,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Cashier Void Requests: ${_cashierVoidEnabled ? "Enabled" : "Disabled"}',
+                                style: WarmCounterTypography.bodyMedium.copyWith(fontSize: 13),
+                              ),
+                            ],
+                          ),
+                          Switch(
+                            key: const ValueKey('toggle_cashier_void_switch'),
+                            value: _cashierVoidEnabled,
+                            activeColor: WarmCounterColors.lightPrimaryAction,
+                            onChanged: (val) async {
+                              await widget.orderController!.setCashierVoidEnabled(val);
+                              setState(() => _cashierVoidEnabled = val);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: WarmCounterSpacing.space16),
 
                   // Main Content: Failed Jobs and Recent Jobs
@@ -392,28 +451,97 @@ class _ReprintTrayDialogState extends State<ReprintTrayDialog> {
               ],
             )
           else
-            OutlinedButton.icon(
-              icon: const Icon(Icons.print_rounded, size: 16),
-              label: const Text('Reprint'),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                minimumSize: const Size(80, 48),
-              ),
-              onPressed: () async {
-                final success = await widget.controller.reprintJob(job);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        success
-                            ? 'Reprint sent to printer.'
-                            : 'Reprint failed. Added to failed jobs queue.',
-                      ),
-                      duration: const Duration(seconds: 2),
+            Row(
+              children: [
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.print_rounded, size: 16),
+                  label: const Text('Reprint'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    minimumSize: const Size(80, 48),
+                  ),
+                  onPressed: () async {
+                    final success = await widget.controller.reprintJob(job);
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            success
+                                ? 'Reprint sent to printer.'
+                                : 'Reprint failed. Added to failed jobs queue.',
+                          ),
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  },
+                ),
+                if (job.orderId != null &&
+                    widget.orderController != null &&
+                    widget.authService != null) ...[
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    key: ValueKey('void_job_${job.id}'),
+                    icon: const Icon(Icons.cancel_outlined, size: 16, color: WarmCounterColors.lightDestructiveAction),
+                    label: const Text('Void', style: TextStyle(color: WarmCounterColors.lightDestructiveAction)),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: WarmCounterColors.lightDestructive),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      minimumSize: const Size(70, 48),
                     ),
-                  );
-                }
-              },
+                    onPressed: () async {
+                      final isSupervisor = widget.currentStaff?.canVoidOrders ?? false;
+                      if (!isSupervisor && !_cashierVoidEnabled) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Cashier void requests are disabled by management.'),
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+                        }
+                        return;
+                      }
+
+                      try {
+                        final order = await widget.orderController!.getOrder(job.orderId!);
+                        if (order.isVoided) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Order is already voided.')),
+                            );
+                          }
+                          return;
+                        }
+                        if (!context.mounted) return;
+                        await showDialog<void>(
+                          context: context,
+                          builder: (ctx) => SupervisorVoidDialog(
+                            order: order,
+                            cashierId: widget.currentStaff?.id ?? 1,
+                            orderController: widget.orderController!,
+                            authService: widget.authService!,
+                            reprintTrayController: widget.controller,
+                            onVoidSuccess: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Order #${order.id} (${order.tokenDisplay}) voided successfully. Kitchen Void Slip emitted.'),
+                                ),
+                              );
+                            },
+                          ),
+                        );
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Failed to load order: $e')),
+                          );
+                        }
+                      }
+                    },
+                  ),
+                ],
+              ],
             ),
         ],
       ),

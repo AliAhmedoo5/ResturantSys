@@ -12,7 +12,7 @@ import 'package:resturant_sys/widgets/catalog/supervisor_catalog_workspace.dart'
 
 void main() {
   group('SupervisorCatalogWorkspace Widget Tests', () {
-    testWidgets('renders all 5 catalog tabs and supports tab switching', (tester) async {
+    testWidgets('renders all 6 catalog tabs and supports tab switching', (tester) async {
       tester.view.physicalSize = const Size(1920, 1080);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -48,6 +48,7 @@ void main() {
       expect(find.byKey(const ValueKey('tab_raw_ingredients')), findsOneWidget);
       expect(find.byKey(const ValueKey('tab_modifiers')), findsOneWidget);
       expect(find.byKey(const ValueKey('tab_discounts')), findsOneWidget);
+      expect(find.byKey(const ValueKey('tab_settings')), findsOneWidget);
 
       // Categories tab is active initially
       expect(find.text('Menu Categories'), findsOneWidget);
@@ -76,6 +77,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Promotions cashiers can apply at the counter without requiring a supervisor PIN (ADR-0004).'), findsOneWidget);
       expect(find.byKey(const ValueKey('add_discount_preset_button')), findsOneWidget);
+
+      // Switch to Settings tab
+      await tester.tap(find.byKey(const ValueKey('tab_settings')));
+      await tester.pumpAndSettle();
+      expect(find.text('Operational Feature Toggles & Settings'), findsOneWidget);
+      expect(find.byKey(const ValueKey('supervisor_cashier_void_toggle')), findsOneWidget);
     });
 
     testWidgets('creates a Category through CategoryFormDialog and displays it in list', (tester) async {

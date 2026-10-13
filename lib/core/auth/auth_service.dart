@@ -56,6 +56,16 @@ class AuthService {
     return staff;
   }
 
+  /// Authenticates a staff member specifically verifying Supervisor or Owner authorization
+  /// without modifying the active session (preserving the active cashier's login).
+  Future<Staff?> authenticateSupervisorPin(String pin) async {
+    final staff = await authenticateWithPin(pin);
+    if (staff != null && staff.canVoidOrders) {
+      return staff;
+    }
+    return null;
+  }
+
   /// Authenticates a staff member and establishes an active user session.
   Future<Staff?> authenticateAndLogin(String pin) async {
     final staff = await authenticateWithPin(pin);

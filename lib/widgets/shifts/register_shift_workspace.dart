@@ -13,6 +13,7 @@ import 'discrepancy_review_dialog.dart';
 import 'open_business_day_dialog.dart';
 import 'open_shift_dialog.dart';
 import 'x_report_dialog.dart';
+import '../../core/auth/auth_service.dart';
 import '../../core/orders/order_and_checkout_controller.dart';
 import '../../core/catalog/catalog_and_recipe_controller.dart';
 import '../../core/hardware/reprint_tray_controller.dart';
@@ -27,6 +28,7 @@ class RegisterShiftWorkspace extends StatefulWidget {
     this.orderController,
     this.catalogController,
     this.reprintTrayController,
+    this.authService,
   });
 
   final ShiftAndCashController controller;
@@ -34,6 +36,7 @@ class RegisterShiftWorkspace extends StatefulWidget {
   final OrderAndCheckoutController? orderController;
   final CatalogAndRecipeController? catalogController;
   final ReprintTrayController? reprintTrayController;
+  final AuthService? authService;
 
   @override
   State<RegisterShiftWorkspace> createState() => _RegisterShiftWorkspaceState();
@@ -293,6 +296,7 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
                   orderController: widget.orderController!,
                   catalogController: widget.catalogController!,
                   reprintTrayController: widget.reprintTrayController,
+                  authService: widget.authService,
                   currentStaff: widget.currentStaff,
                   businessDayId: _activeBusinessDay!.id,
                   shiftId: _activeShift!.id,

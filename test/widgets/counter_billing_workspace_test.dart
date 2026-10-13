@@ -1,14 +1,19 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:resturant_sys/core/auth/auth_service.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/auth/staff_role.dart';
 import 'package:resturant_sys/core/catalog/discount_preset.dart';
 import 'package:resturant_sys/core/catalog/menu_category.dart';
 import 'package:resturant_sys/core/catalog/menu_item.dart';
 import 'package:resturant_sys/core/catalog/modifier.dart';
+import 'package:resturant_sys/core/database/pos_database.dart';
 import 'package:resturant_sys/core/orders/deal.dart';
 import 'package:resturant_sys/core/orders/deal_item.dart';
 import 'package:resturant_sys/core/orders/deal_item_option.dart';
+import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
 import 'package:resturant_sys/core/hardware/in_memory_hardware_adapter.dart';
 import 'package:resturant_sys/core/hardware/reprint_tray_controller.dart';
 import 'package:resturant_sys/core/theme/warm_counter_theme.dart';
@@ -19,6 +24,11 @@ import 'package:resturant_sys/widgets/orders/reprint_tray_dialog.dart';
 import 'package:resturant_sys/widgets/orders/tender_checkout_dialog.dart';
 
 void main() {
+  setUpAll(() {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  });
+
   group('CounterBillingWorkspace Widget Tests', () {
     const testStaff = Staff(
       id: 2,
@@ -407,6 +417,55 @@ void main() {
 
       expect(find.byType(ReprintTrayDialog), findsOneWidget);
       expect(find.text('Hardware & Reprint Tray'), findsOneWidget);
+    });
+
+    testWidgets('renders Void Order button when orderController is provided and alerts when cashier voids disabled', (tester) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final tempDir = await Directory.systemTemp.createTemp('cbw_void_test_');
+      final path = '${tempDir.path}${Platform.pathSeparator}test.db';
+      final posDb = PosDatabase(factory: databaseFactoryFfi, customPath: path);
+      final db = await posDb.initialize();
+      final orderController = OrderAndCheckoutController(database: db);
+      final authService = AuthService(database: db);
+
+      // Disable cashier void requests
+      await orderController.setCashierVoidEnabled(false);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: WarmCounterTheme.lightTheme,
+          home: Scaffold(
+            body: CounterBillingWorkspace(
+              currentStaff: testStaff,
+              businessDayId: 1,
+              shiftId: 1,
+              orderController: orderController,
+              authService: authService,
+              initialCategories: testCategories,
+              initialMenuItems: testMenuItems,
+              initialDeals: testDeals,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final voidButtonFinder = find.byKey(const ValueKey('open_void_order_button'));
+      expect(voidButtonFinder, findsOneWidget);
+      expect(find.text('Void Order'), findsOneWidget);
+
+      await tester.tap(voidButtonFinder);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cashier void requests are disabled by management.'), findsOneWidget);
+
+      await db.close();
+      if (await tempDir.exists()) {
+        await tempDir.delete(recursive: true);
+      }
     });
   });
 }

@@ -133,5 +133,34 @@ void main() {
       expect(session.isAuthenticated, isFalse);
       expect(session.currentStaff, isNull);
     });
+
+    test('authenticateSupervisorPin validates supervisor and does not alter cashier session', () async {
+      // 1. Log in as cashier
+      final cashier = await authService.authenticateAndLogin('1111');
+      expect(cashier, isNotNull);
+      expect(authService.session.currentStaff?.id, equals(cashier!.id));
+
+      // 2. Kitchen cook PIN cannot authorize supervisor voids
+      final rejectedCook = await authService.authenticateSupervisorPin('2222');
+      expect(rejectedCook, isNull);
+      expect(authService.session.currentStaff?.id, equals(cashier.id)); // Cashier stays logged in!
+
+      // 3. Cashier cannot authorize supervisor voids
+      final rejectedCashier = await authService.authenticateSupervisorPin('1111');
+      expect(rejectedCashier, isNull);
+      expect(authService.session.currentStaff?.id, equals(cashier.id));
+
+      // 4. Invalid PIN returns null
+      final rejectedInvalid = await authService.authenticateSupervisorPin('9999');
+      expect(rejectedInvalid, isNull);
+      expect(authService.session.currentStaff?.id, equals(cashier.id));
+
+      // 5. Supervisor PIN authorizes successfully without logging cashier out
+      final supervisor = await authService.authenticateSupervisorPin('1234');
+      expect(supervisor, isNotNull);
+      expect(supervisor!.role, equals(StaffRole.supervisor));
+      expect(supervisor.canVoidOrders, isTrue);
+      expect(authService.session.currentStaff?.id, equals(cashier.id)); // Still logged in as cashier!
+    });
   });
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import '../../core/auth/auth_service.dart';
 import '../../core/auth/staff.dart';
 import '../../core/catalog/catalog_and_recipe_controller.dart';
 import '../../core/catalog/discount_preset.dart';
@@ -10,6 +11,7 @@ import '../../core/catalog/modifier.dart';
 import '../../core/orders/cart_item.dart';
 import '../../core/orders/deal.dart';
 import '../../core/orders/dining_type.dart';
+import '../../core/orders/order.dart';
 import '../../core/orders/order_and_checkout_controller.dart';
 import '../../core/orders/payment_method.dart';
 import '../../core/hardware/reprint_tray_controller.dart';
@@ -17,6 +19,7 @@ import '../../core/theme/theme.dart';
 import 'deal_selection_dialog.dart';
 import 'modifier_selection_dialog.dart';
 import 'reprint_tray_dialog.dart';
+import 'supervisor_void_dialog.dart';
 import 'tender_checkout_dialog.dart';
 
 /// High-speed touch grid billing and checkout interface for counter cashiers.
@@ -26,6 +29,7 @@ class CounterBillingWorkspace extends StatefulWidget {
     this.orderController,
     this.catalogController,
     this.reprintTrayController,
+    this.authService,
     required this.currentStaff,
     required this.businessDayId,
     required this.shiftId,
@@ -510,6 +514,10 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
+              if (widget.orderController != null) ...[
+                _buildVoidOrderButton(),
+                const SizedBox(width: WarmCounterSpacing.space8),
+              ],
               if (widget.reprintTrayController != null) ...[
                 _buildReprintTrayButton(),
                 const SizedBox(width: WarmCounterSpacing.space8),
@@ -530,6 +538,123 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
         ),
       ],
     );
+  }
+
+  Widget _buildVoidOrderButton() {
+    return OutlinedButton.icon(
+      key: const ValueKey('open_void_order_button'),
+      icon: const Icon(
+        Icons.cancel_outlined,
+        size: 16,
+        color: WarmCounterColors.lightDestructiveAction,
+      ),
+      label: const Text(
+        'Void Order',
+        style: TextStyle(
+          color: WarmCounterColors.lightDestructiveAction,
+          fontWeight: FontWeight.w600,
+          fontSize: 12,
+        ),
+      ),
+      style: OutlinedButton.styleFrom(
+        side: const BorderSide(color: WarmCounterColors.lightDestructive),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        minimumSize: const Size(100, WarmCounterSpacing.minTouchTargetSize),
+      ),
+      onPressed: _openVoidOrderFlow,
+    );
+  }
+
+  Future<void> _openVoidOrderFlow() async {
+    if (widget.orderController == null) return;
+
+    final isSupervisor = widget.currentStaff.canVoidOrders;
+    final isVoidEnabled = await widget.orderController!.isCashierVoidEnabled();
+
+    if (!isSupervisor && !isVoidEnabled) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cashier void requests are disabled by management.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+
+    final recentOrders = await widget.orderController!.getOrders(
+      businessDayId: widget.businessDayId,
+      limit: 10,
+    );
+    final settledOrders = recentOrders.where((o) => o.isSettled).toList();
+
+    if (settledOrders.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No settled orders available to void.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+
+    if (!mounted) return;
+
+    final selectedOrder = await showDialog<Order>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Select Order to Void'),
+        shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.panelBorderRadius),
+        content: SizedBox(
+          width: 400,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: settledOrders.length,
+            itemBuilder: (ctx, i) {
+              final o = settledOrders[i];
+              return ListTile(
+                key: ValueKey('select_order_to_void_${o.id}'),
+                title: Text('Order #${o.id} • Token ${o.tokenDisplay}'),
+                subtitle: Text('Rs ${_currencyFormat.format(o.grandTotal)} • ${o.diningType.displayName}'),
+                onTap: () => Navigator.of(ctx).pop(o),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+
+    if (selectedOrder != null && mounted) {
+      final auth = widget.authService ?? AuthService(database: widget.orderController!.database);
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => SupervisorVoidDialog(
+          order: selectedOrder,
+          cashierId: widget.currentStaff.id,
+          orderController: widget.orderController!,
+          authService: auth,
+          reprintTrayController: widget.reprintTrayController,
+          onVoidSuccess: () {
+            _refreshToken();
+            widget.onOrderCompleted?.call();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Order #${selectedOrder.id} (${selectedOrder.tokenDisplay}) voided successfully.'),
+              ),
+            );
+          },
+        ),
+      );
+    }
   }
 
   Widget _buildReprintTrayButton() {
@@ -579,6 +704,8 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
       builder: (ctx) => ReprintTrayDialog(
         controller: widget.reprintTrayController!,
         currentStaff: widget.currentStaff,
+        orderController: widget.orderController,
+        authService: widget.authService ?? (widget.orderController != null ? AuthService(database: widget.orderController!.database) : null),
       ),
     );
   }

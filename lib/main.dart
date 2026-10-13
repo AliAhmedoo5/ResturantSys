@@ -74,6 +74,7 @@ class RestaurantPosApp extends StatelessWidget {
         catalogController: catalogController,
         orderController: orderController,
         reprintTrayController: reprintTrayController,
+        authService: authService,
       ),
     );
   }

@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
-import 'package:resturant_sys/core/auth/staff.dart';
-import 'package:resturant_sys/core/hardware/reprint_tray_controller.dart';
-import 'package:resturant_sys/core/theme/theme.dart';
+import '../core/auth/auth_service.dart';
+import '../core/auth/staff.dart';
+import '../core/hardware/reprint_tray_controller.dart';
+import '../core/orders/order_and_checkout_controller.dart';
+import '../core/theme/theme.dart';
 import 'orders/reprint_tray_dialog.dart';
 
 /// Operational workspaces selectable in the application header.
@@ -24,6 +25,8 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
     this.selectedWorkspace,
     this.onWorkspaceSelected,
     this.reprintTrayController,
+    this.orderController,
+    this.authService,
     this.title = 'ResturantPOS',
   });
 
@@ -32,6 +35,8 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
   final AppWorkspaceTab? selectedWorkspace;
   final ValueChanged<AppWorkspaceTab>? onWorkspaceSelected;
   final ReprintTrayController? reprintTrayController;
+  final OrderAndCheckoutController? orderController;
+  final AuthService? authService;
   final String title;
 
   @override
@@ -203,6 +208,8 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
                       builder: (ctx) => ReprintTrayDialog(
                         controller: reprintTrayController!,
                         currentStaff: staff,
+                        orderController: orderController,
+                        authService: authService,
                       ),
                     );
                   },

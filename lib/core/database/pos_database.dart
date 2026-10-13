@@ -112,6 +112,7 @@ class PosDatabase {
     await _createOperationalAccountingTables(db);
     await _createCatalogAndRecipeTables(db);
     await _createOrderItemsAndDealsTables(db);
+    await _createOrderVoidsTables(db);
   }
 
   Future<void> _createOperationalAccountingTables(DatabaseExecutor executor) async {
@@ -310,6 +311,19 @@ class PosDatabase {
     ''');
   }
 
+  Future<void> _createOrderVoidsTables(DatabaseExecutor executor) async {
+    await executor.execute('''
+      CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableOrderVoids} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableOrders}(id),
+        voided_by_supervisor_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableStaff}(id),
+        cashier_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableStaff}(id),
+        reason TEXT NOT NULL,
+        voided_at TEXT NOT NULL
+      );
+    ''');
+  }
+
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await _createOperationalAccountingTables(db);
@@ -319,6 +333,9 @@ class PosDatabase {
     }
     if (oldVersion < 4) {
       await _createOrderItemsAndDealsTables(db);
+    }
+    if (oldVersion < 5) {
+      await _createOrderVoidsTables(db);
     }
   }
 
@@ -391,6 +408,7 @@ class PosDatabase {
       'app_name': 'ResturantPOS',
       'paper_width': '80mm',
       PosDatabaseConstants.settingDiscrepancyThreshold: PosDatabaseConstants.defaultDiscrepancyThreshold,
+      PosDatabaseConstants.settingCashierVoidRequestsEnabled: PosDatabaseConstants.defaultCashierVoidRequestsEnabled,
     };
 
     for (final entry in defaultSettings.entries) {

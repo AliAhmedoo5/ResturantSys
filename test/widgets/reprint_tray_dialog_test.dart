@@ -1,19 +1,35 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:resturant_sys/core/auth/auth_service.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/auth/staff_role.dart';
+import 'package:resturant_sys/core/database/pos_database.dart';
 import 'package:resturant_sys/core/hardware/in_memory_hardware_adapter.dart';
 import 'package:resturant_sys/core/hardware/print_job.dart';
 import 'package:resturant_sys/core/hardware/reprint_tray_controller.dart';
 import 'package:resturant_sys/core/orders/dining_type.dart';
 import 'package:resturant_sys/core/orders/order.dart';
+import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
 import 'package:resturant_sys/core/theme/warm_counter_theme.dart';
 import 'package:resturant_sys/widgets/orders/reprint_tray_dialog.dart';
+import 'package:resturant_sys/widgets/orders/supervisor_void_dialog.dart';
 
 void main() {
+  setUpAll(() {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  });
+
   group('ReprintTrayDialog Widget Tests', () {
     late InMemoryHardwareAdapter adapter;
     late ReprintTrayController controller;
+    Directory? tempDir;
+    PosDatabase? posDb;
+    Database? db;
+    OrderAndCheckoutController? orderController;
+    AuthService? authService;
 
     const testStaff = Staff(
       id: 1,
@@ -174,6 +190,102 @@ void main() {
 
       // Failed count decremented from 2 to 1
       expect(controller.failedCount, equals(1));
+    });
+
+    tearDown(() async {
+      await db?.close();
+      if (tempDir != null && await tempDir!.exists()) {
+        await tempDir!.delete(recursive: true);
+      }
+    });
+
+    Future<void> initDatabase() async {
+      tempDir = await Directory.systemTemp.createTemp('reprint_tray_test_');
+      final path = '${tempDir!.path}${Platform.pathSeparator}test.db';
+      posDb = PosDatabase(factory: databaseFactoryFfi, customPath: path);
+      db = await posDb!.initialize();
+      orderController = OrderAndCheckoutController(database: db!);
+      authService = AuthService(database: db!);
+    }
+
+    testWidgets('Supervisor can view and toggle cashier void requests feature switch', (tester) async {
+      await initDatabase();
+
+      await tester.pumpWidget(createTestApp(
+        ReprintTrayDialog(
+          controller: controller,
+          currentStaff: testStaff,
+          orderController: orderController,
+          authService: authService,
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      final switchFinder = find.byKey(const ValueKey('toggle_cashier_void_switch'));
+      expect(switchFinder, findsOneWidget);
+      expect(find.text('Cashier Void Requests: Enabled'), findsOneWidget);
+
+      await tester.tap(switchFinder);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cashier Void Requests: Disabled'), findsOneWidget);
+      final enabled = await orderController!.isCashierVoidEnabled();
+      expect(enabled, isFalse);
+    });
+
+    testWidgets('Recent settled job displays Void button and opens SupervisorVoidDialog', (tester) async {
+      await initDatabase();
+
+      final now = DateTime(2026, 10, 12, 12, 0, 0);
+      await db!.insert('orders', {
+        'id': 7,
+        'business_day_id': 1,
+        'shift_id': 1,
+        'cashier_id': 2,
+        'token_number': 7,
+        'dining_type': 'dineIn',
+        'subtotal': 450.0,
+        'discount_amount': 0.0,
+        'tax_amount': 0.0,
+        'delivery_fee': 0.0,
+        'grand_total': 450.0,
+        'payment_status': 'SETTLED',
+        'created_at': now.toIso8601String(),
+      });
+
+      final fakeOrder = Order(
+        id: 7,
+        businessDayId: 1,
+        shiftId: 1,
+        cashierId: 2,
+        tokenNumber: 7,
+        diningType: DiningType.dineIn,
+        subtotal: 450.0,
+        grandTotal: 450.0,
+        paymentStatus: 'SETTLED',
+        createdAt: now,
+      );
+
+      await controller.dispatchOrderPrinting(order: fakeOrder, isCashPaid: true);
+
+      await tester.pumpWidget(createTestApp(
+        ReprintTrayDialog(
+          controller: controller,
+          currentStaff: testStaff,
+          orderController: orderController,
+          authService: authService,
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      final voidBtn = find.byKey(ValueKey('void_job_${controller.recentJobs.first.id}'));
+      expect(voidBtn, findsOneWidget);
+
+      await tester.tap(voidBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SupervisorVoidDialog), findsOneWidget);
+      expect(find.text('Supervisor Void Authorization'), findsOneWidget);
     });
   });
 }

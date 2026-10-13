@@ -6,6 +6,7 @@ import 'package:resturant_sys/core/theme/theme.dart';
 import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
 import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
 import 'package:resturant_sys/core/hardware/reprint_tray_controller.dart';
+import '../core/auth/auth_service.dart';
 import 'app_header.dart';
 import 'catalog/supervisor_catalog_workspace.dart';
 import 'pin_lock_screen.dart';
@@ -22,6 +23,7 @@ class AppShell extends StatefulWidget {
     this.catalogController,
     this.orderController,
     this.reprintTrayController,
+    this.authService,
     this.child,
   });
 
@@ -31,6 +33,7 @@ class AppShell extends StatefulWidget {
   final CatalogAndRecipeController? catalogController;
   final OrderAndCheckoutController? orderController;
   final ReprintTrayController? reprintTrayController;
+  final AuthService? authService;
   final Widget? child;
 
   @override
@@ -81,6 +84,8 @@ class _AppShellState extends State<AppShell> {
               selectedWorkspace: _selectedWorkspace,
               onWorkspaceSelected: (tab) => setState(() => _selectedWorkspace = tab),
               reprintTrayController: widget.reprintTrayController,
+              orderController: widget.orderController,
+              authService: widget.authService,
             ),
           ),
           body: widget.child ?? _buildWorkspaceBody(context, staff),
@@ -91,7 +96,10 @@ class _AppShellState extends State<AppShell> {
 
   Widget _buildWorkspaceBody(BuildContext context, Staff staff) {
     if (_selectedWorkspace == AppWorkspaceTab.catalog && widget.catalogController != null) {
-      return SupervisorCatalogWorkspace(controller: widget.catalogController!);
+      return SupervisorCatalogWorkspace(
+        controller: widget.catalogController!,
+        orderController: widget.orderController,
+      );
     }
 
     if (widget.shiftController != null) {
@@ -101,6 +109,7 @@ class _AppShellState extends State<AppShell> {
         orderController: widget.orderController,
         catalogController: widget.catalogController,
         reprintTrayController: widget.reprintTrayController,
+        authService: widget.authService,
       );
     }
 

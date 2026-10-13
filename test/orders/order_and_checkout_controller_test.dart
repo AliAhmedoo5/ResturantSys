@@ -8,6 +8,7 @@ import 'package:resturant_sys/core/database/pos_database.dart';
 import 'package:resturant_sys/core/orders/cart_item.dart';
 import 'package:resturant_sys/core/orders/dining_type.dart';
 import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
+import 'package:resturant_sys/core/orders/order_void.dart';
 import 'package:resturant_sys/core/orders/payment_method.dart';
 import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
 
@@ -494,6 +495,216 @@ void main() {
 
       checkPackaging = await catalogController.getRawIngredient(packaging.id);
       expect(checkPackaging.currentStock, equals(98.0));
+    });
+
+    test('voidOrder marks order VOIDED, records immutable audit entry, and accurately reverses BOM & packaging stock', () async {
+      final day = await shiftController.openBusinessDay(openedByStaffId: 1);
+      final shift = await shiftController.openShift(staffId: 2, openingFloat: 1000.0);
+
+      // Create ingredients
+      final beef = await catalogController.createRawIngredient(
+        name: 'Beef Patty',
+        storageUnit: StorageUnit.count,
+        currentStock: 50.0,
+      );
+      final cheese = await catalogController.createRawIngredient(
+        name: 'Cheese Slice',
+        storageUnit: StorageUnit.count,
+        currentStock: 40.0,
+      );
+      final packaging = await catalogController.createRawIngredient(
+        name: 'Takeaway Packaging Box',
+        storageUnit: StorageUnit.count,
+        currentStock: 30.0,
+      );
+
+      final cat = await catalogController.createCategory(name: 'Burgers', displayOrder: 1, colorHex: '#FF0000');
+      final burger = await catalogController.createMenuItem(categoryId: cat.id, name: 'Double Cheese', basePrice: 600.0);
+
+      // Recipe: 2 beef patties, 1 cheese slice
+      await catalogController.addRecipeItem(menuItemId: burger.id, rawIngredientId: beef.id, quantity: 2.0);
+      await catalogController.addRecipeItem(menuItemId: burger.id, rawIngredientId: cheese.id, quantity: 1.0);
+
+      // Modifier: +1 extra cheese slice
+      final extraCheeseMod = await catalogController.createModifier(
+        menuItemId: burger.id,
+        name: 'Extra Cheese',
+        priceDelta: 50.0,
+        rawIngredientId: cheese.id,
+        ingredientQtyDelta: 1.0,
+      );
+
+      // Checkout Takeaway: 2 Double Cheese with 1 Extra Cheese
+      // Expected deduction:
+      // Beef: 2 burgers * 2 patties = 4 patties
+      // Cheese: 2 burgers * 1 cheese + 1 extra cheese = 3 cheese slices
+      // Packaging: 1 box (takeaway)
+      final cartItem = CartItem(
+        menuItem: burger,
+        quantity: 2,
+        selectedModifiers: [extraCheeseMod],
+      );
+
+      final checkoutRes = await orderController.checkoutOrder(
+        businessDayId: day.id,
+        shiftId: shift.id,
+        cashierId: 2,
+        diningType: DiningType.takeaway,
+        items: [cartItem],
+        payments: [
+          PaymentTender(method: PaymentMethod.cash, amountTendered: 1300.0),
+        ],
+      );
+
+      final orderId = checkoutRes.order.id;
+
+      // Verify stock post-checkout
+      var curBeef = await catalogController.getRawIngredient(beef.id);
+      expect(curBeef.currentStock, equals(46.0)); // 50 - 4 = 46
+
+      var curCheese = await catalogController.getRawIngredient(cheese.id);
+      expect(curCheese.currentStock, equals(37.0)); // 40 - 3 = 37
+
+      var curPackaging = await catalogController.getRawIngredient(packaging.id);
+      expect(curPackaging.currentStock, equals(29.0)); // 30 - 1 = 29
+
+      // Void Order with Supervisor authorization
+      final voidResult = await orderController.voidOrder(
+        orderId: orderId,
+        supervisorStaffId: 1,
+        cashierStaffId: 2,
+        reason: VoidReason.customerCancelled,
+      );
+
+      // Assert audit record
+      expect(voidResult.orderId, equals(orderId));
+      expect(voidResult.voidedBySupervisorId, equals(1));
+      expect(voidResult.cashierId, equals(2));
+      expect(voidResult.reason, equals('Customer Cancelled'));
+      expect(voidResult.supervisorName, equals('Supervisor'));
+      expect(voidResult.cashierName, equals('Counter Cashier'));
+
+      // Assert order is marked VOIDED in database
+      final updatedOrder = await orderController.getOrder(orderId);
+      expect(updatedOrder.isVoided, isTrue);
+      expect(updatedOrder.paymentStatus, equals('VOIDED'));
+
+      // Assert persisted audit record matches
+      final persistedAudit = await orderController.getOrderVoid(orderId);
+      expect(persistedAudit, isNotNull);
+      expect(persistedAudit!.reason, equals('Customer Cancelled'));
+      expect(persistedAudit.voidedBySupervisorId, equals(1));
+
+      // Assert BOM and Packaging inventory deductions are fully restored!
+      curBeef = await catalogController.getRawIngredient(beef.id);
+      expect(curBeef.currentStock, equals(50.0)); // Restored to 50!
+
+      curCheese = await catalogController.getRawIngredient(cheese.id);
+      expect(curCheese.currentStock, equals(40.0)); // Restored to 40!
+
+      curPackaging = await catalogController.getRawIngredient(packaging.id);
+      expect(curPackaging.currentStock, equals(30.0)); // Restored to 30!
+    });
+
+    test('voidOrder prevents double-voiding and non-existent orders', () async {
+      final day = await shiftController.openBusinessDay(openedByStaffId: 1);
+      final shift = await shiftController.openShift(staffId: 2, openingFloat: 1000.0);
+
+      final cat = await catalogController.createCategory(name: 'Drinks', displayOrder: 1, colorHex: '#0000FF');
+      final drink = await catalogController.createMenuItem(categoryId: cat.id, name: 'Cola', basePrice: 100.0);
+
+      final checkoutRes = await orderController.checkoutOrder(
+        businessDayId: day.id,
+        shiftId: shift.id,
+        cashierId: 2,
+        diningType: DiningType.dineIn,
+        items: [CartItem(menuItem: drink, quantity: 1)],
+        payments: [
+          const PaymentTender(method: PaymentMethod.cash, amountTendered: 100.0),
+        ],
+      );
+
+      // First void succeeds
+      await orderController.voidOrder(
+        orderId: checkoutRes.order.id,
+        supervisorStaffId: 1,
+        cashierStaffId: 2,
+        reason: VoidReason.cashierMistake,
+      );
+
+      // Second void fails
+      expect(
+        () => orderController.voidOrder(
+          orderId: checkoutRes.order.id,
+          supervisorStaffId: 1,
+          cashierStaffId: 2,
+          reason: VoidReason.cashierMistake,
+        ),
+        throwsStateError,
+      );
+
+      // Non-existent order fails
+      expect(
+        () => orderController.voidOrder(
+          orderId: 999999,
+          supervisorStaffId: 1,
+          cashierStaffId: 2,
+          reason: VoidReason.paymentDeclined,
+        ),
+        throwsStateError,
+      );
+    });
+
+    test('voidOrder validates mandatory cancellation reasons', () async {
+      final day = await shiftController.openBusinessDay(openedByStaffId: 1);
+      final shift = await shiftController.openShift(staffId: 2, openingFloat: 1000.0);
+
+      final cat = await catalogController.createCategory(name: 'Sides', displayOrder: 1, colorHex: '#FFFF00');
+      final fries = await catalogController.createMenuItem(categoryId: cat.id, name: 'Fries', basePrice: 200.0);
+
+      final checkoutRes = await orderController.checkoutOrder(
+        businessDayId: day.id,
+        shiftId: shift.id,
+        cashierId: 2,
+        diningType: DiningType.dineIn,
+        items: [CartItem(menuItem: fries, quantity: 1)],
+        payments: [
+          const PaymentTender(method: PaymentMethod.cash, amountTendered: 200.0),
+        ],
+      );
+
+      // Arbitrary reason throws ArgumentError
+      expect(
+        () => orderController.voidOrder(
+          orderId: checkoutRes.order.id,
+          supervisorStaffId: 1,
+          cashierStaffId: 2,
+          reason: 'Arbitrary Reason',
+        ),
+        throwsArgumentError,
+      );
+
+      // Valid mandatory reason succeeds
+      final res = await orderController.voidOrder(
+        orderId: checkoutRes.order.id,
+        supervisorStaffId: 1,
+        cashierStaffId: 2,
+        reason: VoidReason.paymentDeclined,
+      );
+      expect(res.reason, equals(VoidReason.paymentDeclined));
+    });
+
+    test('feature toggle reads and sets cashier void requests enabled in settings', () async {
+      // Default is enabled (true)
+      expect(await orderController.isCashierVoidEnabled(), isTrue);
+
+      // Disable toggle
+      await orderController.setCashierVoidEnabled(false);
+      expect(await orderController.isCashierVoidEnabled(), isFalse);
+
+      // Re-enable toggle
+      await orderController.setCashierVoidEnabled(true);
+      expect(await orderController.isCashierVoidEnabled(), isTrue);
     });
   });
 }

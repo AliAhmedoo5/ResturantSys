@@ -6,6 +6,7 @@ import 'package:resturant_sys/core/catalog/menu_category.dart';
 import 'package:resturant_sys/core/catalog/menu_item.dart';
 import 'package:resturant_sys/core/catalog/modifier.dart';
 import 'package:resturant_sys/core/catalog/raw_ingredient.dart';
+import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
 import 'package:resturant_sys/core/theme/theme.dart';
 import 'dialogs/category_form_dialog.dart';
 import 'dialogs/discount_preset_form_dialog.dart';
@@ -23,6 +24,7 @@ class SupervisorCatalogWorkspace extends StatefulWidget {
   const SupervisorCatalogWorkspace({
     super.key,
     this.controller,
+    this.orderController,
     this.initialCategories,
     this.initialMenuItems,
     this.initialRawIngredients,
@@ -31,6 +33,7 @@ class SupervisorCatalogWorkspace extends StatefulWidget {
   });
 
   final CatalogAndRecipeController? controller;
+  final OrderAndCheckoutController? orderController;
   final List<MenuCategory>? initialCategories;
   final List<MenuItem>? initialMenuItems;
   final List<RawIngredient>? initialRawIngredients;
@@ -48,6 +51,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
   List<RawIngredient> _rawIngredients = [];
   List<Modifier> _modifiers = [];
   List<DiscountPreset> _discounts = [];
+  bool _cashierVoidEnabled = true;
 
   // Filter states
   int? _menuItemCategoryFilter;
@@ -62,6 +66,12 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
   }
 
   Future<void> _loadAllCatalogData() async {
+    if (widget.orderController != null) {
+      widget.orderController!.isCashierVoidEnabled().then((enabled) {
+        if (mounted) setState(() => _cashierVoidEnabled = enabled);
+      });
+    }
+
     if (widget.initialCategories != null || widget.controller == null) {
       if (mounted) {
         setState(() {
@@ -656,7 +666,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
     }
 
     return DefaultTabController(
-      length: 5,
+      length: 6,
       child: Column(
         children: [
           // Sub-navigation TabBar
@@ -675,6 +685,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                 Tab(key: ValueKey('tab_raw_ingredients'), icon: Icon(Icons.inventory_2_outlined), text: 'Raw Ingredients'),
                 Tab(key: ValueKey('tab_modifiers'), icon: Icon(Icons.tune_outlined), text: 'Modifiers'),
                 Tab(key: ValueKey('tab_discounts'), icon: Icon(Icons.local_offer_outlined), text: 'Pre-Approved Discounts'),
+                Tab(key: ValueKey('tab_settings'), icon: Icon(Icons.settings_outlined), text: 'Settings & Toggles'),
               ],
             ),
           ),
@@ -686,7 +697,75 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                 _buildRawIngredientsTab(),
                 _buildModifiersTab(),
                 _buildDiscountsTab(),
+                _buildSettingsTab(),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSettingsTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(WarmCounterSpacing.space24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Operational Feature Toggles & Settings',
+            style: WarmCounterTypography.pageHeading.copyWith(fontSize: 18),
+          ),
+          const SizedBox(height: WarmCounterSpacing.space16),
+          Card(
+            color: WarmCounterColors.lightCardBackground,
+            shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.panelBorderRadius),
+            elevation: 0,
+            child: Padding(
+              padding: const EdgeInsets.all(WarmCounterSpacing.space16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Cashier-Initiated Void Requests',
+                              style: WarmCounterTypography.bodyMedium.copyWith(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'When enabled, cashiers can tap Void Order and request supervisor authorization. When disabled, cashiers cannot initiate void requests from the billing register.',
+                              style: WarmCounterTypography.caption.copyWith(
+                                color: WarmCounterColors.lightSecondaryText,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Switch(
+                        key: const ValueKey('supervisor_cashier_void_toggle'),
+                        value: _cashierVoidEnabled,
+                        activeColor: WarmCounterColors.lightPrimaryAction,
+                        onChanged: (val) async {
+                          if (widget.orderController != null) {
+                            await widget.orderController!.setCashierVoidEnabled(val);
+                          }
+                          setState(() => _cashierVoidEnabled = val);
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ],

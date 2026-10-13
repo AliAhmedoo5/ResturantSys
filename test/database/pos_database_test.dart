@@ -64,6 +64,7 @@ void main() {
       expect(tableNames, contains('cash_movements'));
       expect(tableNames, contains('orders'));
       expect(tableNames, contains('order_payments'));
+      expect(tableNames, contains('order_voids'));
     });
 
     test('seeds default departments: Front Counter, Kitchen, Management', () async {
