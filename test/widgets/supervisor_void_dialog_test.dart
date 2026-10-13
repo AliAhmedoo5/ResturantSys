@@ -19,6 +19,8 @@ import 'package:resturant_sys/core/orders/order_void.dart';
 import 'package:resturant_sys/core/orders/payment_method.dart';
 import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
 import 'package:resturant_sys/core/theme/warm_counter_theme.dart';
+import 'package:resturant_sys/widgets/orders/counter_billing_workspace.dart';
+import 'package:resturant_sys/widgets/orders/reprint_tray_dialog.dart';
 import 'package:resturant_sys/widgets/orders/supervisor_void_dialog.dart';
 
 void main() {
@@ -133,8 +135,8 @@ void main() {
       expect(find.textContaining('Order #${testOrder.id}'), findsOneWidget);
       expect(find.textContaining('Token ${testOrder.tokenDisplay}'), findsOneWidget);
 
-      // Mandatory cancellation reasons
-      expect(find.text('Cancellation Reason (Mandatory):'), findsOneWidget);
+      // Mandatory void reasons
+      expect(find.text('Void Reason (Mandatory):'), findsOneWidget);
       expect(find.text(VoidReason.customerCancelled), findsOneWidget);
       expect(find.text(VoidReason.cashierMistake), findsOneWidget);
       expect(find.text(VoidReason.paymentDeclined), findsOneWidget);
@@ -241,6 +243,103 @@ void main() {
 
       // Cashier remains logged in throughout the entire flow
       expect(authService.session.currentStaff?.id, equals(cashierStaff.id));
+    });
+
+    testWidgets('ReprintTrayDialog allows supervisor to view and toggle cashier void requests switch', (tester) async {
+      const supervisorStaff = Staff(
+        id: 1,
+        name: 'Supervisor',
+        departmentId: 1,
+        pinHash: 'hash',
+        role: StaffRole.supervisor,
+        isActive: true,
+      );
+
+      await tester.pumpWidget(createTestApp(
+        ReprintTrayDialog(
+          controller: reprintTrayController,
+          currentStaff: supervisorStaff,
+          orderController: orderController,
+          authService: authService,
+        ),
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      final switchFinder = find.byKey(const ValueKey('toggle_cashier_void_switch'));
+      expect(switchFinder, findsOneWidget);
+      expect(find.text('Cashier Void Requests: Enabled'), findsOneWidget);
+
+      await tester.tap(switchFinder);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.text('Cashier Void Requests: Disabled'), findsOneWidget);
+      final enabled = await orderController.isCashierVoidEnabled();
+      expect(enabled, isFalse);
+    });
+
+    testWidgets('ReprintTrayDialog recent settled job displays Void button and launches SupervisorVoidDialog', (tester) async {
+      const supervisorStaff = Staff(
+        id: 1,
+        name: 'Supervisor',
+        departmentId: 1,
+        pinHash: 'hash',
+        role: StaffRole.supervisor,
+        isActive: true,
+      );
+
+      await reprintTrayController.dispatchOrderPrinting(order: testOrder, isCashPaid: true);
+
+      await tester.pumpWidget(createTestApp(
+        ReprintTrayDialog(
+          controller: reprintTrayController,
+          currentStaff: supervisorStaff,
+          orderController: orderController,
+          authService: authService,
+        ),
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      final voidBtn = find.byKey(ValueKey('void_job_${reprintTrayController.recentJobs.first.id}'));
+      expect(voidBtn, findsOneWidget);
+
+      await tester.tap(voidBtn);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byType(SupervisorVoidDialog), findsOneWidget);
+      expect(find.text('Supervisor Void Authorization'), findsOneWidget);
+    });
+
+    testWidgets('CounterBillingWorkspace alerts when cashier void requests are disabled', (tester) async {
+      await orderController.setCashierVoidEnabled(false);
+
+      await tester.pumpWidget(createTestApp(
+        CounterBillingWorkspace(
+          currentStaff: cashierStaff,
+          businessDayId: 1,
+          shiftId: 1,
+          orderController: orderController,
+          authService: authService,
+          reprintTrayController: reprintTrayController,
+          initialCategories: const [],
+          initialMenuItems: const [],
+          initialDeals: const [],
+        ),
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      final voidButtonFinder = find.byKey(const ValueKey('open_void_order_button'));
+      expect(voidButtonFinder, findsOneWidget);
+
+      await tester.tap(voidButtonFinder);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.text('Cashier void requests are disabled by management.'), findsOneWidget);
     });
   });
 }

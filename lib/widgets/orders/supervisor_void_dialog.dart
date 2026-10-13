@@ -21,7 +21,7 @@ class SupervisorVoidDialog extends StatefulWidget {
     required this.cashierId,
     required this.orderController,
     required this.authService,
-    this.reprintTrayController,
+    required this.reprintTrayController,
     this.onVoidSuccess,
   });
 
@@ -29,7 +29,7 @@ class SupervisorVoidDialog extends StatefulWidget {
   final int cashierId;
   final OrderAndCheckoutController orderController;
   final AuthService authService;
-  final ReprintTrayController? reprintTrayController;
+  final ReprintTrayController reprintTrayController;
   final VoidCallback? onVoidSuccess;
 
   @override
@@ -106,13 +106,11 @@ class _SupervisorVoidDialogState extends State<SupervisorVoidDialog> {
       );
 
       // 3. Emit automatic ESC/POS Kitchen Void Slip (ADR-0005)
-      if (widget.reprintTrayController != null) {
-        await widget.reprintTrayController!.dispatchKitchenVoidSlip(
-          order: widget.order,
-          reason: _selectedReason,
-          supervisorName: supervisor.name,
-        );
-      }
+      await widget.reprintTrayController.dispatchKitchenVoidSlip(
+        order: widget.order,
+        reason: _selectedReason,
+        supervisorName: supervisor.name,
+      );
 
       if (mounted) {
         widget.onVoidSuccess?.call();
@@ -174,8 +172,9 @@ class _SupervisorVoidDialogState extends State<SupervisorVoidDialog> {
                           ),
                           Text(
                             'Order #${widget.order.id} • Token ${widget.order.tokenDisplay} • Rs ${_currencyFormat.format(widget.order.grandTotal)}',
-                            style: WarmCounterTypography.caption.copyWith(
+                            style: WarmCounterTypography.tabularNumbers.copyWith(
                               color: WarmCounterColors.lightSecondaryText,
+                              fontSize: 12,
                             ),
                           ),
                         ],
@@ -234,7 +233,10 @@ class _SupervisorVoidDialogState extends State<SupervisorVoidDialog> {
                                           '${item.quantity}x ${item.name}',
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
-                                          style: WarmCounterTypography.bodyMedium.copyWith(fontSize: 13),
+                                          style: WarmCounterTypography.tabularNumbers.copyWith(
+                                            fontSize: 13,
+                                            color: WarmCounterColors.lightPrimaryText,
+                                          ),
                                         ),
                                       )),
                                 ],
@@ -242,9 +244,9 @@ class _SupervisorVoidDialogState extends State<SupervisorVoidDialog> {
                             ),
                             const SizedBox(height: WarmCounterSpacing.space16),
 
-                            // Mandatory Cancellation Reason
+                            // Mandatory Void Reason
                             Text(
-                              'Cancellation Reason (Mandatory):',
+                              'Void Reason (Mandatory):',
                               style: WarmCounterTypography.bodyMedium.copyWith(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 13,
@@ -263,7 +265,8 @@ class _SupervisorVoidDialogState extends State<SupervisorVoidDialog> {
                                       ? null
                                       : () => setState(() => _selectedReason = reason),
                                   child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    constraints: const BoxConstraints(minHeight: WarmCounterSpacing.minTouchTargetSize),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                                     decoration: BoxDecoration(
                                       color: isSelected
                                           ? WarmCounterColors.lightDestructiveHighlight

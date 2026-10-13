@@ -490,6 +490,19 @@ class OrderAndCheckoutController {
     });
   }
 
+  /// Finds raw ingredient ID representing takeaway packaging box / materials.
+  Future<int?> _findPackagingIngredientId(DatabaseExecutor executor) async {
+    final packagingRows = await executor.rawQuery('''
+      SELECT id FROM ${PosDatabaseConstants.tableRawIngredients}
+      WHERE LOWER(name) LIKE '%packaging%' OR LOWER(name) LIKE '%takeaway%'
+      LIMIT 1;
+    ''');
+    if (packagingRows.isNotEmpty) {
+      return packagingRows.first['id'] as int;
+    }
+    return null;
+  }
+
   /// Calculates BOM ingredient consumption and applies soft deductions.
   /// Handles removals with 0g BOM, add-ons with ingredient qty deltas, deal decomposition,
   /// and automatic takeaway packaging material deduction.
@@ -526,15 +539,8 @@ class OrderAndCheckoutController {
 
     // Takeaway & Delivery Packaging Material Deduction
     if (diningType.requiresPackaging) {
-      // Find raw ingredient representing takeaway packaging box / materials
-      final packagingRows = await executor.rawQuery('''
-        SELECT id FROM ${PosDatabaseConstants.tableRawIngredients}
-        WHERE LOWER(name) LIKE '%packaging%' OR LOWER(name) LIKE '%takeaway%'
-        LIMIT 1;
-      ''');
-
-      if (packagingRows.isNotEmpty) {
-        final packagingId = packagingRows.first['id'] as int;
+      final packagingId = await _findPackagingIngredientId(executor);
+      if (packagingId != null) {
         deductions[packagingId] = (deductions[packagingId] ?? 0.0) + 1.0;
       }
     }
@@ -801,14 +807,8 @@ class OrderAndCheckoutController {
 
       // Reverse packaging if Takeaway or Delivery
       if (order.diningType.requiresPackaging) {
-        final packagingRows = await txn.rawQuery('''
-          SELECT id FROM ${PosDatabaseConstants.tableRawIngredients}
-          WHERE LOWER(name) LIKE '%packaging%' OR LOWER(name) LIKE '%takeaway%'
-          LIMIT 1;
-        ''');
-
-        if (packagingRows.isNotEmpty) {
-          final packagingId = packagingRows.first['id'] as int;
+        final packagingId = await _findPackagingIngredientId(txn);
+        if (packagingId != null) {
           reversals[packagingId] = (reversals[packagingId] ?? 0.0) + 1.0;
         }
       }

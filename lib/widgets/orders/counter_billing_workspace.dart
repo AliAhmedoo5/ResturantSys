@@ -618,8 +618,20 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
               final o = settledOrders[i];
               return ListTile(
                 key: ValueKey('select_order_to_void_${o.id}'),
-                title: Text('Order #${o.id} • Token ${o.tokenDisplay}'),
-                subtitle: Text('Rs ${_currencyFormat.format(o.grandTotal)} • ${o.diningType.displayName}'),
+                title: Text(
+                  'Order #${o.id} • Token ${o.tokenDisplay}',
+                  style: WarmCounterTypography.tabularNumbers.copyWith(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+                subtitle: Text(
+                  'Rs ${_currencyFormat.format(o.grandTotal)} • ${o.diningType.displayName}',
+                  style: WarmCounterTypography.tabularNumbers.copyWith(
+                    fontSize: 12,
+                    color: WarmCounterColors.lightSecondaryText,
+                  ),
+                ),
                 onTap: () => Navigator.of(ctx).pop(o),
               );
             },
@@ -636,6 +648,8 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
 
     if (selectedOrder != null && mounted) {
       final auth = widget.authService ?? AuthService(database: widget.orderController!.database);
+      final reprintTray = widget.reprintTrayController ??
+          ReprintTrayController(hardwareAdapter: InMemoryHardwareAdapter());
       await showDialog<void>(
         context: context,
         builder: (ctx) => SupervisorVoidDialog(
@@ -643,7 +657,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
           cashierId: widget.currentStaff.id,
           orderController: widget.orderController!,
           authService: auth,
-          reprintTrayController: widget.reprintTrayController,
+          reprintTrayController: reprintTray,
           onVoidSuccess: () {
             _refreshToken();
             widget.onOrderCompleted?.call();
