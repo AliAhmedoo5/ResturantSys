@@ -78,7 +78,7 @@ void main() {
       );
       final cat = await catalogController.createCategory(name: 'Burgers', displayOrder: 1, colorHex: '#FF0000');
       final burger = await catalogController.createMenuItem(categoryId: cat.id, name: 'Zinger', basePrice: 500.0);
-      await catalogController.addRecipeItem(menuItemId: burger.id, rawIngredientId: meat.id, quantity: 1.0);
+      await catalogController.addOrUpdateRecipeItem(menuItemId: burger.id, rawIngredientId: meat.id, quantity: 1.0);
 
       // Checkout an order
       final result = await orderController.checkoutOrder(

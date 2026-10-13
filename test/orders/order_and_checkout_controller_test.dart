@@ -522,8 +522,8 @@ void main() {
       final burger = await catalogController.createMenuItem(categoryId: cat.id, name: 'Double Cheese', basePrice: 600.0);
 
       // Recipe: 2 beef patties, 1 cheese slice
-      await catalogController.addRecipeItem(menuItemId: burger.id, rawIngredientId: beef.id, quantity: 2.0);
-      await catalogController.addRecipeItem(menuItemId: burger.id, rawIngredientId: cheese.id, quantity: 1.0);
+      await catalogController.addOrUpdateRecipeItem(menuItemId: burger.id, rawIngredientId: beef.id, quantity: 2.0);
+      await catalogController.addOrUpdateRecipeItem(menuItemId: burger.id, rawIngredientId: cheese.id, quantity: 1.0);
 
       // Modifier: +1 extra cheese slice
       final extraCheeseMod = await catalogController.createModifier(
@@ -552,7 +552,7 @@ void main() {
         diningType: DiningType.takeaway,
         items: [cartItem],
         payments: [
-          PaymentTender(method: PaymentMethod.cash, amountTendered: 1300.0),
+          const PaymentTender(method: PaymentMethod.cash, amountTendered: 1300.0),
         ],
       );
 

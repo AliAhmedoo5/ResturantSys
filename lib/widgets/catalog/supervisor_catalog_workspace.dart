@@ -754,7 +754,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                       Switch(
                         key: const ValueKey('supervisor_cashier_void_toggle'),
                         value: _cashierVoidEnabled,
-                        activeColor: WarmCounterColors.lightPrimaryAction,
+                        activeThumbColor: WarmCounterColors.lightPrimaryAction,
                         onChanged: (val) async {
                           if (widget.orderController != null) {
                             await widget.orderController!.setCashierVoidEnabled(val);

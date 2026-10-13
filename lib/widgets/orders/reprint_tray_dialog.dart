@@ -47,7 +47,7 @@ class _ReprintTrayDialogState extends State<ReprintTrayDialog> {
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: widget.controller,
-      builder: (context, _) {
+      builder: (_, __) {
         final failedJobs = widget.controller.failedJobs;
         final recentJobs = widget.controller.recentJobs;
 
@@ -228,7 +228,7 @@ class _ReprintTrayDialogState extends State<ReprintTrayDialog> {
                           Switch(
                             key: const ValueKey('toggle_cashier_void_switch'),
                             value: _cashierVoidEnabled,
-                            activeColor: WarmCounterColors.lightPrimaryAction,
+                            activeThumbColor: WarmCounterColors.lightPrimaryAction,
                             onChanged: (val) async {
                               await widget.orderController!.setCashierVoidEnabled(val);
                               setState(() => _cashierVoidEnabled = val);
@@ -476,8 +476,7 @@ class _ReprintTrayDialogState extends State<ReprintTrayDialog> {
                     }
                   },
                 ),
-                if (job.orderId != null &&
-                    widget.orderController != null &&
+                if (widget.orderController != null &&
                     widget.authService != null) ...[
                   const SizedBox(width: 8),
                   OutlinedButton.icon(
@@ -504,7 +503,7 @@ class _ReprintTrayDialogState extends State<ReprintTrayDialog> {
                       }
 
                       try {
-                        final order = await widget.orderController!.getOrder(job.orderId!);
+                        final order = await widget.orderController!.getOrder(job.orderId);
                         if (order.isVoided) {
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(

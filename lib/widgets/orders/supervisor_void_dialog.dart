@@ -151,7 +151,7 @@ class _SupervisorVoidDialogState extends State<SupervisorVoidDialog> {
                     children: [
                       Container(
                         padding: const EdgeInsets.all(WarmCounterSpacing.space8),
-                        decoration: BoxDecoration(
+                        decoration: const BoxDecoration(
                           color: WarmCounterColors.lightDestructiveHighlight,
                           borderRadius: WarmCounterSpacing.controlBorderRadius,
                         ),

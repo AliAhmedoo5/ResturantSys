@@ -82,7 +82,7 @@ class _AppShellState extends State<AppShell> {
               activeStaff: staff,
               onLock: () => widget.session.lock(),
               selectedWorkspace: _selectedWorkspace,
-              onWorkspaceSelected: (tab) => setState(() => _selectedWorkspace = tab),
+              onWorkspaceSelected: (AppWorkspaceTab tab) => setState(() => _selectedWorkspace = tab),
               reprintTrayController: widget.reprintTrayController,
               orderController: widget.orderController,
               authService: widget.authService,

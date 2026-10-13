@@ -45,6 +45,7 @@ class CounterBillingWorkspace extends StatefulWidget {
   final OrderAndCheckoutController? orderController;
   final CatalogAndRecipeController? catalogController;
   final ReprintTrayController? reprintTrayController;
+  final AuthService? authService;
   final Staff currentStaff;
   final int businessDayId;
   final int shiftId;
