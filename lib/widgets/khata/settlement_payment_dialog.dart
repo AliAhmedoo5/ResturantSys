@@ -95,7 +95,7 @@ class _SettlementPaymentDialogState extends State<SettlementPaymentDialog> {
         borderRadius: WarmCounterSpacing.panelBorderRadius,
       ),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520),
+        constraints: const BoxConstraints(minWidth: 460, maxWidth: 520),
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(WarmCounterSpacing.space24),
           child: Form(
@@ -165,10 +165,12 @@ class _SettlementPaymentDialogState extends State<SettlementPaymentDialog> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'Current Net Payable Due:',
-                        style: WarmCounterTypography.bodyMedium.copyWith(
-                          fontWeight: FontWeight.w600,
+                      Expanded(
+                        child: Text(
+                          'Current Net Payable Due:',
+                          style: WarmCounterTypography.bodyMedium.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                       Text(
@@ -195,17 +197,17 @@ class _SettlementPaymentDialogState extends State<SettlementPaymentDialog> {
                 const SizedBox(height: WarmCounterSpacing.space8),
 
                 // Radio 1: Paid from Active Drawer
-                Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(
+                Material(
+                  color: _paymentSource == VendorPaymentSource.paidFromActiveDrawer
+                      ? WarmCounterColors.lightPrimaryAction.withAlpha(10)
+                      : Colors.transparent,
+                  shape: RoundedRectangleBorder(
+                    side: BorderSide(
                       color: _paymentSource == VendorPaymentSource.paidFromActiveDrawer
                           ? WarmCounterColors.lightPrimaryAction
                           : WarmCounterColors.lightBorder,
                     ),
                     borderRadius: WarmCounterSpacing.controlBorderRadius,
-                    color: _paymentSource == VendorPaymentSource.paidFromActiveDrawer
-                        ? WarmCounterColors.lightPrimaryAction.withAlpha(10)
-                        : null,
                   ),
                   child: RadioListTile<VendorPaymentSource>(
                     key: const Key('source_drawer_tile'),
@@ -233,17 +235,17 @@ class _SettlementPaymentDialogState extends State<SettlementPaymentDialog> {
                 const SizedBox(height: WarmCounterSpacing.space8),
 
                 // Radio 2: Paid Outside Drawer
-                Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(
+                Material(
+                  color: _paymentSource == VendorPaymentSource.paidOutsideDrawer
+                      ? WarmCounterColors.lightPrimaryAction.withAlpha(10)
+                      : Colors.transparent,
+                  shape: RoundedRectangleBorder(
+                    side: BorderSide(
                       color: _paymentSource == VendorPaymentSource.paidOutsideDrawer
                           ? WarmCounterColors.lightPrimaryAction
                           : WarmCounterColors.lightBorder,
                     ),
                     borderRadius: WarmCounterSpacing.controlBorderRadius,
-                    color: _paymentSource == VendorPaymentSource.paidOutsideDrawer
-                        ? WarmCounterColors.lightPrimaryAction.withAlpha(10)
-                        : null,
                   ),
                   child: RadioListTile<VendorPaymentSource>(
                     key: const Key('source_external_tile'),

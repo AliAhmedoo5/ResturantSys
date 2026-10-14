@@ -302,6 +302,7 @@ void main() {
         ),
       );
 
+      await tester.pump();
       await tester.pumpAndSettle();
 
       // Top control bar
@@ -317,6 +318,7 @@ void main() {
 
       // Search filter
       await tester.enterText(find.byKey(const Key('vendor_search_field')), 'Packaging');
+      await tester.pump();
       await tester.pumpAndSettle();
 
       expect(find.text('Bilal Packaging'), findsOneWidget);
@@ -324,12 +326,14 @@ void main() {
 
       // Clear search
       await tester.enterText(find.byKey(const Key('vendor_search_field')), '');
+      await tester.pump();
       await tester.pumpAndSettle();
 
       expect(find.text('Al-Siddiq Poultry'), findsOneWidget);
 
       // Select Al-Siddiq Poultry
-      await tester.tap(find.text('Al-Siddiq Poultry'));
+      await tester.tap(find.byKey(Key('vendor_tile_${v1.id}')));
+      await tester.pump();
       await tester.pumpAndSettle();
 
       // Statement view shows delivery line

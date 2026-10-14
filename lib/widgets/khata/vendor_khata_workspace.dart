@@ -50,7 +50,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
   @override
   void initState() {
     super.initState();
-    _loadInitialData();
+    _loadInitialData(isInitialMount: true);
   }
 
   @override
@@ -59,8 +59,10 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
     super.dispose();
   }
 
-  Future<void> _loadInitialData() async {
-    setState(() => _isLoading = true);
+  Future<void> _loadInitialData({bool isInitialMount = false}) async {
+    if (!isInitialMount && mounted) {
+      setState(() => _isLoading = true);
+    }
     try {
       final vendors = await widget.controller.getVendors(
         searchQuery: _searchController.text,
@@ -89,20 +91,25 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
         statement = await widget.controller.getVendorStatement(selected.id);
       }
 
-      setState(() {
-        _vendors = vendors;
-        _selectedVendor = selected;
-        _statement = statement;
-        _activeShift = activeShift;
-        _rawIngredients = rawIngredients;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _vendors = vendors;
+          _selectedVendor = selected;
+          _statement = statement;
+          _activeShift = activeShift;
+          _rawIngredients = rawIngredients;
+          _isLoading = false;
+        });
+      }
     } catch (_) {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
   Future<void> _selectVendor(Vendor vendor) async {
+    if (!mounted) return;
     setState(() {
       _selectedVendor = vendor;
       _isLoading = true;
@@ -110,12 +117,16 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
 
     try {
       final statement = await widget.controller.getVendorStatement(vendor.id);
-      setState(() {
-        _statement = statement;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _statement = statement;
+          _isLoading = false;
+        });
+      }
     } catch (_) {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
