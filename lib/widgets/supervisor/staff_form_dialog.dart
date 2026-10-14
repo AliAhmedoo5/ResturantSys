@@ -171,6 +171,7 @@ class _StaffFormDialogState extends State<StaffFormDialog> {
                   Expanded(
                     child: DropdownButtonFormField<int>(
                       key: const ValueKey('staff_department_dropdown'),
+                      isExpanded: true,
                       initialValue: _selectedDepartmentId,
                       decoration: const InputDecoration(
                         labelText: 'Department',
@@ -180,7 +181,7 @@ class _StaffFormDialogState extends State<StaffFormDialog> {
                       items: widget.departments.map((dept) {
                         return DropdownMenuItem<int>(
                           value: dept.id,
-                          child: Text(dept.name),
+                          child: Text(dept.name, overflow: TextOverflow.ellipsis),
                         );
                       }).toList(),
                       onChanged: (val) {
@@ -193,6 +194,7 @@ class _StaffFormDialogState extends State<StaffFormDialog> {
                   Expanded(
                     child: DropdownButtonFormField<StaffRole>(
                       key: const ValueKey('staff_role_dropdown'),
+                      isExpanded: true,
                       initialValue: _selectedRole,
                       decoration: const InputDecoration(
                         labelText: 'Role',
@@ -202,7 +204,7 @@ class _StaffFormDialogState extends State<StaffFormDialog> {
                       items: StaffRole.values.map((role) {
                         return DropdownMenuItem<StaffRole>(
                           value: role,
-                          child: Text(role.displayName),
+                          child: Text(role.displayName, overflow: TextOverflow.ellipsis),
                         );
                       }).toList(),
                       onChanged: (val) {
@@ -253,8 +255,10 @@ class _StaffFormDialogState extends State<StaffFormDialog> {
                 ),
               ],
               const SizedBox(height: WarmCounterSpacing.space24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+              Wrap(
+                alignment: WrapAlignment.end,
+                spacing: WarmCounterSpacing.space12,
+                runSpacing: WarmCounterSpacing.space8,
                 children: [
                   OutlinedButton(
                     onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(),
@@ -263,7 +267,6 @@ class _StaffFormDialogState extends State<StaffFormDialog> {
                     ),
                     child: const Text('Cancel'),
                   ),
-                  const SizedBox(width: WarmCounterSpacing.space12),
                   ElevatedButton(
                     key: const ValueKey('staff_save_button'),
                     onPressed: _isSubmitting ? null : _submit,

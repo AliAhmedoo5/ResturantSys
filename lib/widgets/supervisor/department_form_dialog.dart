@@ -127,8 +127,10 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
                 },
               ),
               const SizedBox(height: WarmCounterSpacing.space24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+              Wrap(
+                alignment: WrapAlignment.end,
+                spacing: WarmCounterSpacing.space12,
+                runSpacing: WarmCounterSpacing.space8,
                 children: [
                   OutlinedButton(
                     onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(),
@@ -137,7 +139,6 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
                     ),
                     child: const Text('Cancel'),
                   ),
-                  const SizedBox(width: WarmCounterSpacing.space12),
                   ElevatedButton(
                     key: const ValueKey('department_save_button'),
                     onPressed: _isSubmitting ? null : _submit,
