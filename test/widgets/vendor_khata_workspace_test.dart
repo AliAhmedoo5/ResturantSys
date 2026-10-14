@@ -285,8 +285,8 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: WarmCounterTheme.lightTheme,
-          home: Material(
-            child: VendorKhataWorkspace(
+          home: Scaffold(
+            body: VendorKhataWorkspace(
               currentStaff: testStaff,
               initialVendors: [v1, v2],
               initialSelectedVendor: v1,

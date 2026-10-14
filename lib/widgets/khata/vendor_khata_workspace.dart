@@ -987,139 +987,138 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
               ),
             ),
           ] else ...[
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: statement.entries.length,
-              separatorBuilder: (ctx, i) => const Divider(
-                height: 1,
-                thickness: 1,
-                color: WarmCounterColors.lightBorder,
-              ),
-              itemBuilder: (ctx, index) {
-                final entry = statement.entries[index];
-                final txn = entry.transaction;
-
-                final typeBadgeText = txn.type.displayName;
-                Color typeBadgeColor = WarmCounterColors.lightWarning;
-
-                if (txn.type == VendorTransactionType.paymentDrawer) {
-                  typeBadgeColor = WarmCounterColors.lightPrimaryAction;
-                } else if (txn.type == VendorTransactionType.paymentExternal) {
-                  typeBadgeColor = Colors.blueGrey;
-                }
-
-                String particulars = txn.notes ?? '-';
-                if (txn.rawIngredientName != null && txn.quantity != null) {
-                  particulars = '${txn.rawIngredientName} (${txn.quantity}) - $particulars';
-                }
-
-                return Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: WarmCounterSpacing.space24,
-                    vertical: WarmCounterSpacing.space12,
-                  ),
-                  child: Row(
-                    children: [
-                      // Date
-                      Expanded(
-                        flex: 2,
-                        child: Text(
-                          DateFormat('yyyy-MM-dd HH:mm').format(txn.createdAt),
-                          style: WarmCounterTypography.caption,
-                        ),
-                      ),
-                      // Slip
-                      Expanded(
-                        flex: 2,
-                        child: Text(
-                          txn.referenceSlip ?? '-',
-                          style: WarmCounterTypography.bodyMedium.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      // Type Badge
-                      Expanded(
-                        flex: 2,
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: typeBadgeColor.withAlpha(25),
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: typeBadgeColor.withAlpha(80)),
-                            ),
-                            child: Text(
-                              typeBadgeText,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: typeBadgeColor,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      // Particulars
-                      Expanded(
-                        flex: 3,
-                        child: Text(
-                          particulars,
-                          style: WarmCounterTypography.caption,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      // Added (+)
-                      Expanded(
-                        flex: 2,
-                        child: Text(
-                          entry.creditAmount > 0
-                              ? '+ ${_currencyFormat.format(entry.creditAmount)}'
-                              : '-',
-                          textAlign: TextAlign.right,
-                          style: WarmCounterTypography.tabularNumbers.copyWith(
-                            fontWeight: FontWeight.w600,
-                            color: entry.creditAmount > 0 ? WarmCounterColors.lightWarning : null,
-                          ),
-                        ),
-                      ),
-                      // Paid (-)
-                      Expanded(
-                        flex: 2,
-                        child: Text(
-                          entry.debitAmount > 0
-                              ? '- ${_currencyFormat.format(entry.debitAmount)}'
-                              : '-',
-                          textAlign: TextAlign.right,
-                          style: WarmCounterTypography.tabularNumbers.copyWith(
-                            fontWeight: FontWeight.w600,
-                            color: entry.debitAmount > 0 ? WarmCounterColors.lightPrimaryAction : null,
-                          ),
-                        ),
-                      ),
-                      // Running Balance
-                      Expanded(
-                        flex: 2,
-                        child: Text(
-                          'Rs. ${_currencyFormat.format(entry.runningBalance)}',
-                          textAlign: TextAlign.right,
-                          style: WarmCounterTypography.tabularNumbers.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
+            for (int index = 0; index < statement.entries.length; index++) ...[
+              if (index > 0)
+                const Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: WarmCounterColors.lightBorder,
+                ),
+              _buildStatementEntryRow(statement.entries[index]),
+            ],
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatementEntryRow(VendorStatementEntry entry) {
+    final txn = entry.transaction;
+
+    final typeBadgeText = txn.type.displayName;
+    Color typeBadgeColor = WarmCounterColors.lightWarning;
+
+    if (txn.type == VendorTransactionType.paymentDrawer) {
+      typeBadgeColor = WarmCounterColors.lightPrimaryAction;
+    } else if (txn.type == VendorTransactionType.paymentExternal) {
+      typeBadgeColor = Colors.blueGrey;
+    }
+
+    String particulars = txn.notes ?? '-';
+    if (txn.rawIngredientName != null && txn.quantity != null) {
+      particulars = '${txn.rawIngredientName} (${txn.quantity}) - $particulars';
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: WarmCounterSpacing.space24,
+        vertical: WarmCounterSpacing.space12,
+      ),
+      child: Row(
+        children: [
+          // Date
+          Expanded(
+            flex: 2,
+            child: Text(
+              DateFormat('yyyy-MM-dd HH:mm').format(txn.createdAt),
+              style: WarmCounterTypography.caption,
+            ),
+          ),
+          // Slip
+          Expanded(
+            flex: 2,
+            child: Text(
+              txn.referenceSlip ?? '-',
+              style: WarmCounterTypography.bodyMedium.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          // Type Badge
+          Expanded(
+            flex: 2,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 3,
+                ),
+                decoration: BoxDecoration(
+                  color: typeBadgeColor.withAlpha(25),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: typeBadgeColor.withAlpha(80)),
+                ),
+                child: Text(
+                  typeBadgeText,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: typeBadgeColor,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // Particulars
+          Expanded(
+            flex: 3,
+            child: Text(
+              particulars,
+              style: WarmCounterTypography.caption,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          // Added (+)
+          Expanded(
+            flex: 2,
+            child: Text(
+              entry.creditAmount > 0
+                  ? '+ ${_currencyFormat.format(entry.creditAmount)}'
+                  : '-',
+              textAlign: TextAlign.right,
+              style: WarmCounterTypography.tabularNumbers.copyWith(
+                fontWeight: FontWeight.w600,
+                color: entry.creditAmount > 0 ? WarmCounterColors.lightWarning : null,
+              ),
+            ),
+          ),
+          // Paid (-)
+          Expanded(
+            flex: 2,
+            child: Text(
+              entry.debitAmount > 0
+                  ? '- ${_currencyFormat.format(entry.debitAmount)}'
+                  : '-',
+              textAlign: TextAlign.right,
+              style: WarmCounterTypography.tabularNumbers.copyWith(
+                fontWeight: FontWeight.w600,
+                color: entry.debitAmount > 0 ? WarmCounterColors.lightPrimaryAction : null,
+              ),
+            ),
+          ),
+          // Running Balance
+          Expanded(
+            flex: 2,
+            child: Text(
+              'Rs. ${_currencyFormat.format(entry.runningBalance)}',
+              textAlign: TextAlign.right,
+              style: WarmCounterTypography.tabularNumbers.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
         ],
       ),
     );
