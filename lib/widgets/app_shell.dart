@@ -17,6 +17,10 @@ import 'procurement/kitchen_wastage_workspace.dart';
 import 'procurement/quick_mandi_purchase_workspace.dart';
 import 'shifts/register_shift_workspace.dart';
 
+import '../core/orders/token_queue_controller.dart';
+import 'supervisor/supervisor_portal_workspace.dart';
+import 'supervisor/token_queue_tray.dart';
+
 /// Top-level desktop application shell coordinating authentication gating,
 /// active workspace presentation, and header state.
 class AppShell extends StatefulWidget {
@@ -31,6 +35,7 @@ class AppShell extends StatefulWidget {
     this.procurementController,
     this.vendorKhataController,
     this.authService,
+    this.tokenQueueController,
     this.child,
   });
 
@@ -43,6 +48,7 @@ class AppShell extends StatefulWidget {
   final ProcurementAndWastageController? procurementController;
   final VendorKhataController? vendorKhataController;
   final AuthService? authService;
+  final TokenQueueController? tokenQueueController;
   final Widget? child;
 
   @override
@@ -130,6 +136,22 @@ class _AppShellState extends State<AppShell> {
     if (_selectedWorkspace == AppWorkspaceTab.wastage) {
       return KitchenWastageWorkspace(
         controller: widget.procurementController,
+      );
+    }
+
+    if (_selectedWorkspace == AppWorkspaceTab.supervisor && widget.authService != null) {
+      return SupervisorPortalWorkspace(
+        authService: widget.authService!,
+        shiftController: widget.shiftController,
+        orderController: widget.orderController,
+        tokenQueueController: widget.tokenQueueController,
+        currentStaff: staff,
+      );
+    }
+
+    if (_selectedWorkspace == AppWorkspaceTab.tokenQueue && widget.tokenQueueController != null) {
+      return TokenQueueTray(
+        controller: widget.tokenQueueController!,
       );
     }
 

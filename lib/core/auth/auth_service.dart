@@ -1,8 +1,10 @@
 import 'package:sqflite_common/sqlite_api.dart';
 import 'package:resturant_sys/core/database/pos_database_constants.dart';
+import 'department.dart';
 import 'pin_hasher.dart';
-import 'staff.dart';
 import 'session_state.dart';
+import 'staff.dart';
+import 'staff_role.dart';
 
 /// Service responsible for PIN verification, staff lookup, and active session coordination.
 class AuthService {
@@ -110,5 +112,267 @@ class AuthService {
     );
 
     return count > 0;
+  }
+
+  // ===========================================================================
+  // UNIVERSAL STAFF & DEPARTMENT DIRECTORY
+  // ===========================================================================
+
+  static String _formatTimestamp(DateTime dt) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    return '${dt.year}-${twoDigits(dt.month)}-${twoDigits(dt.day)} '
+        '${twoDigits(dt.hour)}:${twoDigits(dt.minute)}:${twoDigits(dt.second)}';
+  }
+
+  /// Retrieves all configured departments in the system.
+  Future<List<Department>> getDepartments() async {
+    final rows = await database.query(
+      PosDatabaseConstants.tableDepartments,
+      orderBy: 'id ASC',
+    );
+    return rows.map((r) => Department.fromMap(r)).toList();
+  }
+
+  /// Creates a new custom department.
+  Future<Department> createDepartment(String name) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      throw ArgumentError('Department name cannot be empty.');
+    }
+
+    final now = _formatTimestamp(DateTime.now());
+    final id = await database.insert(
+      PosDatabaseConstants.tableDepartments,
+      {
+        'name': trimmed,
+        'created_at': now,
+      },
+    );
+
+    return Department(
+      id: id,
+      name: trimmed,
+      createdAt: DateTime.parse(now),
+    );
+  }
+
+  /// Registers a new staff member with name, department, role, and a 4-digit numeric PIN.
+  Future<Staff> registerStaff({
+    required String name,
+    required int departmentId,
+    required StaffRole role,
+    required String pin,
+  }) async {
+    final trimmedName = name.trim();
+    if (trimmedName.isEmpty) {
+      throw ArgumentError('Staff name cannot be empty.');
+    }
+
+    if (!_pinFormatRegex.hasMatch(pin)) {
+      throw ArgumentError('Staff PIN must be exactly 4 numeric digits.');
+    }
+
+    // Verify department exists
+    final deptRows = await database.query(
+      PosDatabaseConstants.tableDepartments,
+      where: 'id = ?',
+      whereArgs: [departmentId],
+      limit: 1,
+    );
+    if (deptRows.isEmpty) {
+      throw ArgumentError('Department ID $departmentId does not exist.');
+    }
+    final departmentName = deptRows.first['name'] as String;
+
+    final hashedPin = PinHasher.hashPin(pin);
+
+    // Verify unique PIN
+    final existingPinRows = await database.query(
+      PosDatabaseConstants.tableStaff,
+      where: 'pin_hash = ?',
+      whereArgs: [hashedPin],
+      limit: 1,
+    );
+    if (existingPinRows.isNotEmpty) {
+      throw StateError('This 4-digit PIN is already assigned to another staff member.');
+    }
+
+    final now = _formatTimestamp(DateTime.now());
+    final id = await database.insert(
+      PosDatabaseConstants.tableStaff,
+      {
+        'name': trimmedName,
+        'department_id': departmentId,
+        'pin_hash': hashedPin,
+        'role': role.code,
+        'is_active': 1,
+        'created_at': now,
+      },
+    );
+
+    return Staff(
+      id: id,
+      name: trimmedName,
+      departmentId: departmentId,
+      departmentName: departmentName,
+      pinHash: hashedPin,
+      role: role,
+      isActive: true,
+      createdAt: DateTime.parse(now),
+    );
+  }
+
+  /// Supervisor/Owner administrative reset or update of a staff member's 4-digit PIN.
+  Future<bool> updateStaffPin({
+    required int staffId,
+    required String newPin,
+  }) async {
+    if (!_pinFormatRegex.hasMatch(newPin)) {
+      throw ArgumentError('New PIN must be exactly 4 numeric digits.');
+    }
+
+    final newHash = PinHasher.hashPin(newPin);
+
+    // Ensure PIN is not already in use by someone else
+    final conflictRows = await database.query(
+      PosDatabaseConstants.tableStaff,
+      where: 'pin_hash = ? AND id != ?',
+      whereArgs: [newHash, staffId],
+      limit: 1,
+    );
+    if (conflictRows.isNotEmpty) {
+      throw StateError('This PIN is already in use by another staff member.');
+    }
+
+    final count = await database.update(
+      PosDatabaseConstants.tableStaff,
+      {'pin_hash': newHash},
+      where: 'id = ?',
+      whereArgs: [staffId],
+    );
+
+    return count > 0;
+  }
+
+  /// Lists all registered staff members with joined department names.
+  Future<List<Staff>> getAllStaff() async {
+    final rows = await database.rawQuery('''
+      SELECT 
+        s.id, 
+        s.name, 
+        s.department_id, 
+        s.pin_hash, 
+        s.role, 
+        s.is_active, 
+        s.created_at,
+        d.name AS department_name
+      FROM ${PosDatabaseConstants.tableStaff} s
+      LEFT JOIN ${PosDatabaseConstants.tableDepartments} d 
+        ON s.department_id = d.id
+      ORDER BY s.id ASC;
+    ''');
+
+    return rows
+        .map((r) => Staff.fromMap(
+              r,
+              departmentName: r['department_name'] as String?,
+            ))
+        .toList();
+  }
+
+  /// Activates or deactivates a staff member's account.
+  Future<bool> updateStaffActiveStatus({
+    required int staffId,
+    required bool isActive,
+  }) async {
+    final count = await database.update(
+      PosDatabaseConstants.tableStaff,
+      {'is_active': isActive ? 1 : 0},
+      where: 'id = ?',
+      whereArgs: [staffId],
+    );
+    return count > 0;
+  }
+
+  /// Updates a staff member's general profile information.
+  Future<Staff> updateStaff({
+    required int staffId,
+    required String name,
+    required int departmentId,
+    required StaffRole role,
+    String? newPin,
+    bool? isActive,
+  }) async {
+    final trimmedName = name.trim();
+    if (trimmedName.isEmpty) {
+      throw ArgumentError('Staff name cannot be empty.');
+    }
+
+    final deptRows = await database.query(
+      PosDatabaseConstants.tableDepartments,
+      where: 'id = ?',
+      whereArgs: [departmentId],
+      limit: 1,
+    );
+    if (deptRows.isEmpty) {
+      throw ArgumentError('Department ID $departmentId does not exist.');
+    }
+    final departmentName = deptRows.first['name'] as String;
+
+    final updateValues = <String, Object?>{
+      'name': trimmedName,
+      'department_id': departmentId,
+      'role': role.code,
+    };
+
+    if (isActive != null) {
+      updateValues['is_active'] = isActive ? 1 : 0;
+    }
+
+    if (newPin != null) {
+      if (!_pinFormatRegex.hasMatch(newPin)) {
+        throw ArgumentError('New PIN must be exactly 4 numeric digits.');
+      }
+      final newHash = PinHasher.hashPin(newPin);
+      final conflictRows = await database.query(
+        PosDatabaseConstants.tableStaff,
+        where: 'pin_hash = ? AND id != ?',
+        whereArgs: [newHash, staffId],
+        limit: 1,
+      );
+      if (conflictRows.isNotEmpty) {
+        throw StateError('This PIN is already in use by another staff member.');
+      }
+      updateValues['pin_hash'] = newHash;
+    }
+
+    await database.update(
+      PosDatabaseConstants.tableStaff,
+      updateValues,
+      where: 'id = ?',
+      whereArgs: [staffId],
+    );
+
+    final staffRows = await database.rawQuery('''
+      SELECT 
+        s.id, 
+        s.name, 
+        s.department_id, 
+        s.pin_hash, 
+        s.role, 
+        s.is_active, 
+        s.created_at,
+        d.name AS department_name
+      FROM ${PosDatabaseConstants.tableStaff} s
+      LEFT JOIN ${PosDatabaseConstants.tableDepartments} d 
+        ON s.department_id = d.id
+      WHERE s.id = ?
+      LIMIT 1;
+    ''', [staffId]);
+
+    return Staff.fromMap(
+      staffRows.first,
+      departmentName: departmentName,
+    );
   }
 }

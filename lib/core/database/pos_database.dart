@@ -175,6 +175,7 @@ class PosDatabase {
         tax_amount REAL NOT NULL DEFAULT 0.0,
         grand_total REAL NOT NULL,
         payment_status TEXT NOT NULL,
+        token_status TEXT NOT NULL DEFAULT 'PREPARING',
         created_at TEXT NOT NULL
       );
     ''');
@@ -405,6 +406,9 @@ class PosDatabase {
     if (oldVersion < 7) {
       await _createVendorKhataTables(db);
     }
+    if (oldVersion < 8) {
+      await db.execute("ALTER TABLE ${PosDatabaseConstants.tableOrders} ADD COLUMN token_status TEXT NOT NULL DEFAULT 'PREPARING';");
+    }
   }
 
   static String _formatTimestamp(DateTime dt) {
@@ -477,6 +481,7 @@ class PosDatabase {
       'paper_width': '80mm',
       PosDatabaseConstants.settingDiscrepancyThreshold: PosDatabaseConstants.defaultDiscrepancyThreshold,
       PosDatabaseConstants.settingCashierVoidRequestsEnabled: PosDatabaseConstants.defaultCashierVoidRequestsEnabled,
+      PosDatabaseConstants.settingTokenTrayEnabled: PosDatabaseConstants.defaultTokenTrayEnabled,
     };
 
     for (final entry in defaultSettings.entries) {

@@ -1,0 +1,984 @@
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import '../../core/auth/auth_service.dart';
+import '../../core/auth/department.dart';
+import '../../core/auth/staff.dart';
+import '../../core/auth/staff_role.dart';
+import '../../core/orders/order_and_checkout_controller.dart';
+import '../../core/orders/token_queue_controller.dart';
+import '../../core/shifts/shift.dart';
+import '../../core/shifts/shift_and_cash_controller.dart';
+import '../../core/theme/theme.dart';
+import 'department_form_dialog.dart';
+import 'kitchen_token_station.dart';
+import 'staff_form_dialog.dart';
+import 'staff_pin_dialog.dart';
+import 'token_queue_tray.dart';
+
+enum SupervisorPortalTab {
+  staff('Staff & Departments', Icons.badge_rounded),
+  toggles('Feature Toggles', Icons.toggle_on_rounded),
+  discrepancies('Discrepancy Review', Icons.assignment_late_rounded),
+  tokenQueue('Token Queue Tray', Icons.confirmation_number_rounded),
+  kitchenStation('Kitchen Station', Icons.soup_kitchen_rounded);
+
+  const SupervisorPortalTab(this.label, this.icon);
+  final String label;
+  final IconData icon;
+}
+
+/// The back-office administrative hub protected by Supervisor/Owner PIN.
+/// Features custom Department management, universal Staff PIN configuration,
+/// operational Feature Toggles, discrepancy audit review table, and Token Queue tray.
+class SupervisorPortalWorkspace extends StatefulWidget {
+  const SupervisorPortalWorkspace({
+    super.key,
+    required this.authService,
+    this.shiftController,
+    this.orderController,
+    this.tokenQueueController,
+    this.currentStaff,
+  });
+
+  final AuthService authService;
+  final ShiftAndCashController? shiftController;
+  final OrderAndCheckoutController? orderController;
+  final TokenQueueController? tokenQueueController;
+  final Staff? currentStaff;
+
+  @override
+  State<SupervisorPortalWorkspace> createState() => _SupervisorPortalWorkspaceState();
+}
+
+class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
+  SupervisorPortalTab _activeTab = SupervisorPortalTab.staff;
+  final NumberFormat _currencyFormat = NumberFormat('#,##0.00');
+  final DateFormat _dateFormat = DateFormat('yyyy-MM-dd HH:mm');
+
+  // Staff & Departments State
+  List<Department> _departments = [];
+  List<Staff> _staffMembers = [];
+  bool _isLoadingStaff = true;
+
+  // Feature Toggles State
+  bool _tokenTrayEnabled = true;
+  bool _cashierVoidEnabled = true;
+  bool _isLoadingToggles = true;
+
+  // Discrepancy Review State
+  List<Shift> _discrepancyShifts = [];
+  bool _isLoadingDiscrepancies = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAllData();
+  }
+
+  Future<void> _loadAllData() async {
+    await Future.wait([
+      _loadStaffAndDepartments(),
+      _loadFeatureToggles(),
+      _loadDiscrepancies(),
+    ]);
+    if (widget.tokenQueueController != null) {
+      widget.tokenQueueController!.loadTokens();
+    }
+  }
+
+  Future<void> _loadStaffAndDepartments() async {
+    setState(() => _isLoadingStaff = true);
+    try {
+      final depts = await widget.authService.getDepartments();
+      final staff = await widget.authService.getAllStaff();
+      if (mounted) {
+        setState(() {
+          _departments = depts;
+          _staffMembers = staff;
+          _isLoadingStaff = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingStaff = false);
+    }
+  }
+
+  Future<void> _loadFeatureToggles() async {
+    if (widget.orderController == null) {
+      setState(() => _isLoadingToggles = false);
+      return;
+    }
+    setState(() => _isLoadingToggles = true);
+    try {
+      final tokenTray = await widget.orderController!.isTokenTrayEnabled();
+      final cashierVoid = await widget.orderController!.isCashierVoidEnabled();
+      if (mounted) {
+        setState(() {
+          _tokenTrayEnabled = tokenTray;
+          _cashierVoidEnabled = cashierVoid;
+          _isLoadingToggles = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingToggles = false);
+    }
+  }
+
+  Future<void> _loadDiscrepancies() async {
+    if (widget.shiftController == null) {
+      setState(() => _isLoadingDiscrepancies = false);
+      return;
+    }
+    setState(() => _isLoadingDiscrepancies = true);
+    try {
+      final shifts = await widget.shiftController!.getHistoricalDiscrepancyShifts();
+      if (mounted) {
+        setState(() {
+          _discrepancyShifts = shifts;
+          _isLoadingDiscrepancies = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingDiscrepancies = false);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Action Handlers
+  // ---------------------------------------------------------------------------
+
+  Future<void> _openAddDepartmentDialog() async {
+    final created = await showDialog<Department>(
+      context: context,
+      builder: (ctx) => DepartmentFormDialog(
+        onSave: (name) => widget.authService.createDepartment(name),
+      ),
+    );
+    if (created != null) {
+      await _loadStaffAndDepartments();
+    }
+  }
+
+  Future<void> _openRegisterStaffDialog() async {
+    final registered = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StaffFormDialog(
+        departments: _departments,
+        onSave: ({
+          required String name,
+          required int departmentId,
+          required StaffRole role,
+          required String pin,
+          bool? isActive,
+        }) async {
+          await widget.authService.registerStaff(
+            name: name,
+            departmentId: departmentId,
+            role: role,
+            pin: pin,
+          );
+        },
+      ),
+    );
+    if (registered == true) {
+      await _loadStaffAndDepartments();
+    }
+  }
+
+  Future<void> _openEditStaffDialog(Staff staff) async {
+    final updated = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StaffFormDialog(
+        departments: _departments,
+        initialStaff: staff,
+        onSave: ({
+          required String name,
+          required int departmentId,
+          required StaffRole role,
+          required String pin,
+          bool? isActive,
+        }) async {
+          await widget.authService.updateStaff(
+            staffId: staff.id,
+            name: name,
+            departmentId: departmentId,
+            role: role,
+            newPin: pin.isNotEmpty ? pin : null,
+            isActive: isActive,
+          );
+        },
+      ),
+    );
+    if (updated == true) {
+      await _loadStaffAndDepartments();
+    }
+  }
+
+  Future<void> _openUpdatePinDialog(Staff staff) async {
+    final updated = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StaffPinDialog(
+        staff: staff,
+        onUpdatePin: (staffId, newPin) => widget.authService.updateStaffPin(
+          staffId: staffId,
+          newPin: newPin,
+        ),
+      ),
+    );
+    if (updated == true) {
+      await _loadStaffAndDepartments();
+    }
+  }
+
+  Future<void> _toggleStaffActive(Staff staff, bool active) async {
+    await widget.authService.updateStaffActiveStatus(staffId: staff.id, isActive: active);
+    await _loadStaffAndDepartments();
+  }
+
+  Future<void> _handleToggleTokenTray(bool enabled) async {
+    setState(() => _tokenTrayEnabled = enabled);
+    if (widget.orderController != null) {
+      await widget.orderController!.setTokenTrayEnabled(enabled);
+    }
+  }
+
+  Future<void> _handleToggleCashierVoid(bool enabled) async {
+    setState(() => _cashierVoidEnabled = enabled);
+    if (widget.orderController != null) {
+      await widget.orderController!.setCashierVoidEnabled(enabled);
+    }
+  }
+
+  Future<void> _openResolveDiscrepancyDialog(Shift shift) async {
+    final notesController = TextEditingController();
+    String? dialogError;
+
+    final resolved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return Dialog(
+              shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.panelBorderRadius),
+              backgroundColor: WarmCounterColors.lightCardBackground,
+              child: Container(
+                width: 500,
+                padding: const EdgeInsets.all(WarmCounterSpacing.space24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(WarmCounterSpacing.space8),
+                          decoration: const BoxDecoration(
+                            color: WarmCounterColors.lightDestructiveHighlight,
+                            borderRadius: WarmCounterSpacing.controlBorderRadius,
+                          ),
+                          child: const Icon(
+                            Icons.assignment_turned_in_rounded,
+                            color: WarmCounterColors.lightDestructiveAction,
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: WarmCounterSpacing.space12),
+                        Text(
+                          'Resolve Shift #${shift.id} Discrepancy',
+                          style: WarmCounterTypography.pageHeading.copyWith(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: WarmCounterSpacing.space16),
+                    Text(
+                      'Cashier: ${shift.staffName ?? 'Staff #${shift.staffId}'} • Variance: PKR ${_currencyFormat.format(shift.discrepancy ?? 0.0)}',
+                      style: WarmCounterTypography.bodyMedium.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: WarmCounterSpacing.space16),
+                    if (dialogError != null) ...[
+                      Text(
+                        dialogError!,
+                        style: const TextStyle(color: WarmCounterColors.lightDestructiveAction, fontSize: 13),
+                      ),
+                      const SizedBox(height: WarmCounterSpacing.space12),
+                    ],
+                    TextField(
+                      controller: notesController,
+                      maxLines: 3,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        labelText: 'Supervisor Resolution Audit Notes *',
+                        hintText: 'Describe root cause or resolution reason...',
+                        border: OutlineInputBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
+                      ),
+                    ),
+                    const SizedBox(height: WarmCounterSpacing.space24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        OutlinedButton(
+                          onPressed: () => Navigator.of(ctx).pop(false),
+                          child: const Text('Cancel'),
+                        ),
+                        const SizedBox(width: WarmCounterSpacing.space12),
+                        ElevatedButton(
+                          key: const ValueKey('submit_resolution_button'),
+                          onPressed: () async {
+                            final notes = notesController.text.trim();
+                            if (notes.isEmpty) {
+                              setDialogState(() => dialogError = 'Resolution notes are mandatory.');
+                              return;
+                            }
+                            try {
+                              final supId = widget.currentStaff?.id ?? 1;
+                              await widget.shiftController!.resolveDiscrepancy(
+                                shiftId: shift.id,
+                                supervisorStaffId: supId,
+                                resolutionNotes: notes,
+                              );
+                              if (ctx.mounted) Navigator.of(ctx).pop(true);
+                            } catch (e) {
+                              setDialogState(() => dialogError = e.toString());
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: WarmCounterColors.lightPrimaryAction,
+                            foregroundColor: Colors.white,
+                          ),
+                          child: const Text('Resolve Discrepancy'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (resolved == true) {
+      await _loadDiscrepancies();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: WarmCounterColors.lightPageBackground,
+      padding: const EdgeInsets.all(WarmCounterSpacing.space24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Top Navigation Bar
+          _buildTopTabBar(context),
+          const SizedBox(height: WarmCounterSpacing.space16),
+
+          // Main Workspace Tab Content
+          Expanded(
+            child: _buildTabContent(context),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTopTabBar(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(WarmCounterSpacing.space6),
+      decoration: BoxDecoration(
+        color: WarmCounterColors.lightCardBackground,
+        borderRadius: WarmCounterSpacing.panelBorderRadius,
+        border: Border.all(color: WarmCounterColors.lightBorder),
+      ),
+      child: Row(
+        children: SupervisorPortalTab.values.map((tab) {
+          final isSelected = _activeTab == tab;
+          return Expanded(
+            child: InkWell(
+              key: ValueKey('portal_tab_${tab.name}'),
+              onTap: () => setState(() => _activeTab = tab),
+              borderRadius: WarmCounterSpacing.controlBorderRadius,
+              child: Container(
+                constraints: const BoxConstraints(minHeight: 46),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? WarmCounterColors.lightActiveNavHighlight
+                      : Colors.transparent,
+                  borderRadius: WarmCounterSpacing.controlBorderRadius,
+                  border: isSelected
+                      ? Border.all(color: WarmCounterColors.lightPrimaryAction)
+                      : null,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      tab.icon,
+                      size: 20,
+                      color: isSelected
+                          ? WarmCounterColors.lightPrimaryAction
+                          : WarmCounterColors.lightSecondaryText,
+                    ),
+                    const SizedBox(width: WarmCounterSpacing.space8),
+                    Text(
+                      tab.label,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                        color: isSelected
+                            ? WarmCounterColors.lightPrimaryAction
+                            : WarmCounterColors.lightPrimaryText,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildTabContent(BuildContext context) {
+    switch (_activeTab) {
+      case SupervisorPortalTab.staff:
+        return _buildStaffAndDepartmentsView(context);
+      case SupervisorPortalTab.toggles:
+        return _buildFeatureTogglesView(context);
+      case SupervisorPortalTab.discrepancies:
+        return _buildDiscrepanciesView(context);
+      case SupervisorPortalTab.tokenQueue:
+        if (widget.tokenQueueController != null) {
+          return TokenQueueTray(controller: widget.tokenQueueController!);
+        }
+        return const Center(child: Text('Token Queue Controller not provided.'));
+      case SupervisorPortalTab.kitchenStation:
+        if (widget.tokenQueueController != null) {
+          return KitchenTokenStation(
+            controller: widget.tokenQueueController!,
+            currentStaff: widget.currentStaff,
+          );
+        }
+        return const Center(child: Text('Kitchen Token Station unavailable.'));
+    }
+  }
+
+  // ===========================================================================
+  // TAB 1: UNIVERSAL STAFF & DEPARTMENT DIRECTORY
+  // ===========================================================================
+
+  Widget _buildStaffAndDepartmentsView(BuildContext context) {
+    if (_isLoadingStaff) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Left Column: Departments Directory
+        SizedBox(
+          width: 320,
+          child: Container(
+            padding: const EdgeInsets.all(WarmCounterSpacing.space20),
+            decoration: BoxDecoration(
+              color: WarmCounterColors.lightCardBackground,
+              borderRadius: WarmCounterSpacing.panelBorderRadius,
+              border: Border.all(color: WarmCounterColors.lightBorder),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Departments (${_departments.length})',
+                      style: WarmCounterTypography.pageHeading.copyWith(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    IconButton(
+                      key: const ValueKey('add_department_button'),
+                      icon: const Icon(Icons.add_circle_outline_rounded, color: WarmCounterColors.lightPrimaryAction),
+                      tooltip: 'Add Custom Department',
+                      onPressed: _openAddDepartmentDialog,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: WarmCounterSpacing.space12),
+                Expanded(
+                  child: ListView.separated(
+                    itemCount: _departments.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1, color: WarmCounterColors.lightBorder),
+                    itemBuilder: (context, index) {
+                      final dept = _departments[index];
+                      final staffInDept = _staffMembers.where((s) => s.departmentId == dept.id).length;
+
+                      return ListTile(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        leading: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: const BoxDecoration(
+                            color: WarmCounterColors.lightPageBackground,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.apartment_rounded, size: 18, color: WarmCounterColors.lightSecondaryText),
+                        ),
+                        title: Text(
+                          dept.name,
+                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                        ),
+                        subtitle: Text(
+                          '$staffInDept staff registered',
+                          style: TextStyle(color: WarmCounterColors.lightSecondaryText, fontSize: 12),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: WarmCounterSpacing.space20),
+
+        // Right Column: Staff Members Directory
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.all(WarmCounterSpacing.space20),
+            decoration: BoxDecoration(
+              color: WarmCounterColors.lightCardBackground,
+              borderRadius: WarmCounterSpacing.panelBorderRadius,
+              border: Border.all(color: WarmCounterColors.lightBorder),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Staff Directory (${_staffMembers.length})',
+                          style: WarmCounterTypography.pageHeading.copyWith(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        Text(
+                          'Configure 4-digit numeric PINs, operational roles, and department assignments.',
+                          style: WarmCounterTypography.secondaryLabel.copyWith(
+                            color: WarmCounterColors.lightSecondaryText,
+                          ),
+                        ),
+                      ],
+                    ),
+                    ElevatedButton.icon(
+                      key: const ValueKey('register_staff_button'),
+                      onPressed: _openRegisterStaffDialog,
+                      icon: const Icon(Icons.person_add_rounded, size: 18),
+                      label: const Text('Register Staff'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: WarmCounterColors.lightPrimaryAction,
+                        foregroundColor: Colors.white,
+                        shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: WarmCounterSpacing.space16),
+
+                // Staff Table
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: DataTable(
+                      headingRowColor: WidgetStateProperty.all(WarmCounterColors.lightPageBackground),
+                      columns: const [
+                        DataColumn(label: Text('Name', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text('Department', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text('Role', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold))),
+                      ],
+                      rows: _staffMembers.map((staff) {
+                        return DataRow(
+                          cells: [
+                            DataCell(Text(staff.name, style: const TextStyle(fontWeight: FontWeight.w600))),
+                            DataCell(Text(staff.departmentName ?? 'General')),
+                            DataCell(
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: WarmCounterColors.lightActiveNavHighlight,
+                                  borderRadius: WarmCounterSpacing.controlBorderRadius,
+                                ),
+                                child: Text(
+                                  staff.role.displayName,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: WarmCounterColors.lightPrimaryAction,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            DataCell(
+                              Row(
+                                children: [
+                                  Switch(
+                                    value: staff.isActive,
+                                    onChanged: (val) => _toggleStaffActive(staff, val),
+                                    activeColor: WarmCounterColors.lightPrimaryAction,
+                                  ),
+                                  Text(
+                                    staff.isActive ? 'Active' : 'Inactive',
+                                    style: TextStyle(
+                                      color: staff.isActive
+                                          ? const Color(0xFF047857)
+                                          : WarmCounterColors.lightSecondaryText,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            DataCell(
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    key: ValueKey('update_pin_${staff.id}'),
+                                    icon: const Icon(Icons.pin_rounded, size: 20),
+                                    tooltip: 'Update 4-Digit PIN',
+                                    onPressed: () => _openUpdatePinDialog(staff),
+                                  ),
+                                  IconButton(
+                                    key: ValueKey('edit_staff_${staff.id}'),
+                                    icon: const Icon(Icons.edit_rounded, size: 20),
+                                    tooltip: 'Edit Profile',
+                                    onPressed: () => _openEditStaffDialog(staff),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ===========================================================================
+  // TAB 2: OPERATIONAL FEATURE TOGGLES
+  // ===========================================================================
+
+  Widget _buildFeatureTogglesView(BuildContext context) {
+    if (_isLoadingToggles) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return Center(
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 720),
+        padding: const EdgeInsets.all(WarmCounterSpacing.space32),
+        decoration: BoxDecoration(
+          color: WarmCounterColors.lightCardBackground,
+          borderRadius: WarmCounterSpacing.panelBorderRadius,
+          border: Border.all(color: WarmCounterColors.lightBorder),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(WarmCounterSpacing.space12),
+                  decoration: const BoxDecoration(
+                    color: WarmCounterColors.lightActiveNavHighlight,
+                    borderRadius: WarmCounterSpacing.controlBorderRadius,
+                  ),
+                  child: const Icon(
+                    Icons.tune_rounded,
+                    color: WarmCounterColors.lightPrimaryAction,
+                    size: 28,
+                  ),
+                ),
+                const SizedBox(width: WarmCounterSpacing.space16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Operational Feature Toggles',
+                        style: WarmCounterTypography.pageHeading.copyWith(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        'Enable or disable key POS modules to adapt to your restaurant workflow.',
+                        style: WarmCounterTypography.bodyMedium.copyWith(
+                          color: WarmCounterColors.lightSecondaryText,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: WarmCounterSpacing.space32, color: WarmCounterColors.lightBorder),
+
+            // Toggle 1: Token Tray
+            SwitchListTile(
+              key: const ValueKey('toggle_token_tray_switch'),
+              value: _tokenTrayEnabled,
+              onChanged: _handleToggleTokenTray,
+              activeColor: WarmCounterColors.lightPrimaryAction,
+              title: const Text(
+                'Interactive Token Queue Tray',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+              ),
+              subtitle: const Text(
+                'Displays active tokens on-screen with 1-tap fulfillment progression (Preparing -> Ready -> Delivered). When disabled, token tray navigation is hidden.',
+              ),
+              secondary: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: const BoxDecoration(
+                  color: WarmCounterColors.lightPageBackground,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.confirmation_number_rounded, color: WarmCounterColors.lightPrimaryAction),
+              ),
+            ),
+            const Divider(height: WarmCounterSpacing.space24, color: WarmCounterColors.lightBorder),
+
+            // Toggle 2: Cashier Void Requests
+            SwitchListTile(
+              key: const ValueKey('toggle_cashier_void_switch'),
+              value: _cashierVoidEnabled,
+              onChanged: _handleToggleCashierVoid,
+              activeColor: WarmCounterColors.lightPrimaryAction,
+              title: const Text(
+                'Cashier Void Requests',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+              ),
+              subtitle: const Text(
+                'Allows front counter cashiers to request post-print order voids with mandatory cancellation reasons requiring supervisor PIN authorization.',
+              ),
+              secondary: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: const BoxDecoration(
+                  color: WarmCounterColors.lightPageBackground,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.cancel_rounded, color: WarmCounterColors.lightDestructiveAction),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // TAB 3: DISCREPANCY AUDIT REVIEW TABLE
+  // ===========================================================================
+
+  Widget _buildDiscrepanciesView(BuildContext context) {
+    if (_isLoadingDiscrepancies) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(WarmCounterSpacing.space20),
+      decoration: BoxDecoration(
+        color: WarmCounterColors.lightCardBackground,
+        borderRadius: WarmCounterSpacing.panelBorderRadius,
+        border: Border.all(color: WarmCounterColors.lightBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Discrepancy Audit Review (${_discrepancyShifts.length})',
+                    style: WarmCounterTypography.pageHeading.copyWith(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Text(
+                    'Historical shift log of counted cash discrepancies with resolution audit notes.',
+                    style: WarmCounterTypography.secondaryLabel.copyWith(
+                      color: WarmCounterColors.lightSecondaryText,
+                    ),
+                  ),
+                ],
+              ),
+              IconButton(
+                icon: const Icon(Icons.refresh_rounded),
+                tooltip: 'Refresh Discrepancies',
+                onPressed: _loadDiscrepancies,
+              ),
+            ],
+          ),
+          const SizedBox(height: WarmCounterSpacing.space16),
+
+          Expanded(
+            child: _discrepancyShifts.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.verified_rounded,
+                          size: 48,
+                          color: Color(0xFF10B981),
+                        ),
+                        const SizedBox(height: WarmCounterSpacing.space12),
+                        Text(
+                          'No historical cash discrepancies flagged.',
+                          style: WarmCounterTypography.bodyMedium.copyWith(
+                            color: const Color(0xFF047857),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : SingleChildScrollView(
+                    child: DataTable(
+                      headingRowColor: WidgetStateProperty.all(WarmCounterColors.lightPageBackground),
+                      columns: const [
+                        DataColumn(label: Text('Shift / Cashier', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text('Opened & Closed', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text('Variance Amount', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text('Resolution Notes', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text('Action', style: TextStyle(fontWeight: FontWeight.bold))),
+                      ],
+                      rows: _discrepancyShifts.map((shift) {
+                        final isFlagged = shift.discrepancyStatus == DiscrepancyStatus.flagged;
+                        final discrepancy = shift.discrepancy ?? 0.0;
+                        final isNegative = discrepancy < 0;
+
+                        return DataRow(
+                          cells: [
+                            DataCell(
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text('Shift #${shift.id}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  Text(
+                                    shift.staffName ?? 'Staff #${shift.staffId}',
+                                    style: TextStyle(color: WarmCounterColors.lightSecondaryText, fontSize: 12),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            DataCell(
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(_dateFormat.format(shift.openedAt), style: const TextStyle(fontSize: 12)),
+                                  if (shift.closedAt != null)
+                                    Text(_dateFormat.format(shift.closedAt!), style: TextStyle(color: WarmCounterColors.lightSecondaryText, fontSize: 11)),
+                                ],
+                              ),
+                            ),
+                            DataCell(
+                              Text(
+                                '${isNegative ? '-' : '+'}PKR ${_currencyFormat.format(discrepancy.abs())}',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color: isNegative
+                                      ? WarmCounterColors.lightDestructiveAction
+                                      : const Color(0xFF047857),
+                                ),
+                              ),
+                            ),
+                            DataCell(
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: isFlagged
+                                      ? WarmCounterColors.lightDestructiveHighlight
+                                      : const Color(0xFFECFDF5),
+                                  borderRadius: WarmCounterSpacing.controlBorderRadius,
+                                ),
+                                child: Text(
+                                  isFlagged ? 'FLAGGED' : 'RESOLVED',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: isFlagged
+                                        ? WarmCounterColors.lightDestructiveAction
+                                        : const Color(0xFF047857),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            DataCell(
+                              Text(
+                                shift.resolutionNotes ?? '—',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontStyle: shift.resolutionNotes == null ? FontStyle.italic : FontStyle.normal,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                            DataCell(
+                              isFlagged
+                                  ? ElevatedButton(
+                                      key: ValueKey('resolve_discrepancy_${shift.id}'),
+                                      onPressed: () => _openResolveDiscrepancyDialog(shift),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: WarmCounterColors.lightPrimaryAction,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                      ),
+                                      child: const Text('Resolve', style: TextStyle(fontSize: 12)),
+                                    )
+                                  : const Icon(Icons.check_circle_rounded, color: Color(0xFF047857), size: 20),
+                            ),
+                          ],
+                        );
+                      }).toList(),
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}

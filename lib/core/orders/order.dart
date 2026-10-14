@@ -1,6 +1,7 @@
 import 'dining_type.dart';
 import 'order_item.dart';
 import 'order_payment.dart';
+import 'token_status.dart';
 
 /// A finalized commercial order transaction.
 class Order {
@@ -18,6 +19,7 @@ class Order {
     required this.grandTotal,
     required this.paymentStatus,
     required this.createdAt,
+    this.tokenStatus = TokenStatus.preparing,
     this.items = const [],
     this.payments = const [],
     this.cashierName,
@@ -36,6 +38,7 @@ class Order {
   final double grandTotal;
   final String paymentStatus;
   final DateTime createdAt;
+  final TokenStatus tokenStatus;
   final List<OrderItem> items;
   final List<OrderPayment> payments;
   final String? cashierName;
@@ -66,6 +69,9 @@ class Order {
       grandTotal: (map['grand_total'] as num).toDouble(),
       paymentStatus: map['payment_status'] as String,
       createdAt: DateTime.parse(map['created_at'] as String),
+      tokenStatus: map['token_status'] != null
+          ? TokenStatus.fromCode(map['token_status'] as String)
+          : TokenStatus.preparing,
       items: items,
       payments: payments,
       cashierName: cashierName ?? map['cashier_name'] as String?,
@@ -86,6 +92,7 @@ class Order {
       'grand_total': grandTotal,
       'payment_status': paymentStatus,
       'created_at': createdAt.toIso8601String(),
+      'token_status': tokenStatus.code,
     };
   }
 }

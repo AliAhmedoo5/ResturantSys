@@ -12,7 +12,9 @@ enum AppWorkspaceTab {
   catalog('Catalog', Icons.restaurant_menu_rounded),
   khata('Khata', Icons.menu_book_rounded),
   mandi('Mandi', Icons.shopping_basket_rounded),
-  wastage('Wastage', Icons.delete_outline_rounded);
+  wastage('Wastage', Icons.delete_outline_rounded),
+  supervisor('Supervisor', Icons.admin_panel_settings_rounded),
+  tokenQueue('Tokens', Icons.confirmation_number_rounded);
 
   const AppWorkspaceTab(this.label, this.icon);
   final String label;
@@ -31,6 +33,7 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
     this.reprintTrayController,
     this.orderController,
     this.authService,
+    this.isTokenTrayEnabled = true,
     this.title = 'ResturantPOS',
   });
 
@@ -41,6 +44,7 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
   final ReprintTrayController? reprintTrayController;
   final OrderAndCheckoutController? orderController;
   final AuthService? authService;
+  final bool isTokenTrayEnabled;
   final String title;
 
   @override
@@ -125,6 +129,12 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
                           tab: AppWorkspaceTab.khata,
                           isSelected: selectedWorkspace == AppWorkspaceTab.khata,
                         ),
+                        const SizedBox(width: WarmCounterSpacing.space8),
+                        _buildWorkspaceTabButton(
+                          context,
+                          tab: AppWorkspaceTab.supervisor,
+                          isSelected: selectedWorkspace == AppWorkspaceTab.supervisor,
+                        ),
                       ],
                       const SizedBox(width: WarmCounterSpacing.space8),
                       _buildWorkspaceTabButton(
@@ -138,6 +148,14 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
                         tab: AppWorkspaceTab.wastage,
                         isSelected: selectedWorkspace == AppWorkspaceTab.wastage,
                       ),
+                      if (isTokenTrayEnabled) ...[
+                        const SizedBox(width: WarmCounterSpacing.space8),
+                        _buildWorkspaceTabButton(
+                          context,
+                          tab: AppWorkspaceTab.tokenQueue,
+                          isSelected: selectedWorkspace == AppWorkspaceTab.tokenQueue,
+                        ),
+                      ],
                     ],
                   ),
                 ),

@@ -440,6 +440,21 @@ class ShiftAndCashController {
     return rows.map((r) => Shift.fromMap(r)).toList();
   }
 
+  /// Retrieves all historical shifts flagged with cash discrepancies (both active flagged and resolved).
+  Future<List<Shift>> getHistoricalDiscrepancyShifts() async {
+    final rows = await database.rawQuery('''
+      SELECT 
+        sh.*, 
+        st.name as staff_name
+      FROM ${PosDatabaseConstants.tableShifts} sh
+      LEFT JOIN ${PosDatabaseConstants.tableStaff} st ON sh.staff_id = st.id
+      WHERE sh.discrepancy_status != ?
+      ORDER BY sh.id DESC;
+    ''', [DiscrepancyStatus.clean.dbValue]);
+
+    return rows.map((r) => Shift.fromMap(r)).toList();
+  }
+
   /// Asynchronously marks a flagged shift discrepancy as RESOLVED with supervisor notes.
   Future<Shift> resolveDiscrepancy({
     required int shiftId,
