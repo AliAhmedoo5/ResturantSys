@@ -54,6 +54,28 @@ class Staff {
   bool get canPerformZReport =>
       role == StaffRole.supervisor || role == StaffRole.owner;
 
+  Staff copyWith({
+    int? id,
+    String? name,
+    int? departmentId,
+    String? departmentName,
+    String? pinHash,
+    StaffRole? role,
+    bool? isActive,
+    DateTime? createdAt,
+  }) {
+    return Staff(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      departmentId: departmentId ?? this.departmentId,
+      departmentName: departmentName ?? this.departmentName,
+      pinHash: pinHash ?? this.pinHash,
+      role: role ?? this.role,
+      isActive: isActive ?? this.isActive,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
   factory Staff.fromMap(Map<String, Object?> map, {String? departmentName}) {
     return Staff(
       id: map['id'] as int,

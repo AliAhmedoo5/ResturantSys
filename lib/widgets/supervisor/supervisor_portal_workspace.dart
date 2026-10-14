@@ -311,12 +311,11 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
         staff: staff,
         onUpdatePin: (staffId, newPin) async {
           if (widget.authService != null) {
-            return await widget.authService!.updateStaffPin(
+            await widget.authService!.updateStaffPin(
               staffId: staffId,
               newPin: newPin,
             );
           }
-          return true;
         },
       ),
     );

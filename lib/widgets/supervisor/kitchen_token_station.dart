@@ -340,8 +340,8 @@ class _KitchenTokenStationState extends State<KitchenTokenStation> {
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEA580C),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFEA580C),
                   borderRadius: WarmCounterSpacing.controlBorderRadius,
                 ),
                 child: Text(

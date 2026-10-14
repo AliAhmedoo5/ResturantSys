@@ -6,7 +6,6 @@ import 'package:resturant_sys/core/auth/staff_role.dart';
 import 'package:resturant_sys/core/orders/dining_type.dart';
 import 'package:resturant_sys/core/orders/order.dart';
 import 'package:resturant_sys/core/orders/order_item.dart';
-import 'package:resturant_sys/core/orders/payment_status.dart';
 import 'package:resturant_sys/core/orders/token_queue_controller.dart';
 import 'package:resturant_sys/core/orders/token_status.dart';
 import 'package:resturant_sys/core/shifts/shift.dart';
@@ -64,20 +63,19 @@ void main() {
       discountAmount: 0.0,
       taxAmount: 0.0,
       grandTotal: 500.0,
-      paymentStatus: PaymentStatus.settled,
+      paymentStatus: 'SETTLED',
       createdAt: DateTime(2026, 1, 1, 12, 0),
       tokenStatus: TokenStatus.preparing,
-      items: const [
+      items: [
         OrderItem(
           id: 1,
           orderId: 101,
           menuItemId: 1,
           name: 'Zinger Burger',
-          unitPrice: 500.0,
           quantity: 1,
-          subtotal: 500.0,
-          taxAmount: 0.0,
-          total: 500.0,
+          unitPrice: 500.0,
+          totalPrice: 500.0,
+          createdAt: DateTime(2026, 1, 1, 12, 0),
         ),
       ],
     );
@@ -94,7 +92,7 @@ void main() {
       expectedCash: 5000.0,
       discrepancy: -500.0,
       discrepancyStatus: DiscrepancyStatus.flagged,
-      isClosed: true,
+      status: ShiftStatus.closed,
     );
 
     Widget createTestApp({

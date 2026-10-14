@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../auth/auth_service.dart';
 import '../auth/staff.dart';
+import '../auth/staff_role.dart';
 import '../database/pos_database_constants.dart';
 import 'order.dart';
 import 'order_item.dart';

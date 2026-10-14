@@ -111,11 +111,11 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
                 key: const ValueKey('department_name_input'),
                 controller: _nameController,
                 autofocus: true,
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   labelText: 'Department Name',
                   hintText: 'e.g. Riders, Catering, Front Counter',
                   border: OutlineInputBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 ),
                 validator: (val) {
                   if (val == null || val.trim().isEmpty) {
