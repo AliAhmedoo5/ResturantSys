@@ -595,7 +595,7 @@ class _KitchenWastageWorkspaceState extends State<KitchenWastageWorkspace> {
           shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.panelBorderRadius),
           elevation: 0,
           child: Padding(
-            padding: const EdgeInsets.all(WarmCounterSpacing.space20),
+            padding: const EdgeInsets.all(WarmCounterSpacing.space16),
             child: Row(
               children: [
                 Container(
@@ -615,7 +615,7 @@ class _KitchenWastageWorkspaceState extends State<KitchenWastageWorkspace> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      const Text(
                         'Total Recorded Wastage Loss',
                         style: WarmCounterTypography.secondaryLabel,
                       ),
@@ -653,17 +653,14 @@ class _KitchenWastageWorkspaceState extends State<KitchenWastageWorkspace> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'Recent Kitchen Wastage Audit Log',
-                  style: WarmCounterTypography.bodyMedium.copyWith(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                  ),
+                  style: WarmCounterTypography.bodyMedium,
                 ),
                 const SizedBox(height: WarmCounterSpacing.space12),
                 if (_recentLogs.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.all(WarmCounterSpacing.space24),
+                  const Padding(
+                    padding: EdgeInsets.all(WarmCounterSpacing.space24),
                     child: Center(
                       child: Text(
                         'No kitchen wastage incidents logged yet.',

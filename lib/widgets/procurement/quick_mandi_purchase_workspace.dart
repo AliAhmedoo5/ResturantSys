@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:resturant_sys/core/catalog/raw_ingredient.dart';
-import 'package:resturant_sys/core/catalog/storage_unit.dart';
 import 'package:resturant_sys/core/procurement/desi_unit.dart';
 import 'package:resturant_sys/core/procurement/mandi_procurement.dart';
 import 'package:resturant_sys/core/procurement/procurement_and_wastage_controller.dart';
@@ -291,7 +290,7 @@ class _QuickMandiPurchaseWorkspaceState extends State<QuickMandiPurchaseWorkspac
                           'Quick Desi Mandi Purchase',
                           style: WarmCounterTypography.pageHeading.copyWith(fontSize: 20),
                         ),
-                        Text(
+                        const Text(
                           'Bulk stock intake with traditional Pakistani wholesale units',
                           style: WarmCounterTypography.secondaryLabel,
                         ),
@@ -310,10 +309,10 @@ class _QuickMandiPurchaseWorkspaceState extends State<QuickMandiPurchaseWorkspac
                     borderRadius: WarmCounterSpacing.controlBorderRadius,
                     border: Border.all(color: WarmCounterColors.lightWarning),
                   ),
-                  child: Row(
+                  child: const Row(
                     children: [
-                      const Icon(Icons.warning_amber_rounded, color: WarmCounterColors.lightWarning),
-                      const SizedBox(width: WarmCounterSpacing.space12),
+                      Icon(Icons.warning_amber_rounded, color: WarmCounterColors.lightWarning),
+                      SizedBox(width: WarmCounterSpacing.space12),
                       Expanded(
                         child: Text(
                           'No raw ingredients registered yet. Add ingredients in the Catalog & BOM workspace first.',
@@ -542,7 +541,7 @@ class _QuickMandiPurchaseWorkspaceState extends State<QuickMandiPurchaseWorkspac
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Purchase Intake:', style: WarmCounterTypography.secondaryLabel),
+              const Text('Purchase Intake:', style: WarmCounterTypography.secondaryLabel),
               Text(
                 '${qty.toStringAsFixed(1)} ${_selectedUnit.displayName} (${_selectedUnit.metricEquivalence})',
                 style: WarmCounterTypography.bodyMedium.copyWith(fontWeight: FontWeight.w600),
@@ -553,7 +552,7 @@ class _QuickMandiPurchaseWorkspaceState extends State<QuickMandiPurchaseWorkspac
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Converted Recipe Stock:', style: WarmCounterTypography.secondaryLabel),
+              const Text('Converted Recipe Stock:', style: WarmCounterTypography.secondaryLabel),
               Text(
                 '+${_qtyFormat.format(convertedQty)} $storageUnitStr',
                 key: const ValueKey('mandi_converted_stock_display'),
@@ -568,7 +567,7 @@ class _QuickMandiPurchaseWorkspaceState extends State<QuickMandiPurchaseWorkspac
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Unit Cost per Recipe Unit:', style: WarmCounterTypography.secondaryLabel),
+              const Text('Unit Cost per Recipe Unit:', style: WarmCounterTypography.secondaryLabel),
               Text(
                 totalCost > 0 && convertedQty > 0
                     ? 'Rs. ${_currencyFormat.format(unitCost)} / $storageUnitStr'
@@ -586,7 +585,7 @@ class _QuickMandiPurchaseWorkspaceState extends State<QuickMandiPurchaseWorkspac
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Current Stock:', style: WarmCounterTypography.caption),
+                const Text('Current Stock:', style: WarmCounterTypography.caption),
                 Text(
                   '${_qtyFormat.format(_selectedIngredient!.currentStock)} $storageUnitStr',
                   style: WarmCounterTypography.caption.copyWith(fontWeight: FontWeight.bold),
@@ -632,8 +631,8 @@ class _QuickMandiPurchaseWorkspaceState extends State<QuickMandiPurchaseWorkspac
                 ),
                 const SizedBox(height: WarmCounterSpacing.space8),
                 if (_ingredients.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.all(WarmCounterSpacing.space16),
+                  const Padding(
+                    padding: EdgeInsets.all(WarmCounterSpacing.space16),
                     child: Center(
                       child: Text('No raw ingredients recorded.', style: WarmCounterTypography.caption),
                     ),
@@ -699,17 +698,14 @@ class _QuickMandiPurchaseWorkspaceState extends State<QuickMandiPurchaseWorkspac
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'Recent Mandi Purchases Log',
-                  style: WarmCounterTypography.bodyMedium.copyWith(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                  ),
+                  style: WarmCounterTypography.bodyMedium,
                 ),
                 const SizedBox(height: WarmCounterSpacing.space12),
                 if (_recentProcurements.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.all(WarmCounterSpacing.space24),
+                  const Padding(
+                    padding: EdgeInsets.all(WarmCounterSpacing.space24),
                     child: Center(
                       child: Text(
                         'No wholesale purchases recorded yet.',
