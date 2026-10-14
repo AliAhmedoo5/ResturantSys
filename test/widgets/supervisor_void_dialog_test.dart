@@ -6,6 +6,7 @@ import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/auth/staff_role.dart';
 import 'package:resturant_sys/core/hardware/in_memory_hardware_adapter.dart';
 import 'package:resturant_sys/core/hardware/print_job.dart';
+import 'package:resturant_sys/core/hardware/printer_topology.dart';
 import 'package:resturant_sys/core/hardware/reprint_tray_controller.dart';
 import 'package:resturant_sys/core/catalog/discount_preset.dart';
 import 'package:resturant_sys/core/orders/cart_item.dart';
@@ -168,7 +169,10 @@ void main() {
       authService = FakeAuthService();
       orderController = FakeOrderController();
       hardwareAdapter = InMemoryHardwareAdapter();
-      reprintTrayController = ReprintTrayController(hardwareAdapter: hardwareAdapter);
+      reprintTrayController = ReprintTrayController(
+        hardwareAdapter: hardwareAdapter,
+        topology: PrinterTopology.dual,
+      );
 
       testOrder = Order(
         id: 42,

@@ -494,38 +494,33 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
       runSpacing: WarmCounterSpacing.space8,
       children: [
         // Dining Type Selector
-        Row(
-          mainAxisSize: MainAxisSize.min,
+        Wrap(
+          spacing: WarmCounterSpacing.space8,
+          runSpacing: WarmCounterSpacing.space8,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: DiningType.values.map((type) {
             final isSelected = _selectedDiningType == type;
-            return Padding(
-              padding: const EdgeInsets.only(right: WarmCounterSpacing.space8),
-              child: ChoiceChip(
-                key: ValueKey('dining_type_${type.code}'),
-                label: Text(type.displayName),
-                selected: isSelected,
-                selectedColor: WarmCounterColors.lightActiveNavHighlight,
-                onSelected: (selected) {
-                  if (selected) setState(() => _selectedDiningType = type);
-                },
-              ),
+            return ChoiceChip(
+              key: ValueKey('dining_type_${type.code}'),
+              label: Text(type.displayName),
+              selected: isSelected,
+              selectedColor: WarmCounterColors.lightActiveNavHighlight,
+              onSelected: (selected) {
+                if (selected) setState(() => _selectedDiningType = type);
+              },
             );
           }).toList(),
         ),
 
         // Actions & Hotkey Tooltip Hint
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.end,
+        Wrap(
+          spacing: WarmCounterSpacing.space8,
+          runSpacing: WarmCounterSpacing.space8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          alignment: WrapAlignment.end,
           children: [
-            if (widget.orderController != null) ...[
-              _buildVoidOrderButton(),
-              const SizedBox(width: WarmCounterSpacing.space8),
-            ],
-            if (widget.reprintTrayController != null) ...[
-              _buildReprintTrayButton(),
-              const SizedBox(width: WarmCounterSpacing.space8),
-            ],
+            if (widget.orderController != null) _buildVoidOrderButton(),
+            if (widget.reprintTrayController != null) _buildReprintTrayButton(),
             Text(
               '[Space] Tender | [Numpad Enter] Exact | [Esc] Clear',
               overflow: TextOverflow.ellipsis,
