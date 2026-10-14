@@ -662,11 +662,14 @@ class _QuickMandiPurchaseWorkspaceState extends State<QuickMandiPurchaseWorkspac
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      'Live Raw Ingredient Balances',
-                      style: WarmCounterTypography.bodyMedium.copyWith(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 16,
+                    Expanded(
+                      child: Text(
+                        'Live Raw Ingredient Balances',
+                        overflow: TextOverflow.ellipsis,
+                        style: WarmCounterTypography.bodyMedium.copyWith(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                        ),
                       ),
                     ),
                     IconButton(
