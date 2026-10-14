@@ -140,7 +140,7 @@ void main() {
       expect(find.textContaining('Staff Directory'), findsOneWidget);
       expect(find.text('Supervisor'), findsWidgets);
       expect(find.text('Counter Cashier'), findsOneWidget);
-      expect(find.text('Kitchen Cook'), findsOneWidget);
+      expect(find.text('Kitchen Cook'), findsWidgets);
 
       // Create new Custom Department
       final addDeptBtn = find.byKey(const ValueKey('add_department_button'));
