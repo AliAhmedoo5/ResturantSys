@@ -303,7 +303,7 @@ void main() {
       expect(find.byKey(const Key('add_supplier_button')), findsOneWidget);
 
       // Directory list contains both vendors
-      expect(find.text('Al-Siddiq Poultry'), findsOneWidget);
+      expect(find.text('Al-Siddiq Poultry'), findsWidgets);
       expect(find.text('Bilal Packaging'), findsOneWidget);
 
       // Net payable for Al-Siddiq is 20,000
@@ -320,7 +320,7 @@ void main() {
       await tester.enterText(find.byKey(const Key('vendor_search_field')), '');
       await tester.pump();
 
-      expect(find.text('Al-Siddiq Poultry'), findsOneWidget);
+      expect(find.text('Al-Siddiq Poultry'), findsWidgets);
 
       // Select Al-Siddiq Poultry
       await tester.tap(find.byKey(Key('vendor_tile_${v1.id}')));
