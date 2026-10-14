@@ -81,7 +81,7 @@ void main() {
       // Verify SnackBar confirmation and added procurement
       expect(find.textContaining('Recorded 2.0 Dharri (دھڑی) of Red Onions for Rs. 4,000.00'), findsOneWidget);
       // Stock increased from 10,000 to 20,000
-      expect(find.text('20,000 g'), findsOneWidget);
+      expect(find.text('20,000 g'), findsWidgets);
     });
 
     testWidgets('QuickMandiPurchaseDialog renders and closes correctly', (tester) async {

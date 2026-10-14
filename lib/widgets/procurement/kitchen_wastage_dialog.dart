@@ -25,8 +25,9 @@ class KitchenWastageDialog extends StatelessWidget {
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 1100, maxHeight: 720),
+      child: SizedBox(
+        width: 1000,
+        height: 720,
         child: ClipRRect(
           borderRadius: WarmCounterSpacing.panelBorderRadius,
           child: Scaffold(

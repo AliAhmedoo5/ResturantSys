@@ -99,33 +99,40 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
           if (activeStaff != null &&
               (activeStaff!.canAccessSupervisorPortal || activeStaff!.canAccessKitchen) &&
               onWorkspaceSelected != null)
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildWorkspaceTabButton(
-                  context,
-                  tab: AppWorkspaceTab.register,
-                  isSelected: selectedWorkspace == AppWorkspaceTab.register,
+            Expanded(
+              child: Center(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildWorkspaceTabButton(
+                        context,
+                        tab: AppWorkspaceTab.register,
+                        isSelected: selectedWorkspace == AppWorkspaceTab.register,
+                      ),
+                      const SizedBox(width: WarmCounterSpacing.space8),
+                      _buildWorkspaceTabButton(
+                        context,
+                        tab: AppWorkspaceTab.catalog,
+                        isSelected: selectedWorkspace == AppWorkspaceTab.catalog,
+                      ),
+                      const SizedBox(width: WarmCounterSpacing.space8),
+                      _buildWorkspaceTabButton(
+                        context,
+                        tab: AppWorkspaceTab.mandi,
+                        isSelected: selectedWorkspace == AppWorkspaceTab.mandi,
+                      ),
+                      const SizedBox(width: WarmCounterSpacing.space8),
+                      _buildWorkspaceTabButton(
+                        context,
+                        tab: AppWorkspaceTab.wastage,
+                        isSelected: selectedWorkspace == AppWorkspaceTab.wastage,
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(width: WarmCounterSpacing.space8),
-                _buildWorkspaceTabButton(
-                  context,
-                  tab: AppWorkspaceTab.catalog,
-                  isSelected: selectedWorkspace == AppWorkspaceTab.catalog,
-                ),
-                const SizedBox(width: WarmCounterSpacing.space8),
-                _buildWorkspaceTabButton(
-                  context,
-                  tab: AppWorkspaceTab.mandi,
-                  isSelected: selectedWorkspace == AppWorkspaceTab.mandi,
-                ),
-                const SizedBox(width: WarmCounterSpacing.space8),
-                _buildWorkspaceTabButton(
-                  context,
-                  tab: AppWorkspaceTab.wastage,
-                  isSelected: selectedWorkspace == AppWorkspaceTab.wastage,
-                ),
-              ],
+              ),
             ),
 
           // Right: Active Session / Locked Status & Actions

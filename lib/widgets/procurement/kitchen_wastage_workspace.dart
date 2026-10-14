@@ -337,6 +337,7 @@ class _KitchenWastageWorkspaceState extends State<KitchenWastageWorkspace> {
                 DropdownButtonFormField<int>(
                   key: const ValueKey('wastage_ingredient_dropdown'),
                   value: _selectedIngredient?.id,
+                  isExpanded: true,
                   decoration: const InputDecoration(
                     prefixIcon: Icon(Icons.inventory_2_outlined),
                     border: OutlineInputBorder(),
@@ -346,6 +347,7 @@ class _KitchenWastageWorkspaceState extends State<KitchenWastageWorkspace> {
                       value: ing.id,
                       child: Text(
                         '${ing.name} (Unit: ${ing.storageUnit.displayName} • Rs. ${_currencyFormat.format(ing.costPerRecipeUnit)}/${ing.storageUnit.code})',
+                        overflow: TextOverflow.ellipsis,
                       ),
                     );
                   }).toList(),
@@ -394,6 +396,7 @@ class _KitchenWastageWorkspaceState extends State<KitchenWastageWorkspace> {
                 DropdownButtonFormField<WastageReason>(
                   key: const ValueKey('wastage_reason_dropdown'),
                   value: _selectedReason,
+                  isExpanded: true,
                   decoration: const InputDecoration(
                     prefixIcon: Icon(Icons.report_problem_outlined),
                     border: OutlineInputBorder(),
@@ -401,7 +404,10 @@ class _KitchenWastageWorkspaceState extends State<KitchenWastageWorkspace> {
                   items: WastageReason.values.map((r) {
                     return DropdownMenuItem<WastageReason>(
                       value: r,
-                      child: Text(r.displayName),
+                      child: Text(
+                        r.displayName,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     );
                   }).toList(),
                   onChanged: (r) {
@@ -474,14 +480,18 @@ class _KitchenWastageWorkspaceState extends State<KitchenWastageWorkspace> {
                     onPressed: _submitWastage,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         const Icon(Icons.check_circle_outline_rounded, size: 20),
                         const SizedBox(width: WarmCounterSpacing.space8),
-                        Text(
-                          'Log Wastage Chit & Deduct Stock',
-                          style: WarmCounterTypography.bodyMedium.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
+                        Flexible(
+                          child: Text(
+                            'Log Wastage Chit & Deduct Stock',
+                            overflow: TextOverflow.ellipsis,
+                            style: WarmCounterTypography.bodyMedium.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
                       ],
@@ -516,11 +526,14 @@ class _KitchenWastageWorkspaceState extends State<KitchenWastageWorkspace> {
             children: [
               const Icon(Icons.trending_down_rounded, color: WarmCounterColors.lightDestructiveAction, size: 20),
               const SizedBox(width: WarmCounterSpacing.space8),
-              Text(
-                'Financial Food-Cost Loss',
-                style: WarmCounterTypography.bodyMedium.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: WarmCounterColors.lightDestructiveAction,
+              Expanded(
+                child: Text(
+                  'Financial Food-Cost Loss',
+                  overflow: TextOverflow.ellipsis,
+                  style: WarmCounterTypography.bodyMedium.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: WarmCounterColors.lightDestructiveAction,
+                  ),
                 ),
               ),
             ],
@@ -530,12 +543,15 @@ class _KitchenWastageWorkspaceState extends State<KitchenWastageWorkspace> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Wasted Stock Deduction:', style: WarmCounterTypography.secondaryLabel),
-              Text(
-                '-${_qtyFormat.format(qty)} $storageUnitStr',
-                key: const ValueKey('wastage_deducted_stock_display'),
-                style: WarmCounterTypography.bodyMedium.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: WarmCounterColors.lightDestructiveAction,
+              Flexible(
+                child: Text(
+                  '-${_qtyFormat.format(qty)} $storageUnitStr',
+                  overflow: TextOverflow.ellipsis,
+                  key: const ValueKey('wastage_deducted_stock_display'),
+                  style: WarmCounterTypography.bodyMedium.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: WarmCounterColors.lightDestructiveAction,
+                  ),
                 ),
               ),
             ],
@@ -545,9 +561,12 @@ class _KitchenWastageWorkspaceState extends State<KitchenWastageWorkspace> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Ingredient Unit Cost:', style: WarmCounterTypography.secondaryLabel),
-              Text(
-                'Rs. ${_currencyFormat.format(unitCost)} / $storageUnitStr',
-                style: WarmCounterTypography.bodyMedium,
+              Flexible(
+                child: Text(
+                  'Rs. ${_currencyFormat.format(unitCost)} / $storageUnitStr',
+                  overflow: TextOverflow.ellipsis,
+                  style: WarmCounterTypography.bodyMedium,
+                ),
               ),
             ],
           ),
@@ -556,13 +575,16 @@ class _KitchenWastageWorkspaceState extends State<KitchenWastageWorkspace> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('Total Financial Loss:', style: WarmCounterTypography.bodyMedium.copyWith(fontWeight: FontWeight.bold)),
-              Text(
-                'Rs. ${_currencyFormat.format(costLoss)}',
-                key: const ValueKey('wastage_cost_loss_display'),
-                style: WarmCounterTypography.pageHeading.copyWith(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  color: WarmCounterColors.lightDestructiveAction,
+              Flexible(
+                child: Text(
+                  'Rs. ${_currencyFormat.format(costLoss)}',
+                  overflow: TextOverflow.ellipsis,
+                  key: const ValueKey('wastage_cost_loss_display'),
+                  style: WarmCounterTypography.pageHeading.copyWith(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: WarmCounterColors.lightDestructiveAction,
+                  ),
                 ),
               ),
             ],
@@ -573,9 +595,12 @@ class _KitchenWastageWorkspaceState extends State<KitchenWastageWorkspace> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text('Current Stock:', style: WarmCounterTypography.caption),
-                Text(
-                  '${_qtyFormat.format(_selectedIngredient!.currentStock)} $storageUnitStr',
-                  style: WarmCounterTypography.caption.copyWith(fontWeight: FontWeight.bold),
+                Flexible(
+                  child: Text(
+                    '${_qtyFormat.format(_selectedIngredient!.currentStock)} $storageUnitStr',
+                    overflow: TextOverflow.ellipsis,
+                    style: WarmCounterTypography.caption.copyWith(fontWeight: FontWeight.bold),
+                  ),
                 ),
               ],
             ),

@@ -332,6 +332,7 @@ class _QuickMandiPurchaseWorkspaceState extends State<QuickMandiPurchaseWorkspac
                 DropdownButtonFormField<int>(
                   key: const ValueKey('mandi_ingredient_dropdown'),
                   value: _selectedIngredient?.id,
+                  isExpanded: true,
                   decoration: const InputDecoration(
                     prefixIcon: Icon(Icons.inventory_2_outlined),
                     border: OutlineInputBorder(),
@@ -339,7 +340,10 @@ class _QuickMandiPurchaseWorkspaceState extends State<QuickMandiPurchaseWorkspac
                   items: _ingredients.map((ing) {
                     return DropdownMenuItem<int>(
                       value: ing.id,
-                      child: Text('${ing.name} (Unit: ${ing.storageUnit.displayName})'),
+                      child: Text(
+                        '${ing.name} (Unit: ${ing.storageUnit.displayName})',
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     );
                   }).toList(),
                   onChanged: (id) {
@@ -371,6 +375,7 @@ class _QuickMandiPurchaseWorkspaceState extends State<QuickMandiPurchaseWorkspac
                           DropdownButtonFormField<DesiUnit>(
                             key: const ValueKey('mandi_unit_dropdown'),
                             value: _selectedUnit,
+                            isExpanded: true,
                             decoration: const InputDecoration(
                               prefixIcon: Icon(Icons.scale_rounded),
                               border: OutlineInputBorder(),
@@ -378,7 +383,10 @@ class _QuickMandiPurchaseWorkspaceState extends State<QuickMandiPurchaseWorkspac
                             items: DesiUnit.values.map((u) {
                               return DropdownMenuItem<DesiUnit>(
                                 value: u,
-                                child: Text('${u.displayName} [${u.metricEquivalence}]'),
+                                child: Text(
+                                  '${u.displayName} [${u.metricEquivalence}]',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               );
                             }).toList(),
                             onChanged: (u) {
@@ -485,14 +493,18 @@ class _QuickMandiPurchaseWorkspaceState extends State<QuickMandiPurchaseWorkspac
                     onPressed: _submitProcurement,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         const Icon(Icons.add_shopping_cart_rounded, size: 20),
                         const SizedBox(width: WarmCounterSpacing.space8),
-                        Text(
-                          'Confirm Mandi Purchase',
-                          style: WarmCounterTypography.bodyMedium.copyWith(
-                            color: WarmCounterColors.lightTextOnPrimary,
-                            fontWeight: FontWeight.w700,
+                        Flexible(
+                          child: Text(
+                            'Confirm Mandi Purchase',
+                            overflow: TextOverflow.ellipsis,
+                            style: WarmCounterTypography.bodyMedium.copyWith(
+                              color: WarmCounterColors.lightTextOnPrimary,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
                       ],
@@ -528,11 +540,14 @@ class _QuickMandiPurchaseWorkspaceState extends State<QuickMandiPurchaseWorkspac
             children: [
               const Icon(Icons.calculate_outlined, color: WarmCounterColors.lightPrimaryAction, size: 20),
               const SizedBox(width: WarmCounterSpacing.space8),
-              Text(
-                'Automatic Recipe Unit Calculation',
-                style: WarmCounterTypography.bodyMedium.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: WarmCounterColors.lightPrimaryAction,
+              Expanded(
+                child: Text(
+                  'Automatic Recipe Unit Calculation',
+                  overflow: TextOverflow.ellipsis,
+                  style: WarmCounterTypography.bodyMedium.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: WarmCounterColors.lightPrimaryAction,
+                  ),
                 ),
               ),
             ],
@@ -542,9 +557,12 @@ class _QuickMandiPurchaseWorkspaceState extends State<QuickMandiPurchaseWorkspac
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Purchase Intake:', style: WarmCounterTypography.secondaryLabel),
-              Text(
-                '${qty.toStringAsFixed(1)} ${_selectedUnit.displayName} (${_selectedUnit.metricEquivalence})',
-                style: WarmCounterTypography.bodyMedium.copyWith(fontWeight: FontWeight.w600),
+              Flexible(
+                child: Text(
+                  '${qty.toStringAsFixed(1)} ${_selectedUnit.displayName} (${_selectedUnit.metricEquivalence})',
+                  overflow: TextOverflow.ellipsis,
+                  style: WarmCounterTypography.bodyMedium.copyWith(fontWeight: FontWeight.w600),
+                ),
               ),
             ],
           ),
@@ -553,12 +571,15 @@ class _QuickMandiPurchaseWorkspaceState extends State<QuickMandiPurchaseWorkspac
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Converted Recipe Stock:', style: WarmCounterTypography.secondaryLabel),
-              Text(
-                '+${_qtyFormat.format(convertedQty)} $storageUnitStr',
-                key: const ValueKey('mandi_converted_stock_display'),
-                style: WarmCounterTypography.bodyMedium.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: WarmCounterColors.lightPrimaryAction,
+              Flexible(
+                child: Text(
+                  '+${_qtyFormat.format(convertedQty)} $storageUnitStr',
+                  overflow: TextOverflow.ellipsis,
+                  key: const ValueKey('mandi_converted_stock_display'),
+                  style: WarmCounterTypography.bodyMedium.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: WarmCounterColors.lightPrimaryAction,
+                  ),
                 ),
               ),
             ],
@@ -568,14 +589,17 @@ class _QuickMandiPurchaseWorkspaceState extends State<QuickMandiPurchaseWorkspac
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Unit Cost per Recipe Unit:', style: WarmCounterTypography.secondaryLabel),
-              Text(
-                totalCost > 0 && convertedQty > 0
-                    ? 'Rs. ${_currencyFormat.format(unitCost)} / $storageUnitStr'
-                    : 'Rs. 0.00 / $storageUnitStr',
-                key: const ValueKey('mandi_unit_cost_display'),
-                style: WarmCounterTypography.bodyMedium.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: WarmCounterColors.lightPrimaryAction,
+              Flexible(
+                child: Text(
+                  totalCost > 0 && convertedQty > 0
+                      ? 'Rs. ${_currencyFormat.format(unitCost)} / $storageUnitStr'
+                      : 'Rs. 0.00 / $storageUnitStr',
+                  overflow: TextOverflow.ellipsis,
+                  key: const ValueKey('mandi_unit_cost_display'),
+                  style: WarmCounterTypography.bodyMedium.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: WarmCounterColors.lightPrimaryAction,
+                  ),
                 ),
               ),
             ],
@@ -586,9 +610,12 @@ class _QuickMandiPurchaseWorkspaceState extends State<QuickMandiPurchaseWorkspac
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text('Current Stock:', style: WarmCounterTypography.caption),
-                Text(
-                  '${_qtyFormat.format(_selectedIngredient!.currentStock)} $storageUnitStr',
-                  style: WarmCounterTypography.caption.copyWith(fontWeight: FontWeight.bold),
+                Flexible(
+                  child: Text(
+                    '${_qtyFormat.format(_selectedIngredient!.currentStock)} $storageUnitStr',
+                    overflow: TextOverflow.ellipsis,
+                    style: WarmCounterTypography.caption.copyWith(fontWeight: FontWeight.bold),
+                  ),
                 ),
               ],
             ),
