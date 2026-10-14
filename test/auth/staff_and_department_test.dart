@@ -115,7 +115,7 @@ void main() {
           role: StaffRole.cashier,
           pin: '1234',
         ),
-        throwsA(isA<Exception>()),
+        throwsA(isA<StateError>()),
       );
     });
 

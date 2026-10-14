@@ -135,7 +135,8 @@ void main() {
       expect(find.byKey(const ValueKey('portal_tab_kitchenStation')), findsOneWidget);
 
       // Verify default Staff & Departments tab content
-      expect(find.textContaining('Departments'), findsOneWidget);
+      expect(find.text('Staff & Departments'), findsOneWidget);
+      expect(find.textContaining('Departments ('), findsOneWidget);
       expect(find.textContaining('Staff Directory'), findsOneWidget);
       expect(find.text('Supervisor'), findsWidgets);
       expect(find.text('Counter Cashier'), findsOneWidget);

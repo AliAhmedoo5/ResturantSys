@@ -364,72 +364,76 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
             return Dialog(
               shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.panelBorderRadius),
               backgroundColor: WarmCounterColors.lightCardBackground,
-              child: Container(
-                width: 500,
-                padding: const EdgeInsets.all(WarmCounterSpacing.space24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(WarmCounterSpacing.space8),
-                          decoration: const BoxDecoration(
-                            color: WarmCounterColors.lightDestructiveHighlight,
-                            borderRadius: WarmCounterSpacing.controlBorderRadius,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 480),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(WarmCounterSpacing.space24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(WarmCounterSpacing.space8),
+                            decoration: const BoxDecoration(
+                              color: WarmCounterColors.lightDestructiveHighlight,
+                              borderRadius: WarmCounterSpacing.controlBorderRadius,
+                            ),
+                            child: const Icon(
+                              Icons.assignment_turned_in_rounded,
+                              color: WarmCounterColors.lightDestructiveAction,
+                              size: 24,
+                            ),
                           ),
-                          child: const Icon(
-                            Icons.assignment_turned_in_rounded,
-                            color: WarmCounterColors.lightDestructiveAction,
-                            size: 24,
+                          const SizedBox(width: WarmCounterSpacing.space12),
+                          Expanded(
+                            child: Text(
+                              'Resolve Shift #${shift.id} Discrepancy',
+                              style: WarmCounterTypography.pageHeading.copyWith(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: WarmCounterSpacing.space12),
-                        Text(
-                          'Resolve Shift #${shift.id} Discrepancy',
-                          style: WarmCounterTypography.pageHeading.copyWith(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: WarmCounterSpacing.space16),
-                    Text(
-                      'Cashier: ${shift.staffName ?? 'Staff #${shift.staffId}'} • Variance: PKR ${_currencyFormat.format(shift.discrepancy ?? 0.0)}',
-                      style: WarmCounterTypography.bodyMedium.copyWith(
-                        fontWeight: FontWeight.w600,
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: WarmCounterSpacing.space16),
-                    if (dialogError != null) ...[
+                      const SizedBox(height: WarmCounterSpacing.space16),
                       Text(
-                        dialogError!,
-                        style: const TextStyle(color: WarmCounterColors.lightDestructiveAction, fontSize: 13),
-                      ),
-                      const SizedBox(height: WarmCounterSpacing.space12),
-                    ],
-                    TextField(
-                      controller: notesController,
-                      maxLines: 3,
-                      autofocus: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Supervisor Resolution Audit Notes *',
-                        hintText: 'Describe root cause or resolution reason...',
-                        border: OutlineInputBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
-                      ),
-                    ),
-                    const SizedBox(height: WarmCounterSpacing.space24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        OutlinedButton(
-                          onPressed: () => Navigator.of(ctx).pop(false),
-                          child: const Text('Cancel'),
+                        'Cashier: ${shift.staffName ?? 'Staff #${shift.staffId}'} • Variance: PKR ${_currencyFormat.format(shift.discrepancy ?? 0.0)}',
+                        style: WarmCounterTypography.bodyMedium.copyWith(
+                          fontWeight: FontWeight.w600,
                         ),
-                        const SizedBox(width: WarmCounterSpacing.space12),
-                        ElevatedButton(
+                      ),
+                      const SizedBox(height: WarmCounterSpacing.space16),
+                      if (dialogError != null) ...[
+                        Text(
+                          dialogError!,
+                          style: const TextStyle(color: WarmCounterColors.lightDestructiveAction, fontSize: 13),
+                        ),
+                        const SizedBox(height: WarmCounterSpacing.space12),
+                      ],
+                      TextField(
+                        controller: notesController,
+                        maxLines: 3,
+                        autofocus: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Supervisor Resolution Audit Notes *',
+                          hintText: 'Describe root cause or resolution reason...',
+                          border: OutlineInputBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
+                        ),
+                      ),
+                      const SizedBox(height: WarmCounterSpacing.space24),
+                      Wrap(
+                        alignment: WrapAlignment.end,
+                        spacing: WarmCounterSpacing.space12,
+                        runSpacing: WarmCounterSpacing.space8,
+                        children: [
+                          OutlinedButton(
+                            onPressed: () => Navigator.of(ctx).pop(false),
+                            child: const Text('Cancel'),
+                          ),
+                          ElevatedButton(
                           key: const ValueKey('submit_resolution_button'),
                           onPressed: () async {
                             final notes = notesController.text.trim();
@@ -615,14 +619,16 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
         // Left Column: Departments Directory
         SizedBox(
           width: 320,
-          child: Container(
-            padding: const EdgeInsets.all(WarmCounterSpacing.space16),
-            decoration: BoxDecoration(
-              color: WarmCounterColors.lightCardBackground,
-              borderRadius: WarmCounterSpacing.panelBorderRadius,
-              border: Border.all(color: WarmCounterColors.lightBorder),
-            ),
-            child: Column(
+          child: Material(
+            color: WarmCounterColors.lightCardBackground,
+            borderRadius: WarmCounterSpacing.panelBorderRadius,
+            child: Container(
+              padding: const EdgeInsets.all(WarmCounterSpacing.space16),
+              decoration: BoxDecoration(
+                borderRadius: WarmCounterSpacing.panelBorderRadius,
+                border: Border.all(color: WarmCounterColors.lightBorder),
+              ),
+              child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Row(
@@ -678,14 +684,17 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
             ),
           ),
         ),
-        const SizedBox(width: WarmCounterSpacing.space16),
+      ),
+      const SizedBox(width: WarmCounterSpacing.space16),
 
-        // Right Column: Staff Members Directory
-        Expanded(
+      // Right Column: Staff Members Directory
+      Expanded(
+        child: Material(
+          color: WarmCounterColors.lightCardBackground,
+          borderRadius: WarmCounterSpacing.panelBorderRadius,
           child: Container(
             padding: const EdgeInsets.all(WarmCounterSpacing.space16),
             decoration: BoxDecoration(
-              color: WarmCounterColors.lightCardBackground,
               borderRadius: WarmCounterSpacing.panelBorderRadius,
               border: Border.all(color: WarmCounterColors.lightBorder),
             ),
@@ -812,8 +821,9 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
             ),
           ),
         ),
-      ],
-    );
+      ),
+    ],
+  );
   }
 
   // ===========================================================================
@@ -826,15 +836,17 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
     }
 
     return Center(
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 720),
-        padding: const EdgeInsets.all(WarmCounterSpacing.space32),
-        decoration: BoxDecoration(
-          color: WarmCounterColors.lightCardBackground,
-          borderRadius: WarmCounterSpacing.panelBorderRadius,
-          border: Border.all(color: WarmCounterColors.lightBorder),
-        ),
-        child: Column(
+      child: Material(
+        color: WarmCounterColors.lightCardBackground,
+        borderRadius: WarmCounterSpacing.panelBorderRadius,
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 720),
+          padding: const EdgeInsets.all(WarmCounterSpacing.space32),
+          decoration: BoxDecoration(
+            borderRadius: WarmCounterSpacing.panelBorderRadius,
+            border: Border.all(color: WarmCounterColors.lightBorder),
+          ),
+          child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -926,7 +938,8 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 
   // ===========================================================================
@@ -938,14 +951,16 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    return Container(
-      padding: const EdgeInsets.all(WarmCounterSpacing.space16),
-      decoration: BoxDecoration(
-        color: WarmCounterColors.lightCardBackground,
-        borderRadius: WarmCounterSpacing.panelBorderRadius,
-        border: Border.all(color: WarmCounterColors.lightBorder),
-      ),
-      child: Column(
+    return Material(
+      color: WarmCounterColors.lightCardBackground,
+      borderRadius: WarmCounterSpacing.panelBorderRadius,
+      child: Container(
+        padding: const EdgeInsets.all(WarmCounterSpacing.space16),
+        decoration: BoxDecoration(
+          borderRadius: WarmCounterSpacing.panelBorderRadius,
+          border: Border.all(color: WarmCounterColors.lightBorder),
+        ),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
@@ -1001,7 +1016,9 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                     ),
                   )
                 : SingleChildScrollView(
-                    child: DataTable(
+                    scrollDirection: Axis.horizontal,
+                    child: SingleChildScrollView(
+                      child: DataTable(
                       headingRowColor: WidgetStateProperty.all(WarmCounterColors.lightPageBackground),
                       columns: const [
                         DataColumn(label: Text('Shift / Cashier', style: TextStyle(fontWeight: FontWeight.bold))),
@@ -1104,9 +1121,11 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                       }).toList(),
                     ),
                   ),
-          ),
-        ],
-      ),
-    );
+                ),
+        ),
+      ],
+    ),
+  ),
+);
   }
 }
