@@ -114,7 +114,7 @@ class _StaffPinDialogState extends State<StaffPinDialog> {
                   ),
                 ],
               ),
-              const SizedBox(height: WarmCounterSpacing.space20),
+              const SizedBox(height: WarmCounterSpacing.space16),
               if (_errorMessage != null) ...[
                 Container(
                   padding: const EdgeInsets.all(WarmCounterSpacing.space12),
@@ -148,7 +148,7 @@ class _StaffPinDialogState extends State<StaffPinDialog> {
                     icon: Icon(_obscurePin ? Icons.visibility_outlined : Icons.visibility_off_outlined),
                     onPressed: () => setState(() => _obscurePin = !_obscurePin),
                   ),
-                  border: OutlineInputBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
+                  border: const OutlineInputBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 ),
                 validator: (val) {
@@ -165,12 +165,12 @@ class _StaffPinDialogState extends State<StaffPinDialog> {
                 obscureText: _obscurePin,
                 keyboardType: TextInputType.number,
                 maxLength: 4,
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   labelText: 'Confirm New PIN',
                   hintText: 'Re-enter 4 digits',
                   counterText: '',
                   border: OutlineInputBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 ),
                 validator: (val) {
                   if (val == null || val.trim().length != 4 || int.tryParse(val.trim()) == null) {

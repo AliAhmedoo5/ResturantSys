@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/auth/staff.dart';
+import '../../core/orders/order.dart';
 import '../../core/orders/token_queue_controller.dart';
 import '../../core/theme/theme.dart';
 import '../pin_numpad.dart';
@@ -311,7 +312,7 @@ class _KitchenTokenStationState extends State<KitchenTokenStation> {
     );
   }
 
-  Widget _buildKitchenOrderCard(BuildContext context, dynamic order) {
+  Widget _buildKitchenOrderCard(BuildContext context, Order order) {
     return Container(
       padding: const EdgeInsets.all(WarmCounterSpacing.space16),
       decoration: BoxDecoration(

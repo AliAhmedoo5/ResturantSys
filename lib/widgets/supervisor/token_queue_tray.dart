@@ -247,7 +247,7 @@ class _TokenQueueTrayState extends State<TokenQueueTray> {
                 children: [
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
+                    decoration: const BoxDecoration(
                       color: WarmCounterColors.lightPrimaryAction,
                       borderRadius: WarmCounterSpacing.controlBorderRadius,
                     ),
@@ -367,7 +367,7 @@ class _TokenQueueTrayState extends State<TokenQueueTray> {
             Container(
               padding: const EdgeInsets.symmetric(vertical: 8),
               alignment: Alignment.center,
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: WarmCounterColors.lightPageBackground,
                 borderRadius: WarmCounterSpacing.controlBorderRadius,
               ),

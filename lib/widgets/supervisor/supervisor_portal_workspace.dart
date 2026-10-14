@@ -311,7 +311,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                       controller: notesController,
                       maxLines: 3,
                       autofocus: true,
-                      decoration: InputDecoration(
+                      decoration: const InputDecoration(
                         labelText: 'Supervisor Resolution Audit Notes *',
                         hintText: 'Describe root cause or resolution reason...',
                         border: OutlineInputBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
@@ -540,7 +540,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                         ),
                         subtitle: Text(
                           '$staffInDept staff registered',
-                          style: TextStyle(color: WarmCounterColors.lightSecondaryText, fontSize: 12),
+                          style: const TextStyle(color: WarmCounterColors.lightSecondaryText, fontSize: 12),
                         ),
                       );
                     },
@@ -620,7 +620,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                             DataCell(
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
+                                decoration: const BoxDecoration(
                                   color: WarmCounterColors.lightActiveNavHighlight,
                                   borderRadius: WarmCounterSpacing.controlBorderRadius,
                                 ),

@@ -88,7 +88,7 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
                   ),
                 ],
               ),
-              const SizedBox(height: WarmCounterSpacing.space20),
+              const SizedBox(height: WarmCounterSpacing.space16),
               if (_errorMessage != null) ...[
                 Container(
                   padding: const EdgeInsets.all(WarmCounterSpacing.space12),

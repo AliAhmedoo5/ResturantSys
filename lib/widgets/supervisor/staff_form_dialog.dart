@@ -126,7 +126,7 @@ class _StaffFormDialogState extends State<StaffFormDialog> {
                   ),
                 ],
               ),
-              const SizedBox(height: WarmCounterSpacing.space20),
+              const SizedBox(height: WarmCounterSpacing.space16),
               if (_errorMessage != null) ...[
                 Container(
                   padding: const EdgeInsets.all(WarmCounterSpacing.space12),
@@ -149,11 +149,11 @@ class _StaffFormDialogState extends State<StaffFormDialog> {
                 key: const ValueKey('staff_name_input'),
                 controller: _nameController,
                 autofocus: true,
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   labelText: 'Full Name',
                   hintText: 'e.g. Usman Ali',
                   border: OutlineInputBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 ),
                 validator: (val) {
                   if (val == null || val.trim().isEmpty) {
@@ -169,11 +169,11 @@ class _StaffFormDialogState extends State<StaffFormDialog> {
                   Expanded(
                     child: DropdownButtonFormField<int>(
                       key: const ValueKey('staff_department_dropdown'),
-                      value: _selectedDepartmentId,
-                      decoration: InputDecoration(
+                      initialValue: _selectedDepartmentId,
+                      decoration: const InputDecoration(
                         labelText: 'Department',
                         border: OutlineInputBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       ),
                       items: widget.departments.map((dept) {
                         return DropdownMenuItem<int>(
@@ -191,11 +191,11 @@ class _StaffFormDialogState extends State<StaffFormDialog> {
                   Expanded(
                     child: DropdownButtonFormField<StaffRole>(
                       key: const ValueKey('staff_role_dropdown'),
-                      value: _selectedRole,
-                      decoration: InputDecoration(
+                      initialValue: _selectedRole,
+                      decoration: const InputDecoration(
                         labelText: 'Role',
                         border: OutlineInputBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       ),
                       items: StaffRole.values.map((role) {
                         return DropdownMenuItem<StaffRole>(
@@ -225,7 +225,7 @@ class _StaffFormDialogState extends State<StaffFormDialog> {
                     icon: Icon(_obscurePin ? Icons.visibility_outlined : Icons.visibility_off_outlined),
                     onPressed: () => setState(() => _obscurePin = !_obscurePin),
                   ),
-                  border: OutlineInputBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
+                  border: const OutlineInputBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 ),
                 validator: (val) {
@@ -246,7 +246,7 @@ class _StaffFormDialogState extends State<StaffFormDialog> {
                   subtitle: const Text('Inactive staff cannot log into terminal or stations.'),
                   value: _isActive,
                   onChanged: (val) => setState(() => _isActive = val),
-                  activeColor: WarmCounterColors.lightPrimaryAction,
+                  activeThumbColor: WarmCounterColors.lightPrimaryAction,
                   contentPadding: EdgeInsets.zero,
                 ),
               ],

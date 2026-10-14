@@ -18,7 +18,6 @@ void main() {
     late PosDatabase posDb;
     late AuthService authService;
     late ShiftAndCashController shiftController;
-    late int businessDayId;
     late int supervisorId;
     late int cashierId;
 
@@ -40,8 +39,7 @@ void main() {
       final cashier = (await authService.authenticateWithPin('1111'))!;
       cashierId = cashier.id;
 
-      final bDay = await shiftController.openBusinessDay(openedByStaffId: supervisorId);
-      businessDayId = bDay.id;
+      await shiftController.openBusinessDay(openedByStaffId: supervisorId);
     });
 
     tearDown(() async {
