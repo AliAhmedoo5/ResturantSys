@@ -173,6 +173,10 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
 
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
       final session = SessionState();
       const supervisor = Staff(
         id: 1,
@@ -204,18 +208,22 @@ void main() {
       expect(find.byKey(const ValueKey('workspace_tab_wastage')), findsOneWidget);
 
       // Tap Catalog & BOM tab
+      await tester.ensureVisible(find.byKey(const ValueKey('workspace_tab_catalog')));
       await tester.tap(find.byKey(const ValueKey('workspace_tab_catalog')));
       await tester.pumpAndSettle();
 
       // Tap Khata tab
+      await tester.ensureVisible(find.byKey(const ValueKey('workspace_tab_khata')));
       await tester.tap(find.byKey(const ValueKey('workspace_tab_khata')));
       await tester.pumpAndSettle();
 
       // Tap Mandi Purchase tab
+      await tester.ensureVisible(find.byKey(const ValueKey('workspace_tab_mandi')));
       await tester.tap(find.byKey(const ValueKey('workspace_tab_mandi')));
       await tester.pumpAndSettle();
 
       // Tap Kitchen Wastage tab
+      await tester.ensureVisible(find.byKey(const ValueKey('workspace_tab_wastage')));
       await tester.tap(find.byKey(const ValueKey('workspace_tab_wastage')));
       await tester.pumpAndSettle();
 
