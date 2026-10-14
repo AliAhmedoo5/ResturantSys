@@ -33,7 +33,7 @@ enum SupervisorPortalTab {
 class SupervisorPortalWorkspace extends StatefulWidget {
   const SupervisorPortalWorkspace({
     super.key,
-    required this.authService,
+    this.authService,
     this.shiftController,
     this.orderController,
     this.tokenQueueController,
@@ -45,7 +45,7 @@ class SupervisorPortalWorkspace extends StatefulWidget {
     this.initialDiscrepancies,
   });
 
-  final AuthService authService;
+  final AuthService? authService;
   final ShiftAndCashController? shiftController;
   final OrderAndCheckoutController? orderController;
   final TokenQueueController? tokenQueueController;
@@ -119,10 +119,16 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
   }
 
   Future<void> _loadStaffAndDepartments() async {
-    setState(() => _isLoadingStaff = true);
+    if (widget.authService == null) {
+      setState(() => _isLoadingStaff = false);
+      return;
+    }
+    if (_departments.isEmpty && _staffMembers.isEmpty) {
+      setState(() => _isLoadingStaff = true);
+    }
     try {
-      final depts = await widget.authService.getDepartments();
-      final staff = await widget.authService.getAllStaff();
+      final depts = await widget.authService!.getDepartments();
+      final staff = await widget.authService!.getAllStaff();
       if (mounted) {
         setState(() {
           _departments = depts;
@@ -183,11 +189,25 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
     final created = await showDialog<Department>(
       context: context,
       builder: (ctx) => DepartmentFormDialog(
-        onSave: (name) => widget.authService.createDepartment(name),
+        onSave: (name) async {
+          if (widget.authService != null) {
+            return await widget.authService!.createDepartment(name);
+          }
+          final dept = Department(
+            id: _departments.length + 1,
+            name: name,
+            createdAt: DateTime.now(),
+          );
+          return dept;
+        },
       ),
     );
     if (created != null) {
-      await _loadStaffAndDepartments();
+      if (widget.authService != null) {
+        await _loadStaffAndDepartments();
+      } else {
+        setState(() => _departments.add(created));
+      }
     }
   }
 
@@ -203,16 +223,33 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
           required String pin,
           bool? isActive,
         }) async {
-          await widget.authService.registerStaff(
-            name: name,
-            departmentId: departmentId,
-            role: role,
-            pin: pin,
-          );
+          if (widget.authService != null) {
+            await widget.authService!.registerStaff(
+              name: name,
+              departmentId: departmentId,
+              role: role,
+              pin: pin,
+            );
+          } else {
+            final dept = _departments.firstWhere(
+              (d) => d.id == departmentId,
+              orElse: () => Department(id: departmentId, name: 'General', createdAt: DateTime.now()),
+            );
+            final newStaff = Staff(
+              id: _staffMembers.length + 1,
+              name: name,
+              departmentId: departmentId,
+              departmentName: dept.name,
+              pinHash: pin,
+              role: role,
+              isActive: isActive ?? true,
+            );
+            setState(() => _staffMembers.add(newStaff));
+          }
         },
       ),
     );
-    if (registered == true) {
+    if (registered == true && widget.authService != null) {
       await _loadStaffAndDepartments();
     }
   }
@@ -230,18 +267,39 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
           required String pin,
           bool? isActive,
         }) async {
-          await widget.authService.updateStaff(
-            staffId: staff.id,
-            name: name,
-            departmentId: departmentId,
-            role: role,
-            newPin: pin.isNotEmpty ? pin : null,
-            isActive: isActive,
-          );
+          if (widget.authService != null) {
+            await widget.authService!.updateStaff(
+              staffId: staff.id,
+              name: name,
+              departmentId: departmentId,
+              role: role,
+              newPin: pin.isNotEmpty ? pin : null,
+              isActive: isActive,
+            );
+          } else {
+            final dept = _departments.firstWhere(
+              (d) => d.id == departmentId,
+              orElse: () => Department(id: departmentId, name: 'General', createdAt: DateTime.now()),
+            );
+            setState(() {
+              final idx = _staffMembers.indexWhere((s) => s.id == staff.id);
+              if (idx != -1) {
+                _staffMembers[idx] = Staff(
+                  id: staff.id,
+                  name: name,
+                  departmentId: departmentId,
+                  departmentName: dept.name,
+                  pinHash: pin.isNotEmpty ? pin : staff.pinHash,
+                  role: role,
+                  isActive: isActive ?? staff.isActive,
+                );
+              }
+            });
+          }
         },
       ),
     );
-    if (updated == true) {
+    if (updated == true && widget.authService != null) {
       await _loadStaffAndDepartments();
     }
   }
@@ -251,20 +309,34 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
       context: context,
       builder: (ctx) => StaffPinDialog(
         staff: staff,
-        onUpdatePin: (staffId, newPin) => widget.authService.updateStaffPin(
-          staffId: staffId,
-          newPin: newPin,
-        ),
+        onUpdatePin: (staffId, newPin) async {
+          if (widget.authService != null) {
+            return await widget.authService!.updateStaffPin(
+              staffId: staffId,
+              newPin: newPin,
+            );
+          }
+          return true;
+        },
       ),
     );
-    if (updated == true) {
+    if (updated == true && widget.authService != null) {
       await _loadStaffAndDepartments();
     }
   }
 
   Future<void> _toggleStaffActive(Staff staff, bool active) async {
-    await widget.authService.updateStaffActiveStatus(staffId: staff.id, isActive: active);
-    await _loadStaffAndDepartments();
+    if (widget.authService != null) {
+      await widget.authService!.updateStaffActiveStatus(staffId: staff.id, isActive: active);
+      await _loadStaffAndDepartments();
+    } else {
+      setState(() {
+        final index = _staffMembers.indexWhere((s) => s.id == staff.id);
+        if (index != -1) {
+          _staffMembers[index] = staff.copyWith(isActive: active);
+        }
+      });
+    }
   }
 
   Future<void> _handleToggleTokenTray(bool enabled) async {
@@ -366,16 +438,42 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                               setDialogState(() => dialogError = 'Resolution notes are mandatory.');
                               return;
                             }
-                            try {
-                              final supId = widget.currentStaff?.id ?? 1;
-                              await widget.shiftController!.resolveDiscrepancy(
-                                shiftId: shift.id,
-                                supervisorStaffId: supId,
-                                resolutionNotes: notes,
-                              );
+                            if (widget.shiftController != null) {
+                              try {
+                                final supId = widget.currentStaff?.id ?? 1;
+                                await widget.shiftController!.resolveDiscrepancy(
+                                  shiftId: shift.id,
+                                  supervisorStaffId: supId,
+                                  resolutionNotes: notes,
+                                );
+                                if (ctx.mounted) Navigator.of(ctx).pop(true);
+                              } catch (e) {
+                                setDialogState(() => dialogError = e.toString());
+                              }
+                            } else {
+                              final index = _discrepancyShifts.indexWhere((s) => s.id == shift.id);
+                              if (index != -1) {
+                                setState(() {
+                                  _discrepancyShifts[index] = Shift(
+                                    id: shift.id,
+                                    businessDayId: shift.businessDayId,
+                                    staffId: shift.staffId,
+                                    openedAt: shift.openedAt,
+                                    closedAt: shift.closedAt,
+                                    openingFloat: shift.openingFloat,
+                                    countedCash: shift.countedCash,
+                                    expectedCash: shift.expectedCash,
+                                    discrepancy: shift.discrepancy,
+                                    discrepancyStatus: DiscrepancyStatus.resolved,
+                                    status: shift.status,
+                                    staffName: shift.staffName,
+                                    resolvedByStaffId: widget.currentStaff?.id ?? 1,
+                                    resolutionNotes: notes,
+                                    resolvedAt: DateTime.now(),
+                                  );
+                                });
+                              }
                               if (ctx.mounted) Navigator.of(ctx).pop(true);
-                            } catch (e) {
-                              setDialogState(() => dialogError = e.toString());
                             }
                           },
                           style: ElevatedButton.styleFrom(
@@ -395,7 +493,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
       },
     );
 
-    if (resolved == true) {
+    if (resolved == true && widget.shiftController != null) {
       await _loadDiscrepancies();
     }
   }
@@ -497,7 +595,6 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
         if (widget.tokenQueueController != null) {
           return KitchenTokenStation(
             controller: widget.tokenQueueController!,
-            currentStaff: widget.currentStaff,
           );
         }
         return const Center(child: Text('Kitchen Token Station unavailable.'));

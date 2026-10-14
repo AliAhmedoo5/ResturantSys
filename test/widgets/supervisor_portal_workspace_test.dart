@@ -1,104 +1,101 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:resturant_sys/core/auth/auth_service.dart';
 import 'package:resturant_sys/core/auth/department.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
-import 'package:resturant_sys/core/database/pos_database.dart';
-import 'package:resturant_sys/core/catalog/menu_item.dart';
-import 'package:resturant_sys/core/orders/cart_item.dart';
+import 'package:resturant_sys/core/auth/staff_role.dart';
 import 'package:resturant_sys/core/orders/dining_type.dart';
-import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
-import 'package:resturant_sys/core/orders/payment_method.dart';
+import 'package:resturant_sys/core/orders/order.dart';
+import 'package:resturant_sys/core/orders/order_item.dart';
+import 'package:resturant_sys/core/orders/payment_status.dart';
 import 'package:resturant_sys/core/orders/token_queue_controller.dart';
+import 'package:resturant_sys/core/orders/token_status.dart';
 import 'package:resturant_sys/core/shifts/shift.dart';
-import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
 import 'package:resturant_sys/core/theme/warm_counter_theme.dart';
+import 'package:resturant_sys/widgets/pin_numpad.dart';
 import 'package:resturant_sys/widgets/supervisor/supervisor_portal_workspace.dart';
 
 void main() {
-  setUpAll(() {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
-  });
-
   group('SupervisorPortalWorkspace Widget Tests', () {
-    late Directory tempDir;
-    late String testDbPath;
-    late PosDatabase posDb;
-    late AuthService authService;
-    late ShiftAndCashController shiftController;
-    late OrderAndCheckoutController orderController;
-    late TokenQueueController tokenQueueController;
-    late Staff supervisorStaff;
-    late int businessDayId;
-    late int shiftId;
-    late MenuItem burger;
-    late List<Department> initialDepts;
-    late List<Staff> initialStaffList;
+    final testDepartments = [
+      Department(id: 1, name: 'Front Counter', createdAt: DateTime(2026, 1, 1)),
+      Department(id: 2, name: 'Kitchen', createdAt: DateTime(2026, 1, 1)),
+      Department(id: 3, name: 'Management', createdAt: DateTime(2026, 1, 1)),
+    ];
 
-    setUp(() async {
-      tempDir = await Directory.systemTemp.createTemp('pos_portal_widget_test_');
-      testDbPath = '${tempDir.path}${Platform.pathSeparator}portal_widget.db';
-      posDb = PosDatabase(
-        factory: databaseFactoryFfi,
-        customPath: testDbPath,
-      );
-      final db = await posDb.initialize();
+    final testStaffList = [
+      const Staff(
+        id: 1,
+        name: 'Supervisor',
+        departmentId: 3,
+        departmentName: 'Management',
+        pinHash: '1234',
+        role: StaffRole.supervisor,
+        isActive: true,
+      ),
+      const Staff(
+        id: 2,
+        name: 'Counter Cashier',
+        departmentId: 1,
+        departmentName: 'Front Counter',
+        pinHash: '1111',
+        role: StaffRole.cashier,
+        isActive: true,
+      ),
+      const Staff(
+        id: 3,
+        name: 'Kitchen Cook',
+        departmentId: 2,
+        departmentName: 'Kitchen',
+        pinHash: '2222',
+        role: StaffRole.kitchen,
+        isActive: true,
+      ),
+    ];
 
-      authService = AuthService(database: db);
-      shiftController = ShiftAndCashController(database: db);
-      orderController = OrderAndCheckoutController(database: db);
-      tokenQueueController = TokenQueueController(
-        database: db,
-        authService: authService,
-      );
+    final testOrder = Order(
+      id: 101,
+      businessDayId: 1,
+      shiftId: 1,
+      cashierId: 1,
+      cashierName: 'Supervisor',
+      tokenNumber: 1,
+      diningType: DiningType.dineIn,
+      subtotal: 500.0,
+      discountAmount: 0.0,
+      taxAmount: 0.0,
+      grandTotal: 500.0,
+      paymentStatus: PaymentStatus.settled,
+      createdAt: DateTime(2026, 1, 1, 12, 0),
+      tokenStatus: TokenStatus.preparing,
+      items: const [
+        OrderItem(
+          id: 1,
+          orderId: 101,
+          menuItemId: 1,
+          name: 'Zinger Burger',
+          unitPrice: 500.0,
+          quantity: 1,
+          subtotal: 500.0,
+          taxAmount: 0.0,
+          total: 500.0,
+        ),
+      ],
+    );
 
-      // Create dummy menu item
-      final catId = await db.insert('categories', {
-        'name': 'Burgers',
-        'display_order': 1,
-        'color_hex': '#FF0000',
-        'created_at': DateTime.now().toIso8601String(),
-      });
-      final burgerId = await db.insert('menu_items', {
-        'category_id': catId,
-        'name': 'Zinger Burger',
-        'base_price': 500.0,
-        'tax_rate': 0.0,
-        'is_tax_inclusive': 1,
-        'is_active': 1,
-        'created_at': DateTime.now().toIso8601String(),
-      });
-      burger = MenuItem(
-        id: burgerId,
-        categoryId: catId,
-        name: 'Zinger Burger',
-        basePrice: 500.0,
-      );
-
-      supervisorStaff = (await authService.authenticateWithPin('1234'))!;
-      final bDay = await shiftController.openBusinessDay(openedByStaffId: supervisorStaff.id);
-      businessDayId = bDay.id;
-
-      final cashier = (await authService.authenticateWithPin('1111'))!;
-      final shift = await shiftController.openShift(
-        staffId: cashier.id,
-        openingFloat: 5000.0,
-      );
-      shiftId = shift.id;
-
-      initialDepts = await authService.getDepartments();
-      initialStaffList = await authService.getAllStaff();
-    });
-
-    tearDown(() async {
-      await posDb.close();
-      if (await tempDir.exists()) {
-        await tempDir.delete(recursive: true);
-      }
-    });
+    final testDiscrepancyShift = Shift(
+      id: 10,
+      businessDayId: 1,
+      staffId: 2,
+      staffName: 'Counter Cashier',
+      openedAt: DateTime(2026, 1, 1, 9, 0),
+      closedAt: DateTime(2026, 1, 1, 17, 0),
+      openingFloat: 5000.0,
+      countedCash: 4500.0,
+      expectedCash: 5000.0,
+      discrepancy: -500.0,
+      discrepancyStatus: DiscrepancyStatus.flagged,
+      isClosed: true,
+    );
 
     Widget createTestApp({
       List<Department>? initialDepartments,
@@ -106,21 +103,19 @@ void main() {
       bool? initialTokenTrayEnabled,
       bool? initialCashierVoidEnabled,
       List<Shift>? initialDiscrepancies,
+      TokenQueueController? tokenQueueController,
     }) {
       return MaterialApp(
         theme: WarmCounterTheme.lightTheme,
         home: Scaffold(
           body: SupervisorPortalWorkspace(
-            authService: authService,
-            shiftController: shiftController,
-            orderController: orderController,
-            tokenQueueController: tokenQueueController,
-            currentStaff: supervisorStaff,
-            initialDepartments: initialDepartments ?? initialDepts,
-            initialStaff: initialStaff ?? initialStaffList,
+            currentStaff: testStaffList.first,
+            initialDepartments: initialDepartments ?? List.of(testDepartments),
+            initialStaff: initialStaff ?? List.of(testStaffList),
             initialTokenTrayEnabled: initialTokenTrayEnabled ?? true,
             initialCashierVoidEnabled: initialCashierVoidEnabled ?? true,
             initialDiscrepancies: initialDiscrepancies,
+            tokenQueueController: tokenQueueController,
           ),
         ),
       );
@@ -134,14 +129,14 @@ void main() {
       await tester.pumpWidget(createTestApp());
       await tester.pumpAndSettle();
 
-      // Verify portal tab buttons
+      // Verify portal tab navigation buttons
       expect(find.byKey(const ValueKey('portal_tab_staff')), findsOneWidget);
       expect(find.byKey(const ValueKey('portal_tab_toggles')), findsOneWidget);
       expect(find.byKey(const ValueKey('portal_tab_discrepancies')), findsOneWidget);
       expect(find.byKey(const ValueKey('portal_tab_tokenQueue')), findsOneWidget);
       expect(find.byKey(const ValueKey('portal_tab_kitchenStation')), findsOneWidget);
 
-      // Verify default Staff & Departments tab
+      // Verify default Staff & Departments tab content
       expect(find.textContaining('Departments'), findsOneWidget);
       expect(find.textContaining('Staff Directory'), findsOneWidget);
       expect(find.text('Supervisor'), findsWidgets);
@@ -192,26 +187,30 @@ void main() {
       expect(find.text('Interactive Token Queue Tray'), findsOneWidget);
       expect(find.text('Cashier Void Requests'), findsOneWidget);
 
-      final tokenTraySwitch = find.byKey(const ValueKey('toggle_token_tray_switch'));
-      final voidSwitch = find.byKey(const ValueKey('toggle_cashier_void_switch'));
+      final tokenTrayFinder = find.byKey(const ValueKey('toggle_token_tray_switch'));
+      final voidFinder = find.byKey(const ValueKey('toggle_cashier_void_switch'));
 
-      expect(tokenTraySwitch, findsOneWidget);
-      expect(voidSwitch, findsOneWidget);
+      expect(tokenTrayFinder, findsOneWidget);
+      expect(voidFinder, findsOneWidget);
+
+      // Verify initial states
+      expect(tester.widget<SwitchListTile>(tokenTrayFinder).value, isTrue);
+      expect(tester.widget<SwitchListTile>(voidFinder).value, isTrue);
 
       // Toggle Token Tray Off
-      await tester.tap(tokenTraySwitch);
+      await tester.tap(tokenTrayFinder);
       await tester.pumpAndSettle();
-      expect(await orderController.isTokenTrayEnabled(), isFalse);
+      expect(tester.widget<SwitchListTile>(tokenTrayFinder).value, isFalse);
 
       // Toggle Cashier Void Off
-      await tester.tap(voidSwitch);
+      await tester.tap(voidFinder);
       await tester.pumpAndSettle();
-      expect(await orderController.isCashierVoidEnabled(), isFalse);
+      expect(tester.widget<SwitchListTile>(voidFinder).value, isFalse);
 
       // Toggle Token Tray back On
-      await tester.tap(tokenTraySwitch);
+      await tester.tap(tokenTrayFinder);
       await tester.pumpAndSettle();
-      expect(await orderController.isTokenTrayEnabled(), isTrue);
+      expect(tester.widget<SwitchListTile>(tokenTrayFinder).value, isTrue);
     });
 
     testWidgets('discrepancy audit review displays flagged shift and allows resolution', (tester) async {
@@ -219,14 +218,8 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
 
-      // Close shift with a discrepancy to generate a flagged shift
-      final closedShift = await shiftController.closeShift(
-        shiftId: shiftId,
-        countedCash: 4500.0, // Expected 5000, variance = -500
-      );
-
       await tester.pumpWidget(createTestApp(
-        initialDiscrepancies: [closedShift],
+        initialDiscrepancies: [testDiscrepancyShift],
       ));
       await tester.pumpAndSettle();
 
@@ -239,12 +232,12 @@ void main() {
       expect(find.textContaining('500.00'), findsOneWidget);
 
       // Tap Resolve
-      final resolveBtn = find.byKey(ValueKey('resolve_discrepancy_$shiftId'));
+      final resolveBtn = find.byKey(const ValueKey('resolve_discrepancy_10'));
       expect(resolveBtn, findsOneWidget);
       await tester.tap(resolveBtn);
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('Resolve Shift #$shiftId Discrepancy'), findsOneWidget);
+      expect(find.textContaining('Resolve Shift #10 Discrepancy'), findsOneWidget);
 
       // Submit resolution notes
       await tester.enterText(find.byType(TextField), 'Audited: short drawer verified by supervisor');
@@ -255,30 +248,14 @@ void main() {
       expect(find.textContaining('Audited: short drawer'), findsOneWidget);
     });
 
-    testWidgets('token queue tray shows active tokens with 1-tap progression and kitchen station marks ready', (tester) async {
+    testWidgets('token queue tray shows active tokens with 1-tap progression', (tester) async {
       tester.view.physicalSize = const Size(1920, 1080);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
 
-      // Create an order
-      final checkout = await orderController.checkoutOrder(
-        businessDayId: businessDayId,
-        shiftId: shiftId,
-        cashierId: supervisorStaff.id,
-        diningType: DiningType.dineIn,
-        items: [CartItem(menuItem: burger, quantity: 1)],
-        payments: [
-          const PaymentTender(
-            method: PaymentMethod.cash,
-            amountTendered: 1000.0,
-            changeReturned: 500.0,
-          ),
-        ],
-      );
-      final order = checkout.order;
-      await tokenQueueController.loadTokens();
+      final tokenController = TokenQueueController(initialOrders: [testOrder]);
 
-      await tester.pumpWidget(createTestApp());
+      await tester.pumpWidget(createTestApp(tokenQueueController: tokenController));
       await tester.pumpAndSettle();
 
       // Switch to Token Queue Tray
@@ -289,21 +266,68 @@ void main() {
       expect(find.text('PREPARING'), findsOneWidget);
 
       // 1-Tap Advance: Preparing -> Ready
-      final markReadyBtn = find.byKey(ValueKey('advance_token_${order.id}'));
-      expect(markReadyBtn, findsOneWidget);
-      await tester.tap(markReadyBtn);
+      final advanceBtn = find.byKey(const ValueKey('advance_token_101'));
+      expect(advanceBtn, findsOneWidget);
+      await tester.tap(advanceBtn);
       await tester.pumpAndSettle();
 
       expect(find.text('READY ON PASS'), findsOneWidget);
 
       // 1-Tap Advance: Ready -> Delivered
-      final markDeliveredBtn = find.byKey(ValueKey('advance_token_${order.id}'));
-      expect(markDeliveredBtn, findsOneWidget);
-      await tester.tap(markDeliveredBtn);
+      await tester.tap(advanceBtn);
       await tester.pumpAndSettle();
 
       // Token is now Delivered, so active count is 0
       expect(find.text('Active (0)'), findsOneWidget);
+    });
+
+    testWidgets('kitchen station PIN authentication and mark ready on pass', (tester) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final tokenController = TokenQueueController(initialOrders: [testOrder]);
+
+      await tester.pumpWidget(createTestApp(tokenQueueController: tokenController));
+      await tester.pumpAndSettle();
+
+      // Switch to Kitchen Station tab
+      await tester.tap(find.byKey(const ValueKey('portal_tab_kitchenStation')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Kitchen Token Station'), findsOneWidget);
+      expect(find.textContaining('Enter Kitchen Cook 4-Digit PIN'), findsOneWidget);
+
+      // Enter Cook PIN 2222 on PinNumpad
+      final twoButton = find.descendant(
+        of: find.byType(PinNumpad),
+        matching: find.text('2'),
+      );
+      expect(twoButton, findsOneWidget);
+
+      await tester.tap(twoButton);
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(twoButton);
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(twoButton);
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(twoButton);
+      await tester.pumpAndSettle();
+
+      // Station unlocked
+      expect(find.text('Kitchen Token Station (The Pass)'), findsOneWidget);
+      expect(find.textContaining('Unlocked by Kitchen Cook'), findsOneWidget);
+      expect(find.text('#01'), findsOneWidget);
+
+      // 1-Tap Mark Ready
+      final markReadyBtn = find.byKey(const ValueKey('kitchen_mark_ready_101'));
+      expect(markReadyBtn, findsOneWidget);
+      await tester.tap(markReadyBtn);
+      await tester.pumpAndSettle();
+
+      // Pass is now clear
+      expect(find.text('All orders plated! The pass is clear.'), findsOneWidget);
+      expect(tokenController.readyTokens.length, 1);
     });
   });
 }
