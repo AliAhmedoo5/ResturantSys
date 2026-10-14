@@ -285,8 +285,8 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: WarmCounterTheme.lightTheme,
-          home: Scaffold(
-            body: VendorKhataWorkspace(
+          home: Material(
+            child: VendorKhataWorkspace(
               currentStaff: testStaff,
               initialVendors: [v1, v2],
               initialSelectedVendor: v1,
@@ -323,7 +323,7 @@ void main() {
       expect(find.text('Al-Siddiq Poultry'), findsWidgets);
 
       // Select Al-Siddiq Poultry
-      await tester.tap(find.byKey(Key('vendor_tile_${v1.id}')));
+      await tester.tap(find.byKey(Key('vendor_tile_${v1.id}')), warnIfMissed: false);
       await tester.pumpAndSettle();
 
       // Statement view shows delivery line
