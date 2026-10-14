@@ -8,6 +8,7 @@ import 'core/shifts/shift_and_cash_controller.dart';
 import 'core/catalog/catalog_and_recipe_controller.dart';
 import 'core/orders/order_and_checkout_controller.dart';
 import 'core/procurement/procurement_and_wastage_controller.dart';
+import 'core/khata/vendor_khata_controller.dart';
 import 'core/hardware/reprint_tray_controller.dart';
 import 'core/hardware/in_memory_hardware_adapter.dart';
 import 'core/theme/warm_counter_theme.dart';
@@ -32,6 +33,10 @@ void main() async {
     database: database,
     authService: authService,
   );
+  final vendorKhataController = VendorKhataController(
+    database: database,
+    shiftController: shiftController,
+  );
 
   final reprintTrayController = ReprintTrayController(
     hardwareAdapter: InMemoryHardwareAdapter(),
@@ -44,6 +49,7 @@ void main() async {
     catalogController: catalogController,
     orderController: orderController,
     procurementController: procurementController,
+    vendorKhataController: vendorKhataController,
     reprintTrayController: reprintTrayController,
   ));
 }
@@ -57,6 +63,7 @@ class RestaurantPosApp extends StatelessWidget {
     this.catalogController,
     this.orderController,
     this.procurementController,
+    this.vendorKhataController,
     this.reprintTrayController,
   });
 
@@ -65,6 +72,7 @@ class RestaurantPosApp extends StatelessWidget {
   final CatalogAndRecipeController? catalogController;
   final OrderAndCheckoutController? orderController;
   final ProcurementAndWastageController? procurementController;
+  final VendorKhataController? vendorKhataController;
   final ReprintTrayController? reprintTrayController;
 
   @override
@@ -82,6 +90,7 @@ class RestaurantPosApp extends StatelessWidget {
         catalogController: catalogController,
         orderController: orderController,
         procurementController: procurementController,
+        vendorKhataController: vendorKhataController,
         reprintTrayController: reprintTrayController,
         authService: authService,
       ),

@@ -40,7 +40,7 @@ void main() {
         where: 'key = ?',
         whereArgs: ['schema_version'],
       );
-      expect(settings.first['value'], equals('6'));
+      expect(int.parse(settings.first['value'] as String), greaterThanOrEqualTo(6));
 
       // Check tables exist
       final tablesResult = await db.rawQuery(

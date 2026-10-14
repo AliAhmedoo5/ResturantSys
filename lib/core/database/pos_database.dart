@@ -114,6 +114,7 @@ class PosDatabase {
     await _createOrderItemsAndDealsTables(db);
     await _createOrderVoidsTables(db);
     await _createProcurementAndWastageTables(db);
+    await _createVendorKhataTables(db);
   }
 
   Future<void> _createOperationalAccountingTables(DatabaseExecutor executor) async {
@@ -354,6 +355,37 @@ class PosDatabase {
     ''');
   }
 
+  Future<void> _createVendorKhataTables(DatabaseExecutor executor) async {
+    await executor.execute('''
+      CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableVendorKhata} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        phone TEXT NOT NULL,
+        supplied_ingredients TEXT,
+        opening_balance REAL NOT NULL DEFAULT 0.0,
+        current_balance REAL NOT NULL DEFAULT 0.0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    ''');
+
+    await executor.execute('''
+      CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableVendorTransactions} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        vendor_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableVendorKhata}(id) ON DELETE CASCADE,
+        shift_id INTEGER REFERENCES ${PosDatabaseConstants.tableShifts}(id) ON DELETE SET NULL,
+        staff_id INTEGER REFERENCES ${PosDatabaseConstants.tableStaff}(id) ON DELETE SET NULL,
+        type TEXT NOT NULL,
+        amount REAL NOT NULL,
+        reference_slip TEXT,
+        notes TEXT,
+        raw_ingredient_id INTEGER REFERENCES ${PosDatabaseConstants.tableRawIngredients}(id) ON DELETE SET NULL,
+        quantity REAL,
+        created_at TEXT NOT NULL
+      );
+    ''');
+  }
+
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await _createOperationalAccountingTables(db);
@@ -369,6 +401,9 @@ class PosDatabase {
     }
     if (oldVersion < 6) {
       await _createProcurementAndWastageTables(db);
+    }
+    if (oldVersion < 7) {
+      await _createVendorKhataTables(db);
     }
   }
 

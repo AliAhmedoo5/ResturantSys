@@ -8,8 +8,10 @@ import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
 import 'package:resturant_sys/core/hardware/reprint_tray_controller.dart';
 import '../core/auth/auth_service.dart';
 import '../core/procurement/procurement_and_wastage_controller.dart';
+import '../core/khata/vendor_khata_controller.dart';
 import 'app_header.dart';
 import 'catalog/supervisor_catalog_workspace.dart';
+import 'khata/vendor_khata_workspace.dart';
 import 'pin_lock_screen.dart';
 import 'procurement/kitchen_wastage_workspace.dart';
 import 'procurement/quick_mandi_purchase_workspace.dart';
@@ -27,6 +29,7 @@ class AppShell extends StatefulWidget {
     this.orderController,
     this.reprintTrayController,
     this.procurementController,
+    this.vendorKhataController,
     this.authService,
     this.child,
   });
@@ -38,6 +41,7 @@ class AppShell extends StatefulWidget {
   final OrderAndCheckoutController? orderController;
   final ReprintTrayController? reprintTrayController;
   final ProcurementAndWastageController? procurementController;
+  final VendorKhataController? vendorKhataController;
   final AuthService? authService;
   final Widget? child;
 
@@ -105,6 +109,15 @@ class _AppShellState extends State<AppShell> {
         controller: widget.catalogController!,
         orderController: widget.orderController,
         procurementController: widget.procurementController,
+      );
+    }
+
+    if (_selectedWorkspace == AppWorkspaceTab.khata && widget.vendorKhataController != null) {
+      return VendorKhataWorkspace(
+        controller: widget.vendorKhataController!,
+        shiftController: widget.shiftController,
+        catalogController: widget.catalogController,
+        currentStaff: staff,
       );
     }
 

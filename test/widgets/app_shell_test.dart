@@ -199,11 +199,16 @@ void main() {
       // Verify workspace tab buttons are present
       expect(find.byKey(const ValueKey('workspace_tab_register')), findsOneWidget);
       expect(find.byKey(const ValueKey('workspace_tab_catalog')), findsOneWidget);
+      expect(find.byKey(const ValueKey('workspace_tab_khata')), findsOneWidget);
       expect(find.byKey(const ValueKey('workspace_tab_mandi')), findsOneWidget);
       expect(find.byKey(const ValueKey('workspace_tab_wastage')), findsOneWidget);
 
       // Tap Catalog & BOM tab
       await tester.tap(find.byKey(const ValueKey('workspace_tab_catalog')));
+      await tester.pumpAndSettle();
+
+      // Tap Khata tab
+      await tester.tap(find.byKey(const ValueKey('workspace_tab_khata')));
       await tester.pumpAndSettle();
 
       // Tap Mandi Purchase tab

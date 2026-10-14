@@ -10,6 +10,7 @@ import 'orders/reprint_tray_dialog.dart';
 enum AppWorkspaceTab {
   register('Register', Icons.point_of_sale_rounded),
   catalog('Catalog', Icons.restaurant_menu_rounded),
+  khata('Khata', Icons.menu_book_rounded),
   mandi('Mandi', Icons.shopping_basket_rounded),
   wastage('Wastage', Icons.delete_outline_rounded);
 
@@ -117,6 +118,12 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
                           context,
                           tab: AppWorkspaceTab.catalog,
                           isSelected: selectedWorkspace == AppWorkspaceTab.catalog,
+                        ),
+                        const SizedBox(width: WarmCounterSpacing.space8),
+                        _buildWorkspaceTabButton(
+                          context,
+                          tab: AppWorkspaceTab.khata,
+                          isSelected: selectedWorkspace == AppWorkspaceTab.khata,
                         ),
                       ],
                       const SizedBox(width: WarmCounterSpacing.space8),
