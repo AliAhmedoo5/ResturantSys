@@ -556,10 +556,15 @@ class _QuickMandiPurchaseWorkspaceState extends State<QuickMandiPurchaseWorkspac
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Purchase Intake:', style: WarmCounterTypography.secondaryLabel),
-              Flexible(
+              const Expanded(
+                flex: 5,
+                child: Text('Purchase Intake:', style: WarmCounterTypography.secondaryLabel),
+              ),
+              Expanded(
+                flex: 6,
                 child: Text(
                   '${qty.toStringAsFixed(1)} ${_selectedUnit.displayName} (${_selectedUnit.metricEquivalence})',
+                  textAlign: TextAlign.end,
                   overflow: TextOverflow.ellipsis,
                   style: WarmCounterTypography.bodyMedium.copyWith(fontWeight: FontWeight.w600),
                 ),
@@ -570,10 +575,15 @@ class _QuickMandiPurchaseWorkspaceState extends State<QuickMandiPurchaseWorkspac
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Converted Recipe Stock:', style: WarmCounterTypography.secondaryLabel),
-              Flexible(
+              const Expanded(
+                flex: 5,
+                child: Text('Converted Recipe Stock:', style: WarmCounterTypography.secondaryLabel),
+              ),
+              Expanded(
+                flex: 6,
                 child: Text(
                   '+${_qtyFormat.format(convertedQty)} $storageUnitStr',
+                  textAlign: TextAlign.end,
                   overflow: TextOverflow.ellipsis,
                   key: const ValueKey('mandi_converted_stock_display'),
                   style: WarmCounterTypography.bodyMedium.copyWith(
@@ -588,12 +598,17 @@ class _QuickMandiPurchaseWorkspaceState extends State<QuickMandiPurchaseWorkspac
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Unit Cost per Recipe Unit:', style: WarmCounterTypography.secondaryLabel),
-              Flexible(
+              const Expanded(
+                flex: 5,
+                child: Text('Unit Cost per Recipe Unit:', style: WarmCounterTypography.secondaryLabel),
+              ),
+              Expanded(
+                flex: 6,
                 child: Text(
                   totalCost > 0 && convertedQty > 0
                       ? 'Rs. ${_currencyFormat.format(unitCost)} / $storageUnitStr'
                       : 'Rs. 0.00 / $storageUnitStr',
+                  textAlign: TextAlign.end,
                   overflow: TextOverflow.ellipsis,
                   key: const ValueKey('mandi_unit_cost_display'),
                   style: WarmCounterTypography.bodyMedium.copyWith(
@@ -609,10 +624,15 @@ class _QuickMandiPurchaseWorkspaceState extends State<QuickMandiPurchaseWorkspac
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Current Stock:', style: WarmCounterTypography.caption),
-                Flexible(
+                const Expanded(
+                  flex: 5,
+                  child: Text('Current Stock:', style: WarmCounterTypography.caption),
+                ),
+                Expanded(
+                  flex: 6,
                   child: Text(
                     '${_qtyFormat.format(_selectedIngredient!.currentStock)} $storageUnitStr',
+                    textAlign: TextAlign.end,
                     overflow: TextOverflow.ellipsis,
                     style: WarmCounterTypography.caption.copyWith(fontWeight: FontWeight.bold),
                   ),

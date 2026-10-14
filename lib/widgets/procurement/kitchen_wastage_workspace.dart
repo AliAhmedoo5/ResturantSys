@@ -542,10 +542,15 @@ class _KitchenWastageWorkspaceState extends State<KitchenWastageWorkspace> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Wasted Stock Deduction:', style: WarmCounterTypography.secondaryLabel),
-              Flexible(
+              const Expanded(
+                flex: 5,
+                child: Text('Wasted Stock Deduction:', style: WarmCounterTypography.secondaryLabel),
+              ),
+              Expanded(
+                flex: 6,
                 child: Text(
                   '-${_qtyFormat.format(qty)} $storageUnitStr',
+                  textAlign: TextAlign.end,
                   overflow: TextOverflow.ellipsis,
                   key: const ValueKey('wastage_deducted_stock_display'),
                   style: WarmCounterTypography.bodyMedium.copyWith(
@@ -560,10 +565,15 @@ class _KitchenWastageWorkspaceState extends State<KitchenWastageWorkspace> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Ingredient Unit Cost:', style: WarmCounterTypography.secondaryLabel),
-              Flexible(
+              const Expanded(
+                flex: 5,
+                child: Text('Ingredient Unit Cost:', style: WarmCounterTypography.secondaryLabel),
+              ),
+              Expanded(
+                flex: 6,
                 child: Text(
                   'Rs. ${_currencyFormat.format(unitCost)} / $storageUnitStr',
+                  textAlign: TextAlign.end,
                   overflow: TextOverflow.ellipsis,
                   style: WarmCounterTypography.bodyMedium,
                 ),
@@ -574,10 +584,15 @@ class _KitchenWastageWorkspaceState extends State<KitchenWastageWorkspace> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Total Financial Loss:', style: WarmCounterTypography.bodyMedium.copyWith(fontWeight: FontWeight.bold)),
-              Flexible(
+              Expanded(
+                flex: 5,
+                child: Text('Total Financial Loss:', style: WarmCounterTypography.bodyMedium.copyWith(fontWeight: FontWeight.bold)),
+              ),
+              Expanded(
+                flex: 6,
                 child: Text(
                   'Rs. ${_currencyFormat.format(costLoss)}',
+                  textAlign: TextAlign.end,
                   overflow: TextOverflow.ellipsis,
                   key: const ValueKey('wastage_cost_loss_display'),
                   style: WarmCounterTypography.pageHeading.copyWith(
@@ -594,10 +609,15 @@ class _KitchenWastageWorkspaceState extends State<KitchenWastageWorkspace> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Current Stock:', style: WarmCounterTypography.caption),
-                Flexible(
+                const Expanded(
+                  flex: 5,
+                  child: Text('Current Stock:', style: WarmCounterTypography.caption),
+                ),
+                Expanded(
+                  flex: 6,
                   child: Text(
                     '${_qtyFormat.format(_selectedIngredient!.currentStock)} $storageUnitStr',
+                    textAlign: TextAlign.end,
                     overflow: TextOverflow.ellipsis,
                     style: WarmCounterTypography.caption.copyWith(fontWeight: FontWeight.bold),
                   ),

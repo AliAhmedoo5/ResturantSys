@@ -8,10 +8,10 @@ import 'orders/reprint_tray_dialog.dart';
 
 /// Operational workspaces selectable in the application header.
 enum AppWorkspaceTab {
-  register('Register & Shifts', Icons.point_of_sale_rounded),
-  catalog('Catalog & BOM', Icons.restaurant_menu_rounded),
-  mandi('Mandi Purchase', Icons.shopping_basket_rounded),
-  wastage('Kitchen Wastage', Icons.delete_outline_rounded);
+  register('Register', Icons.point_of_sale_rounded),
+  catalog('Catalog', Icons.restaurant_menu_rounded),
+  mandi('Mandi', Icons.shopping_basket_rounded),
+  wastage('Wastage', Icons.delete_outline_rounded);
 
   const AppWorkspaceTab(this.label, this.icon);
   final String label;
@@ -337,7 +337,7 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
       child: Container(
         constraints: WarmCounterSpacing.minTouchTargetConstraints,
         alignment: Alignment.center,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: isSelected
               ? WarmCounterColors.lightActiveNavHighlight

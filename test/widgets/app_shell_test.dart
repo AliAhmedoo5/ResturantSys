@@ -214,7 +214,8 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('workspace_tab_wastage')));
       await tester.pumpAndSettle();
 
-      // Switches back to Register & Shifts tab
+      // Switches back to Register tab
+      await tester.ensureVisible(find.byKey(const ValueKey('workspace_tab_register')));
       await tester.tap(find.byKey(const ValueKey('workspace_tab_register')));
       await tester.pumpAndSettle();
     });
