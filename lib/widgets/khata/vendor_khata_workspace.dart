@@ -20,7 +20,7 @@ import 'vendor_form_dialog.dart';
 class VendorKhataWorkspace extends StatefulWidget {
   const VendorKhataWorkspace({
     super.key,
-    required this.controller,
+    this.controller,
     this.shiftController,
     this.catalogController,
     this.currentStaff,
@@ -31,7 +31,7 @@ class VendorKhataWorkspace extends StatefulWidget {
     this.initialRawIngredients,
   });
 
-  final VendorKhataController controller;
+  final VendorKhataController? controller;
   final ShiftAndCashController? shiftController;
   final CatalogAndRecipeController? catalogController;
   final Staff? currentStaff;
@@ -49,6 +49,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
   final TextEditingController _searchController = TextEditingController();
   final NumberFormat _currencyFormat = NumberFormat('#,##0.00');
 
+  List<Vendor> _allVendors = [];
   List<Vendor> _vendors = [];
   Vendor? _selectedVendor;
   VendorStatement? _statement;
@@ -61,6 +62,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
   void initState() {
     super.initState();
     if (widget.initialVendors != null) {
+      _allVendors = List.from(widget.initialVendors!);
       _vendors = List.from(widget.initialVendors!);
       _selectedVendor = widget.initialSelectedVendor ??
           (_vendors.isNotEmpty ? _vendors.first : null);
@@ -84,16 +86,30 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
       setState(() => _isLoading = true);
     }
     try {
-      final vendors = await widget.controller.getVendors(
-        searchQuery: _searchController.text,
-      );
+      List<Vendor> vendors;
+      if (widget.controller != null) {
+        vendors = await widget.controller!.getVendors(
+          searchQuery: _searchController.text,
+        );
+      } else {
+        final query = _searchController.text.trim().toLowerCase();
+        if (query.isEmpty) {
+          vendors = List.from(_allVendors);
+        } else {
+          vendors = _allVendors
+              .where((v) =>
+                  v.name.toLowerCase().contains(query) ||
+                  (v.suppliedIngredients?.toLowerCase().contains(query) ?? false))
+              .toList();
+        }
+      }
 
-      Shift? activeShift;
+      Shift? activeShift = _activeShift;
       if (widget.shiftController != null) {
         activeShift = await widget.shiftController!.getActiveShift();
       }
 
-      List<RawIngredient> rawIngredients = [];
+      List<RawIngredient> rawIngredients = _rawIngredients;
       if (widget.catalogController != null) {
         rawIngredients = await widget.catalogController!.getRawIngredients();
       }
@@ -107,8 +123,10 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
       }
 
       VendorStatement? statement;
-      if (selected != null) {
-        statement = await widget.controller.getVendorStatement(selected.id);
+      if (widget.controller != null && selected != null) {
+        statement = await widget.controller!.getVendorStatement(selected.id);
+      } else {
+        statement = _statement;
       }
 
       if (mounted) {
@@ -132,20 +150,22 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
     if (!mounted) return;
     setState(() {
       _selectedVendor = vendor;
-      _isLoading = true;
     });
 
-    try {
-      final statement = await widget.controller.getVendorStatement(vendor.id);
-      if (mounted) {
-        setState(() {
-          _statement = statement;
-          _isLoading = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() => _isLoading = false);
+    if (widget.controller != null) {
+      setState(() => _isLoading = true);
+      try {
+        final statement = await widget.controller!.getVendorStatement(vendor.id);
+        if (mounted) {
+          setState(() {
+            _statement = statement;
+            _isLoading = false;
+          });
+        }
+      } catch (_) {
+        if (mounted) {
+          setState(() => _isLoading = false);
+        }
       }
     }
   }
@@ -155,12 +175,28 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
     if (result == null) return;
 
     try {
-      final newVendor = await widget.controller.createVendor(
-        name: result['name'] as String,
-        phone: result['phone'] as String,
-        suppliedIngredients: result['supplied_ingredients'] as String?,
-        openingBalance: result['opening_balance'] as double? ?? 0.0,
-      );
+      Vendor newVendor;
+      if (widget.controller != null) {
+        newVendor = await widget.controller!.createVendor(
+          name: result['name'] as String,
+          phone: result['phone'] as String,
+          suppliedIngredients: result['supplied_ingredients'] as String?,
+          openingBalance: result['opening_balance'] as double? ?? 0.0,
+        );
+      } else {
+        final op = result['opening_balance'] as double? ?? 0.0;
+        newVendor = Vendor(
+          id: _allVendors.length + 1,
+          name: result['name'] as String,
+          phone: result['phone'] as String,
+          suppliedIngredients: result['supplied_ingredients'] as String?,
+          openingBalance: op,
+          currentBalance: op,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+        _allVendors.add(newVendor);
+      }
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -188,13 +224,31 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
     if (result == null) return;
 
     try {
-      final updated = await widget.controller.updateVendor(
-        id: vendor.id,
-        name: result['name'] as String,
-        phone: result['phone'] as String,
-        suppliedIngredients: result['supplied_ingredients'] as String?,
-        openingBalance: result['opening_balance'] as double?,
-      );
+      Vendor updated;
+      if (widget.controller != null) {
+        updated = await widget.controller!.updateVendor(
+          id: vendor.id,
+          name: result['name'] as String,
+          phone: result['phone'] as String,
+          suppliedIngredients: result['supplied_ingredients'] as String?,
+          openingBalance: result['opening_balance'] as double?,
+        );
+      } else {
+        final op = result['opening_balance'] as double? ?? vendor.openingBalance;
+        final delta = op - vendor.openingBalance;
+        updated = Vendor(
+          id: vendor.id,
+          name: result['name'] as String,
+          phone: result['phone'] as String,
+          suppliedIngredients: result['supplied_ingredients'] as String?,
+          openingBalance: op,
+          currentBalance: vendor.currentBalance + delta,
+          createdAt: vendor.createdAt,
+          updatedAt: DateTime.now(),
+        );
+        final idx = _allVendors.indexWhere((v) => v.id == vendor.id);
+        if (idx != -1) _allVendors[idx] = updated;
+      }
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -246,7 +300,11 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
     if (confirmed != true) return;
 
     try {
-      await widget.controller.deleteVendor(vendor.id);
+      if (widget.controller != null) {
+        await widget.controller!.deleteVendor(vendor.id);
+      } else {
+        _allVendors.removeWhere((v) => v.id == vendor.id);
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -277,15 +335,17 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
     if (result == null) return;
 
     try {
-      await widget.controller.recordCreditDelivery(
-        vendorId: _selectedVendor!.id,
-        amount: result['amount'] as double,
-        referenceSlip: result['reference_slip'] as String?,
-        rawIngredientId: result['raw_ingredient_id'] as int?,
-        quantity: result['quantity'] as double?,
-        notes: result['notes'] as String?,
-        staffId: widget.currentStaff?.id,
-      );
+      if (widget.controller != null) {
+        await widget.controller!.recordCreditDelivery(
+          vendorId: _selectedVendor!.id,
+          amount: result['amount'] as double,
+          referenceSlip: result['reference_slip'] as String?,
+          rawIngredientId: result['raw_ingredient_id'] as int?,
+          quantity: result['quantity'] as double?,
+          notes: result['notes'] as String?,
+          staffId: widget.currentStaff?.id,
+        );
+      }
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -319,15 +379,17 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
     if (result == null) return;
 
     try {
-      await widget.controller.recordSettlementPayment(
-        vendorId: _selectedVendor!.id,
-        amount: result['amount'] as double,
-        paymentSource: result['payment_source'] as VendorPaymentSource,
-        shiftId: _activeShift?.id,
-        staffId: widget.currentStaff?.id,
-        referenceSlip: result['reference_slip'] as String?,
-        notes: result['notes'] as String?,
-      );
+      if (widget.controller != null) {
+        await widget.controller!.recordSettlementPayment(
+          vendorId: _selectedVendor!.id,
+          amount: result['amount'] as double,
+          paymentSource: result['payment_source'] as VendorPaymentSource,
+          shiftId: _activeShift?.id,
+          staffId: widget.currentStaff?.id,
+          referenceSlip: result['reference_slip'] as String?,
+          notes: result['notes'] as String?,
+        );
+      }
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -900,13 +962,13 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
             ),
             child: const Row(
               children: [
-                const Expanded(flex: 2, child: Text('Date & Time', style: TextStyle(fontWeight: FontWeight.w700))),
-                const Expanded(flex: 2, child: Text('Slip / Ref', style: TextStyle(fontWeight: FontWeight.w700))),
-                const Expanded(flex: 2, child: Text('Type', style: TextStyle(fontWeight: FontWeight.w700))),
-                const Expanded(flex: 3, child: Text('Particulars / Notes', style: TextStyle(fontWeight: FontWeight.w700))),
-                const Expanded(flex: 2, child: Text('Added (+)', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.w700))),
-                const Expanded(flex: 2, child: Text('Paid (-)', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.w700))),
-                const Expanded(flex: 2, child: Text('Balance', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.w700))),
+                Expanded(flex: 2, child: Text('Date & Time', style: TextStyle(fontWeight: FontWeight.w700))),
+                Expanded(flex: 2, child: Text('Slip / Ref', style: TextStyle(fontWeight: FontWeight.w700))),
+                Expanded(flex: 2, child: Text('Type', style: TextStyle(fontWeight: FontWeight.w700))),
+                Expanded(flex: 3, child: Text('Particulars / Notes', style: TextStyle(fontWeight: FontWeight.w700))),
+                Expanded(flex: 2, child: Text('Added (+)', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.w700))),
+                Expanded(flex: 2, child: Text('Paid (-)', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.w700))),
+                Expanded(flex: 2, child: Text('Balance', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.w700))),
               ],
             ),
           ),

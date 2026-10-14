@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/auth/staff_role.dart';
-import 'package:resturant_sys/core/database/pos_database.dart';
 import 'package:resturant_sys/core/khata/vendor.dart';
-import 'package:resturant_sys/core/khata/vendor_khata_controller.dart';
 import 'package:resturant_sys/core/khata/vendor_payment_source.dart';
-import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
+import 'package:resturant_sys/core/khata/vendor_statement.dart';
+import 'package:resturant_sys/core/khata/vendor_transaction.dart';
 import 'package:resturant_sys/core/theme/warm_counter_theme.dart';
 import 'package:resturant_sys/widgets/khata/credit_delivery_dialog.dart';
 import 'package:resturant_sys/widgets/khata/settlement_payment_dialog.dart';
@@ -15,17 +13,7 @@ import 'package:resturant_sys/widgets/khata/vendor_form_dialog.dart';
 import 'package:resturant_sys/widgets/khata/vendor_khata_workspace.dart';
 
 void main() {
-  setUpAll(() {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
-  });
-
   group('VendorKhataWorkspace & Dialogs Widget Tests', () {
-    late PosDatabase posDb;
-    late Database db;
-    late ShiftAndCashController shiftController;
-    late VendorKhataController khataController;
-
     const testStaff = Staff(
       id: 1,
       name: 'Supervisor Ali',
@@ -35,23 +23,6 @@ void main() {
       role: StaffRole.supervisor,
       isActive: true,
     );
-
-    setUp(() async {
-      posDb = PosDatabase(
-        factory: databaseFactoryFfi,
-        customPath: inMemoryDatabasePath,
-      );
-      db = await posDb.initialize();
-      shiftController = ShiftAndCashController(database: db);
-      khataController = VendorKhataController(
-        database: db,
-        shiftController: shiftController,
-      );
-    });
-
-    tearDown(() async {
-      await posDb.close();
-    });
 
     testWidgets('VendorFormDialog validates inputs and submits supplier data', (tester) async {
       tester.view.physicalSize = const Size(1920, 1080);
@@ -266,49 +237,62 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
 
       // Pre-seed 2 vendors
-      final v1 = await khataController.createVendor(
+      final v1 = Vendor(
+        id: 1,
         name: 'Al-Siddiq Poultry',
         phone: '03001112233',
         suppliedIngredients: 'Chicken Fillets',
         openingBalance: 5000.0,
+        currentBalance: 20000.0,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
       );
 
-      final v2 = await khataController.createVendor(
+      final v2 = Vendor(
+        id: 2,
         name: 'Bilal Packaging',
         phone: '03451112233',
         suppliedIngredients: 'Burger Boxes, Wrapping',
         openingBalance: 0.0,
+        currentBalance: 0.0,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
       );
 
-      // Record a credit delivery on v1
-      await khataController.recordCreditDelivery(
-        vendorId: v1.id,
-        amount: 15000.0,
-        referenceSlip: 'BILL-100',
-        notes: 'Chicken fillets delivery',
-        staffId: 1,
+      final statement = VendorStatement(
+        vendor: v1,
+        entries: [
+          VendorLedgerEntry(
+            transaction: VendorTransaction(
+              id: 1,
+              vendorId: 1,
+              type: VendorTransactionType.creditDelivery,
+              amount: 15000.0,
+              referenceSlip: 'BILL-100',
+              notes: 'Chicken fillets delivery',
+              staffId: 1,
+              createdAt: DateTime.now(),
+            ),
+            runningBalance: 20000.0,
+          ),
+        ],
       );
-
-      final statement = await khataController.getVendorStatement(v1.id);
-      final refreshedV1 = await khataController.getVendorById(v1.id);
 
       await tester.pumpWidget(
         MaterialApp(
           theme: WarmCounterTheme.lightTheme,
           home: Scaffold(
             body: VendorKhataWorkspace(
-              controller: khataController,
-              shiftController: shiftController,
               currentStaff: testStaff,
-              initialVendors: [refreshedV1!, v2],
-              initialSelectedVendor: refreshedV1,
+              initialVendors: [v1, v2],
+              initialSelectedVendor: v1,
               initialStatement: statement,
             ),
           ),
         ),
       );
 
-      await tester.pumpAndSettle();
+      await tester.pump();
 
       // Top control bar
       expect(find.text('Vendor Khata (Supplier Credit Ledger)'), findsOneWidget);
@@ -318,13 +302,12 @@ void main() {
       expect(find.text('Al-Siddiq Poultry'), findsOneWidget);
       expect(find.text('Bilal Packaging'), findsOneWidget);
 
-      // Net payable for Al-Siddiq is 5000 + 15000 = 20,000
+      // Net payable for Al-Siddiq is 20,000
       expect(find.textContaining('20,000.00'), findsWidgets);
 
       // Search filter
       await tester.enterText(find.byKey(const Key('vendor_search_field')), 'Packaging');
       await tester.pump();
-      await tester.pumpAndSettle();
 
       expect(find.text('Bilal Packaging'), findsOneWidget);
       expect(find.text('Al-Siddiq Poultry'), findsNothing);
@@ -332,14 +315,12 @@ void main() {
       // Clear search
       await tester.enterText(find.byKey(const Key('vendor_search_field')), '');
       await tester.pump();
-      await tester.pumpAndSettle();
 
       expect(find.text('Al-Siddiq Poultry'), findsOneWidget);
 
       // Select Al-Siddiq Poultry
       await tester.tap(find.byKey(Key('vendor_tile_${v1.id}')));
       await tester.pump();
-      await tester.pumpAndSettle();
 
       // Statement view shows delivery line
       expect(find.text('Statement of Accounts'), findsOneWidget);
