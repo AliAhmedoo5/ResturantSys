@@ -870,33 +870,36 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
           const SizedBox(width: WarmCounterSpacing.space24),
 
           // Action Buttons
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              ElevatedButton.icon(
-                key: const Key('log_credit_delivery_button'),
-                icon: const Icon(Icons.local_shipping_rounded, size: 18),
-                label: const Text('Log Credit Delivery'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: WarmCounterColors.lightPrimaryAction,
-                  foregroundColor: WarmCounterColors.lightTextOnPrimary,
-                  minimumSize: const Size(180, 48),
+          SizedBox(
+            width: 200,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ElevatedButton.icon(
+                  key: const Key('log_credit_delivery_button'),
+                  icon: const Icon(Icons.local_shipping_rounded, size: 18),
+                  label: const Text('Log Credit Delivery'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: WarmCounterColors.lightPrimaryAction,
+                    foregroundColor: WarmCounterColors.lightTextOnPrimary,
+                    minimumSize: const Size(180, 48),
+                  ),
+                  onPressed: _recordCreditDelivery,
                 ),
-                onPressed: _recordCreditDelivery,
-              ),
-              const SizedBox(height: WarmCounterSpacing.space8),
-              OutlinedButton.icon(
-                key: const Key('settle_payment_button'),
-                icon: const Icon(Icons.payments_rounded, size: 18),
-                label: const Text('Record Payment'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: WarmCounterColors.lightPrimaryAction,
-                  side: const BorderSide(color: WarmCounterColors.lightPrimaryAction),
-                  minimumSize: const Size(180, 48),
+                const SizedBox(height: WarmCounterSpacing.space8),
+                OutlinedButton.icon(
+                  key: const Key('settle_payment_button'),
+                  icon: const Icon(Icons.payments_rounded, size: 18),
+                  label: const Text('Record Payment'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: WarmCounterColors.lightPrimaryAction,
+                    side: const BorderSide(color: WarmCounterColors.lightPrimaryAction),
+                    minimumSize: const Size(180, 48),
+                  ),
+                  onPressed: _recordSettlementPayment,
                 ),
-                onPressed: _recordSettlementPayment,
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
