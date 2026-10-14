@@ -391,7 +391,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
 
   Widget _buildTopTabBar(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(WarmCounterSpacing.space6),
+      padding: const EdgeInsets.all(6),
       decoration: BoxDecoration(
         color: WarmCounterColors.lightCardBackground,
         borderRadius: WarmCounterSpacing.panelBorderRadius,
@@ -488,7 +488,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
         SizedBox(
           width: 320,
           child: Container(
-            padding: const EdgeInsets.all(WarmCounterSpacing.space20),
+            padding: const EdgeInsets.all(WarmCounterSpacing.space16),
             decoration: BoxDecoration(
               color: WarmCounterColors.lightCardBackground,
               borderRadius: WarmCounterSpacing.panelBorderRadius,
@@ -550,12 +550,12 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
             ),
           ),
         ),
-        const SizedBox(width: WarmCounterSpacing.space20),
+        const SizedBox(width: WarmCounterSpacing.space16),
 
         // Right Column: Staff Members Directory
         Expanded(
           child: Container(
-            padding: const EdgeInsets.all(WarmCounterSpacing.space20),
+            padding: const EdgeInsets.all(WarmCounterSpacing.space16),
             decoration: BoxDecoration(
               color: WarmCounterColors.lightCardBackground,
               borderRadius: WarmCounterSpacing.panelBorderRadius,
@@ -640,7 +640,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                                   Switch(
                                     value: staff.isActive,
                                     onChanged: (val) => _toggleStaffActive(staff, val),
-                                    activeColor: WarmCounterColors.lightPrimaryAction,
+                                    activeThumbColor: WarmCounterColors.lightPrimaryAction,
                                   ),
                                   Text(
                                     staff.isActive ? 'Active' : 'Inactive',
@@ -754,7 +754,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
               key: const ValueKey('toggle_token_tray_switch'),
               value: _tokenTrayEnabled,
               onChanged: _handleToggleTokenTray,
-              activeColor: WarmCounterColors.lightPrimaryAction,
+              activeTrackColor: WarmCounterColors.lightPrimaryAction,
               title: const Text(
                 'Interactive Token Queue Tray',
                 style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
@@ -778,7 +778,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
               key: const ValueKey('toggle_cashier_void_switch'),
               value: _cashierVoidEnabled,
               onChanged: _handleToggleCashierVoid,
-              activeColor: WarmCounterColors.lightPrimaryAction,
+              activeTrackColor: WarmCounterColors.lightPrimaryAction,
               title: const Text(
                 'Cashier Void Requests',
                 style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
@@ -811,7 +811,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
     }
 
     return Container(
-      padding: const EdgeInsets.all(WarmCounterSpacing.space20),
+      padding: const EdgeInsets.all(WarmCounterSpacing.space16),
       decoration: BoxDecoration(
         color: WarmCounterColors.lightCardBackground,
         borderRadius: WarmCounterSpacing.panelBorderRadius,
@@ -898,7 +898,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                                   Text('Shift #${shift.id}', style: const TextStyle(fontWeight: FontWeight.bold)),
                                   Text(
                                     shift.staffName ?? 'Staff #${shift.staffId}',
-                                    style: TextStyle(color: WarmCounterColors.lightSecondaryText, fontSize: 12),
+                                    style: const TextStyle(color: WarmCounterColors.lightSecondaryText, fontSize: 12),
                                   ),
                                 ],
                               ),
@@ -910,7 +910,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                                 children: [
                                   Text(_dateFormat.format(shift.openedAt), style: const TextStyle(fontSize: 12)),
                                   if (shift.closedAt != null)
-                                    Text(_dateFormat.format(shift.closedAt!), style: TextStyle(color: WarmCounterColors.lightSecondaryText, fontSize: 11)),
+                                    Text(_dateFormat.format(shift.closedAt!), style: const TextStyle(color: WarmCounterColors.lightSecondaryText, fontSize: 11)),
                                 ],
                               ),
                             ),

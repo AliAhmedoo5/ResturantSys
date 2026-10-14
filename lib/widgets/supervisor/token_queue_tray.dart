@@ -59,7 +59,7 @@ class _TokenQueueTrayState extends State<TokenQueueTray> {
               // Header & Filter Chips
               Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: WarmCounterSpacing.space20,
+                  horizontal: WarmCounterSpacing.space24,
                   vertical: WarmCounterSpacing.space16,
                 ),
                 decoration: const BoxDecoration(
@@ -187,7 +187,6 @@ class _TokenQueueTrayState extends State<TokenQueueTray> {
   Widget _buildTokenCard(BuildContext context, Order order) {
     final isPreparing = order.tokenStatus == TokenStatus.preparing;
     final isReady = order.tokenStatus == TokenStatus.ready;
-    final isDelivered = order.tokenStatus == TokenStatus.delivered;
 
     Color badgeColor;
     Color badgeTextColor;

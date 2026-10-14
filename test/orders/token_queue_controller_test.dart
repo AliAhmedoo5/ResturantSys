@@ -2,9 +2,12 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:resturant_sys/core/auth/auth_service.dart';
+import 'package:resturant_sys/core/catalog/menu_item.dart';
 import 'package:resturant_sys/core/database/pos_database.dart';
+import 'package:resturant_sys/core/orders/cart_item.dart';
 import 'package:resturant_sys/core/orders/dining_type.dart';
 import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
+import 'package:resturant_sys/core/orders/payment_method.dart';
 import 'package:resturant_sys/core/orders/token_queue_controller.dart';
 import 'package:resturant_sys/core/orders/token_status.dart';
 import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
@@ -26,6 +29,7 @@ void main() {
     late int businessDayId;
     late int shiftId;
     late int cashierId;
+    late MenuItem burger;
 
     setUp(() async {
       tempDir = await Directory.systemTemp.createTemp('pos_token_test_');
@@ -44,6 +48,29 @@ void main() {
         authService: authService,
       );
 
+      // Create a test menu item
+      final catId = await db.insert('categories', {
+        'name': 'Burgers',
+        'display_order': 1,
+        'color_hex': '#FF0000',
+        'created_at': DateTime.now().toIso8601String(),
+      });
+      final burgerId = await db.insert('menu_items', {
+        'category_id': catId,
+        'name': 'Zinger Burger',
+        'base_price': 500.0,
+        'tax_rate': 0.0,
+        'is_tax_inclusive': 1,
+        'is_active': 1,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+      burger = MenuItem(
+        id: burgerId,
+        categoryId: catId,
+        name: 'Zinger Burger',
+        basePrice: 500.0,
+      );
+
       // Open business day & shift
       final supStaff = (await authService.authenticateWithPin('1234'))!;
       final bDay = await shiftController.openBusinessDay(openedByStaffId: supStaff.id);
@@ -52,7 +79,6 @@ void main() {
       final cashStaff = (await authService.authenticateWithPin('1111'))!;
       cashierId = cashStaff.id;
       final shift = await shiftController.openShift(
-        businessDayId: businessDayId,
         staffId: cashierId,
         openingFloat: 5000.0,
       );
@@ -67,20 +93,21 @@ void main() {
     });
 
     test('newly checked out order has PREPARING token status by default', () async {
-      final order = await orderController.commitSettledOrder(
+      final checkout = await orderController.checkoutOrder(
         businessDayId: businessDayId,
         shiftId: shiftId,
         cashierId: cashierId,
         diningType: DiningType.dineIn,
-        items: [],
+        items: [CartItem(menuItem: burger, quantity: 1)],
         payments: [
-          const TenderPayment(
-            method: TenderMethod.cash,
+          const PaymentTender(
+            method: PaymentMethod.cash,
             amountTendered: 1000.0,
-            changeReturned: 0.0,
+            changeReturned: 500.0,
           ),
         ],
       );
+      final order = checkout.order;
 
       expect(order.tokenNumber, equals(1));
       expect(order.tokenDisplay, equals('#01'));
@@ -94,20 +121,21 @@ void main() {
     });
 
     test('1-tap progression advances token through Preparing -> Ready -> Delivered', () async {
-      final order = await orderController.commitSettledOrder(
+      final checkout = await orderController.checkoutOrder(
         businessDayId: businessDayId,
         shiftId: shiftId,
         cashierId: cashierId,
         diningType: DiningType.takeaway,
-        items: [],
+        items: [CartItem(menuItem: burger, quantity: 1)],
         payments: [
-          const TenderPayment(
-            method: TenderMethod.cash,
+          const PaymentTender(
+            method: PaymentMethod.cash,
             amountTendered: 500.0,
             changeReturned: 0.0,
           ),
         ],
       );
+      final order = checkout.order;
 
       await tokenQueueController.loadTokens(businessDayId: businessDayId);
       expect(tokenQueueController.preparingTokens.length, equals(1));

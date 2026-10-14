@@ -127,7 +127,7 @@ class _KitchenTokenStationState extends State<KitchenTokenStation> {
                 color: WarmCounterColors.lightSecondaryText,
               ),
             ),
-            const SizedBox(height: WarmCounterSpacing.space20),
+            const SizedBox(height: WarmCounterSpacing.space24),
 
             // PIN Dots Indicator
             Row(
@@ -190,7 +190,7 @@ class _KitchenTokenStationState extends State<KitchenTokenStation> {
               // Top Bar
               Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: WarmCounterSpacing.space20,
+                  horizontal: WarmCounterSpacing.space24,
                   vertical: WarmCounterSpacing.space16,
                 ),
                 decoration: const BoxDecoration(
@@ -290,12 +290,12 @@ class _KitchenTokenStationState extends State<KitchenTokenStation> {
                         ),
                       )
                     : GridView.builder(
-                        padding: const EdgeInsets.all(WarmCounterSpacing.space20),
+                        padding: const EdgeInsets.all(WarmCounterSpacing.space16),
                         gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                           maxCrossAxisExtent: 420,
                           mainAxisExtent: 260,
-                          crossAxisSpacing: WarmCounterSpacing.space20,
-                          mainAxisSpacing: WarmCounterSpacing.space20,
+                          crossAxisSpacing: WarmCounterSpacing.space16,
+                          mainAxisSpacing: WarmCounterSpacing.space16,
                         ),
                         itemCount: preparingOrders.length,
                         itemBuilder: (context, index) {

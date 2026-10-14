@@ -6,8 +6,11 @@ import 'package:resturant_sys/core/auth/auth_service.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/auth/staff_role.dart';
 import 'package:resturant_sys/core/database/pos_database.dart';
+import 'package:resturant_sys/core/catalog/menu_item.dart';
+import 'package:resturant_sys/core/orders/cart_item.dart';
 import 'package:resturant_sys/core/orders/dining_type.dart';
 import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
+import 'package:resturant_sys/core/orders/payment_method.dart';
 import 'package:resturant_sys/core/orders/token_queue_controller.dart';
 import 'package:resturant_sys/core/orders/token_status.dart';
 import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
@@ -31,6 +34,7 @@ void main() {
     late Staff supervisorStaff;
     late int businessDayId;
     late int shiftId;
+    late MenuItem burger;
 
     setUp(() async {
       tempDir = await Directory.systemTemp.createTemp('pos_portal_widget_test_');
@@ -49,13 +53,35 @@ void main() {
         authService: authService,
       );
 
+      // Create dummy menu item
+      final catId = await db.insert('categories', {
+        'name': 'Burgers',
+        'display_order': 1,
+        'color_hex': '#FF0000',
+        'created_at': DateTime.now().toIso8601String(),
+      });
+      final burgerId = await db.insert('menu_items', {
+        'category_id': catId,
+        'name': 'Zinger Burger',
+        'base_price': 500.0,
+        'tax_rate': 0.0,
+        'is_tax_inclusive': 1,
+        'is_active': 1,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+      burger = MenuItem(
+        id: burgerId,
+        categoryId: catId,
+        name: 'Zinger Burger',
+        basePrice: 500.0,
+      );
+
       supervisorStaff = (await authService.authenticateWithPin('1234'))!;
       final bDay = await shiftController.openBusinessDay(openedByStaffId: supervisorStaff.id);
       businessDayId = bDay.id;
 
       final cashier = (await authService.authenticateWithPin('1111'))!;
       final shift = await shiftController.openShift(
-        businessDayId: businessDayId,
         staffId: cashier.id,
         openingFloat: 5000.0,
       );
@@ -217,20 +243,21 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
 
       // Create an order
-      final order = await orderController.commitSettledOrder(
+      final checkout = await orderController.checkoutOrder(
         businessDayId: businessDayId,
         shiftId: shiftId,
         cashierId: supervisorStaff.id,
         diningType: DiningType.dineIn,
-        items: [],
+        items: [CartItem(menuItem: burger, quantity: 1)],
         payments: [
-          const TenderPayment(
-            method: TenderMethod.cash,
+          const PaymentTender(
+            method: PaymentMethod.cash,
             amountTendered: 1000.0,
-            changeReturned: 0.0,
+            changeReturned: 500.0,
           ),
         ],
       );
+      final order = checkout.order;
 
       await tester.pumpWidget(createTestApp());
       await tester.pumpAndSettle();

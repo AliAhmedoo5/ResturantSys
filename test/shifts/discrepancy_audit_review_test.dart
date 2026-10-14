@@ -54,7 +54,6 @@ void main() {
     test('historical shifts flagged with discrepancies can be viewed and resolved with audit notes', () async {
       // 1. Open shift with 5,000 opening float
       final shift = await shiftController.openShift(
-        businessDayId: businessDayId,
         staffId: cashierId,
         openingFloat: 5000.0,
       );
