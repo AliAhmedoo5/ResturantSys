@@ -490,7 +490,8 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                   ],
                 ),
               ),
-            );
+            ),
+          );
           },
         );
       },
