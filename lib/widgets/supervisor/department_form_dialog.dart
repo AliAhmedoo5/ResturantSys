@@ -79,11 +79,13 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
                     ),
                   ),
                   const SizedBox(width: WarmCounterSpacing.space12),
-                  Text(
-                    'Add Custom Department',
-                    style: WarmCounterTypography.pageHeading.copyWith(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
+                  Expanded(
+                    child: Text(
+                      'Add Custom Department',
+                      style: WarmCounterTypography.pageHeading.copyWith(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ],

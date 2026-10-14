@@ -117,11 +117,13 @@ class _StaffFormDialogState extends State<StaffFormDialog> {
                     ),
                   ),
                   const SizedBox(width: WarmCounterSpacing.space12),
-                  Text(
-                    isEditing ? 'Edit Staff Profile' : 'Register New Staff Member',
-                    style: WarmCounterTypography.pageHeading.copyWith(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
+                  Expanded(
+                    child: Text(
+                      isEditing ? 'Edit Staff Profile' : 'Register New Staff Member',
+                      style: WarmCounterTypography.pageHeading.copyWith(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ],
