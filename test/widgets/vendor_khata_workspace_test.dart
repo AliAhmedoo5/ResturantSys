@@ -261,18 +261,22 @@ void main() {
 
       final statement = VendorStatement(
         vendor: v1,
+        openingBalance: 5000.0,
+        currentBalance: 20000.0,
         entries: [
-          VendorLedgerEntry(
+          VendorStatementEntry(
             transaction: VendorTransaction(
               id: 1,
               vendorId: 1,
-              type: VendorTransactionType.creditDelivery,
+              type: VendorTransactionType.purchaseCredit,
               amount: 15000.0,
               referenceSlip: 'BILL-100',
               notes: 'Chicken fillets delivery',
               staffId: 1,
               createdAt: DateTime.now(),
             ),
+            creditAmount: 15000.0,
+            debitAmount: 0.0,
             runningBalance: 20000.0,
           ),
         ],
