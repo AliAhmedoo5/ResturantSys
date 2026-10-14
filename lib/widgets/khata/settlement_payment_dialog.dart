@@ -91,7 +91,7 @@ class _SettlementPaymentDialogState extends State<SettlementPaymentDialog> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      shape: RoundedRectangleBorder(
+      shape: const RoundedRectangleBorder(
         borderRadius: WarmCounterSpacing.panelBorderRadius,
       ),
       child: ConstrainedBox(

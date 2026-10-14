@@ -77,7 +77,7 @@ class _CreditDeliveryDialogState extends State<CreditDeliveryDialog> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      shape: RoundedRectangleBorder(
+      shape: const RoundedRectangleBorder(
         borderRadius: WarmCounterSpacing.panelBorderRadius,
       ),
       child: ConstrainedBox(
@@ -207,7 +207,7 @@ class _CreditDeliveryDialogState extends State<CreditDeliveryDialog> {
                 if (widget.rawIngredients.isNotEmpty) ...[
                   DropdownButtonFormField<int?>(
                     key: const Key('credit_ingredient_dropdown'),
-                    value: _selectedIngredientId,
+                    initialValue: _selectedIngredientId,
                     decoration: const InputDecoration(
                       labelText: 'Linked Stock Ingredient (Optional)',
                       prefixIcon: Icon(Icons.egg_alt_outlined),

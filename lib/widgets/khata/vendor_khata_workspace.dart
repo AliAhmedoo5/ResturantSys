@@ -857,7 +857,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
               horizontal: WarmCounterSpacing.space24,
               vertical: WarmCounterSpacing.space12,
             ),
-            child: Row(
+            child: const Row(
               children: [
                 const Expanded(flex: 2, child: Text('Date & Time', style: TextStyle(fontWeight: FontWeight.w700))),
                 const Expanded(flex: 2, child: Text('Slip / Ref', style: TextStyle(fontWeight: FontWeight.w700))),
@@ -953,7 +953,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
                             ),
                             child: Text(
                               typeBadgeText,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
                                 color: typeBadgeColor,

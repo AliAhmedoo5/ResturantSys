@@ -77,7 +77,7 @@ class _VendorFormDialogState extends State<VendorFormDialog> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      shape: RoundedRectangleBorder(
+      shape: const RoundedRectangleBorder(
         borderRadius: WarmCounterSpacing.panelBorderRadius,
       ),
       child: ConstrainedBox(
