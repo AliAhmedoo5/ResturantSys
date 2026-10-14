@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:resturant_sys/core/auth/auth_service.dart';
+import 'package:resturant_sys/core/auth/department.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/database/pos_database.dart';
 import 'package:resturant_sys/core/catalog/menu_item.dart';
@@ -11,6 +12,7 @@ import 'package:resturant_sys/core/orders/dining_type.dart';
 import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
 import 'package:resturant_sys/core/orders/payment_method.dart';
 import 'package:resturant_sys/core/orders/token_queue_controller.dart';
+import 'package:resturant_sys/core/shifts/shift.dart';
 import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
 import 'package:resturant_sys/core/theme/warm_counter_theme.dart';
 import 'package:resturant_sys/widgets/supervisor/supervisor_portal_workspace.dart';
@@ -33,6 +35,8 @@ void main() {
     late int businessDayId;
     late int shiftId;
     late MenuItem burger;
+    late List<Department> initialDepts;
+    late List<Staff> initialStaffList;
 
     setUp(() async {
       tempDir = await Directory.systemTemp.createTemp('pos_portal_widget_test_');
@@ -84,6 +88,9 @@ void main() {
         openingFloat: 5000.0,
       );
       shiftId = shift.id;
+
+      initialDepts = await authService.getDepartments();
+      initialStaffList = await authService.getAllStaff();
     });
 
     tearDown(() async {
@@ -93,7 +100,13 @@ void main() {
       }
     });
 
-    Widget createTestApp() {
+    Widget createTestApp({
+      List<Department>? initialDepartments,
+      List<Staff>? initialStaff,
+      bool? initialTokenTrayEnabled,
+      bool? initialCashierVoidEnabled,
+      List<Shift>? initialDiscrepancies,
+    }) {
       return MaterialApp(
         theme: WarmCounterTheme.lightTheme,
         home: Scaffold(
@@ -103,6 +116,11 @@ void main() {
             orderController: orderController,
             tokenQueueController: tokenQueueController,
             currentStaff: supervisorStaff,
+            initialDepartments: initialDepartments ?? initialDepts,
+            initialStaff: initialStaff ?? initialStaffList,
+            initialTokenTrayEnabled: initialTokenTrayEnabled ?? true,
+            initialCashierVoidEnabled: initialCashierVoidEnabled ?? true,
+            initialDiscrepancies: initialDiscrepancies,
           ),
         ),
       );
@@ -202,12 +220,14 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
 
       // Close shift with a discrepancy to generate a flagged shift
-      await shiftController.closeShift(
+      final closedShift = await shiftController.closeShift(
         shiftId: shiftId,
         countedCash: 4500.0, // Expected 5000, variance = -500
       );
 
-      await tester.pumpWidget(createTestApp());
+      await tester.pumpWidget(createTestApp(
+        initialDiscrepancies: [closedShift],
+      ));
       await tester.pumpAndSettle();
 
       // Switch to Discrepancy Review tab
@@ -256,6 +276,7 @@ void main() {
         ],
       );
       final order = checkout.order;
+      await tokenQueueController.loadTokens();
 
       await tester.pumpWidget(createTestApp());
       await tester.pumpAndSettle();

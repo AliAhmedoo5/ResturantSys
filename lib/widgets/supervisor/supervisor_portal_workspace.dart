@@ -38,6 +38,11 @@ class SupervisorPortalWorkspace extends StatefulWidget {
     this.orderController,
     this.tokenQueueController,
     this.currentStaff,
+    this.initialDepartments,
+    this.initialStaff,
+    this.initialTokenTrayEnabled,
+    this.initialCashierVoidEnabled,
+    this.initialDiscrepancies,
   });
 
   final AuthService authService;
@@ -45,6 +50,11 @@ class SupervisorPortalWorkspace extends StatefulWidget {
   final OrderAndCheckoutController? orderController;
   final TokenQueueController? tokenQueueController;
   final Staff? currentStaff;
+  final List<Department>? initialDepartments;
+  final List<Staff>? initialStaff;
+  final bool? initialTokenTrayEnabled;
+  final bool? initialCashierVoidEnabled;
+  final List<Shift>? initialDiscrepancies;
 
   @override
   State<SupervisorPortalWorkspace> createState() => _SupervisorPortalWorkspaceState();
@@ -72,17 +82,39 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialDepartments != null) {
+      _departments = List.of(widget.initialDepartments!);
+      _isLoadingStaff = false;
+    }
+    if (widget.initialStaff != null) {
+      _staffMembers = List.of(widget.initialStaff!);
+      _isLoadingStaff = false;
+    }
+    if (widget.initialTokenTrayEnabled != null) {
+      _tokenTrayEnabled = widget.initialTokenTrayEnabled!;
+      _isLoadingToggles = false;
+    }
+    if (widget.initialCashierVoidEnabled != null) {
+      _cashierVoidEnabled = widget.initialCashierVoidEnabled!;
+      _isLoadingToggles = false;
+    }
+    if (widget.initialDiscrepancies != null) {
+      _discrepancyShifts = List.of(widget.initialDiscrepancies!);
+      _isLoadingDiscrepancies = false;
+    }
+
     _loadAllData();
   }
 
   Future<void> _loadAllData() async {
-    await Future.wait([
-      _loadStaffAndDepartments(),
-      _loadFeatureToggles(),
-      _loadDiscrepancies(),
-    ]);
-    if (widget.tokenQueueController != null) {
-      widget.tokenQueueController!.loadTokens();
+    if (widget.initialDepartments == null || widget.initialStaff == null) {
+      await _loadStaffAndDepartments();
+    }
+    if (widget.initialTokenTrayEnabled == null || widget.initialCashierVoidEnabled == null) {
+      await _loadFeatureToggles();
+    }
+    if (widget.initialDiscrepancies == null) {
+      await _loadDiscrepancies();
     }
   }
 

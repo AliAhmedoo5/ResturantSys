@@ -14,7 +14,12 @@ class TokenQueueController extends ChangeNotifier {
   TokenQueueController({
     required this.database,
     this.authService,
-  });
+    List<Order>? initialOrders,
+  }) {
+    if (initialOrders != null) {
+      _orders.addAll(initialOrders);
+    }
+  }
 
   final Database database;
   final AuthService? authService;
