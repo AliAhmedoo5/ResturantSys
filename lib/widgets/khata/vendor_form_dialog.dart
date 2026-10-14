@@ -109,7 +109,8 @@ class _VendorFormDialogState extends State<VendorFormDialog> {
                     Expanded(
                       child: Text(
                         isEditing ? 'Edit Supplier' : 'New Supplier (Vendor)',
-                        style: WarmCounterTypography.sectionHeading.copyWith(
+                        style: WarmCounterTypography.pageHeading.copyWith(
+                          fontSize: 20,
                           fontWeight: FontWeight.w700,
                         ),
                       ),

@@ -126,7 +126,8 @@ class _SettlementPaymentDialogState extends State<SettlementPaymentDialog> {
                         children: [
                           Text(
                             'Settle Supplier Balance',
-                            style: WarmCounterTypography.sectionHeading.copyWith(
+                            style: WarmCounterTypography.pageHeading.copyWith(
+                              fontSize: 20,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -152,12 +153,12 @@ class _SettlementPaymentDialogState extends State<SettlementPaymentDialog> {
                   padding: const EdgeInsets.all(WarmCounterSpacing.space12),
                   decoration: BoxDecoration(
                     color: widget.vendor.hasOutstandingPayable
-                        ? WarmCounterColors.lightAmber.withAlpha(20)
-                        : WarmCounterColors.lightSurface,
+                        ? WarmCounterColors.lightWarning.withAlpha(20)
+                        : WarmCounterColors.lightSurfaceMuted,
                     borderRadius: WarmCounterSpacing.controlBorderRadius,
                     border: Border.all(
                       color: widget.vendor.hasOutstandingPayable
-                          ? WarmCounterColors.lightAmber
+                          ? WarmCounterColors.lightWarning
                           : WarmCounterColors.lightBorder,
                     ),
                   ),
@@ -172,9 +173,9 @@ class _SettlementPaymentDialogState extends State<SettlementPaymentDialog> {
                       ),
                       Text(
                         'Rs. ${widget.vendor.currentBalance.toStringAsFixed(2)}',
-                        style: WarmCounterTypography.currencyMedium.copyWith(
+                        style: WarmCounterTypography.tableAmount.copyWith(
                           color: widget.vendor.hasOutstandingPayable
-                              ? WarmCounterColors.lightAmber
+                              ? WarmCounterColors.lightWarning
                               : WarmCounterColors.lightPrimaryText,
                           fontWeight: FontWeight.w700,
                         ),
@@ -215,10 +216,10 @@ class _SettlementPaymentDialogState extends State<SettlementPaymentDialog> {
                       hasActiveShift
                           ? 'Auto-logs Cash Pay-Out in Shift #${widget.activeShiftId} (${widget.activeStaffName ?? "Cashier"})'
                           : 'No shift open in cash drawer (Disabled)',
-                      style: WarmCounterTypography.captionText.copyWith(
+                      style: WarmCounterTypography.caption.copyWith(
                         color: hasActiveShift
                             ? WarmCounterColors.lightSecondaryText
-                            : WarmCounterColors.lightRed,
+                            : WarmCounterColors.lightDestructive,
                       ),
                     ),
                     activeColor: WarmCounterColors.lightPrimaryAction,
@@ -251,7 +252,7 @@ class _SettlementPaymentDialogState extends State<SettlementPaymentDialog> {
                     title: const Text('Paid Outside Drawer'),
                     subtitle: const Text(
                       'Bank transfer, cheque, or owner personal pocket. Does not touch cash drawer float.',
-                      style: WarmCounterTypography.captionText,
+                      style: WarmCounterTypography.caption,
                     ),
                     activeColor: WarmCounterColors.lightPrimaryAction,
                     onChanged: (val) {

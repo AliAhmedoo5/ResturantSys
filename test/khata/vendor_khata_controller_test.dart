@@ -3,11 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:resturant_sys/core/database/pos_database.dart';
 import 'package:resturant_sys/core/database/pos_database_constants.dart';
-import 'package:resturant_sys/core/khata/vendor.dart';
 import 'package:resturant_sys/core/khata/vendor_khata_controller.dart';
 import 'package:resturant_sys/core/khata/vendor_payment_source.dart';
 import 'package:resturant_sys/core/khata/vendor_transaction.dart';
-import 'package:resturant_sys/core/shifts/business_day.dart';
 import 'package:resturant_sys/core/shifts/cash_movement.dart';
 import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
 
@@ -160,7 +158,7 @@ void main() {
 
     test('Multi-source settlement: Paid from Active Drawer auto-generates Pay-Out cash movement', () async {
       // 1. Setup Business Day & Shift
-      final day = await shiftController.openBusinessDay(openedByStaffId: testStaffId);
+      await shiftController.openBusinessDay(openedByStaffId: testStaffId);
       final shift = await shiftController.openShift(staffId: testStaffId, openingFloat: 5000.0);
 
       // 2. Create Vendor with payable balance
@@ -254,7 +252,7 @@ void main() {
     test('Paid from Active Drawer rejects payment when shift is closed', () async {
       await shiftController.openBusinessDay(openedByStaffId: testStaffId);
       final shift = await shiftController.openShift(staffId: testStaffId, openingFloat: 5000.0);
-      await shiftController.closeShiftWithBlindCount(
+      await shiftController.closeShift(
         shiftId: shift.id,
         countedCash: 5000.0,
       );

@@ -96,12 +96,12 @@ class _CreditDeliveryDialogState extends State<CreditDeliveryDialog> {
                     Container(
                       padding: const EdgeInsets.all(WarmCounterSpacing.space8),
                       decoration: BoxDecoration(
-                        color: WarmCounterColors.lightAmber.withAlpha(30),
+                        color: WarmCounterColors.lightWarning.withAlpha(30),
                         borderRadius: WarmCounterSpacing.controlBorderRadius,
                       ),
                       child: const Icon(
                         Icons.local_shipping_rounded,
-                        color: WarmCounterColors.lightAmber,
+                        color: WarmCounterColors.lightWarning,
                         size: 24,
                       ),
                     ),
@@ -112,7 +112,8 @@ class _CreditDeliveryDialogState extends State<CreditDeliveryDialog> {
                         children: [
                           Text(
                             'Log Credit Delivery',
-                            style: WarmCounterTypography.sectionHeading.copyWith(
+                            style: WarmCounterTypography.pageHeading.copyWith(
+                              fontSize: 20,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -137,7 +138,7 @@ class _CreditDeliveryDialogState extends State<CreditDeliveryDialog> {
                 Container(
                   padding: const EdgeInsets.all(WarmCounterSpacing.space12),
                   decoration: BoxDecoration(
-                    color: WarmCounterColors.lightSurface,
+                    color: WarmCounterColors.lightSurfaceMuted,
                     borderRadius: WarmCounterSpacing.controlBorderRadius,
                     border: Border.all(color: WarmCounterColors.lightBorder),
                   ),
@@ -153,7 +154,7 @@ class _CreditDeliveryDialogState extends State<CreditDeliveryDialog> {
                         child: Text(
                           'Current Balance: Rs. ${widget.vendor.currentBalance.toStringAsFixed(2)} payable. '
                           'This delivery will be added to the credit ledger without immediate cash outflow.',
-                          style: WarmCounterTypography.captionText,
+                          style: WarmCounterTypography.caption,
                         ),
                       ),
                     ],

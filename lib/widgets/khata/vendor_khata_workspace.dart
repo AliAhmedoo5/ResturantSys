@@ -146,7 +146,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error adding supplier: $e'),
-          backgroundColor: WarmCounterColors.lightRed,
+          backgroundColor: WarmCounterColors.lightDestructive,
         ),
       );
     }
@@ -180,7 +180,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error updating supplier: $e'),
-          backgroundColor: WarmCounterColors.lightRed,
+          backgroundColor: WarmCounterColors.lightDestructive,
         ),
       );
     }
@@ -202,7 +202,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: WarmCounterColors.lightRed,
+              backgroundColor: WarmCounterColors.lightDestructive,
               foregroundColor: Colors.white,
             ),
             onPressed: () => Navigator.of(ctx).pop(true),
@@ -229,7 +229,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error deleting supplier: $e'),
-          backgroundColor: WarmCounterColors.lightRed,
+          backgroundColor: WarmCounterColors.lightDestructive,
         ),
       );
     }
@@ -270,7 +270,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error logging delivery: $e'),
-          backgroundColor: WarmCounterColors.lightRed,
+          backgroundColor: WarmCounterColors.lightDestructive,
         ),
       );
     }
@@ -312,7 +312,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error recording payment: $e'),
-          backgroundColor: WarmCounterColors.lightRed,
+          backgroundColor: WarmCounterColors.lightDestructive,
         ),
       );
     }
@@ -381,7 +381,8 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
           const SizedBox(width: WarmCounterSpacing.space12),
           Text(
             'Vendor Khata (Supplier Credit Ledger)',
-            style: WarmCounterTypography.sectionHeading.copyWith(
+            style: WarmCounterTypography.pageHeading.copyWith(
+              fontSize: 20,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -504,7 +505,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
                                         const SizedBox(height: 2),
                                         Text(
                                           vendor.phone,
-                                          style: WarmCounterTypography.captionText.copyWith(
+                                          style: WarmCounterTypography.caption.copyWith(
                                             color: WarmCounterColors.lightSecondaryText,
                                           ),
                                         ),
@@ -515,7 +516,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
                                             vendor.suppliedIngredients!,
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
-                                            style: WarmCounterTypography.captionText.copyWith(
+                                            style: WarmCounterTypography.caption.copyWith(
                                               color: WarmCounterColors.lightSecondaryText,
                                               fontStyle: FontStyle.italic,
                                             ),
@@ -533,7 +534,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
                                         style: WarmCounterTypography.tabularNumbers.copyWith(
                                           fontWeight: FontWeight.w700,
                                           color: vendor.hasOutstandingPayable
-                                              ? WarmCounterColors.lightAmber
+                                              ? WarmCounterColors.lightWarning
                                               : WarmCounterColors.lightPrimaryText,
                                         ),
                                       ),
@@ -545,17 +546,17 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
                                         ),
                                         decoration: BoxDecoration(
                                           color: vendor.hasOutstandingPayable
-                                              ? WarmCounterColors.lightAmber.withAlpha(30)
-                                              : WarmCounterColors.lightSurface,
+                                              ? WarmCounterColors.lightWarning.withAlpha(30)
+                                              : WarmCounterColors.lightSurfaceMuted,
                                           borderRadius: BorderRadius.circular(4),
                                         ),
                                         child: Text(
                                           vendor.hasOutstandingPayable ? 'Payable' : 'Clear',
-                                          style: WarmCounterTypography.captionText.copyWith(
+                                          style: WarmCounterTypography.caption.copyWith(
                                             fontSize: 10,
                                             fontWeight: FontWeight.w600,
                                             color: vendor.hasOutstandingPayable
-                                                ? WarmCounterColors.lightAmber
+                                                ? WarmCounterColors.lightWarning
                                                 : WarmCounterColors.lightSecondaryText,
                                           ),
                                         ),
@@ -592,11 +593,11 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
                                         child: Row(
                                           children: [
                                             Icon(Icons.delete_outline,
-                                                size: 16, color: WarmCounterColors.lightRed),
+                                                size: 16, color: WarmCounterColors.lightDestructive),
                                             SizedBox(width: 8),
                                             Text('Delete',
                                                 style: TextStyle(
-                                                    color: WarmCounterColors.lightRed)),
+                                                    color: WarmCounterColors.lightDestructive)),
                                           ],
                                         ),
                                       ),
@@ -630,7 +631,8 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
               const SizedBox(height: WarmCounterSpacing.space16),
               Text(
                 'Select a Supplier',
-                style: WarmCounterTypography.sectionHeading.copyWith(
+                style: WarmCounterTypography.pageHeading.copyWith(
+                  fontSize: 20,
                   fontWeight: FontWeight.w700,
                   color: WarmCounterColors.lightSecondaryText,
                 ),
@@ -671,7 +673,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
 
   Widget _buildVendorHeaderBanner(BuildContext context, Vendor vendor) {
     return Container(
-      padding: const EdgeInsets.all(WarmCounterSpacing.space20),
+      padding: const EdgeInsets.all(WarmCounterSpacing.space24),
       decoration: BoxDecoration(
         color: WarmCounterColors.lightCardBackground,
         borderRadius: WarmCounterSpacing.panelBorderRadius,
@@ -687,7 +689,8 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
               children: [
                 Text(
                   vendor.name,
-                  style: WarmCounterTypography.sectionHeading.copyWith(
+                  style: WarmCounterTypography.pageHeading.copyWith(
+                    fontSize: 20,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -722,17 +725,17 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
           // Net Payable Due
           Container(
             padding: const EdgeInsets.symmetric(
-              horizontal: WarmCounterSpacing.space20,
+              horizontal: WarmCounterSpacing.space24,
               vertical: WarmCounterSpacing.space12,
             ),
             decoration: BoxDecoration(
               color: vendor.hasOutstandingPayable
-                  ? WarmCounterColors.lightAmber.withAlpha(25)
-                  : WarmCounterColors.lightSurface,
+                  ? WarmCounterColors.lightWarning.withAlpha(25)
+                  : WarmCounterColors.lightSurfaceMuted,
               borderRadius: WarmCounterSpacing.controlBorderRadius,
               border: Border.all(
                 color: vendor.hasOutstandingPayable
-                    ? WarmCounterColors.lightAmber
+                    ? WarmCounterColors.lightWarning
                     : WarmCounterColors.lightBorder,
               ),
             ),
@@ -741,19 +744,19 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
               children: [
                 Text(
                   'NET PAYABLE DUE',
-                  style: WarmCounterTypography.captionText.copyWith(
+                  style: WarmCounterTypography.caption.copyWith(
                     fontWeight: FontWeight.w700,
                     color: vendor.hasOutstandingPayable
-                        ? WarmCounterColors.lightAmber
+                        ? WarmCounterColors.lightWarning
                         : WarmCounterColors.lightSecondaryText,
                   ),
                 ),
                 Text(
                   'Rs. ${_currencyFormat.format(vendor.currentBalance)}',
                   key: const Key('vendor_net_payable_text'),
-                  style: WarmCounterTypography.currencyLarge.copyWith(
+                  style: WarmCounterTypography.orderTotal.copyWith(
                     color: vendor.hasOutstandingPayable
-                        ? WarmCounterColors.lightAmber
+                        ? WarmCounterColors.lightWarning
                         : WarmCounterColors.lightPrimaryText,
                     fontWeight: FontWeight.w800,
                   ),
@@ -761,7 +764,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
               ],
             ),
           ),
-          const SizedBox(width: WarmCounterSpacing.space20),
+          const SizedBox(width: WarmCounterSpacing.space24),
 
           // Action Buttons
           Column(
@@ -814,7 +817,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
           // Statement Header
           Container(
             padding: const EdgeInsets.symmetric(
-              horizontal: WarmCounterSpacing.space20,
+              horizontal: WarmCounterSpacing.space24,
               vertical: WarmCounterSpacing.space16,
             ),
             decoration: const BoxDecoration(
@@ -849,9 +852,9 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
 
           // Table Header
           Container(
-            color: WarmCounterColors.lightSurface,
+            color: WarmCounterColors.lightSurfaceMuted,
             padding: const EdgeInsets.symmetric(
-              horizontal: WarmCounterSpacing.space20,
+              horizontal: WarmCounterSpacing.space24,
               vertical: WarmCounterSpacing.space12,
             ),
             child: Row(
@@ -895,7 +898,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
                 final txn = entry.transaction;
 
                 final typeBadgeText = txn.type.displayName;
-                Color typeBadgeColor = WarmCounterColors.lightAmber;
+                Color typeBadgeColor = WarmCounterColors.lightWarning;
 
                 if (txn.type == VendorTransactionType.paymentDrawer) {
                   typeBadgeColor = WarmCounterColors.lightPrimaryAction;
@@ -910,7 +913,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
 
                 return Padding(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: WarmCounterSpacing.space20,
+                    horizontal: WarmCounterSpacing.space24,
                     vertical: WarmCounterSpacing.space12,
                   ),
                   child: Row(
@@ -920,7 +923,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
                         flex: 2,
                         child: Text(
                           DateFormat('yyyy-MM-dd HH:mm').format(txn.createdAt),
-                          style: WarmCounterTypography.captionText,
+                          style: WarmCounterTypography.caption,
                         ),
                       ),
                       // Slip
@@ -964,7 +967,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
                         flex: 3,
                         child: Text(
                           particulars,
-                          style: WarmCounterTypography.captionText,
+                          style: WarmCounterTypography.caption,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -979,7 +982,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
                           textAlign: TextAlign.right,
                           style: WarmCounterTypography.tabularNumbers.copyWith(
                             fontWeight: FontWeight.w600,
-                            color: entry.creditAmount > 0 ? WarmCounterColors.lightAmber : null,
+                            color: entry.creditAmount > 0 ? WarmCounterColors.lightWarning : null,
                           ),
                         ),
                       ),
