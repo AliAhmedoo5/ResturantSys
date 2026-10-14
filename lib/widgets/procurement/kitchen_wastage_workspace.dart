@@ -295,7 +295,7 @@ class _KitchenWastageWorkspaceState extends State<KitchenWastageWorkspace> {
                           'Kitchen Wastage Log',
                           style: WarmCounterTypography.pageHeading.copyWith(fontSize: 20),
                         ),
-                        Text(
+                        const Text(
                           'Immediate stock deduction and financial food-cost loss audit',
                           style: WarmCounterTypography.secondaryLabel,
                         ),
@@ -314,10 +314,10 @@ class _KitchenWastageWorkspaceState extends State<KitchenWastageWorkspace> {
                     borderRadius: WarmCounterSpacing.controlBorderRadius,
                     border: Border.all(color: WarmCounterColors.lightWarning),
                   ),
-                  child: Row(
+                  child: const Row(
                     children: [
-                      const Icon(Icons.warning_amber_rounded, color: WarmCounterColors.lightWarning),
-                      const SizedBox(width: WarmCounterSpacing.space12),
+                      Icon(Icons.warning_amber_rounded, color: WarmCounterColors.lightWarning),
+                      SizedBox(width: WarmCounterSpacing.space12),
                       Expanded(
                         child: Text(
                           'No raw ingredients registered yet. Add ingredients in the Catalog & BOM workspace first.',
@@ -441,7 +441,7 @@ class _KitchenWastageWorkspaceState extends State<KitchenWastageWorkspace> {
                 const SizedBox(height: WarmCounterSpacing.space16),
 
                 // Notes (Optional)
-                Text(
+                const Text(
                   'Notes / Chef Comments (Optional)',
                   style: WarmCounterTypography.secondaryLabel,
                 ),
@@ -529,7 +529,7 @@ class _KitchenWastageWorkspaceState extends State<KitchenWastageWorkspace> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Wasted Stock Deduction:', style: WarmCounterTypography.secondaryLabel),
+              const Text('Wasted Stock Deduction:', style: WarmCounterTypography.secondaryLabel),
               Text(
                 '-${_qtyFormat.format(qty)} $storageUnitStr',
                 key: const ValueKey('wastage_deducted_stock_display'),
@@ -544,7 +544,7 @@ class _KitchenWastageWorkspaceState extends State<KitchenWastageWorkspace> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Ingredient Unit Cost:', style: WarmCounterTypography.secondaryLabel),
+              const Text('Ingredient Unit Cost:', style: WarmCounterTypography.secondaryLabel),
               Text(
                 'Rs. ${_currencyFormat.format(unitCost)} / $storageUnitStr',
                 style: WarmCounterTypography.bodyMedium,
@@ -572,7 +572,7 @@ class _KitchenWastageWorkspaceState extends State<KitchenWastageWorkspace> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Current Stock:', style: WarmCounterTypography.caption),
+                const Text('Current Stock:', style: WarmCounterTypography.caption),
                 Text(
                   '${_qtyFormat.format(_selectedIngredient!.currentStock)} $storageUnitStr',
                   style: WarmCounterTypography.caption.copyWith(fontWeight: FontWeight.bold),

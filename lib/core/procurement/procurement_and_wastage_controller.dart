@@ -186,6 +186,7 @@ class ProcurementAndWastageController {
     if (staff == null) {
       throw ArgumentError('Invalid or unauthorized staff PIN.');
     }
+    final verifiedStaff = staff;
 
     final now = DateTime.now();
     final formattedNow = _formatTimestamp(now);
@@ -218,7 +219,7 @@ class ProcurementAndWastageController {
       final id = await txn.insert(
         PosDatabaseConstants.tableKitchenWastage,
         {
-          'staff_id': staff!.id,
+          'staff_id': verifiedStaff.id,
           'raw_ingredient_id': rawIngredientId,
           'quantity': quantity,
           'cost_loss': costLoss,
@@ -230,8 +231,8 @@ class ProcurementAndWastageController {
 
       return KitchenWastage(
         id: id,
-        staffId: staff.id,
-        staffName: staff.name,
+        staffId: verifiedStaff.id,
+        staffName: verifiedStaff.name,
         rawIngredientId: rawIngredientId,
         rawIngredientName: ingredient.name,
         quantity: quantity,
