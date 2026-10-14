@@ -273,7 +273,7 @@ void main() {
         openingBalance: 5000.0,
       );
 
-      await khataController.createVendor(
+      final v2 = await khataController.createVendor(
         name: 'Bilal Packaging',
         phone: '03451112233',
         suppliedIngredients: 'Burger Boxes, Wrapping',
@@ -289,6 +289,9 @@ void main() {
         staffId: 1,
       );
 
+      final statement = await khataController.getVendorStatement(v1.id);
+      final refreshedV1 = await khataController.getVendorById(v1.id);
+
       await tester.pumpWidget(
         MaterialApp(
           theme: WarmCounterTheme.lightTheme,
@@ -297,12 +300,14 @@ void main() {
               controller: khataController,
               shiftController: shiftController,
               currentStaff: testStaff,
+              initialVendors: [refreshedV1!, v2],
+              initialSelectedVendor: refreshedV1,
+              initialStatement: statement,
             ),
           ),
         ),
       );
 
-      await tester.pump();
       await tester.pumpAndSettle();
 
       // Top control bar

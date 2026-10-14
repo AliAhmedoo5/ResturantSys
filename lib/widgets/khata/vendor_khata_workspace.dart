@@ -24,12 +24,22 @@ class VendorKhataWorkspace extends StatefulWidget {
     this.shiftController,
     this.catalogController,
     this.currentStaff,
+    this.initialVendors,
+    this.initialSelectedVendor,
+    this.initialStatement,
+    this.initialActiveShift,
+    this.initialRawIngredients,
   });
 
   final VendorKhataController controller;
   final ShiftAndCashController? shiftController;
   final CatalogAndRecipeController? catalogController;
   final Staff? currentStaff;
+  final List<Vendor>? initialVendors;
+  final Vendor? initialSelectedVendor;
+  final VendorStatement? initialStatement;
+  final Shift? initialActiveShift;
+  final List<RawIngredient>? initialRawIngredients;
 
   @override
   State<VendorKhataWorkspace> createState() => _VendorKhataWorkspaceState();
@@ -50,7 +60,17 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
   @override
   void initState() {
     super.initState();
-    _loadInitialData(isInitialMount: true);
+    if (widget.initialVendors != null) {
+      _vendors = List.from(widget.initialVendors!);
+      _selectedVendor = widget.initialSelectedVendor ??
+          (_vendors.isNotEmpty ? _vendors.first : null);
+      _statement = widget.initialStatement;
+      _activeShift = widget.initialActiveShift;
+      _rawIngredients = List.from(widget.initialRawIngredients ?? []);
+      _isLoading = false;
+    } else {
+      _loadInitialData(isInitialMount: true);
+    }
   }
 
   @override
@@ -450,7 +470,17 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
           // Supplier List
           Expanded(
             child: _isLoading && _vendors.isEmpty
-                ? const Center(child: CircularProgressIndicator())
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(WarmCounterSpacing.space24),
+                      child: Text(
+                        'Loading suppliers...',
+                        style: WarmCounterTypography.bodyMedium.copyWith(
+                          color: WarmCounterColors.lightSecondaryText,
+                        ),
+                      ),
+                    ),
+                  )
                 : _vendors.isEmpty
                     ? Center(
                         child: Padding(
