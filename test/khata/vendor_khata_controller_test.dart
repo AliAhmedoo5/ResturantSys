@@ -251,6 +251,59 @@ void main() {
       );
     });
 
+    test('Paid from Active Drawer rejects payment when shift is closed', () async {
+      await shiftController.openBusinessDay(openedByStaffId: testStaffId);
+      final shift = await shiftController.openShift(staffId: testStaffId, openingFloat: 5000.0);
+      await shiftController.closeShiftWithBlindCount(
+        shiftId: shift.id,
+        countedCash: 5000.0,
+      );
+
+      final vendor = await khataController.createVendor(
+        name: 'Rawalpindi Meat Mart',
+        phone: '03011112222',
+        openingBalance: 4000.0,
+      );
+
+      expect(
+        () => khataController.recordSettlementPayment(
+          vendorId: vendor.id,
+          amount: 1000.0,
+          paymentSource: VendorPaymentSource.paidFromActiveDrawer,
+          shiftId: shift.id,
+          staffId: testStaffId,
+        ),
+        throwsA(isA<StateError>()),
+      );
+    });
+
+    test('Updating vendor opening balance adjusts current balance by delta', () async {
+      final vendor = await khataController.createVendor(
+        name: 'Faisalabad Flour Mills',
+        phone: '03099998888',
+        openingBalance: 10000.0,
+      );
+
+      // Add a delivery (+5,000) -> current balance becomes 15,000
+      await khataController.recordCreditDelivery(
+        vendorId: vendor.id,
+        amount: 5000.0,
+        staffId: testStaffId,
+      );
+
+      // Correct opening balance from 10,000 to 12,000 (+2,000 delta)
+      final updated = await khataController.updateVendor(
+        id: vendor.id,
+        name: 'Faisalabad Flour Mills (Pvt) Ltd',
+        phone: '03099998888',
+        openingBalance: 12000.0,
+      );
+
+      expect(updated.openingBalance, equals(12000.0));
+      // Current balance: 15,000 + 2,000 = 17,000
+      expect(updated.currentBalance, equals(17000.0));
+    });
+
     test('Vendor statement view displays chronological delivery receipts, settlements, and running balances', () async {
       // Vendor with initial opening balance Rs. 5,000
       final vendor = await khataController.createVendor(

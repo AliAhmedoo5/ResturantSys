@@ -4,7 +4,7 @@ import 'package:resturant_sys/core/khata/vendor.dart';
 import 'package:resturant_sys/core/khata/vendor_payment_source.dart';
 import 'package:resturant_sys/core/theme/theme.dart';
 
-/// Modal dialog for recording vendor balance settlements with multi-source payment routing
+/// Modal dialog for recording Vendor Khata settlements with multi-source payment routing
 /// ('Paid from Active Drawer' vs 'Paid Outside Drawer').
 class SettlementPaymentDialog extends StatefulWidget {
   const SettlementPaymentDialog({
@@ -337,7 +337,7 @@ class _SettlementPaymentDialogState extends State<SettlementPaymentDialog> {
                         minimumSize: const Size(160, 48),
                       ),
                       onPressed: _submit,
-                      child: const Text('Settle Payment'),
+                      child: const Text('Record Payment'),
                     ),
                   ],
                 ),

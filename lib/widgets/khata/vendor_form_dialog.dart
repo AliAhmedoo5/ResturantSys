@@ -174,37 +174,35 @@ class _VendorFormDialogState extends State<VendorFormDialog> {
                 ),
                 const SizedBox(height: WarmCounterSpacing.space16),
 
-                // Opening Balance (Only on create)
-                if (!isEditing) ...[
-                  TextFormField(
-                    key: const Key('vendor_opening_balance_field'),
-                    controller: _openingBalanceController,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
-                    ],
-                    decoration: const InputDecoration(
-                      labelText: 'Opening Payable Balance (PKR)',
-                      hintText: '0.00',
-                      prefixIcon: Icon(Icons.account_balance_wallet_outlined),
-                      border: OutlineInputBorder(),
-                      helperText: 'Initial amount owed to supplier, if any',
-                    ),
-                    validator: (value) {
-                      if (value != null && value.isNotEmpty) {
-                        final val = double.tryParse(value);
-                        if (val == null || val < 0) {
-                          return 'Enter a valid non-negative number';
-                        }
-                      }
-                      return null;
-                    },
+                // Opening Balance
+                TextFormField(
+                  key: const Key('vendor_opening_balance_field'),
+                  controller: _openingBalanceController,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                  ],
+                  decoration: InputDecoration(
+                    labelText: 'Opening Payable Balance (PKR)',
+                    hintText: '0.00',
+                    prefixIcon: const Icon(Icons.account_balance_wallet_outlined),
+                    border: const OutlineInputBorder(),
+                    helperText: isEditing
+                        ? 'Adjusting opening balance updates net payable ledger'
+                        : 'Initial amount owed to supplier, if any',
                   ),
-                  const SizedBox(height: WarmCounterSpacing.space24),
-                ] else ...[
-                  const SizedBox(height: WarmCounterSpacing.space8),
-                ],
+                  validator: (value) {
+                    if (value != null && value.isNotEmpty) {
+                      final val = double.tryParse(value);
+                      if (val == null || val < 0) {
+                        return 'Enter a valid non-negative number';
+                      }
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: WarmCounterSpacing.space24),
 
                 // Action Buttons
                 Row(

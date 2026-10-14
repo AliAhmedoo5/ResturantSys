@@ -162,6 +162,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
         name: result['name'] as String,
         phone: result['phone'] as String,
         suppliedIngredients: result['supplied_ingredients'] as String?,
+        openingBalance: result['opening_balance'] as double?,
       );
 
       if (!mounted) return;
@@ -529,7 +530,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
                                     children: [
                                       Text(
                                         'Rs. ${_currencyFormat.format(vendor.currentBalance)}',
-                                        style: WarmCounterTypography.bodyMedium.copyWith(
+                                        style: WarmCounterTypography.tabularNumbers.copyWith(
                                           fontWeight: FontWeight.w700,
                                           color: vendor.hasOutstandingPayable
                                               ? WarmCounterColors.lightAmber
@@ -778,13 +779,13 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
                 onPressed: _recordCreditDelivery,
               ),
               const SizedBox(height: WarmCounterSpacing.space8),
-              ElevatedButton.icon(
+              OutlinedButton.icon(
                 key: const Key('settle_payment_button'),
                 icon: const Icon(Icons.payments_rounded, size: 18),
-                label: const Text('Settle Payment'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: WarmCounterColors.lightAmber,
-                  foregroundColor: Colors.white,
+                label: const Text('Record Payment'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: WarmCounterColors.lightPrimaryAction,
+                  side: const BorderSide(color: WarmCounterColors.lightPrimaryAction),
                   minimumSize: const Size(180, 48),
                 ),
                 onPressed: _recordSettlementPayment,
@@ -838,7 +839,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
                 const Spacer(),
                 Text(
                   'Opening Balance: Rs. ${_currencyFormat.format(vendor.openingBalance)}',
-                  style: WarmCounterTypography.bodyMedium.copyWith(
+                  style: WarmCounterTypography.tabularNumbers.copyWith(
                     color: WarmCounterColors.lightSecondaryText,
                   ),
                 ),
@@ -893,14 +894,12 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
                 final entry = statement.entries[index];
                 final txn = entry.transaction;
 
-                String typeBadgeText = 'Credit Delivery';
+                final typeBadgeText = txn.type.displayName;
                 Color typeBadgeColor = WarmCounterColors.lightAmber;
 
                 if (txn.type == VendorTransactionType.paymentDrawer) {
-                  typeBadgeText = 'Drawer Cash';
                   typeBadgeColor = WarmCounterColors.lightPrimaryAction;
                 } else if (txn.type == VendorTransactionType.paymentExternal) {
-                  typeBadgeText = 'Outside Payment';
                   typeBadgeColor = Colors.blueGrey;
                 }
 
@@ -978,7 +977,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
                               ? '+ ${_currencyFormat.format(entry.creditAmount)}'
                               : '-',
                           textAlign: TextAlign.right,
-                          style: WarmCounterTypography.bodyMedium.copyWith(
+                          style: WarmCounterTypography.tabularNumbers.copyWith(
                             fontWeight: FontWeight.w600,
                             color: entry.creditAmount > 0 ? WarmCounterColors.lightAmber : null,
                           ),
@@ -992,7 +991,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
                               ? '- ${_currencyFormat.format(entry.debitAmount)}'
                               : '-',
                           textAlign: TextAlign.right,
-                          style: WarmCounterTypography.bodyMedium.copyWith(
+                          style: WarmCounterTypography.tabularNumbers.copyWith(
                             fontWeight: FontWeight.w600,
                             color: entry.debitAmount > 0 ? WarmCounterColors.lightPrimaryAction : null,
                           ),
@@ -1004,7 +1003,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
                         child: Text(
                           'Rs. ${_currencyFormat.format(entry.runningBalance)}',
                           textAlign: TextAlign.right,
-                          style: WarmCounterTypography.bodyMedium.copyWith(
+                          style: WarmCounterTypography.tabularNumbers.copyWith(
                             fontWeight: FontWeight.w700,
                           ),
                         ),

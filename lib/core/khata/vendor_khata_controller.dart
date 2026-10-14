@@ -76,12 +76,13 @@ class VendorKhataController {
     );
   }
 
-  /// Updates an existing vendor's contact details and supplied ingredients.
+  /// Updates an existing vendor's contact details, supplied ingredients, and opening balance.
   Future<Vendor> updateVendor({
     required int id,
     required String name,
     required String phone,
     String? suppliedIngredients,
+    double? openingBalance,
   }) async {
     final trimmedName = name.trim();
     final trimmedPhone = phone.trim();
@@ -92,25 +93,40 @@ class VendorKhataController {
     if (trimmedPhone.isEmpty) {
       throw ArgumentError('Vendor phone cannot be empty.');
     }
+    if (openingBalance != null && openingBalance < 0) {
+      throw ArgumentError('Opening balance cannot be negative.');
+    }
 
     final now = DateTime.now();
     final formattedNow = _formatTimestamp(now);
 
-    final updatedCount = await database.update(
-      PosDatabaseConstants.tableVendorKhata,
-      {
-        'name': trimmedName,
-        'phone': trimmedPhone,
-        'supplied_ingredients': suppliedIngredients?.trim(),
-        'updated_at': formattedNow,
-      },
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-
-    if (updatedCount == 0) {
+    final existing = await getVendorById(id);
+    if (existing == null) {
       throw StateError('Vendor with ID #$id does not exist.');
     }
+
+    final balanceDelta = openingBalance != null
+        ? (openingBalance - existing.openingBalance)
+        : 0.0;
+
+    await database.rawUpdate('''
+      UPDATE ${PosDatabaseConstants.tableVendorKhata}
+      SET name = ?,
+          phone = ?,
+          supplied_ingredients = ?,
+          opening_balance = COALESCE(?, opening_balance),
+          current_balance = current_balance + ?,
+          updated_at = ?
+      WHERE id = ?;
+    ''', [
+      trimmedName,
+      trimmedPhone,
+      suppliedIngredients?.trim(),
+      openingBalance,
+      balanceDelta,
+      formattedNow,
+      id,
+    ]);
 
     final vendor = await getVendorById(id);
     return vendor!;
@@ -312,8 +328,21 @@ class VendorKhataController {
           ? VendorTransactionType.paymentDrawer
           : VendorTransactionType.paymentExternal;
 
-      // 2. If paid from active drawer, auto-generate CashMovement (Pay-Out)
+      // 2. If paid from active drawer, verify active shift and auto-generate CashMovement (Pay-Out)
       if (isDrawerPayment) {
+        final shiftRows = await txn.query(
+          PosDatabaseConstants.tableShifts,
+          where: 'id = ?',
+          whereArgs: [shiftId],
+        );
+        if (shiftRows.isEmpty) {
+          throw ArgumentError('Shift with ID #$shiftId not found.');
+        }
+        final shiftStatus = shiftRows.first['status'] as String;
+        if (shiftStatus != 'OPEN') {
+          throw StateError('Cannot settle drawer payment against closed shift #$shiftId.');
+        }
+
         final slipPart = referenceSlip != null && referenceSlip.trim().isNotEmpty
             ? ' (Slip: ${referenceSlip.trim()})'
             : '';
