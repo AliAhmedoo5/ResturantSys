@@ -111,12 +111,14 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
                         tab: AppWorkspaceTab.register,
                         isSelected: selectedWorkspace == AppWorkspaceTab.register,
                       ),
-                      const SizedBox(width: WarmCounterSpacing.space8),
-                      _buildWorkspaceTabButton(
-                        context,
-                        tab: AppWorkspaceTab.catalog,
-                        isSelected: selectedWorkspace == AppWorkspaceTab.catalog,
-                      ),
+                      if (activeStaff!.canAccessSupervisorPortal) ...[
+                        const SizedBox(width: WarmCounterSpacing.space8),
+                        _buildWorkspaceTabButton(
+                          context,
+                          tab: AppWorkspaceTab.catalog,
+                          isSelected: selectedWorkspace == AppWorkspaceTab.catalog,
+                        ),
+                      ],
                       const SizedBox(width: WarmCounterSpacing.space8),
                       _buildWorkspaceTabButton(
                         context,

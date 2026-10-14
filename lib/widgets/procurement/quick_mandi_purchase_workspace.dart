@@ -586,7 +586,7 @@ class _QuickMandiPurchaseWorkspaceState extends State<QuickMandiPurchaseWorkspac
                   textAlign: TextAlign.end,
                   overflow: TextOverflow.ellipsis,
                   key: const ValueKey('mandi_converted_stock_display'),
-                  style: WarmCounterTypography.bodyMedium.copyWith(
+                  style: WarmCounterTypography.tabularNumbers.copyWith(
                     fontWeight: FontWeight.w700,
                     color: WarmCounterColors.lightPrimaryAction,
                   ),
@@ -611,7 +611,7 @@ class _QuickMandiPurchaseWorkspaceState extends State<QuickMandiPurchaseWorkspac
                   textAlign: TextAlign.end,
                   overflow: TextOverflow.ellipsis,
                   key: const ValueKey('mandi_unit_cost_display'),
-                  style: WarmCounterTypography.bodyMedium.copyWith(
+                  style: WarmCounterTypography.tabularNumbers.copyWith(
                     fontWeight: FontWeight.w700,
                     color: WarmCounterColors.lightPrimaryAction,
                   ),
@@ -634,7 +634,10 @@ class _QuickMandiPurchaseWorkspaceState extends State<QuickMandiPurchaseWorkspac
                     '${_qtyFormat.format(_selectedIngredient!.currentStock)} $storageUnitStr',
                     textAlign: TextAlign.end,
                     overflow: TextOverflow.ellipsis,
-                    style: WarmCounterTypography.caption.copyWith(fontWeight: FontWeight.bold),
+                    style: WarmCounterTypography.tabularNumbers.copyWith(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ],

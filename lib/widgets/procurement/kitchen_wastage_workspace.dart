@@ -553,7 +553,7 @@ class _KitchenWastageWorkspaceState extends State<KitchenWastageWorkspace> {
                   textAlign: TextAlign.end,
                   overflow: TextOverflow.ellipsis,
                   key: const ValueKey('wastage_deducted_stock_display'),
-                  style: WarmCounterTypography.bodyMedium.copyWith(
+                  style: WarmCounterTypography.tabularNumbers.copyWith(
                     fontWeight: FontWeight.w700,
                     color: WarmCounterColors.lightDestructiveAction,
                   ),
@@ -575,7 +575,7 @@ class _KitchenWastageWorkspaceState extends State<KitchenWastageWorkspace> {
                   'Rs. ${_currencyFormat.format(unitCost)} / $storageUnitStr',
                   textAlign: TextAlign.end,
                   overflow: TextOverflow.ellipsis,
-                  style: WarmCounterTypography.bodyMedium,
+                  style: WarmCounterTypography.tabularNumbers,
                 ),
               ),
             ],
@@ -595,7 +595,7 @@ class _KitchenWastageWorkspaceState extends State<KitchenWastageWorkspace> {
                   textAlign: TextAlign.end,
                   overflow: TextOverflow.ellipsis,
                   key: const ValueKey('wastage_cost_loss_display'),
-                  style: WarmCounterTypography.pageHeading.copyWith(
+                  style: WarmCounterTypography.tabularNumbers.copyWith(
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
                     color: WarmCounterColors.lightDestructiveAction,
@@ -619,7 +619,10 @@ class _KitchenWastageWorkspaceState extends State<KitchenWastageWorkspace> {
                     '${_qtyFormat.format(_selectedIngredient!.currentStock)} $storageUnitStr',
                     textAlign: TextAlign.end,
                     overflow: TextOverflow.ellipsis,
-                    style: WarmCounterTypography.caption.copyWith(fontWeight: FontWeight.bold),
+                    style: WarmCounterTypography.tabularNumbers.copyWith(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ],

@@ -55,82 +55,48 @@ enum DesiUnit {
   final String displayName;
   final String metricEquivalence;
 
+  static const Map<(DesiUnit, StorageUnit), double> _conversionMap = {
+    // Mann = 40 kg
+    (DesiUnit.mann, StorageUnit.kg): 40.0,
+    (DesiUnit.mann, StorageUnit.g): 40000.0,
+    (DesiUnit.mann, StorageUnit.ml): 40000.0,
+    (DesiUnit.mann, StorageUnit.count): 40.0,
+
+    // Darjan = 12 count
+    (DesiUnit.darjan, StorageUnit.count): 12.0,
+    (DesiUnit.darjan, StorageUnit.kg): 12.0,
+    (DesiUnit.darjan, StorageUnit.g): 12.0,
+    (DesiUnit.darjan, StorageUnit.ml): 12.0,
+
+    // Peti = 16 L / crate
+    (DesiUnit.peti, StorageUnit.ml): 16000.0,
+    (DesiUnit.peti, StorageUnit.kg): 16.0,
+    (DesiUnit.peti, StorageUnit.g): 16000.0,
+    (DesiUnit.peti, StorageUnit.count): 16.0,
+
+    // Bori = 50 kg
+    (DesiUnit.bori, StorageUnit.kg): 50.0,
+    (DesiUnit.bori, StorageUnit.g): 50000.0,
+    (DesiUnit.bori, StorageUnit.ml): 50000.0,
+    (DesiUnit.bori, StorageUnit.count): 50.0,
+
+    // Dharri = 5 kg
+    (DesiUnit.dharri, StorageUnit.kg): 5.0,
+    (DesiUnit.dharri, StorageUnit.g): 5000.0,
+    (DesiUnit.dharri, StorageUnit.ml): 5000.0,
+    (DesiUnit.dharri, StorageUnit.count): 5.0,
+
+    // Pao = 250 g
+    (DesiUnit.pao, StorageUnit.g): 250.0,
+    (DesiUnit.pao, StorageUnit.kg): 0.25,
+    (DesiUnit.pao, StorageUnit.ml): 250.0,
+    (DesiUnit.pao, StorageUnit.count): 0.25,
+  };
+
   /// Returns the multiplier converting 1 purchase unit of this [DesiUnit]
   /// into the target [StorageUnit] used by the recipe / inventory system.
   double conversionMultiplier(StorageUnit targetUnit) {
-    switch (this) {
-      case DesiUnit.mann:
-        switch (targetUnit) {
-          case StorageUnit.kg:
-            return 40.0;
-          case StorageUnit.g:
-            return 40000.0;
-          case StorageUnit.ml:
-            return 40000.0;
-          case StorageUnit.count:
-            return 40.0;
-        }
-
-      case DesiUnit.darjan:
-        switch (targetUnit) {
-          case StorageUnit.count:
-            return 12.0;
-          case StorageUnit.kg:
-            return 12.0;
-          case StorageUnit.g:
-            return 12.0;
-          case StorageUnit.ml:
-            return 12.0;
-        }
-
-      case DesiUnit.peti:
-        switch (targetUnit) {
-          case StorageUnit.ml:
-            return 16000.0; // 16 Liters = 16,000 ml
-          case StorageUnit.kg:
-            return 16.0;
-          case StorageUnit.g:
-            return 16000.0;
-          case StorageUnit.count:
-            return 16.0;
-        }
-
-      case DesiUnit.bori:
-        switch (targetUnit) {
-          case StorageUnit.kg:
-            return 50.0;
-          case StorageUnit.g:
-            return 50000.0;
-          case StorageUnit.ml:
-            return 50000.0;
-          case StorageUnit.count:
-            return 50.0;
-        }
-
-      case DesiUnit.dharri:
-        switch (targetUnit) {
-          case StorageUnit.kg:
-            return 5.0;
-          case StorageUnit.g:
-            return 5000.0;
-          case StorageUnit.ml:
-            return 5000.0;
-          case StorageUnit.count:
-            return 5.0;
-        }
-
-      case DesiUnit.pao:
-        switch (targetUnit) {
-          case StorageUnit.g:
-            return 250.0;
-          case StorageUnit.kg:
-            return 0.25;
-          case StorageUnit.ml:
-            return 250.0;
-          case StorageUnit.count:
-            return 0.25;
-        }
-    }
+    return _conversionMap[(this, targetUnit)] ?? 1.0;
   }
 
   /// Converts a purchased quantity in this [DesiUnit] into the recipe [StorageUnit].
