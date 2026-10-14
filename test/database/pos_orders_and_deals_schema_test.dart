@@ -37,7 +37,7 @@ void main() {
       // Check schema version
       final versionResult = await db.rawQuery('PRAGMA user_version;');
       expect(versionResult.first.values.first, equals(PosDatabaseConstants.schemaVersion));
-      expect(versionResult.first.values.first, equals(5));
+      expect(versionResult.first.values.first, greaterThanOrEqualTo(5));
 
       // Check tables exist
       final tables = await db.rawQuery(

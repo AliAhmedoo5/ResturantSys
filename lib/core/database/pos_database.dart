@@ -113,6 +113,7 @@ class PosDatabase {
     await _createCatalogAndRecipeTables(db);
     await _createOrderItemsAndDealsTables(db);
     await _createOrderVoidsTables(db);
+    await _createProcurementAndWastageTables(db);
   }
 
   Future<void> _createOperationalAccountingTables(DatabaseExecutor executor) async {
@@ -324,6 +325,35 @@ class PosDatabase {
     ''');
   }
 
+  Future<void> _createProcurementAndWastageTables(DatabaseExecutor executor) async {
+    await executor.execute('''
+      CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableMandiProcurements} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        raw_ingredient_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableRawIngredients}(id) ON DELETE CASCADE,
+        traditional_unit TEXT NOT NULL,
+        quantity REAL NOT NULL,
+        total_cost REAL NOT NULL,
+        converted_quantity REAL NOT NULL,
+        cost_per_recipe_unit REAL NOT NULL,
+        notes TEXT,
+        created_at TEXT NOT NULL
+      );
+    ''');
+
+    await executor.execute('''
+      CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableKitchenWastage} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        staff_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableStaff}(id),
+        raw_ingredient_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableRawIngredients}(id) ON DELETE CASCADE,
+        quantity REAL NOT NULL,
+        cost_loss REAL NOT NULL,
+        reason TEXT NOT NULL,
+        notes TEXT,
+        created_at TEXT NOT NULL
+      );
+    ''');
+  }
+
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await _createOperationalAccountingTables(db);
@@ -336,6 +366,9 @@ class PosDatabase {
     }
     if (oldVersion < 5) {
       await _createOrderVoidsTables(db);
+    }
+    if (oldVersion < 6) {
+      await _createProcurementAndWastageTables(db);
     }
   }
 

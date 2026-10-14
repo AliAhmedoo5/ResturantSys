@@ -1,6 +1,6 @@
 /// Constants and default configuration for the SQLite database.
 abstract final class PosDatabaseConstants {
-  static const int schemaVersion = 5;
+  static const int schemaVersion = 6;
   static const String databaseFileName = 'pos.db';
   static const String defaultProgramDataFolder = 'ResturantPOS';
   static const String defaultDataSubFolder = 'data';
@@ -27,6 +27,10 @@ abstract final class PosDatabaseConstants {
   static const String tableDeals = 'deals';
   static const String tableDealItems = 'deal_items';
   static const String tableDealItemOptions = 'deal_item_options';
+
+  // Procurement and Kitchen Wastage Tables
+  static const String tableMandiProcurements = 'mandi_procurements';
+  static const String tableKitchenWastage = 'kitchen_wastage';
 
   // Settings Keys
   static const String settingDiscrepancyThreshold = 'discrepancy_threshold';

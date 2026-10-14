@@ -7,9 +7,12 @@ import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
 import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
 import 'package:resturant_sys/core/hardware/reprint_tray_controller.dart';
 import '../core/auth/auth_service.dart';
+import '../core/procurement/procurement_and_wastage_controller.dart';
 import 'app_header.dart';
 import 'catalog/supervisor_catalog_workspace.dart';
 import 'pin_lock_screen.dart';
+import 'procurement/kitchen_wastage_workspace.dart';
+import 'procurement/quick_mandi_purchase_workspace.dart';
 import 'shifts/register_shift_workspace.dart';
 
 /// Top-level desktop application shell coordinating authentication gating,
@@ -23,6 +26,7 @@ class AppShell extends StatefulWidget {
     this.catalogController,
     this.orderController,
     this.reprintTrayController,
+    this.procurementController,
     this.authService,
     this.child,
   });
@@ -33,6 +37,7 @@ class AppShell extends StatefulWidget {
   final CatalogAndRecipeController? catalogController;
   final OrderAndCheckoutController? orderController;
   final ReprintTrayController? reprintTrayController;
+  final ProcurementAndWastageController? procurementController;
   final AuthService? authService;
   final Widget? child;
 
@@ -99,6 +104,19 @@ class _AppShellState extends State<AppShell> {
       return SupervisorCatalogWorkspace(
         controller: widget.catalogController!,
         orderController: widget.orderController,
+        procurementController: widget.procurementController,
+      );
+    }
+
+    if (_selectedWorkspace == AppWorkspaceTab.mandi) {
+      return QuickMandiPurchaseWorkspace(
+        controller: widget.procurementController,
+      );
+    }
+
+    if (_selectedWorkspace == AppWorkspaceTab.wastage) {
+      return KitchenWastageWorkspace(
+        controller: widget.procurementController,
       );
     }
 

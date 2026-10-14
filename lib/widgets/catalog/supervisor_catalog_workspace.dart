@@ -14,6 +14,9 @@ import 'dialogs/menu_item_form_dialog.dart';
 import 'dialogs/modifier_form_dialog.dart';
 import 'dialogs/raw_ingredient_form_dialog.dart';
 import 'dialogs/recipe_builder_dialog.dart';
+import '../procurement/kitchen_wastage_dialog.dart';
+import '../procurement/quick_mandi_purchase_dialog.dart';
+import '../../core/procurement/procurement_and_wastage_controller.dart';
 
 /// Back-office catalog and recipe definition workspace for supervisors and owners.
 ///
@@ -25,6 +28,7 @@ class SupervisorCatalogWorkspace extends StatefulWidget {
     super.key,
     this.controller,
     this.orderController,
+    this.procurementController,
     this.initialCategories,
     this.initialMenuItems,
     this.initialRawIngredients,
@@ -34,6 +38,7 @@ class SupervisorCatalogWorkspace extends StatefulWidget {
 
   final CatalogAndRecipeController? controller;
   final OrderAndCheckoutController? orderController;
+  final ProcurementAndWastageController? procurementController;
   final List<MenuCategory>? initialCategories;
   final List<MenuItem>? initialMenuItems;
   final List<RawIngredient>? initialRawIngredients;
@@ -449,6 +454,28 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
         });
       }
     }
+  }
+
+  void _showQuickMandiDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => QuickMandiPurchaseDialog(
+        controller: widget.procurementController,
+        initialIngredients: _rawIngredients,
+        onProcurementCompleted: (_) => _loadAllCatalogData(),
+      ),
+    ).then((_) => _loadAllCatalogData());
+  }
+
+  void _showKitchenWastageDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => KitchenWastageDialog(
+        controller: widget.procurementController,
+        initialIngredients: _rawIngredients,
+        onWastageLogged: (_) => _loadAllCatalogData(),
+      ),
+    ).then((_) => _loadAllCatalogData());
   }
 
   // ---------------------------------------------------------------------------
@@ -1095,15 +1122,41 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                   ],
                 ),
               ),
-              ElevatedButton.icon(
-                key: const ValueKey('add_ingredient_button'),
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('Add Raw Ingredient'),
-                onPressed: _showAddRawIngredientDialog,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: WarmCounterColors.lightPrimaryAction,
-                  foregroundColor: Colors.white,
-                ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    key: const ValueKey('raw_ingredients_quick_mandi_button'),
+                    icon: const Icon(Icons.shopping_basket_rounded, size: 18),
+                    label: const Text('Quick Mandi Purchase'),
+                    onPressed: _showQuickMandiDialog,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: WarmCounterColors.lightPrimaryAction,
+                      side: const BorderSide(color: WarmCounterColors.lightPrimaryAction),
+                    ),
+                  ),
+                  OutlinedButton.icon(
+                    key: const ValueKey('raw_ingredients_record_wastage_button'),
+                    icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                    label: const Text('Record Wastage'),
+                    onPressed: _showKitchenWastageDialog,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: WarmCounterColors.lightDestructiveAction,
+                      side: const BorderSide(color: WarmCounterColors.lightDestructiveAction),
+                    ),
+                  ),
+                  ElevatedButton.icon(
+                    key: const ValueKey('add_ingredient_button'),
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Add Raw Ingredient'),
+                    onPressed: _showAddRawIngredientDialog,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: WarmCounterColors.lightPrimaryAction,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

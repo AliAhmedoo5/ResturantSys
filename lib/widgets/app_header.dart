@@ -9,7 +9,9 @@ import 'orders/reprint_tray_dialog.dart';
 /// Operational workspaces selectable in the application header.
 enum AppWorkspaceTab {
   register('Register & Shifts', Icons.point_of_sale_rounded),
-  catalog('Catalog & BOM', Icons.restaurant_menu_rounded);
+  catalog('Catalog & BOM', Icons.restaurant_menu_rounded),
+  mandi('Mandi Purchase', Icons.shopping_basket_rounded),
+  wastage('Kitchen Wastage', Icons.delete_outline_rounded);
 
   const AppWorkspaceTab(this.label, this.icon);
   final String label;
@@ -93,9 +95,9 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
             ],
           ),
 
-          // Middle: Workspace Switcher for Supervisors/Owners
+          // Middle: Workspace Switcher for Supervisors/Owners/Kitchen
           if (activeStaff != null &&
-              activeStaff!.canAccessSupervisorPortal &&
+              (activeStaff!.canAccessSupervisorPortal || activeStaff!.canAccessKitchen) &&
               onWorkspaceSelected != null)
             Row(
               mainAxisSize: MainAxisSize.min,
@@ -110,6 +112,18 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
                   context,
                   tab: AppWorkspaceTab.catalog,
                   isSelected: selectedWorkspace == AppWorkspaceTab.catalog,
+                ),
+                const SizedBox(width: WarmCounterSpacing.space8),
+                _buildWorkspaceTabButton(
+                  context,
+                  tab: AppWorkspaceTab.mandi,
+                  isSelected: selectedWorkspace == AppWorkspaceTab.mandi,
+                ),
+                const SizedBox(width: WarmCounterSpacing.space8),
+                _buildWorkspaceTabButton(
+                  context,
+                  tab: AppWorkspaceTab.wastage,
+                  isSelected: selectedWorkspace == AppWorkspaceTab.wastage,
                 ),
               ],
             ),

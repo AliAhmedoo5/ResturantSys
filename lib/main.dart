@@ -7,6 +7,7 @@ import 'core/auth/auth_service.dart';
 import 'core/shifts/shift_and_cash_controller.dart';
 import 'core/catalog/catalog_and_recipe_controller.dart';
 import 'core/orders/order_and_checkout_controller.dart';
+import 'core/procurement/procurement_and_wastage_controller.dart';
 import 'core/hardware/reprint_tray_controller.dart';
 import 'core/hardware/in_memory_hardware_adapter.dart';
 import 'core/theme/warm_counter_theme.dart';
@@ -27,6 +28,10 @@ void main() async {
   final shiftController = ShiftAndCashController(database: database);
   final catalogController = CatalogAndRecipeController(database: database);
   final orderController = OrderAndCheckoutController(database: database);
+  final procurementController = ProcurementAndWastageController(
+    database: database,
+    authService: authService,
+  );
 
   final reprintTrayController = ReprintTrayController(
     hardwareAdapter: InMemoryHardwareAdapter(),
@@ -38,6 +43,7 @@ void main() async {
     shiftController: shiftController,
     catalogController: catalogController,
     orderController: orderController,
+    procurementController: procurementController,
     reprintTrayController: reprintTrayController,
   ));
 }
@@ -50,6 +56,7 @@ class RestaurantPosApp extends StatelessWidget {
     this.shiftController,
     this.catalogController,
     this.orderController,
+    this.procurementController,
     this.reprintTrayController,
   });
 
@@ -57,6 +64,7 @@ class RestaurantPosApp extends StatelessWidget {
   final ShiftAndCashController? shiftController;
   final CatalogAndRecipeController? catalogController;
   final OrderAndCheckoutController? orderController;
+  final ProcurementAndWastageController? procurementController;
   final ReprintTrayController? reprintTrayController;
 
   @override
@@ -73,6 +81,7 @@ class RestaurantPosApp extends StatelessWidget {
         shiftController: shiftController,
         catalogController: catalogController,
         orderController: orderController,
+        procurementController: procurementController,
         reprintTrayController: reprintTrayController,
         authService: authService,
       ),
