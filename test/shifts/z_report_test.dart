@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:resturant_sys/core/catalog/menu_item.dart';
 import 'package:resturant_sys/core/database/pos_database.dart';
 import 'package:resturant_sys/core/database/pos_database_constants.dart';
 import 'package:resturant_sys/core/orders/dining_type.dart';
@@ -14,7 +15,6 @@ import 'package:resturant_sys/core/khata/vendor_khata_controller.dart';
 import 'package:resturant_sys/core/khata/vendor_payment_source.dart';
 import 'package:resturant_sys/core/shifts/cash_movement.dart';
 import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
-import 'package:resturant_sys/core/shifts/z_report.dart';
 
 void main() {
   setUpAll(() {
@@ -95,6 +95,13 @@ void main() {
         'created_at': DateTime.now().toIso8601String(),
       });
 
+      final burgerItem = MenuItem(
+        id: menuItemId,
+        categoryId: catId,
+        name: 'Zinger Burger',
+        basePrice: 500.0,
+      );
+
       // --- SHIFT 1 ---
       final shift1 = await shiftController.openShift(staffId: cashierId, openingFloat: 5000.0);
 
@@ -106,8 +113,7 @@ void main() {
         diningType: DiningType.dineIn,
         items: [
           CartItem(
-            name: 'Zinger Burger',
-            unitPrice: 500.0,
+            menuItem: burgerItem,
             quantity: 1,
           ),
         ],
@@ -124,8 +130,7 @@ void main() {
         diningType: DiningType.takeaway,
         items: [
           CartItem(
-            name: 'Zinger Burger',
-            unitPrice: 500.0,
+            menuItem: burgerItem,
             quantity: 2,
           ),
         ],
@@ -159,8 +164,7 @@ void main() {
         diningType: DiningType.dineIn,
         items: [
           CartItem(
-            name: 'Zinger Burger',
-            unitPrice: 500.0,
+            menuItem: burgerItem,
             quantity: 1,
           ),
         ],
@@ -177,8 +181,7 @@ void main() {
         diningType: DiningType.dineIn,
         items: [
           CartItem(
-            name: 'Zinger Burger',
-            unitPrice: 500.0,
+            menuItem: burgerItem,
             quantity: 1,
           ),
         ],
@@ -209,11 +212,10 @@ void main() {
       await shiftController.closeShift(shiftId: shift2.id, countedCash: 2900.0);
 
       // Kitchen wastage log:
-      await procurementController.logKitchenWastage(
-        staffId: cashierId,
+      await procurementController.recordKitchenWastage(
+        staffPin: '1111',
         rawIngredientId: ingredientId,
         quantity: 2.0,
-        costLoss: 300.0,
         reason: WastageReason.burned,
         notes: 'Burned in fryer',
       );
@@ -221,23 +223,23 @@ void main() {
       // Mandi procurement:
       await procurementController.recordMandiPurchase(
         rawIngredientId: ingredientId,
-        unit: DesiUnit.kg,
-        quantity: 10.0,
+        unit: DesiUnit.dharri,
+        quantity: 2.0,
         totalCost: 1500.0,
         notes: 'Wholesale chicken',
       );
 
       // Vendor Khata delivery and settlement:
       final vendor = await khataController.createVendor(name: 'Al-Madina Poultry', phone: '03001234567');
-      await khataController.recordDeliverySlip(
+      await khataController.recordCreditDelivery(
         vendorId: vendor.id,
         amount: 5000.0,
         referenceSlip: 'INV-101',
       );
-      await khataController.recordPaymentSettlement(
+      await khataController.recordSettlementPayment(
         vendorId: vendor.id,
         amount: 2000.0,
-        source: VendorPaymentSource.externalBank,
+        paymentSource: VendorPaymentSource.paidOutsideDrawer,
         notes: 'Bank transfer',
       );
 
@@ -284,6 +286,24 @@ void main() {
       final day1 = await shiftController.openBusinessDay(openedByStaffId: supervisorId);
       final shift = await shiftController.openShift(staffId: cashierId, openingFloat: 1000.0);
 
+      final cat = await db.query(PosDatabaseConstants.tableCategories, limit: 1);
+      final catId = cat.isNotEmpty ? cat.first['id'] as int : 1;
+      final snackItemId = await db.insert(PosDatabaseConstants.tableMenuItems, {
+        'category_id': catId,
+        'name': 'Quick Snack',
+        'base_price': 200.0,
+        'tax_rate': 0.0,
+        'is_tax_inclusive': 1,
+        'is_active': 1,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+      final snackItem = MenuItem(
+        id: snackItemId,
+        categoryId: catId,
+        name: 'Quick Snack',
+        basePrice: 200.0,
+      );
+
       // Create an order in Day 1: token will be #01
       final res1 = await orderController.checkoutOrder(
         businessDayId: day1.id,
@@ -291,7 +311,7 @@ void main() {
         cashierId: cashierId,
         diningType: DiningType.dineIn,
         items: [
-          CartItem(name: 'Quick Snack', unitPrice: 200.0, quantity: 1),
+          CartItem(menuItem: snackItem, quantity: 1),
         ],
         payments: [
           const PaymentTender(method: PaymentMethod.cash, amountTendered: 200.0),
@@ -306,7 +326,7 @@ void main() {
         cashierId: cashierId,
         diningType: DiningType.dineIn,
         items: [
-          CartItem(name: 'Quick Snack', unitPrice: 200.0, quantity: 1),
+          CartItem(menuItem: snackItem, quantity: 1),
         ],
         payments: [
           const PaymentTender(method: PaymentMethod.cash, amountTendered: 200.0),

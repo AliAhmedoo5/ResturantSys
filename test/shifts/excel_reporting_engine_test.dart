@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:resturant_sys/core/catalog/menu_item.dart';
 import 'package:resturant_sys/core/database/pos_database.dart';
 import 'package:resturant_sys/core/database/pos_database_constants.dart';
 import 'package:resturant_sys/core/orders/cart_item.dart';
@@ -97,6 +98,13 @@ void main() {
         'created_at': DateTime.now().toIso8601String(),
       });
 
+      final drumstickItem = MenuItem(
+        id: menuItemId,
+        categoryId: catId,
+        name: 'Hot Crispy Drumsticks',
+        basePrice: 650.0,
+      );
+
       final shift = await shiftController.openShift(staffId: cashierId, openingFloat: 5000.0);
 
       await orderController.checkoutOrder(
@@ -106,8 +114,7 @@ void main() {
         diningType: DiningType.takeaway,
         items: [
           CartItem(
-            name: 'Hot Crispy Drumsticks',
-            unitPrice: 650.0,
+            menuItem: drumstickItem,
             quantity: 2,
           ),
         ],
@@ -118,29 +125,28 @@ void main() {
 
       await shiftController.closeShift(shiftId: shift.id, countedCash: 6300.0);
 
-      await procurementController.logKitchenWastage(
-        staffId: cashierId,
+      await procurementController.recordKitchenWastage(
+        staffPin: '1111',
         rawIngredientId: ingId,
         quantity: 1.5,
-        costLoss: 300.0,
         reason: WastageReason.dropped,
         notes: 'Dropped during rush hour',
       );
 
       await procurementController.recordMandiPurchase(
         rawIngredientId: ingId,
-        unit: DesiUnit.kg,
-        quantity: 20.0,
+        unit: DesiUnit.dharri,
+        quantity: 4.0,
         totalCost: 3800.0,
         notes: 'Morning fresh poultry mandi',
       );
 
       final vendor = await khataController.createVendor(name: 'Punjab Broilers', phone: '03215551234');
-      await khataController.recordDeliverySlip(vendorId: vendor.id, amount: 8000.0, referenceSlip: 'DEL-88');
-      await khataController.recordPaymentSettlement(
+      await khataController.recordCreditDelivery(vendorId: vendor.id, amount: 8000.0, referenceSlip: 'DEL-88');
+      await khataController.recordSettlementPayment(
         vendorId: vendor.id,
         amount: 3000.0,
-        source: VendorPaymentSource.externalBank,
+        paymentSource: VendorPaymentSource.paidOutsideDrawer,
         notes: 'Interbank wire transfer',
       );
 

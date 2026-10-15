@@ -1431,6 +1431,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                           ),
                           onPressed: () async {
                             if (widget.shiftController != null) {
+                              final messenger = ScaffoldMessenger.of(context);
                               try {
                                 final engine = ExcelReportingEngine(database: widget.shiftController!.database);
                                 final bytes = await engine.generateDailyWorkbookBytes(
@@ -1442,13 +1443,13 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                                   businessDayId: _activeZReport!.businessDayId,
                                 );
                                 if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
+                                  messenger.showSnackBar(
                                     SnackBar(content: Text('6-Sheet Daily Excel Report created at: ${file.path}')),
                                   );
                                 }
                               } catch (e) {
                                 if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
+                                  messenger.showSnackBar(
                                     SnackBar(content: Text('Excel export error: $e'), backgroundColor: WarmCounterColors.lightDestructiveAction),
                                   );
                                 }
