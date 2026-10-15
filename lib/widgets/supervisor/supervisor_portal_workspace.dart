@@ -1318,7 +1318,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                               ),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
+                                decoration: const BoxDecoration(
                                   color: WarmCounterColors.lightActiveNavHighlight,
                                   borderRadius: WarmCounterSpacing.controlBorderRadius,
                                 ),
@@ -1401,6 +1401,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                                 report: _activeZReport!,
                                 onExportExcel: () async {
                                   if (widget.shiftController != null) {
+                                    final messenger = ScaffoldMessenger.of(context);
                                     final engine = ExcelReportingEngine(database: widget.shiftController!.database);
                                     final bytes = await engine.generateDailyWorkbookBytes(
                                       businessDayId: _activeZReport!.businessDayId,
@@ -1411,7 +1412,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                                       businessDayId: _activeZReport!.businessDayId,
                                     );
                                     if (mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
+                                      messenger.showSnackBar(
                                         SnackBar(content: Text('Saved: ${file.path}')),
                                       );
                                     }

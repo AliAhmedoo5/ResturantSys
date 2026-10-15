@@ -11,6 +11,7 @@ import 'business_day_bar.dart';
 import 'cash_movement_dialog.dart';
 import 'discrepancy_review_dialog.dart';
 import 'open_business_day_dialog.dart';
+import 'open_shift_dialog.dart';
 import 'x_report_dialog.dart';
 import 'z_report_dialog.dart';
 import '../../core/database/database_backup_service.dart';
