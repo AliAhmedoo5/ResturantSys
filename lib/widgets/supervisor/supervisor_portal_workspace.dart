@@ -1421,15 +1421,17 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                                 },
                                 onFinalizeBusinessDay: () async {
                                   if (widget.shiftController != null) {
+                                    final messenger = ScaffoldMessenger.of(context);
                                     final staffId = widget.currentStaff?.id ?? 1;
+                                    final dayId = _activeZReport?.businessDayId;
                                     await widget.shiftController!.finalizeBusinessDayWithZReport(
                                       closedByStaffId: staffId,
                                     );
                                     if (mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
+                                      messenger.showSnackBar(
                                         SnackBar(
                                           content: Text(
-                                            'Business Day #${_activeZReport!.businessDayId} finalized with Z-Report. Backup archived and tokens reset to #01.',
+                                            'Business Day #${dayId ?? ""} finalized with Z-Report. Backup archived and tokens reset to #01.',
                                           ),
                                         ),
                                       );

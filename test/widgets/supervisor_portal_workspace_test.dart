@@ -358,7 +358,6 @@ void main() {
         await shiftController.closeShift(
           shiftId: shift.id,
           countedCash: 5000.0,
-          closingStaffId: 2,
         );
 
         await tester.pumpWidget(createTestApp(shiftController: shiftController));

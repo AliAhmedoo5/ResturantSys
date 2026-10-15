@@ -227,20 +227,22 @@ class _ZReportDialogState extends State<ZReportDialog> {
                         ? null
                         : () async {
                             final confirmed = await _confirmFinalizeDay(context, widget.report.businessDayId);
-                            if (!confirmed) return;
+                            if (!confirmed || !mounted) return;
 
                             if (widget.onFinalizeBusinessDay != null) {
                               setState(() => _isProcessing = true);
                               try {
                                 await widget.onFinalizeBusinessDay!();
-                                if (context.mounted) {
+                                if (mounted) {
                                   Navigator.of(context).maybePop(true);
                                 }
                               } finally {
                                 if (mounted) setState(() => _isProcessing = false);
                               }
                             } else {
-                              Navigator.of(context).maybePop(true);
+                              if (mounted) {
+                                Navigator.of(context).maybePop(true);
+                              }
                             }
                           },
                   ),
