@@ -269,7 +269,8 @@ void main() {
 
       final printable = zReport.toPrintableString();
       expect(printable, contains('MASTER END-OF-DAY Z-REPORT'));
-      expect(printable, contains('Day #${day.id}'));
+      expect(printable, contains('Business Day:'));
+      expect(printable, contains('#${day.id}'));
       expect(printable, contains('Net Sales:'));
       expect(printable, contains('2,000.00'));
       expect(printable, contains('Cash Sales:'));
