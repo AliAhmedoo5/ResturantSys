@@ -131,6 +131,7 @@ void main() {
       expect(find.byKey(const ValueKey('portal_tab_staff')), findsOneWidget);
       expect(find.byKey(const ValueKey('portal_tab_toggles')), findsOneWidget);
       expect(find.byKey(const ValueKey('portal_tab_discrepancies')), findsOneWidget);
+      expect(find.byKey(const ValueKey('portal_tab_reports')), findsOneWidget);
       expect(find.byKey(const ValueKey('portal_tab_tokenQueue')), findsOneWidget);
       expect(find.byKey(const ValueKey('portal_tab_kitchenStation')), findsOneWidget);
 

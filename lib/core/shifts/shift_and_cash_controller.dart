@@ -4,6 +4,7 @@ import 'business_day.dart';
 import 'shift.dart';
 import 'cash_movement.dart';
 import 'x_report.dart';
+import 'z_report.dart';
 
 /// Controller coordinating the operational lifecycle of Business Days and Cashier Shifts.
 ///
@@ -555,4 +556,230 @@ class ShiftAndCashController {
       isInterim: shift.isOpen,
     );
   }
+
+  // ===========================================================================
+  // MASTER END-OF-DAY Z-REPORT GENERATION & DAY FINALIZATION
+  // ===========================================================================
+
+  /// Aggregates multi-shift totals, revenue, payment tender splits, cash drawer variances,
+  /// voids, wastage, and supplier khata for an entire Business Day.
+  Future<ZReport> generateZReport(int businessDayId) async {
+    final dayRows = await database.rawQuery('''
+      SELECT b.*, 
+             s1.name as opened_by_staff_name,
+             s2.name as closed_by_staff_name
+      FROM ${PosDatabaseConstants.tableBusinessDays} b
+      LEFT JOIN ${PosDatabaseConstants.tableStaff} s1 ON b.opened_by_staff_id = s1.id
+      LEFT JOIN ${PosDatabaseConstants.tableStaff} s2 ON b.closed_by_staff_id = s2.id
+      WHERE b.id = ?;
+    ''', [businessDayId]);
+
+    if (dayRows.isEmpty) {
+      throw StateError('Business Day #$businessDayId not found.');
+    }
+
+    final day = BusinessDay.fromMap(dayRows.first);
+
+    // 1. Shifts under this business day
+    final shiftRows = await database.rawQuery('''
+      SELECT sh.*, st.name as staff_name
+      FROM ${PosDatabaseConstants.tableShifts} sh
+      LEFT JOIN ${PosDatabaseConstants.tableStaff} st ON sh.staff_id = st.id
+      WHERE sh.business_day_id = ?
+      ORDER BY sh.id ASC;
+    ''', [businessDayId]);
+    final shifts = shiftRows.map((r) => Shift.fromMap(r)).toList();
+
+    // 2. Sales totals from settled orders
+    double grossSales = 0.0;
+    double totalDiscounts = 0.0;
+    double totalTax = 0.0;
+    double netSales = 0.0;
+    int totalOrdersCount = 0;
+
+    final salesRows = await database.rawQuery('''
+      SELECT 
+        COUNT(id) as total_orders,
+        COALESCE(SUM(subtotal), 0.0) as gross_sales,
+        COALESCE(SUM(discount_amount), 0.0) as total_discounts,
+        COALESCE(SUM(tax_amount), 0.0) as total_tax,
+        COALESCE(SUM(grand_total), 0.0) as net_sales
+      FROM ${PosDatabaseConstants.tableOrders}
+      WHERE business_day_id = ? AND payment_status = 'SETTLED';
+    ''', [businessDayId]);
+
+    if (salesRows.isNotEmpty) {
+      final r = salesRows.first;
+      totalOrdersCount = (r['total_orders'] as num?)?.toInt() ?? 0;
+      grossSales = (r['gross_sales'] as num?)?.toDouble() ?? 0.0;
+      totalDiscounts = (r['total_discounts'] as num?)?.toDouble() ?? 0.0;
+      totalTax = (r['total_tax'] as num?)?.toDouble() ?? 0.0;
+      netSales = (r['net_sales'] as num?)?.toDouble() ?? 0.0;
+    }
+
+    // 3. Payment Tenders breakdown
+    double cashSales = 0.0;
+    double cardSales = 0.0;
+    double raastSales = 0.0;
+
+    final tenderRows = await database.rawQuery('''
+      SELECT op.payment_method, 
+             COALESCE(SUM(op.amount_tendered), 0.0) as total_tendered,
+             COALESCE(SUM(op.change_returned), 0.0) as total_change
+      FROM ${PosDatabaseConstants.tableOrderPayments} op
+      JOIN ${PosDatabaseConstants.tableOrders} o ON op.order_id = o.id
+      WHERE o.business_day_id = ? AND o.payment_status = 'SETTLED'
+      GROUP BY op.payment_method;
+    ''', [businessDayId]);
+
+    for (final row in tenderRows) {
+      final method = row['payment_method'] as String;
+      final tendered = (row['total_tendered'] as num).toDouble();
+      final change = (row['total_change'] as num).toDouble();
+      if (method == 'CASH') {
+        cashSales += (tendered - change);
+      } else if (method == 'CARD') {
+        cardSales += tendered;
+      } else if (method == 'RAAST') {
+        raastSales += tendered;
+      }
+    }
+
+    // 4. Voids
+    int totalVoidCount = 0;
+    double totalVoidAmount = 0.0;
+    final voidRows = await database.rawQuery('''
+      SELECT COUNT(id) as void_count, COALESCE(SUM(grand_total), 0.0) as void_amount
+      FROM ${PosDatabaseConstants.tableOrders}
+      WHERE business_day_id = ? AND payment_status = 'VOIDED';
+    ''', [businessDayId]);
+
+    if (voidRows.isNotEmpty) {
+      totalVoidCount = (voidRows.first['void_count'] as num?)?.toInt() ?? 0;
+      totalVoidAmount = (voidRows.first['void_amount'] as num?)?.toDouble() ?? 0.0;
+    }
+
+    // 5. Cash drawer reconciliations across all shifts
+    double totalOpeningFloat = 0.0;
+    double totalPayIn = 0.0;
+    double totalPayOut = 0.0;
+    double totalCountedCash = 0.0;
+
+    for (final sh in shifts) {
+      totalOpeningFloat += sh.openingFloat;
+      if (sh.countedCash != null) {
+        totalCountedCash += sh.countedCash!;
+      }
+      final movements = await getCashMovements(sh.id);
+      for (final m in movements) {
+        if (m.isPayIn) {
+          totalPayIn += m.amount;
+        } else {
+          totalPayOut += m.amount;
+        }
+      }
+    }
+
+    final totalExpectedDrawerCash = totalOpeningFloat + cashSales + totalPayIn - totalPayOut;
+    final netCashVariance = totalCountedCash - totalExpectedDrawerCash;
+
+    // 6. Kitchen Wastage, Mandi Procurements, and Vendor Khata in day timeframe
+    final startTimestamp = _formatTimestamp(day.openedAt);
+    final endTimestamp = _formatTimestamp((day.closedAt ?? DateTime.now()).add(const Duration(minutes: 5)));
+
+    int totalWastageCount = 0;
+    double totalWastageCost = 0.0;
+    try {
+      final wastageRows = await database.rawQuery('''
+        SELECT COUNT(id) as count, COALESCE(SUM(cost_loss), 0.0) as cost
+        FROM ${PosDatabaseConstants.tableKitchenWastage}
+        WHERE created_at >= ? AND created_at <= ?;
+      ''', [startTimestamp, endTimestamp]);
+      if (wastageRows.isNotEmpty) {
+        totalWastageCount = (wastageRows.first['count'] as num?)?.toInt() ?? 0;
+        totalWastageCost = (wastageRows.first['cost'] as num?)?.toDouble() ?? 0.0;
+      }
+    } catch (_) {}
+
+    double totalMandiPurchasesCost = 0.0;
+    try {
+      final mandiRows = await database.rawQuery('''
+        SELECT COALESCE(SUM(total_cost), 0.0) as cost
+        FROM ${PosDatabaseConstants.tableMandiProcurements}
+        WHERE created_at >= ? AND created_at <= ?;
+      ''', [startTimestamp, endTimestamp]);
+      if (mandiRows.isNotEmpty) {
+        totalMandiPurchasesCost = (mandiRows.first['cost'] as num?)?.toDouble() ?? 0.0;
+      }
+    } catch (_) {}
+
+    int totalVendorDeliveriesCount = 0;
+    double totalVendorSettlementsAmount = 0.0;
+    try {
+      final deliveryRows = await database.rawQuery('''
+        SELECT COUNT(id) as count
+        FROM ${PosDatabaseConstants.tableVendorTransactions}
+        WHERE type = 'PURCHASE_CREDIT' AND created_at >= ? AND created_at <= ?;
+      ''', [startTimestamp, endTimestamp]);
+      if (deliveryRows.isNotEmpty) {
+        totalVendorDeliveriesCount = (deliveryRows.first['count'] as num?)?.toInt() ?? 0;
+      }
+
+      final settlementRows = await database.rawQuery('''
+        SELECT COALESCE(SUM(amount), 0.0) as amount
+        FROM ${PosDatabaseConstants.tableVendorTransactions}
+        WHERE type IN ('PAYMENT_DRAWER', 'PAYMENT_EXTERNAL') AND created_at >= ? AND created_at <= ?;
+      ''', [startTimestamp, endTimestamp]);
+      if (settlementRows.isNotEmpty) {
+        totalVendorSettlementsAmount = (settlementRows.first['amount'] as num?)?.toDouble() ?? 0.0;
+      }
+    } catch (_) {}
+
+    return ZReport(
+      businessDayId: day.id,
+      openedAt: day.openedAt,
+      closedAt: day.closedAt,
+      generatedAt: DateTime.now(),
+      openedByStaffName: day.openedByStaffName ?? 'Staff #${day.openedByStaffId}',
+      closedByStaffName: day.closedByStaffName,
+      totalShiftsCount: shifts.length,
+      shifts: shifts,
+      grossSales: grossSales,
+      netSales: netSales,
+      totalTax: totalTax,
+      totalDiscounts: totalDiscounts,
+      cashSales: cashSales,
+      cardSales: cardSales,
+      raastSales: raastSales,
+      totalOpeningFloat: totalOpeningFloat,
+      totalPayIn: totalPayIn,
+      totalPayOut: totalPayOut,
+      totalExpectedDrawerCash: totalExpectedDrawerCash,
+      totalCountedCash: totalCountedCash,
+      netCashVariance: netCashVariance,
+      totalOrdersCount: totalOrdersCount,
+      totalVoidCount: totalVoidCount,
+      totalVoidAmount: totalVoidAmount,
+      totalWastageCount: totalWastageCount,
+      totalWastageCost: totalWastageCost,
+      totalMandiPurchasesCost: totalMandiPurchasesCost,
+      totalVendorDeliveriesCount: totalVendorDeliveriesCount,
+      totalVendorSettlementsAmount: totalVendorSettlementsAmount,
+    );
+  }
+
+  /// Finalizes and locks an active Business Day with supervisor authority.
+  ///
+  /// Concludes the business day, archives shifts, and prepares the operational
+  /// session for the next business day (which resets daily tokens to #01).
+  Future<BusinessDay> finalizeBusinessDayWithZReport({
+    required int closedByStaffId,
+    DateTime? closedAt,
+  }) async {
+    return await closeBusinessDay(
+      closedByStaffId: closedByStaffId,
+      closedAt: closedAt,
+    );
+  }
 }
+

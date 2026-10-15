@@ -14,11 +14,18 @@ import 'kitchen_token_station.dart';
 import 'staff_form_dialog.dart';
 import 'staff_pin_dialog.dart';
 import 'token_queue_tray.dart';
+import '../shifts/z_report_dialog.dart';
+import '../../core/shifts/z_report.dart';
+import '../../core/shifts/excel_reporting_engine.dart';
+import '../../core/database/database_backup_service.dart';
+import '../../core/database/pos_database_constants.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 enum SupervisorPortalTab {
   staff('Staff & Departments', Icons.badge_rounded),
   toggles('Feature Toggles', Icons.toggle_on_rounded),
   discrepancies('Discrepancy Review', Icons.assignment_late_rounded),
+  reports('Z-Reports & Backups', Icons.assessment_rounded),
   tokenQueue('Token Queue Tray', Icons.confirmation_number_rounded),
   kitchenStation('Kitchen Station', Icons.soup_kitchen_rounded);
 
@@ -79,6 +86,12 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
   List<Shift> _discrepancyShifts = [];
   bool _isLoadingDiscrepancies = true;
 
+  // Z-Reports & Backups State
+  ZReport? _activeZReport;
+  bool _isLoadingZReport = true;
+  String _secondaryBackupPath = '';
+  final TextEditingController _usbPathController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
@@ -116,6 +129,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
     if (widget.initialDiscrepancies == null) {
       await _loadDiscrepancies();
     }
+    await _loadReportsAndBackupSettings();
   }
 
   Future<void> _loadStaffAndDepartments() async {
@@ -178,6 +192,98 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
       }
     } catch (_) {
       if (mounted) setState(() => _isLoadingDiscrepancies = false);
+    }
+  }
+
+  Future<void> _loadReportsAndBackupSettings() async {
+    if (widget.shiftController == null) {
+      setState(() => _isLoadingZReport = false);
+      return;
+    }
+    setState(() => _isLoadingZReport = true);
+    try {
+      final activeDay = await widget.shiftController!.getActiveBusinessDay();
+      if (activeDay != null) {
+        final z = await widget.shiftController!.generateZReport(activeDay.id);
+        _activeZReport = z;
+      } else {
+        _activeZReport = null;
+      }
+
+      final settingRows = await widget.shiftController!.database.query(
+        PosDatabaseConstants.tableSystemSettings,
+        where: 'key = ?',
+        whereArgs: [PosDatabaseConstants.settingSecondaryBackupPath],
+      );
+      if (settingRows.isNotEmpty) {
+        _secondaryBackupPath = settingRows.first['value'] as String? ?? '';
+        _usbPathController.text = _secondaryBackupPath;
+      }
+      if (mounted) setState(() => _isLoadingZReport = false);
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingZReport = false);
+    }
+  }
+
+  Future<void> _saveSecondaryBackupPath() async {
+    if (widget.shiftController == null) return;
+    final path = _usbPathController.text.trim();
+    final now = DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
+    await widget.shiftController!.database.insert(
+      PosDatabaseConstants.tableSystemSettings,
+      {
+        'key': PosDatabaseConstants.settingSecondaryBackupPath,
+        'value': path,
+        'updated_at': now,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    setState(() => _secondaryBackupPath = path);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Secondary / USB backup drive path updated.')),
+      );
+    }
+  }
+
+  Future<void> _triggerInstantBackup() async {
+    if (widget.shiftController == null) return;
+    try {
+      final backupService = DatabaseBackupService(database: widget.shiftController!.database);
+      final dbPath = widget.shiftController!.database.path;
+      final result = await backupService.executeBackup(
+        sourceDbPath: dbPath,
+        secondaryBackupDir: _secondaryBackupPath.isNotEmpty ? _secondaryBackupPath : null,
+      );
+      if (mounted) {
+        if (result.success) {
+          final msg = result.warningMessage != null
+              ? 'Local backup created: ${result.localBackupPath}.\nWarning: ${result.warningMessage}'
+              : 'Backup created successfully in local archive and secondary target!';
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(msg),
+              backgroundColor: result.warningMessage != null ? Colors.orange : const Color(0xFF047857),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result.warningMessage ?? 'Failed to create backup.'),
+              backgroundColor: WarmCounterColors.lightDestructiveAction,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Backup error: $e'),
+            backgroundColor: WarmCounterColors.lightDestructiveAction,
+          ),
+        );
+      }
     }
   }
 
@@ -590,6 +696,8 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
         return _buildFeatureTogglesView(context);
       case SupervisorPortalTab.discrepancies:
         return _buildDiscrepanciesView(context);
+      case SupervisorPortalTab.reports:
+        return _buildReportsAndBackupsView(context);
       case SupervisorPortalTab.tokenQueue:
         if (widget.tokenQueueController != null) {
           return TokenQueueTray(controller: widget.tokenQueueController!);
@@ -1129,4 +1237,336 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
   ),
 );
   }
+
+  // ===========================================================================
+  // TAB 4: END-OF-DAY Z-REPORTS & DUAL-TARGET BACKUPS
+  // ===========================================================================
+
+  Widget _buildReportsAndBackupsView(BuildContext context) {
+    if (_isLoadingZReport) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final localDir = DatabaseBackupService.resolveDefaultLocalBackupDir();
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Left Column: Z-Report & 1-Click Excel Export
+        Expanded(
+          flex: 3,
+          child: Material(
+            color: WarmCounterColors.lightCardBackground,
+            borderRadius: WarmCounterSpacing.panelBorderRadius,
+            child: Container(
+              padding: const EdgeInsets.all(WarmCounterSpacing.space16),
+              decoration: BoxDecoration(
+                borderRadius: WarmCounterSpacing.panelBorderRadius,
+                border: Border.all(color: WarmCounterColors.lightBorder),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'End-of-Day Z-Reports & Daily Close',
+                            style: WarmCounterTypography.pageHeading.copyWith(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          Text(
+                            'Review daily revenue, tender breakdowns, net variance, and generate 1-click multi-sheet Excel workbooks.',
+                            style: WarmCounterTypography.secondaryLabel.copyWith(
+                              color: WarmCounterColors.lightSecondaryText,
+                            ),
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.refresh_rounded, color: WarmCounterColors.lightPrimaryAction),
+                        tooltip: 'Refresh Report Data',
+                        onPressed: _loadReportsAndBackupSettings,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: WarmCounterSpacing.space16),
+
+                  if (_activeZReport != null) ...[
+                    // Z-Report Summary Box
+                    Container(
+                      padding: const EdgeInsets.all(WarmCounterSpacing.space16),
+                      decoration: BoxDecoration(
+                        color: WarmCounterColors.lightPageBackground,
+                        borderRadius: WarmCounterSpacing.controlBorderRadius,
+                        border: Border.all(color: WarmCounterColors.lightBorder),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Active Business Day #${_activeZReport!.businessDayId}',
+                                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: WarmCounterColors.lightActiveNavHighlight,
+                                  borderRadius: WarmCounterSpacing.controlBorderRadius,
+                                ),
+                                child: Text(
+                                  '${_activeZReport!.totalShiftsCount} Shifts Finalized',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: WarmCounterColors.lightPrimaryAction,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Net Sales Revenue', style: TextStyle(color: WarmCounterColors.lightSecondaryText, fontSize: 12)),
+                                    const SizedBox(height: 2),
+                                    Text('PKR ${_currencyFormat.format(_activeZReport!.netSales)}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                                  ],
+                                ),
+                              ),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Cash Tenders', style: TextStyle(color: WarmCounterColors.lightSecondaryText, fontSize: 12)),
+                                    const SizedBox(height: 2),
+                                    Text('PKR ${_currencyFormat.format(_activeZReport!.cashSales)}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                                  ],
+                                ),
+                              ),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Net Drawer Variance', style: TextStyle(color: WarmCounterColors.lightSecondaryText, fontSize: 12)),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'PKR ${_currencyFormat.format(_activeZReport!.netCashVariance)}',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 14,
+                                        color: _activeZReport!.netCashVariance.abs() > 0.01
+                                            ? WarmCounterColors.lightDestructiveAction
+                                            : const Color(0xFF047857),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: WarmCounterSpacing.space16),
+
+                    Wrap(
+                      spacing: WarmCounterSpacing.space12,
+                      runSpacing: WarmCounterSpacing.space8,
+                      children: [
+                        ElevatedButton.icon(
+                          key: const ValueKey('portal_view_z_report_btn'),
+                          icon: const Icon(Icons.receipt_long_rounded, size: 18),
+                          label: const Text('View Full Z-Report & Summary'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: WarmCounterColors.lightPrimaryAction,
+                            foregroundColor: Colors.white,
+                          ),
+                          onPressed: () {
+                            showDialog<void>(
+                              context: context,
+                              builder: (ctx) => ZReportDialog(
+                                report: _activeZReport!,
+                                onExportExcel: () async {
+                                  if (widget.shiftController != null) {
+                                    final engine = ExcelReportingEngine(database: widget.shiftController!.database);
+                                    final bytes = await engine.generateDailyWorkbookBytes(
+                                      businessDayId: _activeZReport!.businessDayId,
+                                      zReport: _activeZReport!,
+                                    );
+                                    final file = await engine.saveWorkbookToFile(
+                                      bytes: bytes,
+                                      businessDayId: _activeZReport!.businessDayId,
+                                    );
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text('Saved: ${file.path}')),
+                                      );
+                                    }
+                                  }
+                                },
+                              ),
+                            );
+                          },
+                        ),
+                        ElevatedButton.icon(
+                          key: const ValueKey('portal_export_excel_btn'),
+                          icon: const Icon(Icons.table_chart_rounded, size: 18),
+                          label: const Text('1-Click 6-Sheet Daily Excel (.xlsx)'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF107C41),
+                            foregroundColor: Colors.white,
+                          ),
+                          onPressed: () async {
+                            if (widget.shiftController != null) {
+                              try {
+                                final engine = ExcelReportingEngine(database: widget.shiftController!.database);
+                                final bytes = await engine.generateDailyWorkbookBytes(
+                                  businessDayId: _activeZReport!.businessDayId,
+                                  zReport: _activeZReport!,
+                                );
+                                final file = await engine.saveWorkbookToFile(
+                                  bytes: bytes,
+                                  businessDayId: _activeZReport!.businessDayId,
+                                );
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('6-Sheet Daily Excel Report created at: ${file.path}')),
+                                  );
+                                }
+                              } catch (e) {
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Excel export error: $e'), backgroundColor: WarmCounterColors.lightDestructiveAction),
+                                  );
+                                }
+                              }
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ] else ...[
+                    const Expanded(
+                      child: Center(
+                        child: Text(
+                          'No active Business Day is currently open.',
+                          style: TextStyle(color: WarmCounterColors.lightSecondaryText),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: WarmCounterSpacing.space16),
+
+        // Right Column: Automated & Secondary Backups
+        Expanded(
+          flex: 2,
+          child: Material(
+            color: WarmCounterColors.lightCardBackground,
+            borderRadius: WarmCounterSpacing.panelBorderRadius,
+            child: Container(
+              padding: const EdgeInsets.all(WarmCounterSpacing.space16),
+              decoration: BoxDecoration(
+                borderRadius: WarmCounterSpacing.panelBorderRadius,
+                border: Border.all(color: WarmCounterColors.lightBorder),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Automated & Secondary Backups',
+                    style: WarmCounterTypography.pageHeading.copyWith(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Text(
+                    'Automatic timestamped copies of pos.db are archived upon every Z-Report closure.',
+                    style: WarmCounterTypography.secondaryLabel.copyWith(
+                      color: WarmCounterColors.lightSecondaryText,
+                    ),
+                  ),
+                  const SizedBox(height: WarmCounterSpacing.space16),
+
+                  // Local Archive Path
+                  const Text('Local Backup Directory:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: WarmCounterColors.lightPageBackground,
+                      borderRadius: WarmCounterSpacing.controlBorderRadius,
+                      border: Border.all(color: WarmCounterColors.lightBorder),
+                    ),
+                    child: SelectableText(
+                      localDir,
+                      style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                    ),
+                  ),
+                  const SizedBox(height: WarmCounterSpacing.space16),
+
+                  // Secondary / External USB Drive Path
+                  const Text('Secondary / USB Drive Target Path:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          key: const ValueKey('usb_path_input'),
+                          controller: _usbPathController,
+                          decoration: const InputDecoration(
+                            hintText: r'e.g. E:\Backups or D:\POS_Backup',
+                            border: OutlineInputBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        key: const ValueKey('save_usb_path_btn'),
+                        onPressed: _saveSecondaryBackupPath,
+                        child: const Text('Save'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: WarmCounterSpacing.space24),
+
+                  // Instant Backup Button
+                  ElevatedButton.icon(
+                    key: const ValueKey('trigger_backup_btn'),
+                    icon: const Icon(Icons.backup_rounded, size: 18),
+                    label: const Text('Trigger Instant Database Backup Now'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: WarmCounterColors.lightPrimaryAction,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
+                    ),
+                    onPressed: _triggerInstantBackup,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
+

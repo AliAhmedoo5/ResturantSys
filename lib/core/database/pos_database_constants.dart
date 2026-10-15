@@ -43,6 +43,11 @@ abstract final class PosDatabaseConstants {
   static const String defaultCashierVoidRequestsEnabled = 'true';
   static const String settingTokenTrayEnabled = 'token_tray_enabled';
   static const String defaultTokenTrayEnabled = 'true';
+  static const String settingSecondaryBackupPath = 'secondary_backup_path';
+  static const String defaultSecondaryBackupPath = '';
+  static const String settingLocalBackupPath = 'local_backup_path';
+  static const String defaultLocalBackupPath = '';
+  static const String defaultBackupsSubFolder = 'backups';
 
   // Default Departments
   static const List<String> defaultDepartments = [

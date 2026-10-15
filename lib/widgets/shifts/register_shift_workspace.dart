@@ -11,8 +11,10 @@ import 'business_day_bar.dart';
 import 'cash_movement_dialog.dart';
 import 'discrepancy_review_dialog.dart';
 import 'open_business_day_dialog.dart';
-import 'open_shift_dialog.dart';
 import 'x_report_dialog.dart';
+import 'z_report_dialog.dart';
+import '../../core/database/database_backup_service.dart';
+import '../../core/shifts/excel_reporting_engine.dart';
 import '../../core/auth/auth_service.dart';
 import '../../core/orders/order_and_checkout_controller.dart';
 import '../../core/catalog/catalog_and_recipe_controller.dart';
@@ -94,49 +96,93 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
   }
 
   Future<void> _handleCloseBusinessDay() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.panelBorderRadius),
-        title: const Text('Close Business Day'),
-        content: const Text(
-          'Conclude the active operating business day? All daily shifts must be closed before concluding the day.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: WarmCounterColors.lightPrimaryAction,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Confirm Close'),
-          ),
-        ],
-      ),
-    );
+    final activeDay = _activeBusinessDay;
+    if (activeDay == null) return;
 
-    if (confirmed == true) {
-      try {
-        await widget.controller.closeBusinessDay(closedByStaffId: widget.currentStaff.id);
+    final activeShift = _activeShift;
+    if (activeShift != null && activeShift.isOpen) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Cannot close Business Day while Shift #${activeShift.id} is still open. Complete shift handover first.',
+          ),
+          backgroundColor: WarmCounterColors.lightDestructiveAction,
+        ),
+      );
+      return;
+    }
+
+    try {
+      final zReport = await widget.controller.generateZReport(activeDay.id);
+      if (!mounted) return;
+
+      final finalized = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => ZReportDialog(
+          report: zReport,
+          onExportExcel: () async {
+            final engine = ExcelReportingEngine(database: widget.controller.database);
+            final bytes = await engine.generateDailyWorkbookBytes(
+              businessDayId: activeDay.id,
+              zReport: zReport,
+            );
+            final file = await engine.saveWorkbookToFile(
+              bytes: bytes,
+              businessDayId: activeDay.id,
+            );
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('6-Sheet Daily Excel Report saved: ${file.path}'),
+                ),
+              );
+            }
+          },
+          onFinalizeBusinessDay: () async {
+            await widget.controller.finalizeBusinessDayWithZReport(
+              closedByStaffId: widget.currentStaff.id,
+            );
+
+            // Automatic timestamped database backup
+            try {
+              final backupService = DatabaseBackupService(database: widget.controller.database);
+              final dbPath = widget.controller.database.path;
+              final backupRes = await backupService.executeBackup(sourceDbPath: dbPath);
+              if (mounted && backupRes.warningMessage != null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(backupRes.warningMessage!),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+              }
+            } catch (_) {}
+
+            await _refreshState();
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    'Business Day #${activeDay.id} finalized with Z-Report. Backup archived and tokens reset to #01.',
+                  ),
+                ),
+              );
+            }
+          },
+        ),
+      );
+
+      if (finalized == true) {
         await _refreshState();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Business Day concluded successfully.')),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.toString().replaceFirst('StateError: ', '')),
-              backgroundColor: WarmCounterColors.lightDestructiveAction,
-            ),
-          );
-        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceFirst('StateError: ', '')),
+            backgroundColor: WarmCounterColors.lightDestructiveAction,
+          ),
+        );
       }
     }
   }
