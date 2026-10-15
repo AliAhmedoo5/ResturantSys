@@ -31,6 +31,48 @@ class _ZReportDialogState extends State<ZReportDialog> {
   bool _isProcessing = false;
   final NumberFormat _currencyFormat = NumberFormat('#,##0.00');
 
+  Future<bool> _confirmFinalizeDay(BuildContext context, int dayId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.panelBorderRadius),
+        title: const Row(
+          children: [
+            Icon(Icons.lock_clock_rounded, color: WarmCounterColors.lightDestructiveAction),
+            SizedBox(width: WarmCounterSpacing.space8),
+            Text('Finalize Business Day'),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to finalize and lock Business Day #$dayId?\n\n'
+          'This will close the operational day, archive all shifts, generate an automated database backup, '
+          'and reset daily order tokens to #01.',
+        ),
+        actions: [
+          TextButton(
+            key: const ValueKey('cancel_finalize_dialog_btn'),
+            style: TextButton.styleFrom(
+              minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
+            ),
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            key: const ValueKey('confirm_finalize_dialog_btn'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: WarmCounterColors.lightDestructiveAction,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Confirm & Finalize'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
   @override
   Widget build(BuildContext context) {
     final z = widget.report;
@@ -75,6 +117,7 @@ class _ZReportDialogState extends State<ZReportDialog> {
                         'Business Day #${z.businessDayId} • Opened by ${z.openedByStaffName}',
                         style: WarmCounterTypography.caption.copyWith(
                           color: WarmCounterColors.lightSecondaryText,
+                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),
                     ],
@@ -120,6 +163,10 @@ class _ZReportDialogState extends State<ZReportDialog> {
               runSpacing: WarmCounterSpacing.space8,
               children: [
                 OutlinedButton(
+                  key: const ValueKey('close_z_report_button'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
+                  ),
                   onPressed: () => Navigator.of(context).maybePop(false),
                   child: const Text('Close'),
                 ),
@@ -127,6 +174,9 @@ class _ZReportDialogState extends State<ZReportDialog> {
                   key: const ValueKey('print_z_report_button'),
                   icon: const Icon(Icons.print_rounded, size: 18),
                   label: const Text('Print Z-Report'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
+                  ),
                   onPressed: () {
                     if (widget.onPrint != null) {
                       widget.onPrint!();
@@ -142,8 +192,9 @@ class _ZReportDialogState extends State<ZReportDialog> {
                   icon: const Icon(Icons.table_chart_rounded, size: 18),
                   label: const Text('1-Click 6-Sheet Excel'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF107C41), // Excel brand green
+                    backgroundColor: WarmCounterColors.lightPrimaryAction,
                     foregroundColor: Colors.white,
+                    minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
                   ),
                   onPressed: _isProcessing
                       ? null
@@ -170,10 +221,14 @@ class _ZReportDialogState extends State<ZReportDialog> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: WarmCounterColors.lightDestructiveAction,
                       foregroundColor: Colors.white,
+                      minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
                     ),
                     onPressed: _isProcessing
                         ? null
                         : () async {
+                            final confirmed = await _confirmFinalizeDay(context, widget.report.businessDayId);
+                            if (!confirmed) return;
+
                             if (widget.onFinalizeBusinessDay != null) {
                               setState(() => _isProcessing = true);
                               try {
@@ -208,7 +263,7 @@ class _ZReportDialogState extends State<ZReportDialog> {
               margin: const EdgeInsets.only(bottom: WarmCounterSpacing.space16),
               padding: const EdgeInsets.all(WarmCounterSpacing.space12),
               decoration: BoxDecoration(
-                color: const Color(0xFFFEF2F2),
+                color: WarmCounterColors.lightDestructiveHighlight,
                 borderRadius: WarmCounterSpacing.controlBorderRadius,
                 border: Border.all(color: WarmCounterColors.lightDestructiveAction.withAlpha(80)),
               ),
@@ -222,6 +277,7 @@ class _ZReportDialogState extends State<ZReportDialog> {
                       style: const TextStyle(
                         color: WarmCounterColors.lightDestructiveAction,
                         fontWeight: FontWeight.w600,
+                        fontFeatures: [FontFeature.tabularFigures()],
                       ),
                     ),
                   ),
@@ -233,19 +289,19 @@ class _ZReportDialogState extends State<ZReportDialog> {
               margin: const EdgeInsets.only(bottom: WarmCounterSpacing.space16),
               padding: const EdgeInsets.all(WarmCounterSpacing.space12),
               decoration: BoxDecoration(
-                color: const Color(0xFFF0FDF4),
+                color: WarmCounterColors.lightActiveNavHighlight,
                 borderRadius: WarmCounterSpacing.controlBorderRadius,
-                border: Border.all(color: const Color(0xFF10B981).withAlpha(80)),
+                border: Border.all(color: WarmCounterColors.lightPrimaryAction.withAlpha(80)),
               ),
               child: const Row(
                 children: [
-                  Icon(Icons.check_circle_rounded, color: Color(0xFF10B981)),
+                  Icon(Icons.check_circle_rounded, color: WarmCounterColors.lightPrimaryAction),
                   SizedBox(width: WarmCounterSpacing.space12),
                   Expanded(
                     child: Text(
                       'Balanced Cash Drawers: Zero net discrepancy across all finalized shifts.',
                       style: TextStyle(
-                        color: Color(0xFF065F46),
+                        color: WarmCounterColors.lightPrimaryAction,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -383,6 +439,7 @@ class _ZReportDialogState extends State<ZReportDialog> {
                       item.value,
                       style: TextStyle(
                         fontSize: 13,
+                        fontFeatures: const [FontFeature.tabularFigures()],
                         color: item.isWarning
                             ? WarmCounterColors.lightDestructiveAction
                             : (item.isBold ? WarmCounterColors.lightPrimaryAction : WarmCounterColors.lightPrimaryText),
@@ -401,7 +458,7 @@ class _ZReportDialogState extends State<ZReportDialog> {
     return Container(
       padding: const EdgeInsets.all(WarmCounterSpacing.space16),
       decoration: BoxDecoration(
-        color: const Color(0xFFFBFBFB),
+        color: WarmCounterColors.lightPageBackground,
         borderRadius: WarmCounterSpacing.controlBorderRadius,
         border: Border.all(color: WarmCounterColors.lightBorder),
       ),
@@ -437,7 +494,7 @@ class _ZReportDialogState extends State<ZReportDialog> {
                   fontFamilyFallback: ['monospace'],
                   fontSize: 13,
                   height: 1.4,
-                  color: Color(0xFF1E293B),
+                  color: WarmCounterColors.lightPrimaryText,
                 ),
               ),
             ),

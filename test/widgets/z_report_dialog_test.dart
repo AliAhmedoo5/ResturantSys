@@ -104,9 +104,16 @@ void main() {
       expect(find.textContaining('-50.00'), findsWidgets);
 
       // Buttons
+      expect(find.byKey(const ValueKey('close_z_report_button')), findsOneWidget);
       expect(find.byKey(const ValueKey('export_excel_button')), findsOneWidget);
       expect(find.byKey(const ValueKey('print_z_report_button')), findsOneWidget);
       expect(find.byKey(const ValueKey('finalize_day_button')), findsOneWidget);
+
+      // Verify minimum 48px touch target heights
+      expect(tester.getSize(find.byKey(const ValueKey('close_z_report_button'))).height, greaterThanOrEqualTo(48.0));
+      expect(tester.getSize(find.byKey(const ValueKey('export_excel_button'))).height, greaterThanOrEqualTo(48.0));
+      expect(tester.getSize(find.byKey(const ValueKey('print_z_report_button'))).height, greaterThanOrEqualTo(48.0));
+      expect(tester.getSize(find.byKey(const ValueKey('finalize_day_button'))).height, greaterThanOrEqualTo(48.0));
     });
 
     testWidgets('triggers export excel callback when export button tapped', (tester) async {
@@ -136,7 +143,7 @@ void main() {
       expect(excelExported, isTrue);
     });
 
-    testWidgets('triggers finalize day callback when lock button tapped', (tester) async {
+    testWidgets('cancelling confirmation dialog does not trigger finalize day callback', (tester) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -158,6 +165,41 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const ValueKey('finalize_day_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('cancel_finalize_dialog_btn')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('cancel_finalize_dialog_btn')));
+      await tester.pumpAndSettle();
+
+      expect(finalized, isFalse);
+    });
+
+    testWidgets('triggers finalize day callback when confirmed in dialog', (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      bool finalized = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ZReportDialog(
+              report: dummyZReport,
+              onFinalizeBusinessDay: () async {
+                finalized = true;
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('finalize_day_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('confirm_finalize_dialog_btn')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('confirm_finalize_dialog_btn')));
       await tester.pumpAndSettle();
 
       expect(finalized, isTrue);

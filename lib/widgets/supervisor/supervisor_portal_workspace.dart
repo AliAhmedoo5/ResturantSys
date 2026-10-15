@@ -1369,7 +1369,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                                         fontSize: 14,
                                         color: _activeZReport!.netCashVariance.abs() > 0.01
                                             ? WarmCounterColors.lightDestructiveAction
-                                            : const Color(0xFF047857),
+                                            : WarmCounterColors.lightPrimaryAction,
                                       ),
                                     ),
                                   ],
@@ -1393,9 +1393,10 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: WarmCounterColors.lightPrimaryAction,
                             foregroundColor: Colors.white,
+                            minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
                           ),
-                          onPressed: () {
-                            showDialog<void>(
+                          onPressed: () async {
+                            final finalized = await showDialog<bool>(
                               context: context,
                               builder: (ctx) => ZReportDialog(
                                 report: _activeZReport!,
@@ -1418,8 +1419,28 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                                     }
                                   }
                                 },
+                                onFinalizeBusinessDay: () async {
+                                  if (widget.shiftController != null) {
+                                    final staffId = widget.currentStaff?.id ?? 1;
+                                    await widget.shiftController!.finalizeBusinessDayWithZReport(
+                                      closedByStaffId: staffId,
+                                    );
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            'Business Day #${_activeZReport!.businessDayId} finalized with Z-Report. Backup archived and tokens reset to #01.',
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  }
+                                },
                               ),
                             );
+                            if (finalized == true && mounted) {
+                              await _loadReportsAndBackupSettings();
+                            }
                           },
                         ),
                         ElevatedButton.icon(
@@ -1427,8 +1448,9 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                           icon: const Icon(Icons.table_chart_rounded, size: 18),
                           label: const Text('1-Click 6-Sheet Daily Excel (.xlsx)'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF107C41),
+                            backgroundColor: WarmCounterColors.lightPrimaryAction,
                             foregroundColor: Colors.white,
+                            minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
                           ),
                           onPressed: () async {
                             if (widget.shiftController != null) {

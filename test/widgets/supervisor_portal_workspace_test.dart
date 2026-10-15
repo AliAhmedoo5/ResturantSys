@@ -1,19 +1,28 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:resturant_sys/core/auth/department.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/auth/staff_role.dart';
+import 'package:resturant_sys/core/database/pos_database.dart';
 import 'package:resturant_sys/core/orders/dining_type.dart';
 import 'package:resturant_sys/core/orders/order.dart';
 import 'package:resturant_sys/core/orders/order_item.dart';
 import 'package:resturant_sys/core/orders/token_queue_controller.dart';
 import 'package:resturant_sys/core/orders/token_status.dart';
 import 'package:resturant_sys/core/shifts/shift.dart';
+import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
 import 'package:resturant_sys/core/theme/warm_counter_theme.dart';
 import 'package:resturant_sys/widgets/pin_numpad.dart';
 import 'package:resturant_sys/widgets/supervisor/supervisor_portal_workspace.dart';
 
 void main() {
+  setUpAll(() {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  });
+
   group('SupervisorPortalWorkspace Widget Tests', () {
     final testDepartments = [
       Department(id: 1, name: 'Front Counter', createdAt: DateTime(2026, 1, 1)),
@@ -102,12 +111,14 @@ void main() {
       bool? initialCashierVoidEnabled,
       List<Shift>? initialDiscrepancies,
       TokenQueueController? tokenQueueController,
+      ShiftAndCashController? shiftController,
     }) {
       return MaterialApp(
         theme: WarmCounterTheme.lightTheme,
         home: Scaffold(
           body: SupervisorPortalWorkspace(
             currentStaff: testStaffList.first,
+            shiftController: shiftController,
             initialDepartments: initialDepartments ?? List.of(testDepartments),
             initialStaff: initialStaff ?? List.of(testStaffList),
             initialTokenTrayEnabled: initialTokenTrayEnabled ?? true,
@@ -328,6 +339,64 @@ void main() {
       // Pass is now clear
       expect(find.text('All orders plated! The pass is clear.'), findsOneWidget);
       expect(tokenController.readyTokens.length, 1);
+    });
+
+    testWidgets('reports and backups tab opens Z-Report dialog with wired day finalization', (tester) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final tempDir = await Directory.systemTemp.createTemp('pos_supervisor_reports_test_');
+      final testDbPath = '${tempDir.path}${Platform.pathSeparator}supervisor_reports_test.db';
+      final posDb = PosDatabase(factory: databaseFactoryFfi, customPath: testDbPath);
+      final db = await posDb.initialize();
+      final shiftController = ShiftAndCashController(database: db);
+
+      try {
+        final day = await shiftController.openBusinessDay(openedByStaffId: 1);
+        final shift = await shiftController.openShift(staffId: 2, openingFloat: 5000.0);
+        await shiftController.closeShift(
+          shiftId: shift.id,
+          countedCash: 5000.0,
+          closingStaffId: 2,
+        );
+
+        await tester.pumpWidget(createTestApp(shiftController: shiftController));
+        await tester.pumpAndSettle();
+
+        // Switch to Reports & Backups tab
+        await tester.tap(find.byKey(const ValueKey('portal_tab_reports')));
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('Active Business Day #${day.id}'), findsOneWidget);
+        expect(find.byKey(const ValueKey('portal_view_z_report_btn')), findsOneWidget);
+
+        // Open full Z-Report
+        await tester.tap(find.byKey(const ValueKey('portal_view_z_report_btn')));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Master End-of-Day Z-Report'), findsOneWidget);
+        expect(find.byKey(const ValueKey('finalize_day_button')), findsOneWidget);
+
+        // Tap Finalize button -> Confirmation dialog appears
+        await tester.tap(find.byKey(const ValueKey('finalize_day_button')));
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const ValueKey('confirm_finalize_dialog_btn')), findsOneWidget);
+
+        // Confirm
+        await tester.tap(find.byKey(const ValueKey('confirm_finalize_dialog_btn')));
+        await tester.pumpAndSettle();
+
+        // Verify day is closed in controller
+        final activeDay = await shiftController.getActiveBusinessDay();
+        expect(activeDay, isNull);
+      } finally {
+        await posDb.close();
+        if (await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+        }
+      }
     });
   });
 }

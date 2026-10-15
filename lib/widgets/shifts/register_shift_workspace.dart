@@ -14,7 +14,6 @@ import 'open_business_day_dialog.dart';
 import 'open_shift_dialog.dart';
 import 'x_report_dialog.dart';
 import 'z_report_dialog.dart';
-import '../../core/database/database_backup_service.dart';
 import '../../core/shifts/excel_reporting_engine.dart';
 import '../../core/auth/auth_service.dart';
 import '../../core/orders/order_and_checkout_controller.dart';
@@ -143,21 +142,6 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
             await widget.controller.finalizeBusinessDayWithZReport(
               closedByStaffId: widget.currentStaff.id,
             );
-
-            // Automatic timestamped database backup
-            try {
-              final backupService = DatabaseBackupService(database: widget.controller.database);
-              final dbPath = widget.controller.database.path;
-              final backupRes = await backupService.executeBackup(sourceDbPath: dbPath);
-              if (mounted && backupRes.warningMessage != null) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(backupRes.warningMessage!),
-                    backgroundColor: Colors.orange,
-                  ),
-                );
-              }
-            } catch (_) {}
 
             await _refreshState();
             if (mounted) {
