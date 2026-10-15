@@ -8,6 +8,7 @@ import 'package:resturant_sys/core/orders/dining_type.dart';
 import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
 import 'package:resturant_sys/core/orders/cart_item.dart';
 import 'package:resturant_sys/core/orders/payment_method.dart';
+import 'package:resturant_sys/core/orders/order_void.dart';
 import 'package:resturant_sys/core/procurement/procurement_and_wastage_controller.dart';
 import 'package:resturant_sys/core/procurement/desi_unit.dart';
 import 'package:resturant_sys/core/procurement/wastage_reason.dart';
@@ -194,7 +195,7 @@ void main() {
         orderId: checkoutToVoid.order.id,
         supervisorStaffId: supervisorId,
         cashierStaffId: cashierId,
-        reason: 'Customer cancelled after ordering',
+        reason: VoidReason.customerCancelled,
       );
 
       // Shift 2 Pay-Out: 100
@@ -286,8 +287,12 @@ void main() {
       final day1 = await shiftController.openBusinessDay(openedByStaffId: supervisorId);
       final shift = await shiftController.openShift(staffId: cashierId, openingFloat: 1000.0);
 
-      final cat = await db.query(PosDatabaseConstants.tableCategories, limit: 1);
-      final catId = cat.isNotEmpty ? cat.first['id'] as int : 1;
+      final catId = await db.insert(PosDatabaseConstants.tableCategories, {
+        'name': 'Snacks',
+        'display_order': 1,
+        'color_hex': '#FF5722',
+        'created_at': DateTime.now().toIso8601String(),
+      });
       final snackItemId = await db.insert(PosDatabaseConstants.tableMenuItems, {
         'category_id': catId,
         'name': 'Quick Snack',
