@@ -72,6 +72,10 @@ void main() {
     });
 
     testWidgets('renders all summary metrics, tender breakdown, and variance', (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -106,6 +110,10 @@ void main() {
     });
 
     testWidgets('triggers export excel callback when export button tapped', (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
       bool excelExported = false;
 
       await tester.pumpWidget(
@@ -129,6 +137,10 @@ void main() {
     });
 
     testWidgets('triggers finalize day callback when lock button tapped', (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
       bool finalized = false;
 
       await tester.pumpWidget(

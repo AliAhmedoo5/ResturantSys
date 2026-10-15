@@ -353,9 +353,12 @@ class _ZReportDialogState extends State<ZReportDialog> {
             children: [
               Icon(icon, size: 18, color: WarmCounterColors.lightPrimaryAction),
               const SizedBox(width: 8),
-              Text(
-                title,
-                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
@@ -365,14 +368,17 @@ class _ZReportDialogState extends State<ZReportDialog> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      item.label,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: item.isBold ? WarmCounterColors.lightPrimaryText : WarmCounterColors.lightSecondaryText,
-                        fontWeight: item.isBold ? FontWeight.w600 : FontWeight.w400,
+                    Expanded(
+                      child: Text(
+                        item.label,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: item.isBold ? WarmCounterColors.lightPrimaryText : WarmCounterColors.lightSecondaryText,
+                          fontWeight: item.isBold ? FontWeight.w600 : FontWeight.w400,
+                        ),
                       ),
                     ),
+                    const SizedBox(width: 8),
                     Text(
                       item.value,
                       style: TextStyle(
