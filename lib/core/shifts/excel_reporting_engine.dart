@@ -70,6 +70,20 @@ class ExcelReportingEngine {
       ORDER BY name ASC;
     ''');
 
+    // Real BOM recipe usage from settled orders
+    final recipeUsageRows = await database.rawQuery('''
+      SELECT r.raw_ingredient_id, COALESCE(SUM(r.quantity_per_recipe_unit * oi.quantity), 0.0) as recipe_qty
+      FROM ${PosDatabaseConstants.tableOrderItems} oi
+      JOIN ${PosDatabaseConstants.tableOrders} o ON oi.order_id = o.id
+      JOIN ${PosDatabaseConstants.tableRecipes} r ON oi.menu_item_id = r.menu_item_id
+      WHERE o.business_day_id = ? AND o.payment_status = 'SETTLED'
+      GROUP BY r.raw_ingredient_id;
+    ''', [businessDayId]);
+    final recipeUsageMap = {
+      for (final r in recipeUsageRows)
+        r['raw_ingredient_id'] as int: (r['recipe_qty'] as num).toDouble()
+    };
+
     final mandiSumRows = await database.rawQuery('''
       SELECT raw_ingredient_id, COALESCE(SUM(converted_quantity), 0.0) as purchased_qty
       FROM ${PosDatabaseConstants.tableMandiProcurements}
@@ -102,7 +116,7 @@ class ExcelReportingEngine {
       ORDER BY kw.id ASC;
     ''', [startTimestamp, endTimestamp]);
 
-    // 4. Gather Sheet 5: Shift Handover Audits
+    // 4. Gather Sheet 5: Shift Handover Audits with Pay-Ins/Outs & Voids
     final shiftHandoverRows = await database.rawQuery('''
       SELECT sh.*, st.name as cashier_name
       FROM ${PosDatabaseConstants.tableShifts} sh
@@ -110,6 +124,38 @@ class ExcelReportingEngine {
       WHERE sh.business_day_id = ?
       ORDER BY sh.id ASC;
     ''', [businessDayId]);
+
+    final shiftMovementsRows = await database.rawQuery('''
+      SELECT cm.shift_id, cm.type, COALESCE(SUM(cm.amount), 0.0) as total_amt
+      FROM ${PosDatabaseConstants.tableCashMovements} cm
+      JOIN ${PosDatabaseConstants.tableShifts} sh ON cm.shift_id = sh.id
+      WHERE sh.business_day_id = ?
+      GROUP BY cm.shift_id, cm.type;
+    ''', [businessDayId]);
+
+    final shiftPayInMap = <int, double>{};
+    final shiftPayOutMap = <int, double>{};
+    for (final r in shiftMovementsRows) {
+      final sId = r['shift_id'] as int;
+      final type = r['type'] as String;
+      final amt = (r['total_amt'] as num).toDouble();
+      if (type == 'PAY_IN') {
+        shiftPayInMap[sId] = (shiftPayInMap[sId] ?? 0.0) + amt;
+      } else {
+        shiftPayOutMap[sId] = (shiftPayOutMap[sId] ?? 0.0) + amt;
+      }
+    }
+
+    final shiftVoidRows = await database.rawQuery('''
+      SELECT shift_id, COUNT(id) as void_count
+      FROM ${PosDatabaseConstants.tableOrders}
+      WHERE business_day_id = ? AND payment_status = 'VOIDED'
+      GROUP BY shift_id;
+    ''', [businessDayId]);
+    final shiftVoidMap = {
+      for (final r in shiftVoidRows)
+        ((r['shift_id'] as int?) ?? 0): (r['void_count'] as num).toInt()
+    };
 
     // 5. Gather Sheet 6: Vendor Khata Ledger
     final vendorRows = await database.rawQuery('''
@@ -142,9 +188,9 @@ class ExcelReportingEngine {
     // Build the 6 Worksheets XML
     final sheet1Xml = _buildSheet1ExecutiveSummary(zReport, isoTimestampStr);
     final sheet2Xml = _buildSheet2SalesByItem(itemRows, isoTimestampStr);
-    final sheet3Xml = _buildSheet3StockBOM(ingRows, mandiMap, wastageMap, isoTimestampStr);
+    final sheet3Xml = _buildSheet3StockBOM(ingRows, mandiMap, wastageMap, recipeUsageMap, isoTimestampStr);
     final sheet4Xml = _buildSheet4KitchenWastage(wastageLogRows, isoTimestampStr);
-    final sheet5Xml = _buildSheet5ShiftHandover(shiftHandoverRows, isoTimestampStr);
+    final sheet5Xml = _buildSheet5ShiftHandover(shiftHandoverRows, shiftPayInMap, shiftPayOutMap, shiftVoidMap, isoTimestampStr);
     final sheet6Xml = _buildSheet6VendorKhata(vendorRows, vendorDeliveryMap, vendorPaymentMap, isoTimestampStr);
 
     // Package into standard OOXML ZIP (.xlsx)
@@ -157,6 +203,7 @@ class ExcelReportingEngine {
       sheet6Xml,
     ]);
   }
+
 
   /// Saves the generated workbook bytes to disk.
   Future<File> saveWorkbookToFile({
@@ -222,6 +269,31 @@ class ExcelReportingEngine {
     b.addRow(['Net Cash Variance', z.netCashVariance]);
     b.addEmptyRow();
 
+    b.addSectionHeader('SHIFT DISCREPANCIES AUDIT');
+    if (z.shifts.isEmpty) {
+      b.addRow(['No individual shift handovers recorded for this business day']);
+    } else {
+      b.addTableHeaders([
+        'Shift ID',
+        'Staff ID',
+        'Expected Cash',
+        'Counted Cash',
+        'Discrepancy / Variance',
+        'Audit Status',
+      ]);
+      for (final s in z.shifts) {
+        b.addRow([
+          '#${s.id}',
+          'Staff #${s.staffId}',
+          s.expectedCash ?? 0.0,
+          s.countedCash ?? 0.0,
+          s.discrepancy ?? 0.0,
+          s.discrepancyStatus,
+        ]);
+      }
+    }
+    b.addEmptyRow();
+
     b.addSectionHeader('OPERATIONAL AUDIT & KHATA SUMMARY');
     b.addRow(['Total Shifts Handed Over', z.totalShiftsCount]);
     b.addRow(['Total Order Voids Count', z.totalVoidCount]);
@@ -269,6 +341,7 @@ class ExcelReportingEngine {
     List<Map<String, dynamic>> ingredients,
     Map<int, double> mandiMap,
     Map<int, double> wastageMap,
+    Map<int, double> recipeUsageMap,
     String isoTimestamp,
   ) {
     final b = _SheetXmlBuilder();
@@ -294,8 +367,7 @@ class ExcelReportingEngine {
       final closing = (ing['current_stock'] as num?)?.toDouble() ?? 0.0;
       final mandi = mandiMap[id] ?? 0.0;
       final wastage = wastageMap[id] ?? 0.0;
-      // Recipe usage estimation
-      final recipeUsage = 0.0;
+      final recipeUsage = recipeUsageMap[id] ?? 0.0;
       final opening = closing + recipeUsage + wastage - mandi;
 
       b.addRow([name, unit, opening, mandi, recipeUsage, wastage, closing]);
@@ -345,7 +417,13 @@ class ExcelReportingEngine {
     return b.build();
   }
 
-  String _buildSheet5ShiftHandover(List<Map<String, dynamic>> shifts, String isoTimestamp) {
+  String _buildSheet5ShiftHandover(
+    List<Map<String, dynamic>> shifts,
+    Map<int, double> payInMap,
+    Map<int, double> payOutMap,
+    Map<int, int> voidMap,
+    String isoTimestamp,
+  ) {
     final b = _SheetXmlBuilder();
 
     b.addHeaderRow(['Shift Handover & Drawer Cash Reconciliations']);
@@ -358,26 +436,47 @@ class ExcelReportingEngine {
       'Opened At',
       'Closed At',
       'Opening Float',
+      'Pay-Ins',
+      'Pay-Outs',
       'Expected Cash',
       'Counted Cash',
       'Variance',
       'Discrepancy Status',
+      'Voids',
       'Status',
     ]);
 
     for (final sh in shifts) {
-      final id = '#${sh['id']}';
+      final sId = sh['id'] as int;
+      final id = '#$sId';
       final cashier = sh['cashier_name'] as String? ?? 'Staff #${sh['staff_id']}';
       final openedAt = sh['opened_at'] as String? ?? '';
       final closedAt = sh['closed_at'] as String? ?? 'Active';
       final float = sh['opening_float'] as num? ?? 0;
+      final payIns = payInMap[sId] ?? 0.0;
+      final payOuts = payOutMap[sId] ?? 0.0;
       final expected = sh['expected_cash'] as num? ?? 0;
       final counted = sh['counted_cash'] as num? ?? 0;
       final variance = sh['discrepancy'] as num? ?? 0;
       final discStatus = sh['discrepancy_status'] as String? ?? 'CLEAN';
+      final voids = voidMap[sId] ?? 0;
       final status = sh['status'] as String? ?? 'OPEN';
 
-      b.addRow([id, cashier, openedAt, closedAt, float, expected, counted, variance, discStatus, status]);
+      b.addRow([
+        id,
+        cashier,
+        openedAt,
+        closedAt,
+        float,
+        payIns,
+        payOuts,
+        expected,
+        counted,
+        variance,
+        discStatus,
+        voids,
+        status,
+      ]);
     }
 
     return b.build();

@@ -184,6 +184,7 @@ void main() {
       expect(sheet1Xml, contains('Net Sales'));
       expect(sheet1Xml, contains('1300'));
       expect(sheet1Xml, contains('Cash Sales'));
+      expect(sheet1Xml, contains('SHIFT DISCREPANCIES AUDIT'));
       // Verify ISO timestamp format (e.g. 2026-10-15)
       expect(sheet1Xml, contains(RegExp(r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}')));
 
@@ -193,17 +194,27 @@ void main() {
       expect(sheet2Xml, contains('Hot Crispy Drumsticks'));
       expect(sheet2Xml, contains('Crispy Chicken'));
 
+      // Verify Sheet 3 contains Stock & BOM Consumption with Recipe Usage
+      final sheet3File = archive.findFile('xl/worksheets/sheet3.xml')!;
+      final sheet3Xml = utf8.decode(sheet3File.content as List<int>);
+      expect(sheet3Xml, contains('Chicken Drumsticks'));
+      expect(sheet3Xml, contains('Recipe Usage'));
+      expect(sheet3Xml, contains('Mandi Purchases'));
+
       // Verify Sheet 4 contains Kitchen Wastage log
       final sheet4File = archive.findFile('xl/worksheets/sheet4.xml')!;
       final sheet4Xml = utf8.decode(sheet4File.content as List<int>);
       expect(sheet4Xml, contains('Chicken Drumsticks'));
       expect(sheet4Xml, contains('Dropped during rush hour'));
 
-      // Verify Sheet 5 contains Shift Handover
+      // Verify Sheet 5 contains Shift Handover with Pay-Ins, Pay-Outs, and Voids
       final sheet5File = archive.findFile('xl/worksheets/sheet5.xml')!;
       final sheet5Xml = utf8.decode(sheet5File.content as List<int>);
       expect(sheet5Xml, contains('Shift Handover'));
       expect(sheet5Xml, contains('5000')); // Opening float
+      expect(sheet5Xml, contains('Pay-Ins'));
+      expect(sheet5Xml, contains('Pay-Outs'));
+      expect(sheet5Xml, contains('Voids'));
 
       // Verify Sheet 6 contains Vendor Khata Ledger
       final sheet6File = archive.findFile('xl/worksheets/sheet6.xml')!;

@@ -96,5 +96,32 @@ void main() {
       expect(result.warningMessage, isNotNull);
       expect(result.warningMessage, contains('Secondary backup target unreachable'));
     });
+
+    test('uses secondary backup path configured in system_settings if secondaryBackupDir parameter is null', () async {
+      await db.execute('''
+        CREATE TABLE system_settings (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+      ''');
+      await db.insert('system_settings', {
+        'key': 'secondary_backup_path',
+        'value': secondaryBackupDir.path,
+        'updated_at': DateTime.now().toIso8601String(),
+      });
+
+      final now = DateTime(2026, 10, 15, 23, 50, 0);
+      final result = await backupService.executeBackup(
+        sourceDbPath: sourceDbPath,
+        localBackupDir: localBackupDir.path,
+        timestamp: now,
+      );
+
+      expect(result.success, isTrue);
+      expect(result.localBackupPath, isNotNull);
+      expect(result.secondaryBackupPath, isNotNull);
+      expect(await File(result.secondaryBackupPath!).exists(), isTrue);
+    });
   });
 }

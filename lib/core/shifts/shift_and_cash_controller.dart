@@ -5,6 +5,7 @@ import 'shift.dart';
 import 'cash_movement.dart';
 import 'x_report.dart';
 import 'z_report.dart';
+import '../database/database_backup_service.dart';
 
 /// Controller coordinating the operational lifecycle of Business Days and Cashier Shifts.
 ///
@@ -770,16 +771,31 @@ class ShiftAndCashController {
 
   /// Finalizes and locks an active Business Day with supervisor authority.
   ///
-  /// Concludes the business day, archives shifts, and prepares the operational
-  /// session for the next business day (which resets daily tokens to #01).
+  /// Concludes the business day, archives shifts, triggers automated dual-target backups,
+  /// and prepares the operational session for the next business day (which resets daily tokens to #01).
   Future<BusinessDay> finalizeBusinessDayWithZReport({
     required int closedByStaffId,
     DateTime? closedAt,
+    DatabaseBackupService? backupService,
+    String? sourceDbPath,
   }) async {
-    return await closeBusinessDay(
+    final closedDay = await closeBusinessDay(
       closedByStaffId: closedByStaffId,
       closedAt: closedAt,
     );
+
+    // Automated dual-target database backup on every Z-Report closure
+    try {
+      final service = backupService ?? DatabaseBackupService(database: database);
+      final srcPath = sourceDbPath ?? database.path;
+      if (srcPath.isNotEmpty && srcPath != inMemoryDatabasePath) {
+        await service.executeBackup(sourceDbPath: srcPath);
+      }
+    } catch (_) {
+      // Non-fatal backup guardrail
+    }
+
+    return closedDay;
   }
 }
 

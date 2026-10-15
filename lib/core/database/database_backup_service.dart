@@ -96,11 +96,28 @@ class DatabaseBackupService {
     await sourceFile.copy(localTargetPath);
 
     // 3. Secondary / External USB Backup Target
+    String? effectiveSecDir = secondaryBackupDir;
+    if (effectiveSecDir == null && database != null && database!.isOpen) {
+      try {
+        final settingRows = await database!.query(
+          PosDatabaseConstants.tableSystemSettings,
+          where: 'key = ?',
+          whereArgs: [PosDatabaseConstants.settingSecondaryBackupPath],
+        );
+        if (settingRows.isNotEmpty) {
+          final val = settingRows.first['value'] as String?;
+          if (val != null && val.trim().isNotEmpty) {
+            effectiveSecDir = val.trim();
+          }
+        }
+      } catch (_) {}
+    }
+
     String? secondaryTargetPath;
     String? warning;
 
-    if (secondaryBackupDir != null && secondaryBackupDir.trim().isNotEmpty) {
-      final cleanSecPath = secondaryBackupDir.trim();
+    if (effectiveSecDir != null && effectiveSecDir.trim().isNotEmpty) {
+      final cleanSecPath = effectiveSecDir.trim();
       final secDirObj = Directory(cleanSecPath);
       try {
         if (await secDirObj.exists() || await secDirObj.parent.exists()) {
