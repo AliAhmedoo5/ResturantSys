@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/auth/auth_service.dart';
@@ -1398,7 +1397,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                                       style: TextStyle(
                                         fontWeight: FontWeight.w700,
                                         fontSize: 14,
-                                        fontFeatures: [FontFeature.tabularFigures()],
+                                        fontFeatures: const [FontFeature.tabularFigures()],
                                         color: _activeZReport!.netCashVariance.abs() > 0.01
                                             ? WarmCounterColors.lightDestructiveAction
                                             : WarmCounterColors.lightPrimaryAction,
