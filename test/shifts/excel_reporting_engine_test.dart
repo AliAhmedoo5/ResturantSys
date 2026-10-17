@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
 import 'package:resturant_sys/core/catalog/menu_item.dart';
 import 'package:resturant_sys/core/database/pos_database.dart';
 import 'package:resturant_sys/core/database/pos_database_constants.dart';
@@ -33,6 +34,7 @@ void main() {
     late OrderAndCheckoutController orderController;
     late ProcurementAndWastageController procurementController;
     late VendorKhataController khataController;
+    late CatalogAndRecipeController catalogController;
     late ExcelReportingEngine excelEngine;
     late int supervisorId;
     late int cashierId;
@@ -47,6 +49,7 @@ void main() {
       db = await posDb.initialize();
       shiftController = ShiftAndCashController(database: db);
       orderController = OrderAndCheckoutController(database: db);
+      catalogController = CatalogAndRecipeController(database: db);
       procurementController = ProcurementAndWastageController(database: db);
       khataController = VendorKhataController(database: db);
       excelEngine = ExcelReportingEngine(database: db);
@@ -305,7 +308,7 @@ void main() {
         ],
       );
 
-      final extraCheeseMod = await orderController.createModifier(
+      final extraCheeseMod = await catalogController.createModifier(
         menuItemId: burgerItemId,
         name: '+Extra Cheese',
         priceDelta: 50.0,
