@@ -226,6 +226,7 @@ class _ZReportDialogState extends State<ZReportDialog> {
                     onPressed: _isProcessing
                         ? null
                         : () async {
+                            final navigator = Navigator.of(context);
                             final confirmed = await _confirmFinalizeDay(context, widget.report.businessDayId);
                             if (!confirmed || !mounted) return;
 
@@ -234,14 +235,14 @@ class _ZReportDialogState extends State<ZReportDialog> {
                               try {
                                 await widget.onFinalizeBusinessDay!();
                                 if (mounted) {
-                                  Navigator.of(context).maybePop(true);
+                                  navigator.maybePop(true);
                                 }
                               } finally {
                                 if (mounted) setState(() => _isProcessing = false);
                               }
                             } else {
                               if (mounted) {
-                                Navigator.of(context).maybePop(true);
+                                navigator.maybePop(true);
                               }
                             }
                           },
