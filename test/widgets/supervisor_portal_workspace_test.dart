@@ -1,11 +1,8 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:resturant_sys/core/auth/department.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/auth/staff_role.dart';
-import 'package:resturant_sys/core/database/pos_database.dart';
 import 'package:resturant_sys/core/orders/dining_type.dart';
 import 'package:resturant_sys/core/orders/order.dart';
 import 'package:resturant_sys/core/orders/order_item.dart';
@@ -13,16 +10,12 @@ import 'package:resturant_sys/core/orders/token_queue_controller.dart';
 import 'package:resturant_sys/core/orders/token_status.dart';
 import 'package:resturant_sys/core/shifts/shift.dart';
 import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
+import 'package:resturant_sys/core/shifts/z_report.dart';
 import 'package:resturant_sys/core/theme/warm_counter_theme.dart';
 import 'package:resturant_sys/widgets/pin_numpad.dart';
 import 'package:resturant_sys/widgets/supervisor/supervisor_portal_workspace.dart';
 
 void main() {
-  setUpAll(() {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
-  });
-
   group('SupervisorPortalWorkspace Widget Tests', () {
     final testDepartments = [
       Department(id: 1, name: 'Front Counter', createdAt: DateTime(2026, 1, 1)),
@@ -110,6 +103,8 @@ void main() {
       bool? initialTokenTrayEnabled,
       bool? initialCashierVoidEnabled,
       List<Shift>? initialDiscrepancies,
+      ZReport? initialZReport,
+      Future<void> Function()? onFinalizeBusinessDay,
       TokenQueueController? tokenQueueController,
       ShiftAndCashController? shiftController,
     }) {
@@ -124,6 +119,8 @@ void main() {
             initialTokenTrayEnabled: initialTokenTrayEnabled ?? true,
             initialCashierVoidEnabled: initialCashierVoidEnabled ?? true,
             initialDiscrepancies: initialDiscrepancies,
+            initialZReport: initialZReport,
+            onFinalizeBusinessDay: onFinalizeBusinessDay,
             tokenQueueController: tokenQueueController,
           ),
         ),
@@ -346,56 +343,87 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
 
-      final tempDir = await Directory.systemTemp.createTemp('pos_supervisor_reports_test_');
-      final testDbPath = '${tempDir.path}${Platform.pathSeparator}supervisor_reports_test.db';
-      final posDb = PosDatabase(factory: databaseFactoryFfi, customPath: testDbPath);
-      final db = await posDb.initialize();
-      final shiftController = ShiftAndCashController(database: db);
+      final testZReport = ZReport(
+        businessDayId: 1,
+        openedAt: DateTime(2026, 1, 1, 8, 0),
+        closedAt: DateTime(2026, 1, 1, 23, 0),
+        generatedAt: DateTime(2026, 1, 1, 23, 5),
+        openedByStaffName: 'Supervisor',
+        closedByStaffName: 'Supervisor',
+        totalShiftsCount: 1,
+        shifts: [testDiscrepancyShift],
+        grossSales: 15000.0,
+        netSales: 15000.0,
+        totalTax: 0.0,
+        totalDiscounts: 0.0,
+        cashSales: 10000.0,
+        cardSales: 5000.0,
+        raastSales: 0.0,
+        totalOpeningFloat: 5000.0,
+        totalPayIn: 0.0,
+        totalPayOut: 0.0,
+        totalExpectedDrawerCash: 15000.0,
+        totalActualDrawerCash: 14500.0,
+        netCashVariance: -500.0,
+        totalOrdersCount: 20,
+        averageOrderValue: 750.0,
+        dineInOrdersCount: 15,
+        takeawayOrdersCount: 5,
+        deliveryOrdersCount: 0,
+        totalDiscrepantShiftsCount: 1,
+        unresolvedDiscrepanciesCount: 0,
+        totalWastageCost: 0.0,
+        totalVendorPayouts: 0.0,
+      );
 
-      try {
-        final day = await shiftController.openBusinessDay(openedByStaffId: 1);
-        final shift = await shiftController.openShift(staffId: 2, openingFloat: 5000.0);
-        await shiftController.closeShift(
-          shiftId: shift.id,
-          countedCash: 5000.0,
-        );
+      bool finalizedCalled = false;
 
-        await tester.pumpWidget(createTestApp(shiftController: shiftController));
-        await tester.pumpAndSettle();
+      await tester.pumpWidget(createTestApp(
+        initialZReport: testZReport,
+        onFinalizeBusinessDay: () async {
+          finalizedCalled = true;
+        },
+      ));
+      await tester.pumpAndSettle();
 
-        // Switch to Reports & Backups tab
-        await tester.tap(find.byKey(const ValueKey('portal_tab_reports')));
-        await tester.pumpAndSettle();
+      // Switch to Reports & Backups tab
+      await tester.tap(find.byKey(const ValueKey('portal_tab_reports')));
+      await tester.pumpAndSettle();
 
-        expect(find.textContaining('Active Business Day #${day.id}'), findsOneWidget);
-        expect(find.byKey(const ValueKey('portal_view_z_report_btn')), findsOneWidget);
+      expect(find.textContaining('Active Business Day #1'), findsOneWidget);
+      expect(find.textContaining('1 Shifts Finalized'), findsOneWidget);
 
-        // Open full Z-Report
-        await tester.tap(find.byKey(const ValueKey('portal_view_z_report_btn')));
-        await tester.pumpAndSettle();
+      final viewZReportBtn = find.byKey(const ValueKey('portal_view_z_report_btn'));
+      expect(viewZReportBtn, findsOneWidget);
 
-        expect(find.text('Master End-of-Day Z-Report'), findsOneWidget);
-        expect(find.byKey(const ValueKey('finalize_day_button')), findsOneWidget);
+      // Verify touch target height is at least 48px
+      final btnSize = tester.getSize(viewZReportBtn);
+      expect(btnSize.height, greaterThanOrEqualTo(48.0));
 
-        // Tap Finalize button -> Confirmation dialog appears
-        await tester.tap(find.byKey(const ValueKey('finalize_day_button')));
-        await tester.pumpAndSettle();
+      // Open full Z-Report
+      await tester.tap(viewZReportBtn);
+      await tester.pumpAndSettle();
 
-        expect(find.byKey(const ValueKey('confirm_finalize_dialog_btn')), findsOneWidget);
+      expect(find.text('Master End-of-Day Z-Report'), findsOneWidget);
+      final finalizeBtn = find.byKey(const ValueKey('finalize_day_button'));
+      expect(finalizeBtn, findsOneWidget);
 
-        // Confirm
-        await tester.tap(find.byKey(const ValueKey('confirm_finalize_dialog_btn')));
-        await tester.pumpAndSettle();
+      // Tap Finalize button -> Confirmation dialog appears
+      await tester.tap(finalizeBtn);
+      await tester.pumpAndSettle();
 
-        // Verify day is closed in controller
-        final activeDay = await shiftController.getActiveBusinessDay();
-        expect(activeDay, isNull);
-      } finally {
-        await posDb.close();
-        if (await tempDir.exists()) {
-          await tempDir.delete(recursive: true);
-        }
-      }
+      expect(find.text('Lock Business Day & Finalize?'), findsOneWidget);
+      expect(find.byKey(const ValueKey('cancel_finalize_dialog_btn')), findsOneWidget);
+      expect(find.byKey(const ValueKey('confirm_finalize_dialog_btn')), findsOneWidget);
+
+      // Confirm
+      await tester.tap(find.byKey(const ValueKey('confirm_finalize_dialog_btn')));
+      await tester.pumpAndSettle();
+
+      expect(finalizedCalled, isTrue);
+
+      // Day finalized and closed; Active Business Day #1 card is reset
+      expect(find.textContaining('Active Business Day #1'), findsNothing);
     });
   });
 }

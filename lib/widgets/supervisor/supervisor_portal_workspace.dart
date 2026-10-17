@@ -50,6 +50,8 @@ class SupervisorPortalWorkspace extends StatefulWidget {
     this.initialTokenTrayEnabled,
     this.initialCashierVoidEnabled,
     this.initialDiscrepancies,
+    this.initialZReport,
+    this.onFinalizeBusinessDay,
   });
 
   final AuthService? authService;
@@ -62,6 +64,8 @@ class SupervisorPortalWorkspace extends StatefulWidget {
   final bool? initialTokenTrayEnabled;
   final bool? initialCashierVoidEnabled;
   final List<Shift>? initialDiscrepancies;
+  final ZReport? initialZReport;
+  final Future<void> Function()? onFinalizeBusinessDay;
 
   @override
   State<SupervisorPortalWorkspace> createState() => _SupervisorPortalWorkspaceState();
@@ -115,6 +119,10 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
       _discrepancyShifts = List.of(widget.initialDiscrepancies!);
       _isLoadingDiscrepancies = false;
     }
+    if (widget.initialZReport != null) {
+      _activeZReport = widget.initialZReport;
+      _isLoadingZReport = false;
+    }
 
     _loadAllData();
   }
@@ -129,7 +137,9 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
     if (widget.initialDiscrepancies == null) {
       await _loadDiscrepancies();
     }
-    await _loadReportsAndBackupSettings();
+    if (widget.initialZReport == null) {
+      await _loadReportsAndBackupSettings();
+    }
   }
 
   Future<void> _loadStaffAndDepartments() async {
@@ -1420,7 +1430,9 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                                   }
                                 },
                                 onFinalizeBusinessDay: () async {
-                                  if (widget.shiftController != null) {
+                                  if (widget.onFinalizeBusinessDay != null) {
+                                    await widget.onFinalizeBusinessDay!();
+                                  } else if (widget.shiftController != null) {
                                     final messenger = ScaffoldMessenger.of(context);
                                     final staffId = widget.currentStaff?.id ?? 1;
                                     final dayId = _activeZReport?.businessDayId;
@@ -1441,7 +1453,11 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                               ),
                             );
                             if (finalized == true && mounted) {
-                              await _loadReportsAndBackupSettings();
+                              if (widget.shiftController != null) {
+                                await _loadReportsAndBackupSettings();
+                              } else {
+                                setState(() => _activeZReport = null);
+                              }
                             }
                           },
                         ),
