@@ -77,10 +77,14 @@ class ShiftAndCashController {
 
   /// Concludes and locks an active Business Day.
   ///
-  /// Throws [StateError] if there is no active Business Day, or if an active shift is still open.
+  /// If [autoLockActiveShifts] is true, any active cashier shift under this business day
+  /// is automatically finalized and locked before closing the day (required for supervisor Z-Report).
+  ///
+  /// Throws [StateError] if there is no active Business Day, or if an active shift is still open and [autoLockActiveShifts] is false.
   Future<BusinessDay> closeBusinessDay({
     required int closedByStaffId,
     DateTime? closedAt,
+    bool autoLockActiveShifts = false,
   }) async {
     final active = await getActiveBusinessDay();
     if (active == null) {
@@ -89,9 +93,50 @@ class ShiftAndCashController {
 
     final activeShift = await getActiveShift();
     if (activeShift != null) {
-      throw StateError(
-        'Cannot close Business Day while shift #${activeShift.id} is still open. Complete shift handover first.',
+      if (!autoLockActiveShifts) {
+        throw StateError(
+          'Cannot close Business Day while shift #${activeShift.id} is still open. Complete shift handover first.',
+        );
+      }
+
+      // Auto-lock all open shifts under this business day
+      final openShifts = await database.query(
+        PosDatabaseConstants.tableShifts,
+        where: 'business_day_id = ? AND status = ?',
+        whereArgs: [active.id, ShiftStatus.open.dbValue],
       );
+      final effectiveClosedAt = closedAt ?? DateTime.now();
+      final formattedClosedAt = _formatTimestamp(effectiveClosedAt);
+
+      for (final row in openShifts) {
+        final shift = Shift.fromMap(row);
+        final movements = await getCashMovements(shift.id);
+        double totalPayIn = 0.0;
+        double totalPayOut = 0.0;
+        for (final m in movements) {
+          if (m.isPayIn) {
+            totalPayIn += m.amount;
+          } else {
+            totalPayOut += m.amount;
+          }
+        }
+        final cashSales = await calculateCashSales(shift.id);
+        final expectedCash = shift.openingFloat + cashSales + totalPayIn - totalPayOut;
+
+        await database.update(
+          PosDatabaseConstants.tableShifts,
+          {
+            'closed_at': formattedClosedAt,
+            'counted_cash': shift.countedCash ?? expectedCash,
+            'expected_cash': expectedCash,
+            'discrepancy': (shift.countedCash ?? expectedCash) - expectedCash,
+            'discrepancy_status': DiscrepancyStatus.clean.dbValue,
+            'status': ShiftStatus.closed.dbValue,
+          },
+          where: 'id = ?',
+          whereArgs: [shift.id],
+        );
+      }
     }
 
     final effectiveClosedAt = closedAt ?? DateTime.now();
@@ -782,6 +827,7 @@ class ShiftAndCashController {
     final closedDay = await closeBusinessDay(
       closedByStaffId: closedByStaffId,
       closedAt: closedAt,
+      autoLockActiveShifts: true,
     );
 
     // Automated dual-target database backup on every Z-Report closure
