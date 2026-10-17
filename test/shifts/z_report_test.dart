@@ -356,5 +356,28 @@ void main() {
       // Verify token resets to #01 for the fresh Business Day!
       expect(nextTokenDay2, equals(1));
     });
+
+    test('finalizeBusinessDayWithZReport auto-locks open shifts and concludes day when shift is active', () async {
+      await shiftController.openBusinessDay(openedByStaffId: supervisorId);
+      final shift = await shiftController.openShift(staffId: cashierId, openingFloat: 500.0);
+      expect(shift.isOpen, isTrue);
+
+      // Finalize Business Day with Z-Report while shift is still active
+      final closedDay = await shiftController.finalizeBusinessDayWithZReport(
+        closedByStaffId: supervisorId,
+      );
+
+      expect(closedDay.isClosed, isTrue);
+      final activeShift = await shiftController.getActiveShift();
+      expect(activeShift, isNull);
+
+      final reloadedShiftRows = await db.query(
+        PosDatabaseConstants.tableShifts,
+        where: 'id = ?',
+        whereArgs: [shift.id],
+      );
+      expect(reloadedShiftRows.first['status'], equals('CLOSED'));
+    });
   });
 }
+
