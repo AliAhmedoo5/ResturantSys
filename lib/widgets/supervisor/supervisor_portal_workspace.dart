@@ -1280,24 +1280,27 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'End-of-Day Z-Reports & Daily Close',
-                            style: WarmCounterTypography.pageHeading.copyWith(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'End-of-Day Z-Reports & Daily Close',
+                              style: WarmCounterTypography.pageHeading.copyWith(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
-                          ),
-                          Text(
-                            'Review daily revenue, tender breakdowns, net variance, and generate 1-click multi-sheet Excel workbooks.',
-                            style: WarmCounterTypography.secondaryLabel.copyWith(
-                              color: WarmCounterColors.lightSecondaryText,
+                            Text(
+                              'Review daily revenue, tender breakdowns, net variance, and generate 1-click multi-sheet Excel workbooks.',
+                              style: WarmCounterTypography.secondaryLabel.copyWith(
+                                color: WarmCounterColors.lightSecondaryText,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
+                      const SizedBox(width: WarmCounterSpacing.space16),
                       IconButton(
                         icon: const Icon(Icons.refresh_rounded, color: WarmCounterColors.lightPrimaryAction),
                         tooltip: 'Refresh Report Data',

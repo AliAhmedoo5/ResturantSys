@@ -411,7 +411,7 @@ void main() {
       await tester.tap(finalizeBtn);
       await tester.pumpAndSettle();
 
-      expect(find.text('Lock Business Day & Finalize?'), findsOneWidget);
+      expect(find.text('Finalize Business Day'), findsOneWidget);
       expect(find.byKey(const ValueKey('cancel_finalize_dialog_btn')), findsOneWidget);
       expect(find.byKey(const ValueKey('confirm_finalize_dialog_btn')), findsOneWidget);
 
