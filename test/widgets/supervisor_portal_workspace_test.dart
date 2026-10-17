@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:resturant_sys/core/auth/department.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/auth/staff_role.dart';
+import 'package:resturant_sys/core/hardware/in_memory_hardware_adapter.dart';
+import 'package:resturant_sys/core/hardware/reprint_tray_controller.dart';
 import 'package:resturant_sys/core/orders/dining_type.dart';
 import 'package:resturant_sys/core/orders/order.dart';
 import 'package:resturant_sys/core/orders/order_item.dart';
@@ -106,6 +108,7 @@ void main() {
       ZReport? initialZReport,
       Future<void> Function()? onFinalizeBusinessDay,
       TokenQueueController? tokenQueueController,
+      ReprintTrayController? reprintTrayController,
       ShiftAndCashController? shiftController,
     }) {
       return MaterialApp(
@@ -122,6 +125,7 @@ void main() {
             initialZReport: initialZReport,
             onFinalizeBusinessDay: onFinalizeBusinessDay,
             tokenQueueController: tokenQueueController,
+            reprintTrayController: reprintTrayController,
           ),
         ),
       );
@@ -375,10 +379,13 @@ void main() {
         totalVendorSettlementsAmount: 0.0,
       );
 
+      final fakeHardware = InMemoryHardwareAdapter();
+      final reprintTray = ReprintTrayController(hardwareAdapter: fakeHardware);
       bool finalizedCalled = false;
 
       await tester.pumpWidget(createTestApp(
         initialZReport: testZReport,
+        reprintTrayController: reprintTray,
         onFinalizeBusinessDay: () async {
           finalizedCalled = true;
         },
@@ -391,6 +398,17 @@ void main() {
 
       expect(find.textContaining('Active Business Day #1'), findsOneWidget);
       expect(find.textContaining('1 Shifts Finalized'), findsOneWidget);
+      expect(find.text('Net Drawer Discrepancy'), findsOneWidget);
+
+      // Verify button hierarchy: portal_export_excel_btn is secondary OutlinedButton
+      final exportExcelBtn = find.byKey(const ValueKey('portal_export_excel_btn'));
+      expect(exportExcelBtn, findsOneWidget);
+      expect(find.byType(OutlinedButton), findsWidgets);
+
+      // Verify touch target for save_usb_path_btn
+      final saveUsbBtn = find.byKey(const ValueKey('save_usb_path_btn'));
+      expect(saveUsbBtn, findsOneWidget);
+      expect(tester.getSize(saveUsbBtn).height, greaterThanOrEqualTo(48.0));
 
       final viewZReportBtn = find.byKey(const ValueKey('portal_view_z_report_btn'));
       expect(viewZReportBtn, findsOneWidget);
@@ -404,6 +422,17 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Master End-of-Day Z-Report'), findsOneWidget);
+
+      // Test Print button inside ZReportDialog dispatches to hardware adapter
+      final printBtn = find.byKey(const ValueKey('print_z_report_button'));
+      expect(printBtn, findsOneWidget);
+      await tester.tap(printBtn);
+      await tester.pumpAndSettle();
+
+      expect(fakeHardware.counterPrintedBytes, isNotEmpty);
+      expect(reprintTray.recentJobs, isNotEmpty);
+      expect(reprintTray.recentJobs.first.type, equals(PrintJobType.zReport));
+
       final finalizeBtn = find.byKey(const ValueKey('finalize_day_button'));
       expect(finalizeBtn, findsOneWidget);
 

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:intl/intl.dart';
 import '../orders/order.dart';
 import '../orders/payment_method.dart';
+import '../shifts/z_report.dart';
 import 'esc_pos_constants.dart';
 import 'paper_width.dart';
 
@@ -350,6 +351,20 @@ class EscPosGenerator {
   /// Generates the raw RJ11 cash drawer kick pulse command bytes (`ESC p 0 25 250`).
   List<int> generateCashDrawerPulse() {
     return List<int>.from(EscPosConstants.kickDrawerPulse);
+  }
+
+  /// Generates the raw ESC/POS byte sequence for an End-of-Day Z-Report.
+  List<int> generateZReportSlip({
+    required ZReport report,
+    PaperWidth paperWidth = PaperWidth.mm80,
+  }) {
+    final bytes = <int>[];
+    bytes.addAll(EscPosConstants.initPrinter);
+    bytes.addAll(EscPosConstants.alignLeft);
+    bytes.addAll(_encodeText(report.toPrintableString()));
+    bytes.addAll([EscPosConstants.lf, EscPosConstants.lf, EscPosConstants.lf]);
+    bytes.addAll(EscPosConstants.cutPaperFull);
+    return bytes;
   }
 
   // ---------------------------------------------------------------------------

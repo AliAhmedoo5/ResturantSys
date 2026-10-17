@@ -145,6 +145,7 @@ class _AppShellState extends State<AppShell> {
         shiftController: widget.shiftController,
         orderController: widget.orderController,
         tokenQueueController: widget.tokenQueueController,
+        reprintTrayController: widget.reprintTrayController,
         currentStaff: staff,
       );
     }

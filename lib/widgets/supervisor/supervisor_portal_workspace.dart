@@ -1,9 +1,11 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/auth/auth_service.dart';
 import '../../core/auth/department.dart';
 import '../../core/auth/staff.dart';
 import '../../core/auth/staff_role.dart';
+import '../../core/hardware/reprint_tray_controller.dart';
 import '../../core/orders/order_and_checkout_controller.dart';
 import '../../core/orders/token_queue_controller.dart';
 import '../../core/shifts/shift.dart';
@@ -44,6 +46,7 @@ class SupervisorPortalWorkspace extends StatefulWidget {
     this.shiftController,
     this.orderController,
     this.tokenQueueController,
+    this.reprintTrayController,
     this.currentStaff,
     this.initialDepartments,
     this.initialStaff,
@@ -58,6 +61,7 @@ class SupervisorPortalWorkspace extends StatefulWidget {
   final ShiftAndCashController? shiftController;
   final OrderAndCheckoutController? orderController;
   final TokenQueueController? tokenQueueController;
+  final ReprintTrayController? reprintTrayController;
   final Staff? currentStaff;
   final List<Department>? initialDepartments;
   final List<Staff>? initialStaff;
@@ -1355,7 +1359,14 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                                   children: [
                                     const Text('Net Sales Revenue', style: TextStyle(color: WarmCounterColors.lightSecondaryText, fontSize: 12)),
                                     const SizedBox(height: 2),
-                                    Text('PKR ${_currencyFormat.format(_activeZReport!.netSales)}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                                    Text(
+                                      'PKR ${_currencyFormat.format(_activeZReport!.netSales)}',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 16,
+                                        fontFeatures: [FontFeature.tabularFigures()],
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -1365,7 +1376,14 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                                   children: [
                                     const Text('Cash Tenders', style: TextStyle(color: WarmCounterColors.lightSecondaryText, fontSize: 12)),
                                     const SizedBox(height: 2),
-                                    Text('PKR ${_currencyFormat.format(_activeZReport!.cashSales)}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                                    Text(
+                                      'PKR ${_currencyFormat.format(_activeZReport!.cashSales)}',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 14,
+                                        fontFeatures: [FontFeature.tabularFigures()],
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -1373,13 +1391,14 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Text('Net Drawer Variance', style: TextStyle(color: WarmCounterColors.lightSecondaryText, fontSize: 12)),
+                                    const Text('Net Drawer Discrepancy', style: TextStyle(color: WarmCounterColors.lightSecondaryText, fontSize: 12)),
                                     const SizedBox(height: 2),
                                     Text(
                                       'PKR ${_currencyFormat.format(_activeZReport!.netCashVariance)}',
                                       style: TextStyle(
                                         fontWeight: FontWeight.w700,
                                         fontSize: 14,
+                                        fontFeatures: [FontFeature.tabularFigures()],
                                         color: _activeZReport!.netCashVariance.abs() > 0.01
                                             ? WarmCounterColors.lightDestructiveAction
                                             : WarmCounterColors.lightPrimaryAction,
@@ -1413,17 +1432,18 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                               context: context,
                               builder: (ctx) => ZReportDialog(
                                 report: _activeZReport!,
+                                onPrint: () async {
+                                  if (widget.reprintTrayController != null) {
+                                    await widget.reprintTrayController!.dispatchZReportPrinting(report: _activeZReport!);
+                                  }
+                                },
                                 onExportExcel: () async {
                                   if (widget.shiftController != null) {
                                     final messenger = ScaffoldMessenger.of(context);
                                     final engine = ExcelReportingEngine(database: widget.shiftController!.database);
-                                    final bytes = await engine.generateDailyWorkbookBytes(
+                                    final file = await engine.exportDailyReportToFile(
                                       businessDayId: _activeZReport!.businessDayId,
                                       zReport: _activeZReport!,
-                                    );
-                                    final file = await engine.saveWorkbookToFile(
-                                      bytes: bytes,
-                                      businessDayId: _activeZReport!.businessDayId,
                                     );
                                     if (mounted) {
                                       messenger.showSnackBar(
@@ -1464,13 +1484,13 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                             }
                           },
                         ),
-                        ElevatedButton.icon(
+                        OutlinedButton.icon(
                           key: const ValueKey('portal_export_excel_btn'),
                           icon: const Icon(Icons.table_chart_rounded, size: 18),
                           label: const Text('1-Click 6-Sheet Daily Excel (.xlsx)'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: WarmCounterColors.lightPrimaryAction,
-                            foregroundColor: Colors.white,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: WarmCounterColors.lightPrimaryAction,
+                            side: const BorderSide(color: WarmCounterColors.lightBorder),
                             minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
                           ),
                           onPressed: () async {
@@ -1478,13 +1498,9 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                               final messenger = ScaffoldMessenger.of(context);
                               try {
                                 final engine = ExcelReportingEngine(database: widget.shiftController!.database);
-                                final bytes = await engine.generateDailyWorkbookBytes(
+                                final file = await engine.exportDailyReportToFile(
                                   businessDayId: _activeZReport!.businessDayId,
                                   zReport: _activeZReport!,
-                                );
-                                final file = await engine.saveWorkbookToFile(
-                                  bytes: bytes,
-                                  businessDayId: _activeZReport!.businessDayId,
                                 );
                                 if (mounted) {
                                   messenger.showSnackBar(
@@ -1586,6 +1602,9 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                       const SizedBox(width: 8),
                       ElevatedButton(
                         key: const ValueKey('save_usb_path_btn'),
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
+                        ),
                         onPressed: _saveSecondaryBackupPath,
                         child: const Text('Save'),
                       ),
@@ -1594,13 +1613,13 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                   const SizedBox(height: WarmCounterSpacing.space24),
 
                   // Instant Backup Button
-                  ElevatedButton.icon(
+                  OutlinedButton.icon(
                     key: const ValueKey('trigger_backup_btn'),
                     icon: const Icon(Icons.backup_rounded, size: 18),
                     label: const Text('Trigger Instant Database Backup Now'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: WarmCounterColors.lightPrimaryAction,
-                      foregroundColor: Colors.white,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: WarmCounterColors.lightPrimaryAction,
+                      side: const BorderSide(color: WarmCounterColors.lightBorder),
                       minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
                     ),
                     onPressed: _triggerInstantBackup,

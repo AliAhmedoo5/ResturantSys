@@ -279,7 +279,7 @@ void main() {
       expect(printable, contains('1,000.00'));
       expect(printable, contains('Raast Sales:'));
       expect(printable, contains('500.00'));
-      expect(printable, contains('Net Variance:'));
+      expect(printable, contains('Net Discrepancy:'));
       expect(printable, contains('-20.00'));
       expect(printable, contains('Total Voids:'));
     });

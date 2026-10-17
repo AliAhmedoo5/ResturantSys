@@ -5,7 +5,8 @@ enum PrintJobType {
   customerReceipt('Customer Tax Receipt'),
   kitchenOrderTicket('Kitchen Order Ticket (KOT)'),
   kitchenVoidSlip('Kitchen Order Void Slip'),
-  cashDrawerKick('RJ11 Cash Drawer Pulse');
+  cashDrawerKick('RJ11 Cash Drawer Pulse'),
+  zReport('End-of-Day Master Z-Report');
 
   const PrintJobType(this.label);
   final String label;

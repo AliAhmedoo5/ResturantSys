@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../database/pos_database_constants.dart';
 import '../orders/order.dart';
+import '../shifts/z_report.dart';
 import 'esc_pos_generator.dart';
 import 'hardware_device_adapter.dart';
 import 'paper_width.dart';
@@ -143,6 +144,28 @@ class ReprintTrayController extends ChangeNotifier {
     );
 
     await _executeJob(voidJob);
+  }
+
+  /// Dispatches an End-of-Day Master Z-Report to the thermal printer.
+  Future<void> dispatchZReportPrinting({
+    required ZReport report,
+  }) async {
+    final zReportBytes = generator.generateZReportSlip(
+      report: report,
+      paperWidth: paperWidth,
+    );
+
+    final job = PrintJob(
+      id: 'zreport_${report.businessDayId}_${DateTime.now().millisecondsSinceEpoch}',
+      target: PrinterTarget.counter,
+      type: PrintJobType.zReport,
+      bytes: zReportBytes,
+      orderId: 0,
+      tokenDisplay: 'Day #${report.businessDayId}',
+      createdAt: DateTime.now(),
+    );
+
+    await _executeJob(job);
   }
 
   /// Manual supervisor cash drawer override.

@@ -276,7 +276,7 @@ class _ZReportDialogState extends State<ZReportDialog> {
                   const SizedBox(width: WarmCounterSpacing.space12),
                   Expanded(
                     child: Text(
-                      'Cash Drawer Variance Flag: Net discrepancy of PKR ${_currencyFormat.format(z.netCashVariance)} across all shifts.',
+                      'Cash Drawer Discrepancy Flag: Net discrepancy of PKR ${_currencyFormat.format(z.netCashVariance)} across all shifts.',
                       style: const TextStyle(
                         color: WarmCounterColors.lightDestructiveAction,
                         fontWeight: FontWeight.w600,

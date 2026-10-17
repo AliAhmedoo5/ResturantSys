@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../database/pos_database_constants.dart';
+import '../orders/order_item.dart';
 import 'z_report.dart';
 
 /// Generates standardized 6-sheet OpenXML Excel workbooks (.xlsx) with unalterable ISO audit timestamps.
@@ -69,19 +70,72 @@ class ExcelReportingEngine {
       ORDER BY name ASC;
     ''');
 
-    // Real BOM recipe usage from settled orders
-    final recipeUsageRows = await database.rawQuery('''
-      SELECT r.raw_ingredient_id, COALESCE(SUM(r.quantity_per_recipe_unit * oi.quantity), 0.0) as recipe_qty
+    // Real BOM recipe usage from settled orders including Deals and Modifiers
+    final settledOrderItems = await database.rawQuery('''
+      SELECT oi.*
       FROM ${PosDatabaseConstants.tableOrderItems} oi
       JOIN ${PosDatabaseConstants.tableOrders} o ON oi.order_id = o.id
-      JOIN ${PosDatabaseConstants.tableRecipes} r ON oi.menu_item_id = r.menu_item_id
-      WHERE o.business_day_id = ? AND o.payment_status = 'SETTLED'
-      GROUP BY r.raw_ingredient_id;
+      WHERE o.business_day_id = ? AND o.payment_status = 'SETTLED';
     ''', [businessDayId]);
-    final recipeUsageMap = {
-      for (final r in recipeUsageRows)
-        r['raw_ingredient_id'] as int: (r['recipe_qty'] as num).toDouble()
-    };
+
+    final allRecipes = await database.query(PosDatabaseConstants.tableRecipes);
+    final recipesByMenuItem = <int, List<Map<String, dynamic>>>{};
+    for (final r in allRecipes) {
+      final mId = r['menu_item_id'] as int;
+      recipesByMenuItem.putIfAbsent(mId, () => []).add(r);
+    }
+
+    final recipeUsageMap = <int, double>{};
+
+    for (final itemRow in settledOrderItems) {
+      final item = OrderItem.fromMap(itemRow);
+      final modifiers = item.decodedModifiers;
+      final removedIngredientIds = <int>{};
+      final positiveModifiers = <(int rawIngredientId, double delta)>[];
+
+      for (final mod in modifiers) {
+        final rawIngredientId = mod['raw_ingredient_id'] as int?;
+        final name = (mod['name'] as String? ?? '').toLowerCase();
+        final delta = (mod['ingredient_qty_delta'] as num?)?.toDouble() ?? 0.0;
+
+        if (rawIngredientId != null) {
+          if (delta == 0.0 || name.contains('no ')) {
+            removedIngredientIds.add(rawIngredientId);
+          } else if (delta > 0.0) {
+            positiveModifiers.add((rawIngredientId, delta));
+          }
+        }
+      }
+
+      void accumulateMenuItemUsage(int menuItemId) {
+        final recipes = recipesByMenuItem[menuItemId] ?? const [];
+        for (final recipe in recipes) {
+          final ingredientId = recipe['raw_ingredient_id'] as int;
+          final qtyPerUnit = (recipe['quantity_per_recipe_unit'] as num).toDouble();
+          if (removedIngredientIds.contains(ingredientId)) {
+            continue;
+          }
+          recipeUsageMap[ingredientId] = (recipeUsageMap[ingredientId] ?? 0.0) + (qtyPerUnit * item.quantity);
+        }
+      }
+
+      if (item.menuItemId != null) {
+        accumulateMenuItemUsage(item.menuItemId!);
+      } else if (item.dealId != null) {
+        for (final choice in item.decodedDealChoices) {
+          final choiceMenuItemId = choice['menu_item_id'] as int?;
+          if (choiceMenuItemId != null) {
+            accumulateMenuItemUsage(choiceMenuItemId);
+          }
+        }
+      }
+
+      for (final mod in positiveModifiers) {
+        if (!removedIngredientIds.contains(mod.$1)) {
+          recipeUsageMap[mod.$1] = (recipeUsageMap[mod.$1] ?? 0.0) + (mod.$2 * item.quantity);
+        }
+      }
+    }
 
     final mandiSumRows = await database.rawQuery('''
       SELECT raw_ingredient_id, COALESCE(SUM(converted_quantity), 0.0) as purchased_qty
@@ -227,6 +281,26 @@ class ExcelReportingEngine {
     }
     await file.writeAsBytes(bytes);
     return file;
+  }
+
+  /// Generates and saves the daily 6-sheet Excel report to disk in a single step.
+  Future<File> exportDailyReportToFile({
+    required int businessDayId,
+    required ZReport zReport,
+    String? filePath,
+    DateTime? auditTimestamp,
+  }) async {
+    final bytes = await generateDailyWorkbookBytes(
+      businessDayId: businessDayId,
+      zReport: zReport,
+      auditTimestamp: auditTimestamp,
+    );
+    return saveWorkbookToFile(
+      bytes: bytes,
+      filePath: filePath,
+      businessDayId: businessDayId,
+      timestamp: auditTimestamp,
+    );
   }
 
   // ===========================================================================

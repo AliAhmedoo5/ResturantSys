@@ -134,14 +134,14 @@ class ZReport {
     line('Total Tenders:', 'Rs ${_currencyFormat.format(totalTenderSales)}');
     buffer.writeln(subDivider);
 
-    center('-- CASH DRAWER AUDIT & VARIANCE --');
+    center('-- CASH DRAWER AUDIT & DISCREPANCY --');
     line('Opening Floats:', 'Rs ${_currencyFormat.format(totalOpeningFloat)}');
     line('(+) Cash Sales:', 'Rs ${_currencyFormat.format(cashSales)}');
     line('(+) Total Pay-Ins:', 'Rs ${_currencyFormat.format(totalPayIn)}');
     line('(-) Total Pay-Outs:', 'Rs ${_currencyFormat.format(totalPayOut)}');
     line('Expected Drawer:', 'Rs ${_currencyFormat.format(totalExpectedDrawerCash)}');
     line('Counted Drawer:', 'Rs ${_currencyFormat.format(totalCountedCash)}');
-    line('Net Variance:', 'Rs ${_currencyFormat.format(netCashVariance)}');
+    line('Net Discrepancy:', 'Rs ${_currencyFormat.format(netCashVariance)}');
     buffer.writeln(subDivider);
 
     center('-- AUDIT & OPERATIONS LOG --');
@@ -157,7 +157,7 @@ class ZReport {
       for (final sh in shifts) {
         final shiftVariance = sh.discrepancy ?? 0.0;
         final cashier = sh.staffName ?? 'Staff #${sh.staffId}';
-        line('Shift #${sh.id} ($cashier):', 'Var: Rs ${_currencyFormat.format(shiftVariance)}');
+        line('Shift #${sh.id} ($cashier):', 'Discrepancy: Rs ${_currencyFormat.format(shiftVariance)}');
       }
     }
 
