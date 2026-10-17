@@ -204,5 +204,32 @@ void main() {
 
       expect(finalized, isTrue);
     });
+
+    testWidgets('triggers onPrint callback when print button tapped', (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      bool printTriggered = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ZReportDialog(
+              report: dummyZReport,
+              onPrint: () {
+                printTriggered = true;
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('print_z_report_button')));
+      await tester.pumpAndSettle();
+
+      expect(printTriggered, isTrue);
+    });
   });
 }

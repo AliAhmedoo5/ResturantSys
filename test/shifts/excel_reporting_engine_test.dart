@@ -235,5 +235,133 @@ void main() {
       expect(await savedFile.exists(), isTrue);
       expect(await savedFile.length(), equals(bytes.length));
     });
+
+    test('Sheet 3 Stock & BOM captures recipe usage from Deals and Modifiers', () async {
+      final day = await shiftController.openBusinessDay(openedByStaffId: supervisorId);
+      final shift = await shiftController.openShift(staffId: cashierId, openingFloat: 2000.0);
+
+      final catId = await db.insert(PosDatabaseConstants.tableCategories, {
+        'name': 'Burgers',
+        'display_order': 1,
+        'color_hex': '#E65100',
+        'created_at': DateTime.now().toIso8601String(),
+      });
+
+      final bunIngId = await db.insert(PosDatabaseConstants.tableRawIngredients, {
+        'name': 'Burger Bun',
+        'storage_unit': 'count',
+        'current_stock': 100.0,
+        'low_stock_threshold': 10.0,
+        'cost_per_recipe_unit': 20.0,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+      final pattyIngId = await db.insert(PosDatabaseConstants.tableRawIngredients, {
+        'name': 'Beef Patty',
+        'storage_unit': 'count',
+        'current_stock': 50.0,
+        'low_stock_threshold': 5.0,
+        'cost_per_recipe_unit': 150.0,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+      final cheeseIngId = await db.insert(PosDatabaseConstants.tableRawIngredients, {
+        'name': 'Cheddar Slice',
+        'storage_unit': 'count',
+        'current_stock': 80.0,
+        'low_stock_threshold': 10.0,
+        'cost_per_recipe_unit': 30.0,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+
+      final burgerItemId = await db.insert(PosDatabaseConstants.tableMenuItems, {
+        'category_id': catId,
+        'name': 'Classic Burger',
+        'base_price': 500.0,
+        'tax_rate': 0.0,
+        'is_tax_inclusive': 1,
+        'is_active': 1,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+      await db.insert(PosDatabaseConstants.tableRecipes, {
+        'menu_item_id': burgerItemId,
+        'raw_ingredient_id': bunIngId,
+        'quantity_per_recipe_unit': 1.0,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+      await db.insert(PosDatabaseConstants.tableRecipes, {
+        'menu_item_id': burgerItemId,
+        'raw_ingredient_id': pattyIngId,
+        'quantity_per_recipe_unit': 1.0,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+
+      final deal = await orderController.createDeal(
+        name: 'Solo Burger Combo',
+        basePrice: 650.0,
+        items: [
+          DealItemDraft(
+            groupName: 'Burger',
+            defaultMenuItemId: burgerItemId,
+          ),
+        ],
+      );
+
+      final extraCheeseMod = await orderController.createModifier(
+        menuItemId: burgerItemId,
+        name: '+Extra Cheese',
+        priceDelta: 50.0,
+        rawIngredientId: cheeseIngId,
+        ingredientQtyDelta: 1.0,
+      );
+
+      await orderController.checkoutOrder(
+        businessDayId: day.id,
+        shiftId: shift.id,
+        cashierId: cashierId,
+        diningType: DiningType.dineIn,
+        items: [
+          CartItem(
+            deal: deal,
+            quantity: 2,
+            selectedDealChoices: [
+              SelectedDealChoice(
+                dealItemId: deal.items[0].id,
+                groupName: 'Burger',
+                menuItemId: burgerItemId,
+                menuItemName: 'Classic Burger',
+              ),
+            ],
+            selectedModifiers: [extraCheeseMod],
+          ),
+        ],
+        payments: [
+          const PaymentTender(method: PaymentMethod.cash, amountTendered: 1500.0),
+        ],
+      );
+
+      final zReport = await shiftController.generateZReport(day.id);
+      final bytes = await excelEngine.generateDailyWorkbookBytes(
+        businessDayId: day.id,
+        zReport: zReport,
+      );
+
+      final archive = ZipDecoder().decodeBytes(bytes);
+      final sheet3File = archive.findFile('xl/worksheets/sheet3.xml')!;
+      final sheet3Xml = utf8.decode(sheet3File.content as List<int>);
+
+      expect(sheet3Xml, contains('<is><t>Beef Patty</t></is></c>'));
+      expect(sheet3Xml, contains('<is><t>Cheddar Slice</t></is></c>'));
+
+      final pattyIndex = sheet3Xml.indexOf('<is><t>Beef Patty</t></is>');
+      expect(pattyIndex, isNonNegative);
+      final pattyRowEnd = sheet3Xml.indexOf('</row>', pattyIndex);
+      final pattyRowXml = sheet3Xml.substring(pattyIndex, pattyRowEnd);
+      expect(pattyRowXml, contains('<v>2.0</v>'));
+
+      final cheeseIndex = sheet3Xml.indexOf('<is><t>Cheddar Slice</t></is>');
+      expect(cheeseIndex, isNonNegative);
+      final cheeseRowEnd = sheet3Xml.indexOf('</row>', cheeseIndex);
+      final cheeseRowXml = sheet3Xml.substring(cheeseIndex, cheeseRowEnd);
+      expect(cheeseRowXml, contains('<v>2.0</v>'));
+    });
   });
 }
