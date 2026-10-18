@@ -782,6 +782,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
         if (widget.tokenQueueController != null) {
           return KitchenTokenStation(
             controller: widget.tokenQueueController!,
+            currentStaff: widget.currentStaff,
           );
         }
         return const Center(child: Text('Kitchen Token Station unavailable.'));

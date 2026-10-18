@@ -15,7 +15,7 @@ import 'package:resturant_sys/core/shifts/shift.dart';
 import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
 import 'package:resturant_sys/core/shifts/z_report.dart';
 import 'package:resturant_sys/core/theme/warm_counter_theme.dart';
-import 'package:resturant_sys/widgets/pin_numpad.dart';
+
 import 'package:resturant_sys/widgets/supervisor/supervisor_portal_workspace.dart';
 
 void main() {
@@ -294,7 +294,7 @@ void main() {
       expect(find.text('Active (0)'), findsOneWidget);
     });
 
-    testWidgets('kitchen station PIN authentication and mark ready on pass', (tester) async {
+    testWidgets('Manager session opens kitchen station without Kitchen login', (tester) async {
       tester.view.physicalSize = const Size(1920, 1080);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -308,28 +308,9 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('portal_tab_kitchenStation')));
       await tester.pumpAndSettle();
 
-      expect(find.text('Kitchen Token Station'), findsOneWidget);
-      expect(find.textContaining('Enter Kitchen Cook 4-Digit PIN'), findsOneWidget);
-
-      // Enter Cook PIN 2222 on PinNumpad
-      final twoButton = find.descendant(
-        of: find.byType(PinNumpad),
-        matching: find.text('2'),
-      );
-      expect(twoButton, findsOneWidget);
-
-      await tester.tap(twoButton);
-      await tester.pump(const Duration(milliseconds: 50));
-      await tester.tap(twoButton);
-      await tester.pump(const Duration(milliseconds: 50));
-      await tester.tap(twoButton);
-      await tester.pump(const Duration(milliseconds: 50));
-      await tester.tap(twoButton);
-      await tester.pumpAndSettle();
-
       // Station unlocked
       expect(find.text('Kitchen Token Station (The Pass)'), findsOneWidget);
-      expect(find.textContaining('Unlocked by Kitchen Cook'), findsOneWidget);
+      expect(find.textContaining('Unlocked by Supervisor'), findsOneWidget);
       expect(find.text('#01'), findsOneWidget);
 
       // 1-Tap Mark Ready

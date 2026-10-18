@@ -162,11 +162,11 @@ void main() {
       );
     });
 
-    test('Kitchen station PIN authentication allows Kitchen Cook and Supervisor but rejects Cashier', () async {
+    test('Kitchen station PIN authentication allows Manager but rejects removed Kitchen and Cashier roles', () async {
       // Kitchen Cook PIN: 2222
       final cookAuth = await tokenQueueController.authenticateKitchenPin('2222');
-      expect(cookAuth, isNotNull);
-      expect(cookAuth!.canAccessKitchen, isTrue);
+      expect(cookAuth, isNull);
+
 
       // Supervisor PIN: 1234
       final supAuth = await tokenQueueController.authenticateKitchenPin('1234');

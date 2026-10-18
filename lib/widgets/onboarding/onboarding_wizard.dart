@@ -184,7 +184,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
         orElse: () => depts.first,
       );
 
-      final manager = await widget.authService.registerStaff(
+      final manager = await widget.authService.provisionOnboardingStaff(
         name: _managerNameController.text.trim(),
         departmentId: mgmtDept.id,
         role: StaffRole.manager,
@@ -229,7 +229,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
         orElse: () => depts.first,
       );
 
-      final cashier = await widget.authService.registerStaff(
+      final cashier = await widget.authService.provisionOnboardingStaff(
         name: _cashierNameController.text.trim(),
         departmentId: counterDept.id,
         role: StaffRole.cashier,
@@ -318,7 +318,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
     });
 
     try {
-      final day = await widget.shiftController.openBusinessDay(
+      final day = await widget.shiftController.getActiveBusinessDay() ?? await widget.shiftController.openBusinessDay(
         openedByStaffId: _createdManager!.id,
       );
 
@@ -339,6 +339,8 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
     setState(() => _isLoading = true);
     try {
       await widget.authService.completeOnboarding();
+      if (!mounted) return;
+      setState(() => _isLoading = false);
       widget.onCompleted(_createdCashier!);
     } catch (e) {
       setState(() {
@@ -397,7 +399,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
               const Divider(height: 1, color: WarmCounterColors.lightBorder),
 
               // Active Step Form Content
-              Padding(
+              Flexible(child: Padding(
                 padding: const EdgeInsets.all(WarmCounterSpacing.space24),
                 child: SingleChildScrollView(
                   child: Column(
@@ -439,7 +441,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
                     ],
                   ),
                 ),
-              ),
+              )),
             ],
           ),
         ),
@@ -465,8 +467,9 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
         horizontal: WarmCounterSpacing.space24,
         vertical: WarmCounterSpacing.space16,
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Wrap(
+        spacing: WarmCounterSpacing.space12,
+        runSpacing: WarmCounterSpacing.space8,
         children: List.generate(steps.length, (index) {
           final isCompleted = index < _currentStep;
           final isCurrent = index == _currentStep;

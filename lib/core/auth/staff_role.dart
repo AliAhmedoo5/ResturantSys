@@ -22,8 +22,9 @@ enum StaffRole {
       case 'OWNER':
         return StaffRole.manager;
       case 'CASHIER':
-      default:
         return StaffRole.cashier;
+      default:
+        throw StateError('Authorization error: Unsupported interactive role.');
     }
   }
 

@@ -145,7 +145,7 @@ void main() {
 
     test('fetches all staff and toggles active status', () async {
       final staffList = await authService.getAllStaff();
-      expect(staffList.length, greaterThanOrEqualTo(3));
+      expect(staffList.length, equals(2));
 
       final cashier = staffList.firstWhere((s) => s.role == StaffRole.cashier);
 
