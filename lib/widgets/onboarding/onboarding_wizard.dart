@@ -259,7 +259,8 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
     try {
       // 1. Create or resolve Category
       final catName = _categoryNameController.text.trim();
-      final cat = await widget.catalogController.createCategory(
+      final categories = await widget.catalogController.getCategories();
+      final cat = categories.where((c) => c.name == catName).firstOrNull ?? await widget.catalogController.createCategory(
         name: catName,
         displayOrder: 1,
         colorHex: '#FFC400',
@@ -270,7 +271,8 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
       final initialStock = double.parse(_ingredientStockController.text.trim());
       final unitCost = double.parse(_ingredientCostController.text.trim());
 
-      final rawIngredient = await widget.catalogController.createRawIngredient(
+      final ingredients = await widget.catalogController.getRawIngredients();
+      final rawIngredient = ingredients.where((i) => i.name == ingredientName).firstOrNull ?? await widget.catalogController.createRawIngredient(
         name: ingredientName,
         storageUnit: _selectedStorageUnit,
         currentStock: initialStock,
@@ -283,10 +285,12 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
       final itemPrice = double.parse(_menuItemPriceController.text.trim());
       final recipeQty = double.parse(_recipeQtyController.text.trim());
 
-      final menuItem = await widget.catalogController.createMenuItem(
+      final menuItems = await widget.catalogController.getMenuItems();
+      final menuItem = menuItems.where((i) => i.name == itemName && i.categoryId == cat.id).firstOrNull ?? await widget.catalogController.createMenuItem(
         categoryId: cat.id,
         name: itemName,
         basePrice: itemPrice,
+        isActive: false,
         isTaxInclusive: true,
         taxRate: 0.0,
       );
@@ -297,6 +301,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
         rawIngredientId: rawIngredient.id,
         quantity: recipeQty,
       );
+      await widget.catalogController.toggleMenuItemActive(menuItem.id, true);
 
       setState(() {
         _isLoading = false;

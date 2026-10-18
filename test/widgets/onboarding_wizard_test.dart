@@ -149,7 +149,7 @@ void main() {
 
       // --- STEP 4: Guided First Recipe Creator ---
       expect(find.text('Step 4: Create First Recipe'), findsOneWidget);
-      expect(find.textContaining('sellable items require recipes'), findsOneWidget);
+      expect(find.textContaining('requires a recipe with linked raw ingredients'), findsOneWidget);
 
       final menuItemNameInput = find.byKey(const ValueKey('menu_item_name_input'));
       final categoryNameInput = find.byKey(const ValueKey('category_name_input'));

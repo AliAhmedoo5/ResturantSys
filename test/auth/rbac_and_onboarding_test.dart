@@ -329,6 +329,37 @@ void main() {
       expect(await restartedAuth.isOnboardingRequired(), isFalse);
     });
 
+    test('resuming setup verifies existing credentials without duplicating staff', () async {
+      final resumed = AuthService(database: db);
+      await expectLater(resumed.provisionOnboardingStaff(
+        name: 'Replacement', departmentId: 3, role: StaffRole.manager, pin: '9999',
+      ), throwsStateError);
+      final manager = await resumed.provisionOnboardingStaff(
+        name: 'Replacement', departmentId: 3, role: StaffRole.manager, pin: '123456',
+      );
+      expect(manager.id, testManager.id);
+      expect((await resumed.getAllStaff()).length, 2);
+    });
+
+    test('Manager cannot submit a cashier blind close count', () async {
+      final shift = await shiftController.openShift(staffId: testCashier.id, openingFloat: 100);
+      await expectLater(shiftController.closeShift(
+        shiftId: shift.id, staffId: testManager.id, countedCash: 100,
+      ), throwsStateError);
+      expect((await shiftController.getActiveShift())?.id, shift.id);
+      await shiftController.closeShift(shiftId: shift.id, staffId: testCashier.id, countedCash: 100);
+      expect(await shiftController.getActiveShift(), isNull);
+    });
+
+    test('missing onboarding marker cannot grandfather a Manager-only database', () async {
+      await db.delete(PosDatabaseConstants.tableSystemSettings,
+        where: 'key = ?', whereArgs: [PosDatabaseConstants.settingOnboardingCompleted]);
+      await authService.updateStaffActiveStatus(staffId: testCashier.id, isActive: false);
+      await posDb.close();
+      db = await posDb.initialize();
+      expect(await AuthService(database: db).isOnboardingRequired(), isTrue);
+    });
+
     test('AuthService.isOnboardingRequired detects clean uninitialized database', () async {
       // Currently has manager + cashier, so not uninitialized once completed
       await db.insert(

@@ -52,8 +52,7 @@ class AuthService {
     }
 
     final row = results.first;
-    if (!const ['CASHIER', 'MANAGER', 'SUPERVISOR', 'OWNER']
-        .contains((row['role'] as String).toUpperCase())) {
+    if (!StaffRole.isInteractiveCode(row['role'] as String)) {
       return null;
     }
     final staff = Staff.fromMap(
@@ -302,8 +301,7 @@ class AuthService {
     ''');
 
     return rows
-        .where((r) => const ['CASHIER', 'MANAGER', 'SUPERVISOR', 'OWNER']
-            .contains((r['role'] as String).toUpperCase()))
+        .where((r) => StaffRole.isInteractiveCode(r['role'] as String))
         .map((r) => Staff.fromMap(
               r,
               departmentName: r['department_name'] as String?,

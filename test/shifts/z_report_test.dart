@@ -152,7 +152,7 @@ void main() {
 
       // Shift 1 Close: Expected Cash = 5000 (float) + 500 (cash) + 200 (pay-in) = 5700.0
       // Cashier counts 5680.0 (Variance: -20.0)
-      await shiftController.closeShift(shiftId: shift1.id, countedCash: 5680.0);
+      await shiftController.closeShift(shiftId: shift1.id, staffId: shift1.staffId, countedCash: 5680.0);
 
       // --- SHIFT 2 ---
       final shift2 = await shiftController.openShift(staffId: cashierId, openingFloat: 3000.0);
@@ -210,7 +210,7 @@ void main() {
 
       // Shift 2 Close: Expected Cash = 3000 (float) + 0 (cash sales, voided order is not settled) - 100 (pay-out) = 2900.0
       // Cashier counts 2900.0 (clean variance: 0.0)
-      await shiftController.closeShift(shiftId: shift2.id, countedCash: 2900.0);
+      await shiftController.closeShift(shiftId: shift2.id, staffId: shift2.staffId, countedCash: 2900.0);
 
       // Kitchen wastage log:
       await procurementController.recordKitchenWastage(
@@ -341,7 +341,7 @@ void main() {
       expect(res2.order.tokenNumber, equals(2));
 
       // Close shift
-      await shiftController.closeShift(shiftId: shift.id, countedCash: 1400.0);
+      await shiftController.closeShift(shiftId: shift.id, staffId: shift.staffId, countedCash: 1400.0);
 
       // Finalize Day 1 with Z-Report
       final closedDay = await shiftController.finalizeBusinessDayWithZReport(

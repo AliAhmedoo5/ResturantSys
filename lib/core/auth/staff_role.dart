@@ -15,6 +15,9 @@ enum StaffRole {
   static const StaffRole supervisor = StaffRole.manager;
   static const StaffRole owner = StaffRole.manager;
 
+  static bool isInteractiveCode(String code) =>
+      const ['CASHIER', 'MANAGER', 'SUPERVISOR', 'OWNER'].contains(code.toUpperCase());
+
   static StaffRole fromCode(String code) {
     switch (code.toUpperCase()) {
       case 'MANAGER':

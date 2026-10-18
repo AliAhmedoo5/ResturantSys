@@ -89,7 +89,7 @@ void main() {
       );
 
       // Expected = 4000 - 250 = 3750.0. Cashier counts 3700.0 (-50 discrepancy)
-      await controller.closeShift(shiftId: shift.id, countedCash: 3700.0);
+      await controller.closeShift(shiftId: shift.id, staffId: shift.staffId, countedCash: 3700.0);
 
       final xReport = await controller.generateXReport(shift.id);
 

@@ -126,7 +126,7 @@ void main() {
         ],
       );
 
-      await shiftController.closeShift(shiftId: shift.id, countedCash: 6300.0);
+      await shiftController.closeShift(shiftId: shift.id, staffId: shift.staffId, countedCash: 6300.0);
 
       await procurementController.recordKitchenWastage(
         staffPin: '1111',
