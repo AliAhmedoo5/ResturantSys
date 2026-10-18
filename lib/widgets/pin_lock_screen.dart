@@ -10,11 +10,13 @@ class PinLockScreen extends StatefulWidget {
     required this.onPinSubmitted,
     this.title = 'Enter Staff PIN',
     this.subtitle = 'Enter your 4-digit numeric code to unlock the register',
+    this.maxPinLength = 4,
   });
 
   final Future<bool> Function(String pin) onPinSubmitted;
   final String title;
   final String subtitle;
+  final int maxPinLength;
 
   @override
   State<PinLockScreen> createState() => _PinLockScreenState();
@@ -44,7 +46,7 @@ class _PinLockScreenState extends State<PinLockScreen> {
   }
 
   void _handleDigit(String digit) {
-    if (_isAuthenticating || _enteredPin.length >= 8) return;
+    if (_isAuthenticating || _enteredPin.length >= widget.maxPinLength) return;
 
     final nextPin = _enteredPin + digit;
     setState(() {
@@ -52,10 +54,8 @@ class _PinLockScreenState extends State<PinLockScreen> {
       _enteredPin = nextPin;
     });
 
-    if (nextPin.length == 4) {
-      _submitPin(force: false);
-    } else if (nextPin.length == 8) {
-      _submitPin(force: true);
+    if (nextPin.length == widget.maxPinLength) {
+      _submitPin();
     }
   }
 
@@ -75,7 +75,7 @@ class _PinLockScreenState extends State<PinLockScreen> {
     });
   }
 
-  Future<void> _submitPin({bool force = true}) async {
+  Future<void> _submitPin() async {
     if (_enteredPin.length < 4 || _isAuthenticating) return;
 
     final pinToVerify = _enteredPin;
@@ -89,18 +89,11 @@ class _PinLockScreenState extends State<PinLockScreen> {
       if (!mounted) return;
 
       if (!success) {
-        if (force || pinToVerify.length == 8) {
-          setState(() {
-            _enteredPin = '';
-            _isAuthenticating = false;
-            _errorMessage = 'Invalid PIN. Please try again.';
-          });
-        } else {
-          // If not forced (auto-checked at 4 digits) and failed, allow user to keep typing longer PIN
-          setState(() {
-            _isAuthenticating = false;
-          });
-        }
+        setState(() {
+          _enteredPin = '';
+          _isAuthenticating = false;
+          _errorMessage = 'Invalid PIN. Please try again.';
+        });
       } else {
         setState(() {
           _enteredPin = '';
@@ -161,7 +154,7 @@ class _PinLockScreenState extends State<PinLockScreen> {
       return KeyEventResult.handled;
     } else if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.numpadEnter) {
       if (_enteredPin.length >= 4) {
-        _submitPin(force: true);
+        _submitPin();
       }
       return KeyEventResult.handled;
     }
@@ -235,17 +228,17 @@ class _PinLockScreenState extends State<PinLockScreen> {
                 onClearPressed: _handleClear,
                 onBackspacePressed: _handleBackspace,
               ),
-              if (_enteredPin.length >= 4) ...[
+              if (widget.maxPinLength > 4 && _enteredPin.length >= 4) ...[
                 const SizedBox(height: WarmCounterSpacing.space16),
                 ElevatedButton.icon(
                   key: const ValueKey('unlock_pin_button'),
-                  onPressed: _isAuthenticating ? null : () => _submitPin(force: true),
+                  onPressed: _isAuthenticating ? null : _submitPin,
                   icon: const Icon(Icons.lock_open_rounded, size: 20),
                   label: const Text('Unlock'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: WarmCounterColors.lightPrimaryAction,
                     foregroundColor: Colors.white,
-                    minimumSize: const Size(200, 44),
+                    minimumSize: const Size(200, WarmCounterSpacing.touchTargetMin),
                     shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
                   ),
                 ),
@@ -258,7 +251,7 @@ class _PinLockScreenState extends State<PinLockScreen> {
   }
 
   Widget _buildPinDots() {
-    final dotCount = _enteredPin.length > 4 ? _enteredPin.length : 4;
+    final dotCount = _enteredPin.length > widget.maxPinLength ? _enteredPin.length : widget.maxPinLength;
     return Container(
       key: const ValueKey('pin_dots_container'),
       padding: const EdgeInsets.symmetric(

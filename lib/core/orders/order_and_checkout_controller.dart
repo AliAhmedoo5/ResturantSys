@@ -364,11 +364,12 @@ class OrderAndCheckoutController {
       whereArgs: [cashierId],
       limit: 1,
     );
-    if (staffRows.isNotEmpty) {
-      final role = StaffRole.fromCode(staffRows.first['role'] as String);
-      if (role != StaffRole.cashier) {
-        throw StateError('Authorization error: Manager credentials cannot initiate checkout or process payments.');
-      }
+    if (staffRows.isEmpty) {
+      throw StateError('Authorization error: Cashier ID #$cashierId not found.');
+    }
+    final role = StaffRole.fromCode(staffRows.first['role'] as String);
+    if (role != StaffRole.cashier) {
+      throw StateError('Authorization error: Manager credentials cannot initiate checkout or process payments.');
     }
 
     final now = DateTime.now();

@@ -69,7 +69,7 @@ void main() {
       // --- STEP 1: Restaurant Identity ---
       expect(find.text('Step 1: Restaurant Identity'), findsOneWidget);
       expect(find.byKey(const ValueKey('restaurant_name_input')), findsOneWidget);
-      expect(find.text('PKR'), findsWidgets);
+      expect(find.textContaining('PKR'), findsWidgets);
 
       // Tap Next Step 1 -> advances to Step 2
       final step1NextBtn = find.byKey(const ValueKey('step_1_next_button'));

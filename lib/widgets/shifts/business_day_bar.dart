@@ -128,15 +128,29 @@ class BusinessDayBar extends StatelessWidget {
                         ],
                       ] else ...[
                         // Shift is Active
-                        OutlinedButton.icon(
-                          key: const ValueKey('btn_cash_movement'),
-                          icon: const Icon(Icons.compare_arrows_rounded, size: 18),
-                          label: const Text('Cash Movement'),
-                          onPressed: onCashMovementTap,
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
+                        if (currentStaff.canAccessRegister) ...[
+                          OutlinedButton.icon(
+                            key: const ValueKey('btn_cash_movement'),
+                            icon: const Icon(Icons.compare_arrows_rounded, size: 18),
+                            label: const Text('Cash Movement'),
+                            onPressed: onCashMovementTap,
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
+                            ),
                           ),
-                        ),
+                          const SizedBox(width: WarmCounterSpacing.space8),
+                          ElevatedButton.icon(
+                            key: const ValueKey('btn_close_shift'),
+                            icon: const Icon(Icons.inventory_2_outlined, size: 18),
+                            label: const Text('Handover / Close Shift'),
+                            onPressed: onCloseShiftTap,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: WarmCounterColors.lightDestructiveAction,
+                              foregroundColor: Colors.white,
+                              minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
+                            ),
+                          ),
+                        ],
                         if (isSupervisor) ...[
                           const SizedBox(width: WarmCounterSpacing.space8),
                           OutlinedButton.icon(
@@ -149,18 +163,6 @@ class BusinessDayBar extends StatelessWidget {
                             ),
                           ),
                         ],
-                        const SizedBox(width: WarmCounterSpacing.space8),
-                        ElevatedButton.icon(
-                          key: const ValueKey('btn_close_shift'),
-                          icon: const Icon(Icons.inventory_2_outlined, size: 18),
-                          label: const Text('Handover / Close Shift'),
-                          onPressed: onCloseShiftTap,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: WarmCounterColors.lightDestructiveAction,
-                            foregroundColor: Colors.white,
-                            minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
-                          ),
-                        ),
                       ],
 
                       if (isSupervisor) ...[

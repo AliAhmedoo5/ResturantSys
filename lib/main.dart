@@ -24,7 +24,7 @@ void main() async {
     databaseFactory = databaseFactoryFfi;
   }
 
-  final posDatabase = PosDatabase();
+  final posDatabase = PosDatabase(seedDefaultStaff: false);
   final database = await posDatabase.initialize();
   final authService = AuthService(database: database);
   final shiftController = ShiftAndCashController(database: database);

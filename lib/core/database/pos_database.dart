@@ -11,7 +11,7 @@ class PosDatabase {
   PosDatabase({
     this.factory,
     this.customPath,
-    this.seedDefaultStaff = false,
+    this.seedDefaultStaff = true,
   });
 
   final DatabaseFactory? factory;
@@ -672,7 +672,7 @@ class PosDatabase {
             name: PosDatabaseConstants.defaultSupervisorName,
             dept: PosDatabaseConstants.defaultSupervisorDepartment,
             pin: PosDatabaseConstants.defaultSupervisorPin,
-            role: 'MANAGER',
+            role: 'SUPERVISOR',
           ),
           (
             name: PosDatabaseConstants.defaultCashierName,

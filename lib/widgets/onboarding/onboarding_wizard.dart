@@ -408,18 +408,18 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
                         Container(
                           padding: const EdgeInsets.all(WarmCounterSpacing.space12),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFFEF2F2),
+                            color: WarmCounterColors.lightDestructiveHighlight,
                             borderRadius: WarmCounterSpacing.controlBorderRadius,
-                            border: Border.all(color: const Color(0xFFEF4444)),
+                            border: Border.all(color: WarmCounterColors.lightDestructiveAction),
                           ),
                           child: Row(
                             children: [
-                              const Icon(Icons.error_outline_rounded, color: Color(0xFFDC2626), size: 20),
+                              const Icon(Icons.error_outline_rounded, color: WarmCounterColors.lightDestructiveAction, size: 20),
                               const SizedBox(width: WarmCounterSpacing.space8),
                               Expanded(
                                 child: Text(
                                   _stepError!,
-                                  style: const TextStyle(color: Color(0xFF991B1B), fontSize: 13),
+                                  style: const TextStyle(color: WarmCounterColors.lightDestructiveAction, fontSize: 13),
                                 ),
                               ),
                             ],
@@ -882,7 +882,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
             'Every sellable item in this system requires a recipe with linked raw ingredients for BOM stock deduction.',
             style: WarmCounterTypography.bodyMedium.copyWith(color: WarmCounterColors.lightSecondaryText),
           ),
-          const SizedBox(height: WarmCounterSpacing.space20),
+          const SizedBox(height: WarmCounterSpacing.space16),
 
           // Menu Item Details
           Row(
@@ -1098,17 +1098,17 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
         ] else ...[
           // Day is open -> Guided switch to cashier prompt
           Container(
-            padding: const EdgeInsets.all(WarmCounterSpacing.space20),
+            padding: const EdgeInsets.all(WarmCounterSpacing.space16),
             decoration: BoxDecoration(
-              color: const Color(0xFFECFDF5),
+              color: WarmCounterColors.lightActiveNavHighlight,
               borderRadius: WarmCounterSpacing.panelBorderRadius,
-              border: Border.all(color: const Color(0xFF10B981)),
+              border: Border.all(color: WarmCounterColors.lightBorder),
             ),
             child: Column(
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.check_circle_rounded, color: Color(0xFF047857), size: 32),
+                    const Icon(Icons.check_circle_rounded, color: WarmCounterColors.lightPrimaryAction, size: 32),
                     const SizedBox(width: WarmCounterSpacing.space12),
                     Expanded(
                       child: Column(
@@ -1119,28 +1119,28 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
-                              color: Color(0xFF065F46),
+                              color: WarmCounterColors.lightPrimaryText,
                             ),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             'Strict Two-Role Policy: Manager credentials cannot operate register billing or drawer shifts. Handing over to Cashier "${_createdCashier?.name}".',
-                            style: const TextStyle(fontSize: 13, color: Color(0xFF047857)),
+                            style: const TextStyle(fontSize: 13, color: WarmCounterColors.lightSecondaryText),
                           ),
                         ],
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: WarmCounterSpacing.space20),
+                const SizedBox(height: WarmCounterSpacing.space16),
                 ElevatedButton.icon(
                   key: const ValueKey('switch_to_cashier_button'),
                   icon: const Icon(Icons.swap_horiz_rounded, size: 20),
                   label: const Text('Switch to Cashier & Open Register Shift'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF047857),
+                    backgroundColor: WarmCounterColors.lightPrimaryAction,
                     foregroundColor: Colors.white,
-                    minimumSize: const Size(320, 50),
+                    minimumSize: const Size(320, WarmCounterSpacing.touchTargetMin),
                     shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
                   ),
                   onPressed: _handleFinishAndSwitchToCashier,

@@ -430,13 +430,7 @@ class AuthService {
       'SELECT COUNT(*) as count FROM ${PosDatabaseConstants.tableStaff};',
     );
     final count = (staffCountResult.isNotEmpty ? staffCountResult.first['count'] as int? : 0) ?? 0;
-    if (count == 0) return true;
-
-    final cashierCountResult = await database.rawQuery(
-      "SELECT COUNT(*) as count FROM ${PosDatabaseConstants.tableStaff} WHERE role = 'CASHIER' AND is_active = 1;",
-    );
-    final cashierCount = (cashierCountResult.isNotEmpty ? cashierCountResult.first['count'] as int? : 0) ?? 0;
-    return cashierCount == 0;
+    return count == 0;
   }
 
   /// Checks whether there is at least one active Cashier profile.

@@ -134,7 +134,7 @@ void main() {
 
       // Should now be unlocked
       expect(find.text('Manager Ali'), findsOneWidget);
-      expect(find.text('Management • Supervisor'), findsOneWidget);
+      expect(find.text('Management • Manager'), findsOneWidget);
       expect(find.byKey(const ValueKey('lock_register_button')), findsOneWidget);
 
       // 1-tap lock register action
@@ -264,6 +264,7 @@ void main() {
       final posDb = PosDatabase(
         factory: databaseFactoryFfi,
         customPath: inMemoryDatabasePath,
+        seedDefaultStaff: false,
       );
       final db = await posDb.initialize();
       addTearDown(() async {
@@ -289,7 +290,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(OnboardingWizard), findsOneWidget);
-      expect(find.text('Initial System Setup'), findsOneWidget);
+      expect(find.textContaining('First-Run Setup Wizard'), findsOneWidget);
     });
   });
 }

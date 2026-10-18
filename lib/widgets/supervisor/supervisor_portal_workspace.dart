@@ -644,13 +644,13 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                 vertical: WarmCounterSpacing.space12,
               ),
               decoration: BoxDecoration(
-                color: const Color(0xFFFEF2F2),
+                color: WarmCounterColors.lightDestructiveHighlight,
                 borderRadius: WarmCounterSpacing.panelBorderRadius,
-                border: Border.all(color: const Color(0xFFEF4444)),
+                border: Border.all(color: WarmCounterColors.lightDestructiveAction),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 28),
+                  const Icon(Icons.warning_amber_rounded, color: WarmCounterColors.lightDestructiveAction, size: 28),
                   const SizedBox(width: WarmCounterSpacing.space12),
                   Expanded(
                     child: Column(
@@ -661,14 +661,14 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                           style: WarmCounterTypography.pageHeading.copyWith(
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
-                            color: const Color(0xFF991B1B),
+                            color: WarmCounterColors.lightDestructiveAction,
                           ),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           'Front counter register billing is locked because all cashier profiles are deactivated or missing. Create or activate a cashier profile to resume register operations.',
                           style: WarmCounterTypography.bodySmall.copyWith(
-                            color: const Color(0xFFB91C1C),
+                            color: WarmCounterColors.lightDestructiveAction,
                           ),
                         ),
                       ],
@@ -680,7 +680,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                     icon: const Icon(Icons.person_add_rounded, size: 16),
                     label: const Text('Create Cashier'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFDC2626),
+                      backgroundColor: WarmCounterColors.lightDestructiveAction,
                       foregroundColor: Colors.white,
                       shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
                     ),
