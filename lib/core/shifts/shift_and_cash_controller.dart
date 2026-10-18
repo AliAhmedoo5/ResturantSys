@@ -353,11 +353,6 @@ class ShiftAndCashController {
       },
     );
 
-    final staffRow = await database.query(
-      PosDatabaseConstants.tableStaff,
-      where: 'id = ?',
-      whereArgs: [staffId],
-    );
     final staffName = staffRow.isNotEmpty ? staffRow.first['name'] as String? : null;
 
     return CashMovement(

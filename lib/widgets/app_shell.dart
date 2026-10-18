@@ -59,7 +59,6 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   AppWorkspaceTab _selectedWorkspace = AppWorkspaceTab.register;
   bool _isOnboardingRequired = false;
-  bool _isCheckingOnboarding = true;
 
   @override
   void initState() {
@@ -74,18 +73,9 @@ class _AppShellState extends State<AppShell> {
         if (mounted) {
           setState(() {
             _isOnboardingRequired = required;
-            _isCheckingOnboarding = false;
           });
         }
-      } catch (_) {
-        if (mounted) {
-          setState(() => _isCheckingOnboarding = false);
-        }
-      }
-    } else {
-      if (mounted) {
-        setState(() => _isCheckingOnboarding = false);
-      }
+      } catch (_) {}
     }
   }
 

@@ -274,7 +274,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
         name: ingredientName,
         storageUnit: _selectedStorageUnit,
         currentStock: initialStock,
-        minimumThreshold: initialStock * 0.2,
+        lowStockThreshold: initialStock * 0.2,
         costPerRecipeUnit: unitCost,
       );
 
@@ -286,17 +286,16 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
       final menuItem = await widget.catalogController.createMenuItem(
         categoryId: cat.id,
         name: itemName,
-        price: itemPrice,
-        costPrice: recipeQty * unitCost,
+        basePrice: itemPrice,
         isTaxInclusive: true,
         taxRate: 0.0,
       );
 
       // 4. Create Recipe Item linking menuItem to rawIngredient
-      await widget.catalogController.createRecipeItem(
+      await widget.catalogController.addOrUpdateRecipeItem(
         menuItemId: menuItem.id,
         rawIngredientId: rawIngredient.id,
-        quantityRequired: recipeQty,
+        quantity: recipeQty,
       );
 
       setState(() {
@@ -519,9 +518,9 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
                 ),
               ),
               if (index < steps.length - 1)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: WarmCounterSpacing.space12),
-                  child: const Icon(Icons.chevron_right_rounded, size: 18, color: WarmCounterColors.lightBorder),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: WarmCounterSpacing.space12),
+                  child: Icon(Icons.chevron_right_rounded, size: 18, color: WarmCounterColors.lightBorder),
                 ),
             ],
           );
