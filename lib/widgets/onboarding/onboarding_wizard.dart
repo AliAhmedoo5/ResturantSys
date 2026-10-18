@@ -474,8 +474,8 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
           Color badgeColor;
           Color textColor;
           if (isCompleted) {
-            badgeColor = const Color(0xFF047857);
-            textColor = const Color(0xFF047857);
+            badgeColor = WarmCounterColors.lightPrimaryAction;
+            textColor = WarmCounterColors.lightPrimaryAction;
           } else if (isCurrent) {
             badgeColor = WarmCounterColors.lightPrimaryAction;
             textColor = WarmCounterColors.lightPrimaryAction;

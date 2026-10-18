@@ -23,6 +23,8 @@ void main() {
     late VendorKhataController khataController;
     late ShiftAndCashController shiftController;
     late int testStaffId;
+    late int testSupervisorId;
+    late int testCashierId;
 
     setUp(() async {
       tempDir = await Directory.systemTemp.createTemp('khata_controller_test_');
@@ -38,8 +40,20 @@ void main() {
         shiftController: shiftController,
       );
 
-      final staffRows = await db.query(PosDatabaseConstants.tableStaff, limit: 1);
-      testStaffId = staffRows.first['id'] as int;
+      final supervisorRows = await db.query(
+        PosDatabaseConstants.tableStaff,
+        where: "role IN ('SUPERVISOR', 'MANAGER')",
+        limit: 1,
+      );
+      testSupervisorId = supervisorRows.first['id'] as int;
+
+      final cashierRows = await db.query(
+        PosDatabaseConstants.tableStaff,
+        where: "role = 'CASHIER'",
+        limit: 1,
+      );
+      testCashierId = cashierRows.first['id'] as int;
+      testStaffId = testSupervisorId;
     });
 
     tearDown(() async {
@@ -158,8 +172,8 @@ void main() {
 
     test('Multi-source settlement: Paid from Active Drawer auto-generates Pay-Out cash movement', () async {
       // 1. Setup Business Day & Shift
-      await shiftController.openBusinessDay(openedByStaffId: testStaffId);
-      final shift = await shiftController.openShift(staffId: testStaffId, openingFloat: 5000.0);
+      await shiftController.openBusinessDay(openedByStaffId: testSupervisorId);
+      final shift = await shiftController.openShift(staffId: testCashierId, openingFloat: 5000.0);
 
       // 2. Create Vendor with payable balance
       final vendor = await khataController.createVendor(
@@ -174,7 +188,7 @@ void main() {
         amount: 3500.0,
         paymentSource: VendorPaymentSource.paidFromActiveDrawer,
         shiftId: shift.id,
-        staffId: testStaffId,
+        staffId: testCashierId,
         referenceSlip: 'PAY-HD-01',
         notes: 'Paid cash from till to supplier driver',
       );
@@ -199,8 +213,8 @@ void main() {
 
     test('Multi-source settlement: Paid Outside Drawer updates balance without touching drawer float', () async {
       // 1. Setup Business Day & Shift
-      await shiftController.openBusinessDay(openedByStaffId: testStaffId);
-      final shift = await shiftController.openShift(staffId: testStaffId, openingFloat: 5000.0);
+      await shiftController.openBusinessDay(openedByStaffId: testSupervisorId);
+      final shift = await shiftController.openShift(staffId: testCashierId, openingFloat: 5000.0);
 
       // 2. Create Vendor with payable balance
       final vendor = await khataController.createVendor(
@@ -250,8 +264,8 @@ void main() {
     });
 
     test('Paid from Active Drawer rejects payment when shift is closed', () async {
-      await shiftController.openBusinessDay(openedByStaffId: testStaffId);
-      final shift = await shiftController.openShift(staffId: testStaffId, openingFloat: 5000.0);
+      await shiftController.openBusinessDay(openedByStaffId: testSupervisorId);
+      final shift = await shiftController.openShift(staffId: testCashierId, openingFloat: 5000.0);
       await shiftController.closeShift(
         shiftId: shift.id,
         countedCash: 5000.0,

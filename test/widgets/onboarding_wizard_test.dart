@@ -48,6 +48,13 @@ void main() {
     });
 
     testWidgets('Wizard renders 5 steps and enforces strict sequential completion with Manager and Cashier', (tester) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
       Staff? completedCashier;
 
       await tester.pumpWidget(

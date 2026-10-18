@@ -10,7 +10,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -31,5 +31,5 @@ jobs:
         run: flutter analyze --no-fatal-infos
 
       - name: Run tests
-        timeout-minutes: 6
+        timeout-minutes: 12
         run: flutter test

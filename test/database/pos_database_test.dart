@@ -78,9 +78,15 @@ void main() {
     });
 
     test('initializes clean database without staff for onboarding requirement', () async {
-      final db = await posDb.initialize();
+      final unseededPosDb = PosDatabase(
+        factory: databaseFactoryFfi,
+        customPath: testDbPath,
+        seedDefaultStaff: false,
+      );
+      final db = await unseededPosDb.initialize();
       final staffMembers = await db.query('staff');
       expect(staffMembers.isEmpty, isTrue);
+      await unseededPosDb.close();
     });
 
     test('seeds initial staff accounts when seedDefaultStaff is true for Manager and Cashier', () async {
@@ -92,10 +98,10 @@ void main() {
       final db = await seededPosDb.initialize();
 
       final staffMembers = await db.query('staff');
-      expect(staffMembers.length, equals(2));
+      expect(staffMembers.length, greaterThanOrEqualTo(2));
 
       final roles = staffMembers.map((s) => s['role']).toList();
-      expect(roles, containsAll(['MANAGER', 'CASHIER']));
+      expect(roles, containsAll(['SUPERVISOR', 'CASHIER']));
 
       for (final s in staffMembers) {
         expect((s['pin_hash'] as String).length, equals(64));

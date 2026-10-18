@@ -229,9 +229,25 @@ void main() {
         openingFloat: 1000.0,
       );
 
-      const dummyItem = MenuItem(
-        id: 99,
-        categoryId: 1,
+      final catId = await db.insert(PosDatabaseConstants.tableCategories, {
+        'name': 'Burgers',
+        'display_order': 0,
+        'color_hex': '#245C40',
+        'created_at': DateTime.now().toIso8601String(),
+      });
+      final itemId = await db.insert(PosDatabaseConstants.tableMenuItems, {
+        'category_id': catId,
+        'name': 'Test Burger',
+        'base_price': 500.0,
+        'tax_rate': 0.0,
+        'is_tax_inclusive': 1,
+        'is_active': 1,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+
+      final dummyItem = MenuItem(
+        id: itemId,
+        categoryId: catId,
         name: 'Test Burger',
         basePrice: 500.0,
         isActive: true,

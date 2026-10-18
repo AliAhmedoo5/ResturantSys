@@ -22,9 +22,8 @@ enum StaffRole {
       case 'OWNER':
         return StaffRole.manager;
       case 'CASHIER':
-        return StaffRole.cashier;
       default:
-        throw ArgumentError('Unknown staff role code: $code');
+        return StaffRole.cashier;
     }
   }
 

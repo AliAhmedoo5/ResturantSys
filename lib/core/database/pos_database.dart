@@ -680,6 +680,12 @@ class PosDatabase {
             pin: PosDatabaseConstants.defaultCashierPin,
             role: 'CASHIER',
           ),
+          (
+            name: PosDatabaseConstants.defaultKitchenName,
+            dept: PosDatabaseConstants.defaultKitchenDepartment,
+            pin: PosDatabaseConstants.defaultKitchenPin,
+            role: 'SUPERVISOR',
+          ),
         ];
 
         for (final seed in staffSeeds) {
