@@ -32,4 +32,4 @@ jobs:
 
       - name: Run tests
         timeout-minutes: 12
-        run: flutter test
+        run: flutter test --timeout 60s

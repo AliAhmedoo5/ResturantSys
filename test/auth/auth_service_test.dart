@@ -79,6 +79,21 @@ void main() {
       expect(StaffRole.values.length, equals(2));
       expect(StaffRole.values, contains(StaffRole.cashier));
       expect(StaffRole.values, contains(StaffRole.manager));
+      expect(await authService.authenticateWithPin('2222'), isNull);
+    });
+
+    test('legacy kitchen credentials cannot log in as a cashier', () async {
+      final db = await posDb.initialize();
+      await db.insert('staff', {
+        'name': 'Legacy Kitchen',
+        'department_id': 2,
+        'pin_hash': PinHasher.hashPin('5678'),
+        'role': 'KITCHEN',
+        'is_active': 1,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+      expect(await authService.authenticateAndLogin('5678'), isNull);
+      expect(authService.session.isAuthenticated, isFalse);
     });
 
     test('authenticateAndLogin establishes active session on authService.session', () async {
