@@ -69,6 +69,18 @@ abstract final class PosDatabaseConstants {
   static const String defaultLocalBackupPath = '';
   static const String defaultBackupsSubFolder = 'backups';
 
+  // Onboarding & Restaurant Identity Settings
+  static const String settingOnboardingCompleted = 'onboarding_completed';
+  static const String defaultOnboardingCompleted = 'false';
+  static const String settingRestaurantName = 'restaurant_name';
+  static const String defaultRestaurantName = 'ResturantPOS';
+  static const String settingCurrencyCode = 'currency_code';
+  static const String defaultCurrencyCode = 'PKR';
+  static const String settingDefaultTaxRate = 'default_tax_rate';
+  static const String defaultDefaultTaxRate = '0.0';
+  static const String settingTaxInclusive = 'tax_inclusive';
+  static const String defaultTaxInclusive = 'true';
+
   // Default Departments
   static const List<String> defaultDepartments = [
     'Front Counter',

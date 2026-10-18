@@ -102,17 +102,18 @@ class BusinessDayBar extends StatelessWidget {
                             ),
                           ),
                       ] else if (!isShiftOpen) ...[
-                        ElevatedButton.icon(
-                          key: const ValueKey('btn_open_shift'),
-                          icon: const Icon(Icons.lock_open_rounded, size: 18),
-                          label: const Text('Open Cashier Shift'),
-                          onPressed: onOpenShiftTap,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: WarmCounterColors.lightPrimaryAction,
-                            foregroundColor: Colors.white,
-                            minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
+                        if (currentStaff.canAccessRegister)
+                          ElevatedButton.icon(
+                            key: const ValueKey('btn_open_shift'),
+                            icon: const Icon(Icons.lock_open_rounded, size: 18),
+                            label: const Text('Open Cashier Shift'),
+                            onPressed: onOpenShiftTap,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: WarmCounterColors.lightPrimaryAction,
+                              foregroundColor: Colors.white,
+                              minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
+                            ),
                           ),
-                        ),
                         if (isSupervisor) ...[
                           const SizedBox(width: WarmCounterSpacing.space8),
                           OutlinedButton.icon(

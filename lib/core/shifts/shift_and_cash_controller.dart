@@ -5,6 +5,7 @@ import 'shift.dart';
 import 'cash_movement.dart';
 import 'x_report.dart';
 import 'z_report.dart';
+import '../auth/staff_role.dart';
 import '../database/database_backup_service.dart';
 
 /// Controller coordinating the operational lifecycle of Business Days and Cashier Shifts.
@@ -48,6 +49,20 @@ class ShiftAndCashController {
     required int openedByStaffId,
     DateTime? openedAt,
   }) async {
+    // Only Managers can open Business Days (ADR-0009)
+    final staffRows = await database.query(
+      PosDatabaseConstants.tableStaff,
+      where: 'id = ?',
+      whereArgs: [openedByStaffId],
+      limit: 1,
+    );
+    if (staffRows.isNotEmpty) {
+      final role = StaffRole.fromCode(staffRows.first['role'] as String);
+      if (role == StaffRole.cashier) {
+        throw StateError('Authorization error: Business Day must be opened by a Manager.');
+      }
+    }
+
     final active = await getActiveBusinessDay();
     if (active != null) {
       throw StateError(
@@ -86,6 +101,20 @@ class ShiftAndCashController {
     DateTime? closedAt,
     bool autoLockActiveShifts = false,
   }) async {
+    // Only Managers can close Business Days (ADR-0009)
+    final staffRows = await database.query(
+      PosDatabaseConstants.tableStaff,
+      where: 'id = ?',
+      whereArgs: [closedByStaffId],
+      limit: 1,
+    );
+    if (staffRows.isNotEmpty) {
+      final role = StaffRole.fromCode(staffRows.first['role'] as String);
+      if (role == StaffRole.cashier) {
+        throw StateError('Authorization error: Business Day must be closed by a Manager.');
+      }
+    }
+
     final active = await getActiveBusinessDay();
     if (active == null) {
       throw StateError('No active Business Day to close.');
@@ -195,6 +224,20 @@ class ShiftAndCashController {
       throw ArgumentError('Opening float cannot be negative.');
     }
 
+    // Manager credentials cannot open or operate cashier shifts (ADR-0009)
+    final staffRows = await database.query(
+      PosDatabaseConstants.tableStaff,
+      where: 'id = ?',
+      whereArgs: [staffId],
+      limit: 1,
+    );
+    if (staffRows.isNotEmpty) {
+      final role = StaffRole.fromCode(staffRows.first['role'] as String);
+      if (role != StaffRole.cashier) {
+        throw StateError('Authorization error: Manager credentials cannot open or operate cashier shifts.');
+      }
+    }
+
     final activeDay = await getActiveBusinessDay();
     if (activeDay == null) {
       throw StateError('Cannot open shift: No Business Day is currently open.');
@@ -277,6 +320,20 @@ class ShiftAndCashController {
     final shift = Shift.fromMap(shiftRows.first);
     if (shift.isClosed) {
       throw StateError('Cannot record cash movement: Shift #$shiftId is already closed.');
+    }
+
+    // Manager credentials cannot operate cashier shifts (ADR-0009)
+    final staffRow = await database.query(
+      PosDatabaseConstants.tableStaff,
+      where: 'id = ?',
+      whereArgs: [staffId],
+      limit: 1,
+    );
+    if (staffRow.isNotEmpty) {
+      final role = StaffRole.fromCode(staffRow.first['role'] as String);
+      if (role != StaffRole.cashier) {
+        throw StateError('Authorization error: Manager credentials cannot operate cashier shifts.');
+      }
     }
 
     final effectiveCreatedAt = createdAt ?? DateTime.now();

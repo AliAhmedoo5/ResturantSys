@@ -20,6 +20,7 @@ import 'shifts/register_shift_workspace.dart';
 import '../core/orders/token_queue_controller.dart';
 import 'supervisor/supervisor_portal_workspace.dart';
 import 'supervisor/token_queue_tray.dart';
+import 'onboarding/onboarding_wizard.dart';
 
 /// Top-level desktop application shell coordinating authentication gating,
 /// active workspace presentation, and header state.
@@ -57,9 +58,61 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   AppWorkspaceTab _selectedWorkspace = AppWorkspaceTab.register;
+  bool _isOnboardingRequired = false;
+  bool _isCheckingOnboarding = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkOnboarding();
+  }
+
+  Future<void> _checkOnboarding() async {
+    if (widget.authService != null) {
+      try {
+        final required = await widget.authService!.isOnboardingRequired();
+        if (mounted) {
+          setState(() {
+            _isOnboardingRequired = required;
+            _isCheckingOnboarding = false;
+          });
+        }
+      } catch (_) {
+        if (mounted) {
+          setState(() => _isCheckingOnboarding = false);
+        }
+      }
+    } else {
+      if (mounted) {
+        setState(() => _isCheckingOnboarding = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (_isOnboardingRequired &&
+        widget.authService != null &&
+        widget.shiftController != null &&
+        widget.catalogController != null) {
+      return Scaffold(
+        backgroundColor: WarmCounterColors.lightPageBackground,
+        body: OnboardingWizard(
+          key: const ValueKey('onboarding_wizard'),
+          authService: widget.authService!,
+          shiftController: widget.shiftController!,
+          catalogController: widget.catalogController!,
+          onCompleted: (cashierStaff) {
+            setState(() {
+              _isOnboardingRequired = false;
+              _selectedWorkspace = AppWorkspaceTab.register;
+            });
+            widget.session.login(cashierStaff);
+          },
+        ),
+      );
+    }
+
     return ListenableBuilder(
       listenable: widget.session,
       builder: (context, _) {
@@ -164,6 +217,7 @@ class _AppShellState extends State<AppShell> {
         catalogController: widget.catalogController,
         reprintTrayController: widget.reprintTrayController,
         authService: widget.authService,
+        onLock: () => widget.session.lock(),
       );
     }
 

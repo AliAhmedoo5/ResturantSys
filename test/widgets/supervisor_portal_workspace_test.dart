@@ -51,7 +51,7 @@ void main() {
         departmentId: 2,
         departmentName: 'Kitchen',
         pinHash: '2222',
-        role: StaffRole.kitchen,
+        role: StaffRole.manager,
         isActive: true,
       ),
     ];

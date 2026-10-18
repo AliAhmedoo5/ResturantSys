@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../catalog/discount_preset.dart';
 import '../catalog/modifier.dart';
+import '../auth/staff_role.dart';
 import '../database/pos_database_constants.dart';
 import 'cart_item.dart';
 import 'deal.dart';
@@ -354,6 +355,20 @@ class OrderAndCheckoutController {
     }
     if (payments.isEmpty) {
       throw ArgumentError('Order must have at least one payment tender.');
+    }
+
+    // Hard-block Manager credentials from initiating checkout or tenders (ADR-0009)
+    final staffRows = await database.query(
+      PosDatabaseConstants.tableStaff,
+      where: 'id = ?',
+      whereArgs: [cashierId],
+      limit: 1,
+    );
+    if (staffRows.isNotEmpty) {
+      final role = StaffRole.fromCode(staffRows.first['role'] as String);
+      if (role != StaffRole.cashier) {
+        throw StateError('Authorization error: Manager credentials cannot initiate checkout or process payments.');
+      }
     }
 
     final now = DateTime.now();

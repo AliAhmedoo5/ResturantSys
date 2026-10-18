@@ -77,31 +77,49 @@ void main() {
       expect(names, containsAll(['Front Counter', 'Kitchen', 'Management']));
     });
 
-    test('seeds initial staff accounts for Supervisor, Cashier, and Kitchen Cook', () async {
+    test('initializes clean database without staff for onboarding requirement', () async {
       final db = await posDb.initialize();
+      final staffMembers = await db.query('staff');
+      expect(staffMembers.isEmpty, isTrue);
+    });
+
+    test('seeds initial staff accounts when seedDefaultStaff is true for Manager and Cashier', () async {
+      final seededPosDb = PosDatabase(
+        factory: databaseFactoryFfi,
+        customPath: testDbPath,
+        seedDefaultStaff: true,
+      );
+      final db = await seededPosDb.initialize();
 
       final staffMembers = await db.query('staff');
-      expect(staffMembers.length, equals(3));
+      expect(staffMembers.length, equals(2));
 
       final roles = staffMembers.map((s) => s['role']).toList();
-      expect(roles, containsAll(['SUPERVISOR', 'CASHIER', 'KITCHEN']));
+      expect(roles, containsAll(['MANAGER', 'CASHIER']));
 
       for (final s in staffMembers) {
         expect((s['pin_hash'] as String).length, equals(64));
         expect(s['is_active'], equals(1));
       }
+      await seededPosDb.close();
     });
 
     test('enforces UNIQUE constraint on staff.pin_hash', () async {
       final db = await posDb.initialize();
-      final existingStaff = await db.query('staff', limit: 1);
-      final existingHash = existingStaff.first['pin_hash'] as String;
+      await db.insert('staff', {
+        'name': 'Primary Cashier',
+        'department_id': 1,
+        'pin_hash': 'hash_1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+        'role': 'CASHIER',
+        'is_active': 1,
+        'created_at': '2026-10-11 12:00:00',
+      });
 
       expect(
         () async => db.insert('staff', {
           'name': 'Duplicate PIN Staff',
           'department_id': 1,
-          'pin_hash': existingHash, // duplicate hash
+          'pin_hash': 'hash_1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
           'role': 'CASHIER',
           'is_active': 1,
           'created_at': '2026-10-11 12:00:00',

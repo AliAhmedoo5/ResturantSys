@@ -138,11 +138,11 @@ class _StaffPinDialogState extends State<StaffPinDialog> {
                 controller: _pinController,
                 obscureText: _obscurePin,
                 keyboardType: TextInputType.number,
-                maxLength: 4,
+                maxLength: widget.staff.role.isManager ? 8 : 4,
                 autofocus: true,
                 decoration: InputDecoration(
-                  labelText: 'New 4-Digit PIN',
-                  hintText: '4 digits (e.g. 7777)',
+                  labelText: widget.staff.role.isManager ? 'New 4–8 Digit PIN' : 'New 4-Digit PIN',
+                  hintText: widget.staff.role.isManager ? '4 to 8 digits' : '4 digits (e.g. 7777)',
                   counterText: '',
                   suffixIcon: IconButton(
                     icon: Icon(_obscurePin ? Icons.visibility_outlined : Icons.visibility_off_outlined),
@@ -152,8 +152,18 @@ class _StaffPinDialogState extends State<StaffPinDialog> {
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 ),
                 validator: (val) {
-                  if (val == null || val.trim().length != 4 || int.tryParse(val.trim()) == null) {
-                    return 'PIN must be exactly 4 numeric digits.';
+                  final trimmed = val?.trim() ?? '';
+                  if (int.tryParse(trimmed) == null) {
+                    return 'PIN must be numeric.';
+                  }
+                  if (widget.staff.role.isManager) {
+                    if (trimmed.length < 4 || trimmed.length > 8) {
+                      return 'Manager PIN must be between 4 and 8 digits.';
+                    }
+                  } else {
+                    if (trimmed.length != 4) {
+                      return 'Cashier PIN must be exactly 4 numeric digits.';
+                    }
                   }
                   return null;
                 },
@@ -164,17 +174,21 @@ class _StaffPinDialogState extends State<StaffPinDialog> {
                 controller: _confirmPinController,
                 obscureText: _obscurePin,
                 keyboardType: TextInputType.number,
-                maxLength: 4,
-                decoration: const InputDecoration(
-                  labelText: 'Confirm New PIN',
-                  hintText: 'Re-enter 4 digits',
+                maxLength: widget.staff.role.isManager ? 8 : 4,
+                decoration: InputDecoration(
+                  labelText: widget.staff.role.isManager ? 'Confirm New 4–8 Digit PIN' : 'Confirm New PIN',
+                  hintText: widget.staff.role.isManager ? 'Re-enter 4 to 8 digits' : 'Re-enter 4 digits',
                   counterText: '',
-                  border: OutlineInputBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  border: const OutlineInputBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 ),
                 validator: (val) {
-                  if (val == null || val.trim().length != 4 || int.tryParse(val.trim()) == null) {
-                    return 'Please confirm the 4-digit PIN.';
+                  final trimmed = val?.trim() ?? '';
+                  if (trimmed.isEmpty) {
+                    return 'Please confirm the PIN.';
+                  }
+                  if (trimmed != _pinController.text.trim()) {
+                    return 'PINs do not match.';
                   }
                   return null;
                 },

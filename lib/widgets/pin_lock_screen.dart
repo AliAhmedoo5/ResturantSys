@@ -44,15 +44,18 @@ class _PinLockScreenState extends State<PinLockScreen> {
   }
 
   void _handleDigit(String digit) {
-    if (_isAuthenticating || _enteredPin.length >= 4) return;
+    if (_isAuthenticating || _enteredPin.length >= 8) return;
 
+    final nextPin = _enteredPin + digit;
     setState(() {
       _errorMessage = null;
-      _enteredPin += digit;
+      _enteredPin = nextPin;
     });
 
-    if (_enteredPin.length == 4) {
-      _submitPin();
+    if (nextPin.length == 4) {
+      _submitPin(force: false);
+    } else if (nextPin.length == 8) {
+      _submitPin(force: true);
     }
   }
 
@@ -72,8 +75,8 @@ class _PinLockScreenState extends State<PinLockScreen> {
     });
   }
 
-  Future<void> _submitPin() async {
-    if (_enteredPin.length != 4 || _isAuthenticating) return;
+  Future<void> _submitPin({bool force = true}) async {
+    if (_enteredPin.length < 4 || _isAuthenticating) return;
 
     final pinToVerify = _enteredPin;
     setState(() {
@@ -86,11 +89,18 @@ class _PinLockScreenState extends State<PinLockScreen> {
       if (!mounted) return;
 
       if (!success) {
-        setState(() {
-          _enteredPin = '';
-          _isAuthenticating = false;
-          _errorMessage = 'Invalid PIN. Please try again.';
-        });
+        if (force || pinToVerify.length == 8) {
+          setState(() {
+            _enteredPin = '';
+            _isAuthenticating = false;
+            _errorMessage = 'Invalid PIN. Please try again.';
+          });
+        } else {
+          // If not forced (auto-checked at 4 digits) and failed, allow user to keep typing longer PIN
+          setState(() {
+            _isAuthenticating = false;
+          });
+        }
       } else {
         setState(() {
           _enteredPin = '';
@@ -150,8 +160,8 @@ class _PinLockScreenState extends State<PinLockScreen> {
       _handleClear();
       return KeyEventResult.handled;
     } else if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.numpadEnter) {
-      if (_enteredPin.length == 4) {
-        _submitPin();
+      if (_enteredPin.length >= 4) {
+        _submitPin(force: true);
       }
       return KeyEventResult.handled;
     }
@@ -210,7 +220,7 @@ class _PinLockScreenState extends State<PinLockScreen> {
               ),
               const SizedBox(height: WarmCounterSpacing.space16),
 
-              // 4 PIN Dots Indicator
+              // PIN Dots Indicator
               _buildPinDots(),
               const SizedBox(height: WarmCounterSpacing.space12),
 
@@ -225,6 +235,21 @@ class _PinLockScreenState extends State<PinLockScreen> {
                 onClearPressed: _handleClear,
                 onBackspacePressed: _handleBackspace,
               ),
+              if (_enteredPin.length >= 4) ...[
+                const SizedBox(height: WarmCounterSpacing.space16),
+                ElevatedButton.icon(
+                  key: const ValueKey('unlock_pin_button'),
+                  onPressed: _isAuthenticating ? null : () => _submitPin(force: true),
+                  icon: const Icon(Icons.lock_open_rounded, size: 20),
+                  label: const Text('Unlock'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: WarmCounterColors.lightPrimaryAction,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(200, 44),
+                    shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -233,6 +258,7 @@ class _PinLockScreenState extends State<PinLockScreen> {
   }
 
   Widget _buildPinDots() {
+    final dotCount = _enteredPin.length > 4 ? _enteredPin.length : 4;
     return Container(
       key: const ValueKey('pin_dots_container'),
       padding: const EdgeInsets.symmetric(
@@ -251,7 +277,7 @@ class _PinLockScreenState extends State<PinLockScreen> {
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        children: List.generate(4, (index) {
+        children: List.generate(dotCount, (index) {
           final isFilled = index < _enteredPin.length;
           return Container(
             margin: const EdgeInsets.symmetric(horizontal: WarmCounterSpacing.space8),

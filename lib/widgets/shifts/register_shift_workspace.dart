@@ -31,6 +31,7 @@ class RegisterShiftWorkspace extends StatefulWidget {
     this.catalogController,
     this.reprintTrayController,
     this.authService,
+    this.onLock,
   });
 
   final ShiftAndCashController controller;
@@ -39,6 +40,7 @@ class RegisterShiftWorkspace extends StatefulWidget {
   final CatalogAndRecipeController? catalogController;
   final ReprintTrayController? reprintTrayController;
   final AuthService? authService;
+  final VoidCallback? onLock;
 
   @override
   State<RegisterShiftWorkspace> createState() => _RegisterShiftWorkspaceState();
@@ -90,7 +92,46 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
         onOpenBusinessDay: () async {
           await widget.controller.openBusinessDay(openedByStaffId: widget.currentStaff.id);
           await _refreshState();
+          if (mounted && !widget.currentStaff.canAccessRegister) {
+            _showSwitchToCashierPrompt();
+          }
         },
+      ),
+    );
+  }
+
+  void _showSwitchToCashierPrompt() {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.check_circle_outline_rounded, color: WarmCounterColors.lightPrimaryAction),
+            SizedBox(width: 8),
+            Text('Business Day Opened'),
+          ],
+        ),
+        content: const Text(
+          'Business Day is now active. Manager accounts cannot operate cashier shifts or process register orders. Please switch to a Cashier account to open the shift and begin billing.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Stay on Manager Workspace'),
+          ),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.swap_horiz_rounded),
+            label: const Text('Switch to Cashier Login'),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              widget.onLock?.call();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: WarmCounterColors.lightPrimaryAction,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -174,6 +215,16 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
   }
 
   void _showOpenShiftDialog() {
+    if (!widget.currentStaff.canAccessRegister) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Authorization error: Manager credentials cannot open or operate cashier shifts.'),
+          backgroundColor: WarmCounterColors.lightDestructiveAction,
+        ),
+      );
+      return;
+    }
+
     showDialog<void>(
       context: context,
       builder: (ctx) => OpenShiftDialog(
@@ -290,6 +341,7 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
         isShiftOpen &&
         widget.orderController != null &&
         widget.catalogController != null &&
+        widget.currentStaff.canAccessRegister &&
         !_showShiftDetails;
 
     return Column(
@@ -421,16 +473,56 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: WarmCounterSpacing.space24),
-              ElevatedButton.icon(
-                icon: const Icon(Icons.lock_open_rounded),
-                label: const Text('Open Cashier Shift'),
-                onPressed: _showOpenShiftDialog,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: WarmCounterColors.lightPrimaryAction,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(200, WarmCounterSpacing.touchTargetMin),
+              if (widget.currentStaff.canAccessRegister)
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.lock_open_rounded),
+                  label: const Text('Open Cashier Shift'),
+                  onPressed: _showOpenShiftDialog,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: WarmCounterColors.lightPrimaryAction,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(200, WarmCounterSpacing.touchTargetMin),
+                  ),
+                )
+              else
+                Container(
+                  constraints: const BoxConstraints(maxWidth: 440),
+                  padding: const EdgeInsets.all(WarmCounterSpacing.space16),
+                  decoration: BoxDecoration(
+                    color: WarmCounterColors.lightActiveNavHighlight,
+                    borderRadius: WarmCounterSpacing.controlBorderRadius,
+                    border: Border.all(color: WarmCounterColors.lightBorder),
+                  ),
+                  child: Column(
+                    children: [
+                      const Icon(Icons.badge_outlined, size: 36, color: WarmCounterColors.lightPrimaryAction),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Cashier Credentials Required',
+                        style: WarmCounterTypography.bodyLarge.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Business Day #${_activeBusinessDay!.id} is open. Manager credentials cannot operate cashier shifts or process register orders. Please switch to a Cashier account.',
+                        style: WarmCounterTypography.bodySmall.copyWith(color: WarmCounterColors.lightSecondaryText),
+                        textAlign: TextAlign.center,
+                      ),
+                      if (widget.onLock != null) ...[
+                        const SizedBox(height: 16),
+                        ElevatedButton.icon(
+                          key: const ValueKey('switch_to_cashier_button'),
+                          icon: const Icon(Icons.swap_horiz_rounded),
+                          label: const Text('Switch to Cashier Login'),
+                          onPressed: widget.onLock,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: WarmCounterColors.lightPrimaryAction,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
-              ),
             ],
           ),
         ),

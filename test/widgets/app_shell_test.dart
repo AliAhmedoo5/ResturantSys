@@ -1,13 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:resturant_sys/core/auth/auth_service.dart';
 import 'package:resturant_sys/core/auth/session_state.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/auth/staff_role.dart';
+import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
+import 'package:resturant_sys/core/database/pos_database.dart';
+import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
 import 'package:resturant_sys/core/theme/warm_counter_theme.dart';
 import 'package:resturant_sys/widgets/app_header.dart';
 import 'package:resturant_sys/widgets/app_shell.dart';
+import 'package:resturant_sys/widgets/onboarding/onboarding_wizard.dart';
 
 void main() {
+  setUpAll(() {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  });
+
   group('AppHeader & AppShell Widget Tests', () {
     testWidgets('AppHeader displays Locked status when unauthenticated', (tester) async {
       tester.view.physicalSize = const Size(1280, 800);
@@ -243,6 +254,42 @@ void main() {
       await tester.ensureVisible(find.byKey(const ValueKey('workspace_tab_register')));
       await tester.tap(find.byKey(const ValueKey('workspace_tab_register')));
       await tester.pumpAndSettle();
+    });
+
+    testWidgets('AppShell shows OnboardingWizard on first launch when onboarding is required', (tester) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final posDb = PosDatabase(
+        factory: databaseFactoryFfi,
+        customPath: inMemoryDatabasePath,
+      );
+      final db = await posDb.initialize();
+      addTearDown(() async {
+        await posDb.close();
+      });
+
+      final authService = AuthService(database: db);
+      final shiftController = ShiftAndCashController(database: db);
+      final catalogController = CatalogAndRecipeController(database: db);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: WarmCounterTheme.lightTheme,
+          home: AppShell(
+            session: authService.session,
+            onAuthenticatePin: authService.authenticateWithPin,
+            authService: authService,
+            shiftController: shiftController,
+            catalogController: catalogController,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('onboarding_wizard')), findsOneWidget);
+      expect(find.text('Initial System Setup'), findsOneWidget);
     });
   });
 }

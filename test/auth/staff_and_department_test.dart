@@ -126,7 +126,7 @@ void main() {
       final staff = await authService.registerStaff(
         name: 'Tariq Chef',
         departmentId: kitchenDept.id,
-        role: StaffRole.kitchen,
+        role: StaffRole.manager,
         pin: '4444',
       );
 

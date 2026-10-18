@@ -252,7 +252,7 @@ class TokenQueueController extends ChangeNotifier {
         departmentId: 2,
         departmentName: 'Kitchen',
         pinHash: pin,
-        role: StaffRole.kitchen,
+        role: StaffRole.manager,
         isActive: true,
       );
     }

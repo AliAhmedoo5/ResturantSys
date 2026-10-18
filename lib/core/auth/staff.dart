@@ -27,32 +27,23 @@ class Staff {
   // ---------------------------------------------------------------------------
 
   /// Can open shifts, tender orders, and operate the counter cash drawer.
-  bool get canAccessRegister =>
-      role == StaffRole.cashier ||
-      role == StaffRole.supervisor ||
-      role == StaffRole.owner;
+  /// Strictly restricted to Cashiers; Manager credentials cannot operate the counter.
+  bool get canAccessRegister => role == StaffRole.cashier;
 
   /// Can view kitchen display/tokens and log ingredient prep/wastage chits.
-  bool get canAccessKitchen =>
-      role == StaffRole.kitchen ||
-      role == StaffRole.supervisor ||
-      role == StaffRole.owner;
+  bool get canAccessKitchen => role == StaffRole.manager;
 
   /// Can access back-office settings, Khata, staff management, and reports.
-  bool get canAccessSupervisorPortal =>
-      role == StaffRole.supervisor || role == StaffRole.owner;
+  bool get canAccessSupervisorPortal => role == StaffRole.manager;
 
   /// Can authorize discounts exceeding cashier threshold, void orders, and kick drawer.
-  bool get canAuthorizeOverrides =>
-      role == StaffRole.supervisor || role == StaffRole.owner;
+  bool get canAuthorizeOverrides => role == StaffRole.manager;
 
   /// Can authorize post-print order voids and reprint void slips.
-  bool get canVoidOrders =>
-      role == StaffRole.supervisor || role == StaffRole.owner;
+  bool get canVoidOrders => role == StaffRole.manager;
 
   /// Can execute End-of-Day Z-Report, locking shifts and resetting daily tokens.
-  bool get canPerformZReport =>
-      role == StaffRole.supervisor || role == StaffRole.owner;
+  bool get canPerformZReport => role == StaffRole.manager;
 
   Staff copyWith({
     int? id,

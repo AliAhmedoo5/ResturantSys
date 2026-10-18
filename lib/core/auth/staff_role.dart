@@ -1,19 +1,32 @@
 /// Canonical roles defining staff permissions in the restaurant system.
+///
+/// Strictly two interactive POS roles exist: [cashier] and [manager].
+/// Supervisor and Owner act as identical aliases of Manager.
 enum StaffRole {
   cashier('CASHIER', 'Front Counter Cashier'),
-  kitchen('KITCHEN', 'Kitchen Cook'),
-  supervisor('SUPERVISOR', 'Supervisor'),
-  owner('OWNER', 'Owner / Management');
+  manager('MANAGER', 'Manager');
 
   const StaffRole(this.code, this.displayName);
 
   final String code;
   final String displayName;
 
+  /// Display aliases: Supervisor and Owner are treated as identical aliases of Manager.
+  static const StaffRole supervisor = StaffRole.manager;
+  static const StaffRole owner = StaffRole.manager;
+
   static StaffRole fromCode(String code) {
-    return StaffRole.values.firstWhere(
-      (r) => r.code.toUpperCase() == code.toUpperCase(),
-      orElse: () => StaffRole.cashier,
-    );
+    switch (code.toUpperCase()) {
+      case 'MANAGER':
+      case 'SUPERVISOR':
+      case 'OWNER':
+        return StaffRole.manager;
+      case 'CASHIER':
+      default:
+        return StaffRole.cashier;
+    }
   }
+
+  bool get isManager => this == StaffRole.manager;
+  bool get isCashier => this == StaffRole.cashier;
 }

@@ -11,10 +11,12 @@ class PosDatabase {
   PosDatabase({
     this.factory,
     this.customPath,
+    this.seedDefaultStaff = false,
   });
 
   final DatabaseFactory? factory;
   final String? customPath;
+  final bool seedDefaultStaff;
   Database? _database;
 
   Database? get database => _database;
@@ -651,49 +653,45 @@ class PosDatabase {
       ''', [dept, now]);
     }
 
-    // 2. Seed initial staff accounts if no staff exist (Supervisor, Cashier, Kitchen Cook)
-    final staffCountResult = await db.rawQuery(
-      'SELECT COUNT(*) as count FROM ${PosDatabaseConstants.tableStaff};',
-    );
-    final count = (staffCountResult.isNotEmpty
-            ? staffCountResult.first['count'] as int?
-            : 0) ??
-        0;
+    // 2. Seed initial staff accounts only if explicitly requested (e.g. test environments)
+    if (seedDefaultStaff) {
+      final staffCountResult = await db.rawQuery(
+        'SELECT COUNT(*) as count FROM ${PosDatabaseConstants.tableStaff};',
+      );
+      final count = (staffCountResult.isNotEmpty
+              ? staffCountResult.first['count'] as int?
+              : 0) ??
+          0;
 
-    if (count == 0) {
-      final deptRows = await db.query(PosDatabaseConstants.tableDepartments);
-      final deptMap = {for (final row in deptRows) row['name'] as String: row['id'] as int};
+      if (count == 0) {
+        final deptRows = await db.query(PosDatabaseConstants.tableDepartments);
+        final deptMap = {for (final row in deptRows) row['name'] as String: row['id'] as int};
 
-      final staffSeeds = [
-        (
-          name: PosDatabaseConstants.defaultSupervisorName,
-          dept: PosDatabaseConstants.defaultSupervisorDepartment,
-          pin: PosDatabaseConstants.defaultSupervisorPin,
-          role: 'SUPERVISOR',
-        ),
-        (
-          name: PosDatabaseConstants.defaultCashierName,
-          dept: PosDatabaseConstants.defaultCashierDepartment,
-          pin: PosDatabaseConstants.defaultCashierPin,
-          role: 'CASHIER',
-        ),
-        (
-          name: PosDatabaseConstants.defaultKitchenName,
-          dept: PosDatabaseConstants.defaultKitchenDepartment,
-          pin: PosDatabaseConstants.defaultKitchenPin,
-          role: 'KITCHEN',
-        ),
-      ];
+        final staffSeeds = [
+          (
+            name: PosDatabaseConstants.defaultSupervisorName,
+            dept: PosDatabaseConstants.defaultSupervisorDepartment,
+            pin: PosDatabaseConstants.defaultSupervisorPin,
+            role: 'MANAGER',
+          ),
+          (
+            name: PosDatabaseConstants.defaultCashierName,
+            dept: PosDatabaseConstants.defaultCashierDepartment,
+            pin: PosDatabaseConstants.defaultCashierPin,
+            role: 'CASHIER',
+          ),
+        ];
 
-      for (final seed in staffSeeds) {
-        final deptId = deptMap[seed.dept] ?? 1;
-        final hashedPin = PinHasher.hashPin(seed.pin);
+        for (final seed in staffSeeds) {
+          final deptId = deptMap[seed.dept] ?? 1;
+          final hashedPin = PinHasher.hashPin(seed.pin);
 
-        await db.rawInsert('''
-          INSERT OR IGNORE INTO ${PosDatabaseConstants.tableStaff} 
-          (name, department_id, pin_hash, role, is_active, created_at)
-          VALUES (?, ?, ?, ?, 1, ?);
-        ''', [seed.name, deptId, hashedPin, seed.role, now]);
+          await db.rawInsert('''
+            INSERT OR IGNORE INTO ${PosDatabaseConstants.tableStaff} 
+            (name, department_id, pin_hash, role, is_active, created_at)
+            VALUES (?, ?, ?, ?, 1, ?);
+          ''', [seed.name, deptId, hashedPin, seed.role, now]);
+        }
       }
     }
 
@@ -705,6 +703,11 @@ class PosDatabase {
       PosDatabaseConstants.settingDiscrepancyThreshold: PosDatabaseConstants.defaultDiscrepancyThreshold,
       PosDatabaseConstants.settingCashierVoidRequestsEnabled: PosDatabaseConstants.defaultCashierVoidRequestsEnabled,
       PosDatabaseConstants.settingTokenTrayEnabled: PosDatabaseConstants.defaultTokenTrayEnabled,
+      PosDatabaseConstants.settingRestaurantName: PosDatabaseConstants.defaultRestaurantName,
+      PosDatabaseConstants.settingCurrencyCode: PosDatabaseConstants.defaultCurrencyCode,
+      PosDatabaseConstants.settingDefaultTaxRate: PosDatabaseConstants.defaultDefaultTaxRate,
+      PosDatabaseConstants.settingTaxInclusive: PosDatabaseConstants.defaultTaxInclusive,
+      PosDatabaseConstants.settingOnboardingCompleted: PosDatabaseConstants.defaultOnboardingCompleted,
     };
 
     for (final entry in defaultSettings.entries) {

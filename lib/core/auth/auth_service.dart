@@ -16,9 +16,11 @@ class AuthService {
   final Database database;
   final SessionState session;
 
-  static final RegExp _pinFormatRegex = RegExp(r'^\d{4}$');
+  static final RegExp _pinFormatRegex = RegExp(r'^\d{4,8}$');
+  static final RegExp _cashierPinRegex = RegExp(r'^\d{4}$');
+  static final RegExp _managerPinRegex = RegExp(r'^\d{4,8}$');
 
-  /// Authenticates a staff member by checking a 4-digit numeric PIN against stored SHA-256 hashes.
+  /// Authenticates a staff member by checking a 4–8 digit numeric PIN against stored SHA-256 hashes.
   ///
   /// Returns the authenticated [Staff] with associated department metadata, or `null` if invalid.
   Future<Staff?> authenticateWithPin(String pin) async {
@@ -168,8 +170,14 @@ class AuthService {
       throw ArgumentError('Staff name cannot be empty.');
     }
 
-    if (!_pinFormatRegex.hasMatch(pin)) {
-      throw ArgumentError('Staff PIN must be exactly 4 numeric digits.');
+    if (role == StaffRole.manager) {
+      if (!_managerPinRegex.hasMatch(pin)) {
+        throw ArgumentError('Manager PIN must be between 4 and 8 numeric digits.');
+      }
+    } else {
+      if (!_cashierPinRegex.hasMatch(pin)) {
+        throw ArgumentError('Cashier PIN must be exactly 4 numeric digits.');
+      }
     }
 
     // Verify department exists
@@ -194,7 +202,7 @@ class AuthService {
       limit: 1,
     );
     if (existingPinRows.isNotEmpty) {
-      throw StateError('This 4-digit PIN is already assigned to another staff member.');
+      throw StateError('This PIN is already assigned to another staff member.');
     }
 
     final now = _formatTimestamp(DateTime.now());
@@ -222,13 +230,30 @@ class AuthService {
     );
   }
 
-  /// Supervisor/Owner administrative reset or update of a staff member's 4-digit PIN.
+  /// Supervisor/Manager administrative reset or update of a staff member's PIN.
   Future<bool> updateStaffPin({
     required int staffId,
     required String newPin,
   }) async {
-    if (!_pinFormatRegex.hasMatch(newPin)) {
-      throw ArgumentError('New PIN must be exactly 4 numeric digits.');
+    final staffRows = await database.query(
+      PosDatabaseConstants.tableStaff,
+      where: 'id = ?',
+      whereArgs: [staffId],
+      limit: 1,
+    );
+    if (staffRows.isEmpty) {
+      throw StateError('Staff ID #$staffId does not exist.');
+    }
+    final role = StaffRole.fromCode(staffRows.first['role'] as String);
+
+    if (role == StaffRole.manager) {
+      if (!_managerPinRegex.hasMatch(newPin)) {
+        throw ArgumentError('Manager PIN must be between 4 and 8 numeric digits.');
+      }
+    } else {
+      if (!_cashierPinRegex.hasMatch(newPin)) {
+        throw ArgumentError('Cashier PIN must be exactly 4 numeric digits.');
+      }
     }
 
     final newHash = PinHasher.hashPin(newPin);
@@ -330,8 +355,14 @@ class AuthService {
     }
 
     if (newPin != null) {
-      if (!_pinFormatRegex.hasMatch(newPin)) {
-        throw ArgumentError('New PIN must be exactly 4 numeric digits.');
+      if (role == StaffRole.manager) {
+        if (!_managerPinRegex.hasMatch(newPin)) {
+          throw ArgumentError('Manager PIN must be between 4 and 8 numeric digits.');
+        }
+      } else {
+        if (!_cashierPinRegex.hasMatch(newPin)) {
+          throw ArgumentError('Cashier PIN must be exactly 4 numeric digits.');
+        }
       }
       final newHash = PinHasher.hashPin(newPin);
       final conflictRows = await database.query(
@@ -373,6 +404,61 @@ class AuthService {
     return Staff.fromMap(
       staffRows.first,
       departmentName: departmentName,
+    );
+  }
+
+  // ===========================================================================
+  // ONBOARDING & ACTIVE CASHIER AUDIT
+  // ===========================================================================
+
+  /// Checks whether first-run onboarding is required.
+  ///
+  /// Returns `true` if the database has not marked onboarding as completed,
+  /// or if there are zero staff accounts or zero active cashier profiles.
+  Future<bool> isOnboardingRequired() async {
+    final settingRows = await database.query(
+      PosDatabaseConstants.tableSystemSettings,
+      where: 'key = ?',
+      whereArgs: [PosDatabaseConstants.settingOnboardingCompleted],
+      limit: 1,
+    );
+    if (settingRows.isNotEmpty && settingRows.first['value'] == 'true') {
+      return false;
+    }
+
+    final staffCountResult = await database.rawQuery(
+      'SELECT COUNT(*) as count FROM ${PosDatabaseConstants.tableStaff};',
+    );
+    final count = (staffCountResult.isNotEmpty ? staffCountResult.first['count'] as int? : 0) ?? 0;
+    if (count == 0) return true;
+
+    final cashierCountResult = await database.rawQuery(
+      "SELECT COUNT(*) as count FROM ${PosDatabaseConstants.tableStaff} WHERE role = 'CASHIER' AND is_active = 1;",
+    );
+    final cashierCount = (cashierCountResult.isNotEmpty ? cashierCountResult.first['count'] as int? : 0) ?? 0;
+    return cashierCount == 0;
+  }
+
+  /// Checks whether there is at least one active Cashier profile.
+  Future<bool> hasActiveCashier() async {
+    final cashierCountResult = await database.rawQuery(
+      "SELECT COUNT(*) as count FROM ${PosDatabaseConstants.tableStaff} WHERE role = 'CASHIER' AND is_active = 1;",
+    );
+    final count = (cashierCountResult.isNotEmpty ? cashierCountResult.first['count'] as int? : 0) ?? 0;
+    return count > 0;
+  }
+
+  /// Marks first-run onboarding as completed in system settings.
+  Future<void> completeOnboarding() async {
+    final now = _formatTimestamp(DateTime.now());
+    await database.insert(
+      PosDatabaseConstants.tableSystemSettings,
+      {
+        'key': PosDatabaseConstants.settingOnboardingCompleted,
+        'value': 'true',
+        'updated_at': now,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
 }

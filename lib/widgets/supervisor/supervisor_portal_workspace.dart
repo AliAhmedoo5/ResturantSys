@@ -623,6 +623,8 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
 
   @override
   Widget build(BuildContext context) {
+    final hasActiveCashier = _staffMembers.any((s) => s.role == StaffRole.cashier && s.isActive);
+
     return Container(
       color: WarmCounterColors.lightPageBackground,
       padding: const EdgeInsets.all(WarmCounterSpacing.space24),
@@ -632,6 +634,66 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
           // Top Navigation Bar
           _buildTopTabBar(context),
           const SizedBox(height: WarmCounterSpacing.space16),
+
+          // Prominent Alert: No active cashier
+          if (!hasActiveCashier && _staffMembers.isNotEmpty) ...[
+            Container(
+              key: const ValueKey('no_active_cashier_warning'),
+              padding: const EdgeInsets.symmetric(
+                horizontal: WarmCounterSpacing.space16,
+                vertical: WarmCounterSpacing.space12,
+              ),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF2F2),
+                borderRadius: WarmCounterSpacing.panelBorderRadius,
+                border: Border.all(color: const Color(0xFFEF4444)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 28),
+                  const SizedBox(width: WarmCounterSpacing.space12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'No active cashier — create one',
+                          style: WarmCounterTypography.pageHeading.copyWith(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF991B1B),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Front counter register billing is locked because all cashier profiles are deactivated or missing. Create or activate a cashier profile to resume register operations.',
+                          style: WarmCounterTypography.bodySmall.copyWith(
+                            color: const Color(0xFFB91C1C),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: WarmCounterSpacing.space12),
+                  ElevatedButton.icon(
+                    key: const ValueKey('warning_create_cashier_button'),
+                    icon: const Icon(Icons.person_add_rounded, size: 16),
+                    label: const Text('Create Cashier'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFDC2626),
+                      foregroundColor: Colors.white,
+                      shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
+                    ),
+                    onPressed: () {
+                      setState(() => _activeTab = SupervisorPortalTab.staff);
+                      _openRegisterStaffDialog();
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: WarmCounterSpacing.space16),
+          ],
 
           // Main Workspace Tab Content
           Expanded(

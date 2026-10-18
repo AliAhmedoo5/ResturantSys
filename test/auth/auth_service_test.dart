@@ -26,6 +26,7 @@ void main() {
       posDb = PosDatabase(
         factory: databaseFactoryFfi,
         customPath: testDbPath,
+        seedDefaultStaff: true,
       );
       final db = await posDb.initialize();
       authService = AuthService(database: db);
@@ -55,9 +56,9 @@ void main() {
       expect(staff, isNull);
     });
 
-    test('rejects malformed or non-4-digit input', () async {
+    test('rejects malformed or invalid length input', () async {
       expect(await authService.authenticateWithPin('12'), isNull);
-      expect(await authService.authenticateWithPin('12345'), isNull);
+      expect(await authService.authenticateWithPin('123456789'), isNull);
       expect(await authService.authenticateWithPin('abcd'), isNull);
       expect(await authService.authenticateWithPin(''), isNull);
     });
@@ -74,14 +75,10 @@ void main() {
       expect(staff.canVoidOrders, isFalse);
     });
 
-    test('authenticates default seeded kitchen cook (PIN 2222) and verifies capabilities', () async {
-      final staff = await authService.authenticateWithPin('2222');
-      expect(staff, isNotNull);
-      expect(staff!.name, equals(PosDatabaseConstants.defaultKitchenName));
-      expect(staff.role, equals(StaffRole.kitchen));
-      expect(staff.departmentName, equals('Kitchen'));
-      expect(staff.canAccessKitchen, isTrue);
-      expect(staff.canAccessRegister, isFalse);
+    test('verifies interactive kitchen role is eliminated and manager handles back-office', () async {
+      expect(StaffRole.values.length, equals(2));
+      expect(StaffRole.values, contains(StaffRole.cashier));
+      expect(StaffRole.values, contains(StaffRole.manager));
     });
 
     test('authenticateAndLogin establishes active session on authService.session', () async {
@@ -98,10 +95,10 @@ void main() {
       final deptId = deptResult.first['id'] as int;
 
       await db.insert('staff', {
-        'name': 'Inactive Cook',
+        'name': 'Inactive Cashier',
         'department_id': deptId,
         'pin_hash': PinHasher.hashPin('3333'),
-        'role': 'KITCHEN',
+        'role': 'CASHIER',
         'is_active': 0, // Inactive
         'created_at': DateTime.now().toUtc().toIso8601String(),
       });

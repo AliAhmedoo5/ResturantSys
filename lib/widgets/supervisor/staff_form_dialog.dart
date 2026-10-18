@@ -220,10 +220,14 @@ class _StaffFormDialogState extends State<StaffFormDialog> {
                 controller: _pinController,
                 obscureText: _obscurePin,
                 keyboardType: TextInputType.number,
-                maxLength: 4,
+                maxLength: _selectedRole == StaffRole.manager ? 8 : 4,
                 decoration: InputDecoration(
-                  labelText: isEditing ? 'New 4-Digit PIN (Leave blank to keep existing)' : '4-Digit Numeric PIN',
-                  hintText: '4 digits (e.g. 5678)',
+                  labelText: isEditing
+                      ? (_selectedRole == StaffRole.manager
+                          ? 'New 4–8 Digit PIN (Leave blank to keep existing)'
+                          : 'New 4-Digit PIN (Leave blank to keep existing)')
+                      : (_selectedRole == StaffRole.manager ? '4–8 Digit Numeric PIN' : '4-Digit Numeric PIN'),
+                  hintText: _selectedRole == StaffRole.manager ? '4 to 8 digits' : '4 digits (e.g. 5678)',
                   counterText: '',
                   suffixIcon: IconButton(
                     icon: Icon(_obscurePin ? Icons.visibility_outlined : Icons.visibility_off_outlined),
@@ -236,8 +240,18 @@ class _StaffFormDialogState extends State<StaffFormDialog> {
                   if (isEditing && (val == null || val.trim().isEmpty)) {
                     return null; // Keep existing PIN
                   }
-                  if (val == null || val.trim().length != 4 || int.tryParse(val.trim()) == null) {
-                    return 'PIN must be exactly 4 numeric digits.';
+                  final trimmed = val?.trim() ?? '';
+                  if (int.tryParse(trimmed) == null) {
+                    return 'PIN must be numeric.';
+                  }
+                  if (_selectedRole == StaffRole.manager) {
+                    if (trimmed.length < 4 || trimmed.length > 8) {
+                      return 'Manager PIN must be between 4 and 8 digits.';
+                    }
+                  } else {
+                    if (trimmed.length != 4) {
+                      return 'Cashier PIN must be exactly 4 numeric digits.';
+                    }
                   }
                   return null;
                 },
