@@ -297,6 +297,13 @@ void main() {
               );
             ''');
             await db.execute('''
+              CREATE TABLE system_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+              );
+            ''');
+            await db.execute('''
               CREATE TABLE staff (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
