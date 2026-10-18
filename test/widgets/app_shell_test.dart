@@ -288,7 +288,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const ValueKey('onboarding_wizard')), findsOneWidget);
+      expect(find.byType(OnboardingWizard), findsOneWidget);
       expect(find.text('Initial System Setup'), findsOneWidget);
     });
   });

@@ -521,7 +521,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
               if (index < steps.length - 1)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: WarmCounterSpacing.space12),
-                  child: Icon(Icons.chevron_right_rounded, size: 18, color: WarmCounterColors.lightBorder),
+                  child: const Icon(Icons.chevron_right_rounded, size: 18, color: WarmCounterColors.lightBorder),
                 ),
             ],
           );
@@ -597,11 +597,11 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
                     borderRadius: WarmCounterSpacing.controlBorderRadius,
                     border: Border.all(color: WarmCounterColors.lightBorder),
                   ),
-                  child: Column(
+                  child: const Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Currency Standard', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                      const SizedBox(height: 4),
+                      Text('Currency Standard', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                      SizedBox(height: 4),
                       Text('PKR (Pakistani Rupee • 64-bit Paisa Engine)', style: TextStyle(color: WarmCounterColors.lightSecondaryText, fontSize: 12)),
                     ],
                   ),
@@ -616,11 +616,11 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
                     borderRadius: WarmCounterSpacing.controlBorderRadius,
                     border: Border.all(color: WarmCounterColors.lightBorder),
                   ),
-                  child: Column(
+                  child: const Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Tax Configuration', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                      const SizedBox(height: 4),
+                      Text('Tax Configuration', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                      SizedBox(height: 4),
                       Text('0.0% Tax-Inclusive Shelf Pricing (Internal Carve-Out)', style: TextStyle(color: WarmCounterColors.lightSecondaryText, fontSize: 12)),
                     ],
                   ),

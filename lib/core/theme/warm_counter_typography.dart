@@ -112,6 +112,9 @@ abstract final class WarmCounterTypography {
   /// Secondary metadata and small caption style.
   static const TextStyle caption = secondaryLabel;
 
+  /// Small body text style.
+  static const TextStyle bodySmall = secondaryLabel;
+
   /// Large body text style.
   static const TextStyle bodyLarge = body;
 

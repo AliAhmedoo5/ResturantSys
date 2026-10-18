@@ -229,12 +229,11 @@ void main() {
         openingFloat: 1000.0,
       );
 
-      final dummyItem = MenuItem(
+      const dummyItem = MenuItem(
         id: 99,
         categoryId: 1,
         name: 'Test Burger',
-        price: 500.0,
-        costPrice: 200.0,
+        basePrice: 500.0,
         isActive: true,
         isTaxInclusive: true,
         taxRate: 0.0,
