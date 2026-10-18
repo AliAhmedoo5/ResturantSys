@@ -256,6 +256,7 @@ class ShiftAndCashController {
     required double amount,
     required String category,
     required String notes,
+    int? approvedBy,
     DateTime? createdAt,
   }) async {
     if (amount <= 0) {
@@ -290,6 +291,7 @@ class ShiftAndCashController {
         'amount': amount,
         'category': category.trim().isNotEmpty ? category.trim() : 'General',
         'notes': notes.trim(),
+        'approved_by': approvedBy,
         'created_at': formattedCreatedAt,
       },
     );
@@ -309,6 +311,7 @@ class ShiftAndCashController {
       amount: amount,
       category: category.trim().isNotEmpty ? category.trim() : 'General',
       notes: notes.trim(),
+      approvedBy: approvedBy,
       createdAt: effectiveCreatedAt,
       staffName: staffName,
     );

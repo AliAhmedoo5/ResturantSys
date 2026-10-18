@@ -1,6 +1,6 @@
 /// Constants and default configuration for the SQLite database.
 abstract final class PosDatabaseConstants {
-  static const int schemaVersion = 8;
+  static const int schemaVersion = 9;
   static const String databaseFileName = 'pos.db';
   static const String defaultProgramDataFolder = 'ResturantPOS';
   static const String defaultDataSubFolder = 'data';
@@ -35,6 +35,23 @@ abstract final class PosDatabaseConstants {
   // Vendor Khata (Supplier Credit Ledger) Tables
   static const String tableVendorKhata = 'vendor_khata';
   static const String tableVendorTransactions = 'vendor_transactions';
+
+  // Delivery & Customer Directory Tables (Schema v9)
+  static const String tableDeliveryAreas = 'delivery_areas';
+  static const String tableCustomerAddresses = 'customer_addresses';
+
+  // Order Revisions & Line Deltas (Schema v9)
+  static const String tableOrderRevisions = 'order_revisions';
+  static const String tableOrderRevisionLines = 'order_revision_lines';
+
+  // Rider Trips & Logistics (Schema v9)
+  static const String tableRiderTrips = 'rider_trips';
+
+  // Catalog Image Galleries (Schema v9)
+  static const String tableCatalogImages = 'catalog_images';
+
+  // Offline Report Outbox (Schema v9)
+  static const String tableReportOutbox = 'report_outbox';
 
   // Settings Keys
   static const String settingDiscrepancyThreshold = 'discrepancy_threshold';

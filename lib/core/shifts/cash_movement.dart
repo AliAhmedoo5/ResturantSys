@@ -30,6 +30,7 @@ class CashMovement {
     required this.notes,
     required this.createdAt,
     this.staffName,
+    this.approvedBy,
   });
 
   final int id;
@@ -41,6 +42,7 @@ class CashMovement {
   final String notes;
   final DateTime createdAt;
   final String? staffName;
+  final int? approvedBy;
 
   bool get isPayIn => type == CashMovementType.payIn;
   bool get isPayOut => type == CashMovementType.payOut;
@@ -56,6 +58,7 @@ class CashMovement {
       notes: map['notes'] as String,
       createdAt: DateTime.parse(map['created_at'] as String),
       staffName: map['staff_name'] as String?,
+      approvedBy: map['approved_by'] as int?,
     );
   }
 
@@ -68,6 +71,7 @@ class CashMovement {
       'amount': amount,
       'category': category,
       'notes': notes,
+      'approved_by': approvedBy,
       'created_at': createdAt.toIso8601String(),
     };
   }

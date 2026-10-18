@@ -115,6 +115,7 @@ class PosDatabase {
     await _createOrderVoidsTables(db);
     await _createProcurementAndWastageTables(db);
     await _createVendorKhataTables(db);
+    await _createV9Tables(db);
   }
 
   Future<void> _createOperationalAccountingTables(DatabaseExecutor executor) async {
@@ -157,9 +158,11 @@ class PosDatabase {
         amount REAL NOT NULL,
         category TEXT NOT NULL,
         notes TEXT NOT NULL,
+        approved_by INTEGER REFERENCES ${PosDatabaseConstants.tableStaff}(id),
         created_at TEXT NOT NULL
       );
     ''');
+    await executor.execute('CREATE INDEX IF NOT EXISTS idx_cash_movements_shift_id ON ${PosDatabaseConstants.tableCashMovements}(shift_id);');
 
     await executor.execute('''
       CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableOrders} (
@@ -176,6 +179,14 @@ class PosDatabase {
         grand_total REAL NOT NULL,
         payment_status TEXT NOT NULL,
         token_status TEXT NOT NULL DEFAULT 'PREPARING',
+        current_revision INTEGER NOT NULL DEFAULT 1,
+        cash_rounding_paisa INTEGER NOT NULL DEFAULT 0,
+        delivery_area_id INTEGER REFERENCES ${PosDatabaseConstants.tableDeliveryAreas}(id),
+        delivery_area_name_snapshot TEXT,
+        delivery_address_snapshot TEXT,
+        delivery_fee_paisa INTEGER NOT NULL DEFAULT 0,
+        customer_phone TEXT,
+        customer_name TEXT,
         created_at TEXT NOT NULL
       );
     ''');
@@ -409,6 +420,205 @@ class PosDatabase {
     if (oldVersion < 8) {
       await db.execute("ALTER TABLE ${PosDatabaseConstants.tableOrders} ADD COLUMN token_status TEXT NOT NULL DEFAULT 'PREPARING';");
     }
+    if (oldVersion < 9) {
+      await _upgradeToVersion9(db);
+    }
+  }
+
+  Future<void> _createV9Tables(DatabaseExecutor executor) async {
+    await executor.execute('''
+      CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableDeliveryAreas} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        code TEXT UNIQUE,
+        coverage_description TEXT,
+        delivery_fee_paisa INTEGER NOT NULL CHECK(delivery_fee_paisa >= 0),
+        min_order_paisa INTEGER NOT NULL DEFAULT 0 CHECK(min_order_paisa >= 0),
+        target_eta_minutes INTEGER,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    ''');
+    await executor.execute('CREATE INDEX IF NOT EXISTS idx_delivery_areas_active ON ${PosDatabaseConstants.tableDeliveryAreas}(is_active);');
+
+    await executor.execute('''
+      CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableCustomerAddresses} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        customer_phone TEXT NOT NULL,
+        customer_name TEXT,
+        delivery_area_id INTEGER REFERENCES ${PosDatabaseConstants.tableDeliveryAreas}(id) ON DELETE SET NULL,
+        full_address TEXT NOT NULL,
+        landmark TEXT,
+        notes TEXT,
+        is_default INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    ''');
+    await executor.execute('CREATE INDEX IF NOT EXISTS idx_customer_addresses_phone ON ${PosDatabaseConstants.tableCustomerAddresses}(customer_phone);');
+    await executor.execute('CREATE INDEX IF NOT EXISTS idx_customer_addresses_area ON ${PosDatabaseConstants.tableCustomerAddresses}(delivery_area_id);');
+
+    await executor.execute('''
+      CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableOrderRevisions} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableOrders}(id) ON DELETE RESTRICT,
+        revision_no INTEGER NOT NULL CHECK (revision_no >= 1),
+        prior_revision_id INTEGER REFERENCES ${PosDatabaseConstants.tableOrderRevisions}(id),
+        action TEXT NOT NULL CHECK (action IN ('ADD','CHANGE','REMOVE','CANCEL','CORRECTION')),
+        reason TEXT NOT NULL,
+        cashier_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableStaff}(id),
+        business_day_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableBusinessDays}(id),
+        created_at_utc TEXT NOT NULL,
+        old_total_paisa INTEGER NOT NULL,
+        new_total_paisa INTEGER NOT NULL,
+        money_delta_paisa INTEGER NOT NULL,
+        prior_snapshot_json TEXT NOT NULL,
+        new_snapshot_json TEXT NOT NULL,
+        command_id TEXT NOT NULL UNIQUE,
+        UNIQUE(order_id, revision_no)
+      );
+    ''');
+    await executor.execute('CREATE INDEX IF NOT EXISTS idx_order_revisions_order_id ON ${PosDatabaseConstants.tableOrderRevisions}(order_id);');
+
+    await executor.execute('''
+      CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableOrderRevisionLines} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        revision_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableOrderRevisions}(id) ON DELETE CASCADE,
+        original_order_line_id INTEGER,
+        item_id INTEGER,
+        action TEXT NOT NULL,
+        old_qty_decimal TEXT NOT NULL,
+        new_qty_decimal TEXT NOT NULL,
+        line_price_delta_paisa INTEGER NOT NULL,
+        bom_disposition TEXT NOT NULL,
+        ingredient_delta_snapshot_json TEXT NOT NULL
+      );
+    ''');
+    await executor.execute('CREATE INDEX IF NOT EXISTS idx_order_revision_lines_rev ON ${PosDatabaseConstants.tableOrderRevisionLines}(revision_id);');
+
+    await executor.execute('''
+      CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableRiderTrips} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        rider_staff_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableStaff}(id),
+        shift_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableShifts}(id),
+        business_day_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableBusinessDays}(id),
+        status TEXT NOT NULL DEFAULT 'DISPATCHED' CHECK (status IN ('DISPATCHED','RETURNED','SETTLED','CANCELLED')),
+        cash_expected_paisa INTEGER NOT NULL DEFAULT 0,
+        cash_collected_paisa INTEGER NOT NULL DEFAULT 0,
+        dispatched_at TEXT NOT NULL,
+        returned_at TEXT,
+        settled_at_utc TEXT,
+        created_at TEXT NOT NULL
+      );
+    ''');
+    await executor.execute('CREATE INDEX IF NOT EXISTS idx_rider_trips_rider_status ON ${PosDatabaseConstants.tableRiderTrips}(rider_staff_id, status);');
+    await executor.execute('CREATE INDEX IF NOT EXISTS idx_rider_trips_bday ON ${PosDatabaseConstants.tableRiderTrips}(business_day_id);');
+
+    await executor.execute('''
+      CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableCatalogImages} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        entity_type TEXT NOT NULL CHECK(entity_type IN ('menu_item','deal')),
+        entity_id INTEGER NOT NULL,
+        relative_file_path TEXT NOT NULL,
+        thumbnail_path TEXT,
+        content_type TEXT,
+        byte_count INTEGER,
+        sha256_checksum TEXT,
+        is_primary INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        deleted_at TEXT
+      );
+    ''');
+    await executor.execute('CREATE INDEX IF NOT EXISTS idx_catalog_images_entity ON ${PosDatabaseConstants.tableCatalogImages}(entity_type, entity_id, deleted_at);');
+
+    await executor.execute('''
+      CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableReportOutbox} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_day_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableBusinessDays}(id),
+        channel TEXT NOT NULL CHECK(channel IN ('EMAIL','WHATSAPP')),
+        recipient TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING','PROCESSING','SENT','FAILED')),
+        retry_count INTEGER NOT NULL DEFAULT 0,
+        next_attempt_at TEXT NOT NULL,
+        error_message TEXT,
+        created_at TEXT NOT NULL,
+        processed_at TEXT
+      );
+    ''');
+    await executor.execute('CREATE INDEX IF NOT EXISTS idx_report_outbox_status_attempt ON ${PosDatabaseConstants.tableReportOutbox}(status, next_attempt_at);');
+  }
+
+  Future<void> _upgradeToVersion9(Database db) async {
+    // 1. Create all new v9 schema tables
+    await _createV9Tables(db);
+
+    // 2. Safe addition of missing columns to orders table
+    final orderColsInfo = await db.rawQuery('PRAGMA table_info(${PosDatabaseConstants.tableOrders});');
+    final orderColNames = orderColsInfo.map((r) => r['name'] as String).toSet();
+
+    if (!orderColNames.contains('current_revision')) {
+      await db.execute('ALTER TABLE ${PosDatabaseConstants.tableOrders} ADD COLUMN current_revision INTEGER NOT NULL DEFAULT 1;');
+    }
+    if (!orderColNames.contains('cash_rounding_paisa')) {
+      await db.execute('ALTER TABLE ${PosDatabaseConstants.tableOrders} ADD COLUMN cash_rounding_paisa INTEGER NOT NULL DEFAULT 0;');
+    }
+    if (!orderColNames.contains('delivery_area_id')) {
+      await db.execute('ALTER TABLE ${PosDatabaseConstants.tableOrders} ADD COLUMN delivery_area_id INTEGER REFERENCES ${PosDatabaseConstants.tableDeliveryAreas}(id);');
+    }
+    if (!orderColNames.contains('delivery_area_name_snapshot')) {
+      await db.execute('ALTER TABLE ${PosDatabaseConstants.tableOrders} ADD COLUMN delivery_area_name_snapshot TEXT;');
+    }
+    if (!orderColNames.contains('delivery_address_snapshot')) {
+      await db.execute('ALTER TABLE ${PosDatabaseConstants.tableOrders} ADD COLUMN delivery_address_snapshot TEXT;');
+    }
+    if (!orderColNames.contains('delivery_fee_paisa')) {
+      await db.execute('ALTER TABLE ${PosDatabaseConstants.tableOrders} ADD COLUMN delivery_fee_paisa INTEGER NOT NULL DEFAULT 0;');
+    }
+    if (!orderColNames.contains('customer_phone')) {
+      await db.execute('ALTER TABLE ${PosDatabaseConstants.tableOrders} ADD COLUMN customer_phone TEXT;');
+    }
+    if (!orderColNames.contains('customer_name')) {
+      await db.execute('ALTER TABLE ${PosDatabaseConstants.tableOrders} ADD COLUMN customer_name TEXT;');
+    }
+
+    // 3. Safe transactional table-rebuild of cash_movements to make approved_by nullable
+    final cashMovementsColsInfo = await db.rawQuery('PRAGMA table_info(${PosDatabaseConstants.tableCashMovements});');
+    final cashColNames = cashMovementsColsInfo.map((r) => r['name'] as String).toSet();
+
+    await db.execute('''
+      CREATE TABLE cash_movements_v9_rebuild (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        shift_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableShifts}(id),
+        staff_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableStaff}(id),
+        type TEXT NOT NULL,
+        amount REAL NOT NULL,
+        category TEXT NOT NULL,
+        notes TEXT NOT NULL,
+        approved_by INTEGER REFERENCES ${PosDatabaseConstants.tableStaff}(id),
+        created_at TEXT NOT NULL
+      );
+    ''');
+
+    if (cashColNames.contains('approved_by')) {
+      await db.execute('''
+        INSERT INTO cash_movements_v9_rebuild (id, shift_id, staff_id, type, amount, category, notes, approved_by, created_at)
+        SELECT id, shift_id, staff_id, type, amount, category, notes, approved_by, created_at
+        FROM ${PosDatabaseConstants.tableCashMovements};
+      ''');
+    } else {
+      await db.execute('''
+        INSERT INTO cash_movements_v9_rebuild (id, shift_id, staff_id, type, amount, category, notes, approved_by, created_at)
+        SELECT id, shift_id, staff_id, type, amount, category, notes, NULL, created_at
+        FROM ${PosDatabaseConstants.tableCashMovements};
+      ''');
+    }
+
+    await db.execute('DROP TABLE ${PosDatabaseConstants.tableCashMovements};');
+    await db.execute('ALTER TABLE cash_movements_v9_rebuild RENAME TO ${PosDatabaseConstants.tableCashMovements};');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_cash_movements_shift_id ON ${PosDatabaseConstants.tableCashMovements}(shift_id);');
   }
 
   static String _formatTimestamp(DateTime dt) {

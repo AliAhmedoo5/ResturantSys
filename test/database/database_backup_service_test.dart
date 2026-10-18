@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:resturant_sys/core/database/database_backup_service.dart';
+import 'package:resturant_sys/core/database/pos_database.dart';
 
 void main() {
   setUpAll(() {
@@ -123,5 +124,54 @@ void main() {
       expect(result.secondaryBackupPath, isNotNull);
       expect(await File(result.secondaryBackupPath!).exists(), isTrue);
     });
+
+    test('verifies schema v9 integrity upon backup and restore', () async {
+      final v9DbPath = '${tempRootDir.path}${Platform.pathSeparator}pos_v9_source.db';
+      final posDb = PosDatabase(
+        factory: databaseFactoryFfi,
+        customPath: v9DbPath,
+      );
+      final activeV9Db = await posDb.initialize();
+
+      // Insert sample record into v9 delivery_areas
+      await activeV9Db.insert('delivery_areas', {
+        'name': 'DHA Phase 5',
+        'code': 'DHA5',
+        'delivery_fee_paisa': 20000,
+        'min_order_paisa': 100000,
+        'is_active': 1,
+        'created_at': '2026-10-18 12:00:00',
+        'updated_at': '2026-10-18 12:00:00',
+      });
+
+      final backupServiceV9 = DatabaseBackupService(database: activeV9Db);
+      final backupResult = await backupServiceV9.executeBackup(
+        sourceDbPath: v9DbPath,
+        localBackupDir: localBackupDir.path,
+        timestamp: DateTime(2026, 10, 18, 12, 30, 0),
+      );
+
+      expect(backupResult.success, isTrue);
+      expect(backupResult.localBackupPath, isNotNull);
+
+      await posDb.close();
+
+      // Open the restored backup file directly and verify schema version & tables
+      final restoredDb = await databaseFactoryFfi.openDatabase(backupResult.localBackupPath!);
+      
+      final versionResult = await restoredDb.rawQuery('PRAGMA user_version;');
+      expect(versionResult.first.values.first, equals(9));
+
+      final integrityResult = await restoredDb.rawQuery('PRAGMA integrity_check;');
+      expect(integrityResult.first.values.first, equals('ok'));
+
+      final areas = await restoredDb.query('delivery_areas');
+      expect(areas.length, equals(1));
+      expect(areas.first['name'], equals('DHA Phase 5'));
+      expect(areas.first['delivery_fee_paisa'], equals(20000));
+
+      await restoredDb.close();
+    });
   });
 }
+
