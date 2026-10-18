@@ -73,9 +73,12 @@ void main() {
         expect(delta, equals(0));
       });
 
-      test('safely handles zero and negative cash due', () {
+      test('safely handles zero and negative signed cash due with exact mathematical floor', () {
         expect(PaisaEngine.roundCashPaisa(0), equals(0));
-        expect(PaisaEngine.roundCashPaisa(-500), equals(0));
+        expect(PaisaEngine.roundCashPaisa(-50), equals(0));
+        expect(PaisaEngine.roundCashPaisa(-51), equals(-100));
+        expect(PaisaEngine.roundCashPaisa(-100), equals(-100));
+        expect(PaisaEngine.roundCashPaisa(-500), equals(-500));
       });
     });
 

@@ -54,6 +54,7 @@ void main() {
       expect(tableNames, contains(PosDatabaseConstants.tableRiderTrips));
       expect(tableNames, contains(PosDatabaseConstants.tableCatalogImages));
       expect(tableNames, contains(PosDatabaseConstants.tableReportOutbox));
+      expect(tableNames, contains(PosDatabaseConstants.tableRoundingVarianceLedger));
     });
 
     test('enforces strict constraints on delivery_areas and customer_addresses', () async {
@@ -278,6 +279,15 @@ void main() {
         'created_at': '2026-10-18 23:55:00',
       });
       expect(outboxId, greaterThan(0));
+
+      // Insert rounding variance ledger record
+      final ledgerId = await db.insert(PosDatabaseConstants.tableRoundingVarianceLedger, {
+        'shift_id': shiftId,
+        'cash_rounding_paisa': -25,
+        'reason': 'Cash checkout half-up rounding discount',
+        'created_at': '2026-10-18 23:56:00',
+      });
+      expect(ledgerId, greaterThan(0));
     });
 
     test('preserves historical movements and makes approved_by nullable during safe table rebuild', () async {

@@ -549,6 +549,19 @@ class PosDatabase {
       );
     ''');
     await executor.execute('CREATE INDEX IF NOT EXISTS idx_report_outbox_status_attempt ON ${PosDatabaseConstants.tableReportOutbox}(status, next_attempt_at);');
+
+    await executor.execute('''
+      CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableRoundingVarianceLedger} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_id INTEGER REFERENCES ${PosDatabaseConstants.tableOrders}(id) ON DELETE SET NULL,
+        shift_id INTEGER REFERENCES ${PosDatabaseConstants.tableShifts}(id) ON DELETE SET NULL,
+        cash_rounding_paisa INTEGER NOT NULL,
+        reason TEXT,
+        created_at TEXT NOT NULL
+      );
+    ''');
+    await executor.execute('CREATE INDEX IF NOT EXISTS idx_rounding_ledger_order ON ${PosDatabaseConstants.tableRoundingVarianceLedger}(order_id);');
+    await executor.execute('CREATE INDEX IF NOT EXISTS idx_rounding_ledger_shift ON ${PosDatabaseConstants.tableRoundingVarianceLedger}(shift_id);');
   }
 
   Future<void> _upgradeToVersion9(Database db) async {

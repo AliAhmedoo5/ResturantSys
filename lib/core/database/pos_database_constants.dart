@@ -53,6 +53,9 @@ abstract final class PosDatabaseConstants {
   // Offline Report Outbox (Schema v9)
   static const String tableReportOutbox = 'report_outbox';
 
+  // Rounding Variance Ledger (Schema v9)
+  static const String tableRoundingVarianceLedger = 'rounding_variance_ledger';
+
   // Settings Keys
   static const String settingDiscrepancyThreshold = 'discrepancy_threshold';
   static const String defaultDiscrepancyThreshold = '100.00';

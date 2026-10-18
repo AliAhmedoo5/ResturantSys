@@ -21,7 +21,7 @@ abstract final class PaisaEngine {
   }
 
   /// Rounds physical cash payable to the nearest whole rupee (100 paisa)
-  /// using mathematical half-up arithmetic for non-negative amounts.
+  /// using exact mathematical half-up arithmetic.
   ///
   /// Formula: floor((cash_due + 50) / 100) * 100
   ///
@@ -31,8 +31,7 @@ abstract final class PaisaEngine {
   /// - 61,625 paisa (Rs. 616.25) -> 61,600 paisa (Rs. 616.00)
   /// - 61,600 paisa (Rs. 616.00) -> 61,600 paisa (Rs. 616.00)
   static int roundCashPaisa(int cashDueExactPaisa) {
-    if (cashDueExactPaisa <= 0) return 0;
-    return ((cashDueExactPaisa + 50) ~/ 100) * 100;
+    return ((cashDueExactPaisa + 50) / 100.0).floor() * 100;
   }
 
   /// Computes the rounding variance between exact cash due and rounded cash due.
@@ -91,7 +90,8 @@ abstract final class PaisaEngine {
       );
     }
 
-    final taxPaisa = ((totalPaisa * taxRateBps) / (10000 + taxRateBps)).round();
+    final denominator = 10000 + taxRateBps;
+    final taxPaisa = ((totalPaisa * taxRateBps) + (denominator ~/ 2)) ~/ denominator;
     final taxableBasePaisa = totalPaisa - taxPaisa;
 
     return TaxCarveOutResult(
