@@ -110,11 +110,11 @@ void main() {
       // Sample upload button
       final sampleUploadButton = find.byKey(const ValueKey('add_sample_photo_button'));
       expect(sampleUploadButton, findsOneWidget);
-      await tester.runAsync(() async {
-        await tester.tap(sampleUploadButton);
-        await Future<void>.delayed(const Duration(milliseconds: 200));
-        await tester.pump();
-      });
+      await tester.tap(sampleUploadButton);
+      final state1 = tester.state<CatalogPhotoGalleryDialogState>(find.byType(CatalogPhotoGalleryDialog));
+      if (state1.pendingAsyncAction != null) {
+        await tester.runAsync(() => state1.pendingAsyncAction!);
+      }
       await tester.pump();
 
       // After upload, empty state disappears and primary badge is shown
@@ -144,25 +144,22 @@ void main() {
         isPrimary: false,
       );
 
-      await tester.runAsync(() async {
-        await tester.pumpWidget(
-          MaterialApp(
-            theme: WarmCounterTheme.lightTheme,
-            home: Scaffold(
-              body: CatalogPhotoGalleryDialog(
-                mediaService: mediaService,
-                entityType: 'deal',
-                entityId: 7,
-                entityName: 'Super Saver Meal',
-                currentStaff: managerStaff,
-                initialImages: [img1, img2],
-              ),
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: WarmCounterTheme.lightTheme,
+          home: Scaffold(
+            body: CatalogPhotoGalleryDialog(
+              mediaService: mediaService,
+              entityType: 'deal',
+              entityId: 7,
+              entityName: 'Super Saver Meal',
+              currentStaff: managerStaff,
+              initialImages: [img1, img2],
             ),
           ),
-        );
-        await Future<void>.delayed(const Duration(milliseconds: 50));
-        await tester.pump();
-      });
+        ),
+      );
+      await tester.pump();
 
       // Both images listed
       expect(find.byKey(ValueKey('gallery_image_tile_${img1.id}')), findsOneWidget);
@@ -173,11 +170,11 @@ void main() {
       expect(find.byKey(ValueKey('set_primary_image_${img2.id}')), findsOneWidget);
 
       // Tap "Make Primary" on img2
-      await tester.runAsync(() async {
-        await tester.tap(find.byKey(ValueKey('set_primary_image_${img2.id}')));
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-        await tester.pump();
-      });
+      await tester.tap(find.byKey(ValueKey('set_primary_image_${img2.id}')));
+      final state2 = tester.state<CatalogPhotoGalleryDialogState>(find.byType(CatalogPhotoGalleryDialog));
+      if (state2.pendingAsyncAction != null) {
+        await tester.runAsync(() => state2.pendingAsyncAction!);
+      }
       await tester.pump();
 
       // img2 is now primary
@@ -185,11 +182,10 @@ void main() {
       expect(find.byKey(ValueKey('set_primary_image_${img1.id}')), findsOneWidget);
 
       // Delete img1
-      await tester.runAsync(() async {
-        await tester.tap(find.byKey(ValueKey('delete_image_${img1.id}')));
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-        await tester.pump();
-      });
+      await tester.tap(find.byKey(ValueKey('delete_image_${img1.id}')));
+      if (state2.pendingAsyncAction != null) {
+        await tester.runAsync(() => state2.pendingAsyncAction!);
+      }
       await tester.pump();
 
       // Only img2 remains

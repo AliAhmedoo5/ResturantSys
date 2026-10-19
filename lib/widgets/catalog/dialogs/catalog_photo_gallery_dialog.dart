@@ -17,6 +17,7 @@ class CatalogPhotoGalleryDialog extends StatefulWidget {
     required this.entityName,
     this.currentStaff,
     this.initialImages,
+    this.imageBuilder,
   });
 
   final CatalogMediaService mediaService;
@@ -25,12 +26,14 @@ class CatalogPhotoGalleryDialog extends StatefulWidget {
   final String entityName;
   final Staff? currentStaff;
   final List<CatalogImage>? initialImages;
+  final Widget Function(BuildContext context, File file)? imageBuilder;
 
   @override
-  State<CatalogPhotoGalleryDialog> createState() => _CatalogPhotoGalleryDialogState();
+  State<CatalogPhotoGalleryDialog> createState() => CatalogPhotoGalleryDialogState();
 }
 
-class _CatalogPhotoGalleryDialogState extends State<CatalogPhotoGalleryDialog> {
+class CatalogPhotoGalleryDialogState extends State<CatalogPhotoGalleryDialog> {
+  Future<void>? pendingAsyncAction;
   bool _isLoading = true;
   List<CatalogImage> _images = [];
   String? _errorMessage;
@@ -96,75 +99,87 @@ class _CatalogPhotoGalleryDialogState extends State<CatalogPhotoGalleryDialog> {
   }
 
   Future<void> _setPrimary(CatalogImage image) async {
-    try {
-      await widget.mediaService.setPrimaryImage(
-        image.id,
-        staff: widget.currentStaff,
-      );
-      await _loadImages();
-    } catch (e) {
-      _showErrorSnackBar(e.toString());
-    }
+    final action = () async {
+      try {
+        await widget.mediaService.setPrimaryImage(
+          image.id,
+          staff: widget.currentStaff,
+        );
+        await _loadImages();
+      } catch (e) {
+        _showErrorSnackBar(e.toString());
+      }
+    }();
+    pendingAsyncAction = action;
+    await action;
   }
 
   Future<void> _deleteImage(CatalogImage image) async {
-    try {
-      await widget.mediaService.deleteImage(
-        image.id,
-        staff: widget.currentStaff,
-        permanent: false,
-      );
-      await _loadImages();
-    } catch (e) {
-      _showErrorSnackBar(e.toString());
-    }
+    final action = () async {
+      try {
+        await widget.mediaService.deleteImage(
+          image.id,
+          staff: widget.currentStaff,
+          permanent: false,
+        );
+        await _loadImages();
+      } catch (e) {
+        _showErrorSnackBar(e.toString());
+      }
+    }();
+    pendingAsyncAction = action;
+    await action;
   }
 
   Future<void> _handleUpload({List<int>? explicitBytes, String? explicitName}) async {
-    setState(() => _isUploading = true);
-    try {
-      List<int> bytes;
-      String fileName;
+    final action = () async {
+      setState(() => _isUploading = true);
+      try {
+        List<int> bytes;
+        String fileName;
 
-      if (explicitBytes != null) {
-        bytes = explicitBytes;
-        fileName = explicitName ?? 'uploaded_image.png';
-      } else {
-        final rawPath = _filePathController.text.trim();
-        if (rawPath.isEmpty) {
-          throw ArgumentError('Please enter a valid image file path or use sample.');
+        if (explicitBytes != null) {
+          bytes = explicitBytes;
+          fileName = explicitName ?? 'uploaded_image.png';
+        } else {
+          final rawPath = _filePathController.text.trim();
+          if (rawPath.isEmpty) {
+            throw ArgumentError('Please enter a valid image file path or use sample.');
+          }
+          final file = File(rawPath);
+          if (!await file.exists()) {
+            throw ArgumentError('File not found at path: $rawPath');
+          }
+          bytes = await file.readAsBytes();
+          fileName = file.uri.pathSegments.last;
         }
-        final file = File(rawPath);
-        if (!await file.exists()) {
-          throw ArgumentError('File not found at path: $rawPath');
+
+        await widget.mediaService.saveImage(
+          staff: widget.currentStaff,
+          entityType: widget.entityType,
+          entityId: widget.entityId,
+          bytes: bytes,
+          originalFileName: fileName,
+          isPrimary: _makePrimaryOnUpload ? true : null,
+        );
+
+        _filePathController.clear();
+        _makePrimaryOnUpload = false;
+        _showAddForm = false;
+        await _loadImages();
+      } catch (e) {
+        if (mounted) {
+          setState(() => _errorMessage = e.toString());
         }
-        bytes = await file.readAsBytes();
-        fileName = file.uri.pathSegments.last;
+        _showErrorSnackBar(e.toString());
+      } finally {
+        if (mounted) {
+          setState(() => _isUploading = false);
+        }
       }
-
-      await widget.mediaService.saveImage(
-        staff: widget.currentStaff,
-        entityType: widget.entityType,
-        entityId: widget.entityId,
-        bytes: bytes,
-        originalFileName: fileName,
-        isPrimary: _makePrimaryOnUpload ? true : null,
-      );
-
-      _filePathController.clear();
-      _makePrimaryOnUpload = false;
-      _showAddForm = false;
-      await _loadImages();
-    } catch (e) {
-      if (mounted) {
-        setState(() => _errorMessage = e.toString());
-      }
-      _showErrorSnackBar(e.toString());
-    } finally {
-      if (mounted) {
-        setState(() => _isUploading = false);
-      }
-    }
+    }();
+    pendingAsyncAction = action;
+    await action;
   }
 
   void _showErrorSnackBar(String message) {
@@ -185,17 +200,15 @@ class _CatalogPhotoGalleryDialogState extends State<CatalogPhotoGalleryDialog> {
         size: 32,
       ),
     );
-    try {
-      if (!file.existsSync()) return fallback;
-      final bytes = file.readAsBytesSync();
-      return Image.memory(
-        Uint8List.fromList(bytes),
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => fallback,
-      );
-    } catch (_) {
-      return fallback;
+    if (!file.existsSync()) return fallback;
+    if (widget.imageBuilder != null) {
+      return widget.imageBuilder!(context, file);
     }
+    return Image.file(
+      file,
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) => fallback,
+    );
   }
 
   Widget _buildImageTile(CatalogImage image) {

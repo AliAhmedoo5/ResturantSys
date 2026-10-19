@@ -427,29 +427,31 @@ void main() {
         0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
       ]);
 
-      await tester.runAsync(() async {
-        await tester.pumpWidget(
-          MaterialApp(
-            theme: WarmCounterTheme.lightTheme,
-            home: Scaffold(
-              body: CounterBillingWorkspace(
-                currentStaff: testStaff,
-                businessDayId: 1,
-                shiftId: 1,
-                initialCategories: testCategories,
-                initialMenuItems: testMenuItems,
-                initialDeals: testDeals,
-                initialMenuItemImages: {
-                  101: validImgFile.path, // Zinger burger has image
-                  // 102 (Beef Smash) has 0 images
-                },
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: WarmCounterTheme.lightTheme,
+          home: Scaffold(
+            body: CounterBillingWorkspace(
+              currentStaff: testStaff,
+              businessDayId: 1,
+              shiftId: 1,
+              initialCategories: testCategories,
+              initialMenuItems: testMenuItems,
+              initialDeals: testDeals,
+              initialMenuItemImages: {
+                101: validImgFile.path, // Zinger burger has image
+                // 102 (Beef Smash) has 0 images
+              },
+              imageBuilder: (context, file) => Image.file(
+                file,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => const Icon(Icons.restaurant_outlined),
               ),
             ),
           ),
-        );
-        await Future<void>.delayed(const Duration(milliseconds: 50));
-        await tester.pump();
-      });
+        ),
+      );
+      await tester.pump();
 
       // Zinger Burger has an Image widget
       final zingerTile = find.byKey(const ValueKey('menu_item_tile_101'));

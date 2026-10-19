@@ -47,6 +47,7 @@ class CounterBillingWorkspace extends StatefulWidget {
     this.initialNextTokenNumber,
     this.initialMenuItemImages,
     this.initialDealImages,
+    this.imageBuilder,
   });
 
   final OrderAndCheckoutController? orderController;
@@ -67,6 +68,7 @@ class CounterBillingWorkspace extends StatefulWidget {
   final int? initialNextTokenNumber;
   final Map<int, String>? initialMenuItemImages;
   final Map<int, String>? initialDealImages;
+  final Widget Function(BuildContext context, File file)? imageBuilder;
 
   @override
   State<CounterBillingWorkspace> createState() => _CounterBillingWorkspaceState();
@@ -938,17 +940,15 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
   }
 
   Widget _buildSafeImage(File file, {required Widget Function() placeholder}) {
-    try {
-      if (!file.existsSync()) return placeholder();
-      final bytes = file.readAsBytesSync();
-      return Image.memory(
-        Uint8List.fromList(bytes),
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => placeholder(),
-      );
-    } catch (_) {
-      return placeholder();
+    if (!file.existsSync()) return placeholder();
+    if (widget.imageBuilder != null) {
+      return widget.imageBuilder!(context, file);
     }
+    return Image.file(
+      file,
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) => placeholder(),
+    );
   }
 
   Widget _buildMenuItemTile(MenuItem item) {
