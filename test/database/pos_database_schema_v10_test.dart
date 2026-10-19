@@ -37,8 +37,13 @@ void main() {
     expect((await updated.getMenuItems(activeOnly: true)).single.id, item.id);
     final group = await updated.createModifierGroup(menuItemId: item.id, name: 'Sauce', isRequired: true);
     expect((await updated.getModifierGroups()).single.id, group.id);
+    final normal = await updated.createModifier(menuItemId: item.id, name: 'Normal sauce', rawIngredientId: mayo.id);
+    // Reapply the upgrade to an already expanded schema: DDL and conversion
+    // must be idempotent, preserving new zero-delta options.
+    await upgradedDb.execute('PRAGMA user_version = 9');
     await upgraded.close();
     final reopened = CatalogAndRecipeController(database: await upgraded.initialize());
     expect((await reopened.getModifierGroups()).single.id, group.id);
+    expect((await reopened.getModifiers()).singleWhere((m) => m.id == normal.id).ingredientQtyDelta, 0);
   });
 }

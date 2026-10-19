@@ -23,7 +23,7 @@ void main() {
       businessDayId: 1, shiftId: 1,
       initialCategories: const [MenuCategory(id: 1, name: 'Burgers', displayOrder: 0, colorHex: '#000000')],
       initialMenuItems: const [MenuItem(id: 1, categoryId: 1, name: 'Burger', basePrice: 300)],
-      initialDeals: const [Deal(id: 1, name: 'Meal', basePrice: 300, items: [DealItem(id: 1, dealId: 1, groupName: 'Main', defaultMenuItemId: 1)])],
+      initialDeals: [Deal(id: 1, name: 'Meal', basePrice: 300, createdAt: DateTime(2026), items: [DealItem(id: 1, dealId: 1, groupName: 'Main', defaultMenuItemId: 1)])],
       initialModifiers: const [Modifier(id: 1, menuItemId: 1, name: 'Extra sauce', groupId: 1, group: group, priceDelta: 30)],
     ))));
     await tester.pumpAndSettle();
