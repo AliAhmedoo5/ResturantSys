@@ -345,8 +345,12 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
 
   Future<void> _toggleMenuItemActive(MenuItem item, bool active) async {
     if (widget.controller != null) {
-      await widget.controller!.toggleMenuItemActive(item.id, active);
-      await _loadAllCatalogData();
+      try {
+        await widget.controller!.toggleMenuItemActive(item.id, active);
+        await _loadAllCatalogData();
+      } on StateError catch (error) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+      }
     } else {
       setState(() {
         final idx = _menuItems.indexWhere((m) => m.id == item.id);
@@ -1408,7 +1412,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
           for (final group in _modifierGroups)
             ListTile(
               title: Text(group.name),
-              subtitle: Text('${_menuItems.where((item) => item.id == group.menuItemId).firstOrNull?.name ?? 'Menu item'} · ${group.selectionMode} · ${group.minSelected}–${group.maxSelected}${group.isRequired ? ' · Required' : ''}'),
+              subtitle: Text('${_allMenuItems.where((item) => item.id == group.menuItemId).firstOrNull?.name ?? 'Menu item'} · ${group.selectionMode} · ${group.minSelected}–${group.maxSelected}${group.isRequired ? ' · Required' : ''}'),
               trailing: IconButton(
                 key: ValueKey('edit_modifier_group_${group.id}'),
                 tooltip: 'Edit modifier group',
