@@ -442,10 +442,9 @@ void main() {
                 101: validImgFile.path, // Zinger burger has image
                 // 102 (Beef Smash) has 0 images
               },
-              imageBuilder: (context, file) => Image.file(
-                file,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => const Icon(Icons.restaurant_outlined),
+              imageBuilder: (context, file) => Container(
+                key: const ValueKey('catalog_image_thumbnail'),
+                child: Text(file.path),
               ),
             ),
           ),
@@ -453,9 +452,9 @@ void main() {
       );
       await tester.pump();
 
-      // Zinger Burger has an Image widget
+      // Zinger Burger has a primary thumbnail rendered via imageBuilder
       final zingerTile = find.byKey(const ValueKey('menu_item_tile_101'));
-      expect(find.descendant(of: zingerTile, matching: find.byType(Image)), findsOneWidget);
+      expect(find.descendant(of: zingerTile, matching: find.byKey(const ValueKey('catalog_image_thumbnail'))), findsOneWidget);
 
       // Beef Smash has placeholder icon
       final beefTile = find.byKey(const ValueKey('menu_item_tile_102'));

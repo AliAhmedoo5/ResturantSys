@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
@@ -38,6 +39,7 @@ class SupervisorCatalogWorkspace extends StatefulWidget {
     this.initialModifiers,
     this.initialModifierGroups,
     this.initialDiscounts,
+    this.imageBuilder,
   });
 
   final CatalogAndRecipeController? controller;
@@ -49,6 +51,7 @@ class SupervisorCatalogWorkspace extends StatefulWidget {
   final List<Modifier>? initialModifiers;
   final List<ModifierGroup>? initialModifierGroups;
   final List<DiscountPreset>? initialDiscounts;
+  final Widget Function(BuildContext context, File file)? imageBuilder;
 
   @override
   State<SupervisorCatalogWorkspace> createState() => _SupervisorCatalogWorkspaceState();
@@ -319,6 +322,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
         entityType: entityType,
         entityId: entityId,
         entityName: entityName,
+        imageBuilder: widget.imageBuilder,
       ),
     );
   }
