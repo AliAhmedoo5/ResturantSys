@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../../../core/auth/staff.dart';
 import '../../../core/catalog/catalog_image.dart';
