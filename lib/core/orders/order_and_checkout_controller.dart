@@ -421,14 +421,24 @@ class OrderAndCheckoutController {
       final deliveryFeePaisa = deliveryArea?.deliveryFeePaisa ?? 0;
       final grandTotalPaisa = PaisaEngine.rupeesToPaisa(totals.grandTotal) + deliveryFeePaisa;
       final grandTotal = PaisaEngine.paisaToRupees(grandTotalPaisa);
+      var cashRoundingPaisa = 0;
       if (deliveryArea != null) {
-        final paid = payments.fold<int>(0, (sum, p) => sum + PaisaEngine.rupeesToPaisa(p.amountTendered - p.changeReturned));
-        if (payments.any((p) => !p.amountTendered.isFinite || !p.changeReturned.isFinite || p.amountTendered < 0 || p.changeReturned < 0 || p.changeReturned > p.amountTendered) || paid != grandTotalPaisa) {
-          throw const DeliveryCheckoutException('Payment must cover the food total and fixed delivery fee exactly. Your cart is unchanged.');
+        if (payments.any((p) => !p.amountTendered.isFinite || !p.changeReturned.isFinite || p.amountTendered < 0 || p.changeReturned < 0 || p.changeReturned > p.amountTendered || p.method == PaymentMethod.split)) {
+          throw const DeliveryCheckoutException('Enter valid individual payment tenders. Your cart is unchanged.');
         }
+        final digitalPaid = payments.where((p) => p.method != PaymentMethod.cash).fold<int>(0,
+          (sum, p) => sum + PaisaEngine.rupeesToPaisa(p.amountTendered) - PaisaEngine.rupeesToPaisa(p.changeReturned));
+        final cashPaid = payments.where((p) => p.method == PaymentMethod.cash).fold<int>(0,
+          (sum, p) => sum + PaisaEngine.rupeesToPaisa(p.amountTendered) - PaisaEngine.rupeesToPaisa(p.changeReturned));
+        final hasCash = payments.any((p) => p.method == PaymentMethod.cash);
+        final cashExact = grandTotalPaisa - digitalPaid;
+        final cashDue = hasCash ? ((cashExact + 50) ~/ 100) * 100 : 0;
+        if (digitalPaid > grandTotalPaisa || (hasCash ? cashPaid != cashDue : digitalPaid != grandTotalPaisa)) {
+          throw const DeliveryCheckoutException('Payment must cover the food total and fixed delivery fee, with only the cash balance rounded to whole rupees. Your cart is unchanged.');
+        }
+        cashRoundingPaisa = hasCash ? cashDue - cashExact : 0;
         await DeliveryController.rememberAddress(txn, delivery!);
-      }
-      for (final item in items) { await _validateCartItem(item, txn); }
+      }      for (final item in items) { await _validateCartItem(item, txn); }
       // 1. Daily Sequential Token
       final tokenNumber = await getNextTokenNumber(businessDayId, txn);
 
@@ -446,6 +456,7 @@ class OrderAndCheckoutController {
           'discount_id': discount?.id,
           'tax_amount': totals.taxAmount,
           'grand_total': grandTotal,
+          'cash_rounding_paisa': cashRoundingPaisa,
           'delivery_area_id': deliveryArea?.id,
           'delivery_area_name_snapshot': deliveryArea?.name,
           'delivery_fee_paisa': deliveryFeePaisa,
@@ -458,6 +469,12 @@ class OrderAndCheckoutController {
         },
       );
 
+      if (cashRoundingPaisa != 0) {
+        await txn.insert(PosDatabaseConstants.tableRoundingVarianceLedger, {
+          'order_id': orderId, 'shift_id': shiftId, 'cash_rounding_paisa': cashRoundingPaisa,
+          'reason': 'Delivery checkout cash balance half-up rounding', 'created_at': formattedNow,
+        });
+      }
       // 3. Commit Order Items
       final createdOrderItems = <OrderItem>[];
       for (final cartItem in items) {
@@ -557,6 +574,7 @@ class OrderAndCheckoutController {
         discountId: discount?.id,
         taxAmount: totals.taxAmount,
         grandTotal: grandTotal,
+        cashRoundingPaisa: cashRoundingPaisa,
         deliveryAreaId: deliveryArea?.id,
         deliveryAreaName: deliveryArea?.name,
         deliveryFeePaisa: deliveryFeePaisa,
@@ -1079,4 +1097,5 @@ class OrderAndCheckoutController {
     return OrderVoid.fromMap(rows.first);
   }
 }
+
 

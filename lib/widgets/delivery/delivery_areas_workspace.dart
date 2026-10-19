@@ -1,3 +1,4 @@
+import '../../core/theme/warm_counter_typography.dart';
 import 'package:flutter/material.dart';
 import '../../core/delivery/delivery_controller.dart';
 
@@ -46,6 +47,7 @@ class _DeliveryAreasWorkspaceState extends State<DeliveryAreasWorkspace> {
         title: Text('${area.name} (${area.code}) • ${area.isActive ? "Active" : "Inactive"}'),
         subtitle: Text('${area.coverageDescription}\nFee Rs ${(area.deliveryFeePaisa / 100).toStringAsFixed(2)} • Minimum Rs ${(area.minOrderPaisa / 100).toStringAsFixed(2)}'),
         isThreeLine: true,
+        subtitleTextStyle: WarmCounterTypography.tabularNumbers.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
         trailing: Row(mainAxisSize: MainAxisSize.min, children: [IconButton(tooltip: 'Edit area', onPressed: () => _edit(area), icon: const Icon(Icons.edit)),
           IconButton(tooltip: 'Archive area', onPressed: () => _archive(area), icon: const Icon(Icons.archive_outlined))]));
       })),
@@ -92,10 +94,11 @@ class _AreaDialogState extends State<_AreaDialog> {
       TextFormField(controller: _code, decoration: const InputDecoration(labelText: 'Area code'), validator: (v) => v!.trim().isEmpty ? 'Enter a code' : null),
       TextFormField(controller: _coverage, decoration: const InputDecoration(labelText: 'Coverage description'), maxLines: 2),
       for (final field in [(_fee, 'Delivery fee (paisa)'), (_minimum, 'Minimum food order (paisa)')])
-        TextFormField(controller: field.$1, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: field.$2, helperText: '100 paisa = Rs 1.00'),
+        TextFormField(controller: field.$1, style: WarmCounterTypography.tabularNumbers, textAlign: TextAlign.right, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: field.$2, helperText: '100 paisa = Rs 1.00'),
           validator: (v) => int.tryParse(v ?? '') == null || int.parse(v!) < 0 ? 'Enter non-negative whole paisa' : null),
       SwitchListTile(title: const Text('Active for delivery checkout'), value: _active, onChanged: _saving ? null : (v) => setState(() => _active = v)),
       if (_error != null) Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
     ])))), actions: [TextButton(onPressed: _saving ? null : () => Navigator.pop(context), child: const Text('Cancel')),
       FilledButton(onPressed: _saving ? null : _save, child: Text(_saving ? 'Saving…' : 'Save area'))]);
 }
+

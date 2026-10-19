@@ -71,9 +71,9 @@ class DeliveryController {
   }
 
   Future<List<DeliveryArea>> getAreas({bool activeOnly = false, bool includeArchived = false}) async {
+    final conditions = [if (!includeArchived || activeOnly) 'archived_at IS NULL', if (activeOnly) 'is_active = 1'];
     final rows = await database.query('delivery_areas',
-      where: [if (!includeArchived || activeOnly) 'archived_at IS NULL', if (activeOnly) 'is_active = 1'].join(' AND ').isEmpty
-          ? null : [if (!includeArchived || activeOnly) 'archived_at IS NULL', if (activeOnly) 'is_active = 1'].join(' AND '),
+      where: conditions.isEmpty ? null : conditions.join(' AND '),
       orderBy: 'name COLLATE NOCASE, id');
     return rows.map(DeliveryArea.fromMap).toList();
   }
@@ -140,4 +140,5 @@ class DeliveryCheckoutException implements Exception {
   @override
   String toString() => message;
 }
+
 

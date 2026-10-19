@@ -322,6 +322,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
     final completed = await showDialog<bool>(
       context: context,
       builder: (ctx) => TenderCheckoutDialog(
+        roundPhysicalCash: _selectedDiningType == DiningType.delivery,
         grandTotal: totals.grandTotal + (_deliveryDetails?.quotedFeePaisa ?? 0) / 100,
         onCompleteCheckout: (tenders) async {
             if (widget.orderController != null) {
@@ -1296,4 +1297,5 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
     );
   }
 }
+
 

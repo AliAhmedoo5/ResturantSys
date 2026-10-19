@@ -1,3 +1,4 @@
+import '../../core/orders/paisa_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/orders/order_and_checkout_controller.dart';
@@ -11,9 +12,11 @@ class TenderCheckoutDialog extends StatefulWidget {
     super.key,
     required this.grandTotal,
     required this.onCompleteCheckout,
+    this.roundPhysicalCash = false,
   });
 
   final double grandTotal;
+  final bool roundPhysicalCash;
   final Future<void> Function(List<PaymentTender> tenders) onCompleteCheckout;
 
   @override
@@ -38,9 +41,10 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
   @override
   void initState() {
     super.initState();
-    _cashTenderController.text = widget.grandTotal.toStringAsFixed(0);
+    _cashTenderController.text = _cashDue.toStringAsFixed(0);
     _splitCashController.text = (widget.grandTotal / 2).toStringAsFixed(0);
-    _splitElectronicController.text = (widget.grandTotal - (widget.grandTotal / 2)).toStringAsFixed(0);
+    _splitElectronicController.text = (widget.grandTotal - (widget.grandTotal / 2)).toStringAsFixed(widget.roundPhysicalCash ? 2 : 0);
+    if (widget.roundPhysicalCash) _splitCashController.text = (_splitDue - _splitElectronicAmount).toStringAsFixed(0);
   }
 
   @override
@@ -52,13 +56,19 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
     super.dispose();
   }
 
+  double _roundCash(double amount) => widget.roundPhysicalCash
+      ? ((PaisaEngine.rupeesToPaisa(amount) + 50) ~/ 100).toDouble() : amount;
+  double get _cashDue => _roundCash(widget.grandTotal);
+  double get _splitDue => widget.roundPhysicalCash
+      ? _splitElectronicAmount + _roundCash(widget.grandTotal - _splitElectronicAmount) : widget.grandTotal;
+
   double get _cashTenderAmount {
     return double.tryParse(_cashTenderController.text) ?? 0.0;
   }
 
   double get _cashReturnChange {
     final tendered = _cashTenderAmount;
-    final change = tendered - widget.grandTotal;
+    final change = tendered - _cashDue;
     return change > 0 ? change : 0.0;
   }
 
@@ -273,7 +283,7 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
           spacing: WarmCounterSpacing.space8,
           runSpacing: WarmCounterSpacing.space8,
           children: [
-            _buildDenominationChip(widget.grandTotal, 'Exact Cash'),
+            _buildDenominationChip(_cashDue, 'Exact Cash'),
             _buildDenominationChip(500.0, 'Rs 500'),
             _buildDenominationChip(1000.0, 'Rs 1,000'),
             _buildDenominationChip(2000.0, 'Rs 2,000'),
@@ -415,7 +425,7 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
   }
 
   Widget _buildSplitTenderBody() {
-    final isMatched = (_splitTotalPaid - widget.grandTotal).abs() < 0.01;
+    final isMatched = (_splitTotalPaid - _splitDue).abs() < 0.01;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -426,6 +436,7 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
         ),
         const SizedBox(height: WarmCounterSpacing.space12),
 
+        if (widget.roundPhysicalCash) Text('Cash balance rounds to whole rupees. Digital amounts stay exact.', style: WarmCounterTypography.caption),
         // Cash Portion
         const Text('1. Cash Portion Amount:', style: WarmCounterTypography.secondaryLabel),
         const SizedBox(height: 4),
@@ -481,7 +492,7 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               Text(
-                isMatched ? 'Balanced' : 'Remaining: Rs ${_currencyFormat.format(widget.grandTotal - _splitTotalPaid)}',
+                isMatched ? 'Balanced' : 'Remaining: Rs ${_currencyFormat.format(_splitDue - _splitTotalPaid)}',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: isMatched ? Colors.green : Colors.red,
@@ -503,7 +514,7 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
 
     if (_selectedMethod == PaymentMethod.cash) {
       final cash = _cashTenderAmount;
-      if (cash < widget.grandTotal) {
+      if (cash < _cashDue) {
         setState(() => _errorMessage = 'Cash tendered is less than Grand Total.');
         return;
       }
@@ -522,7 +533,7 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
     } else if (_selectedMethod == PaymentMethod.split) {
       final cashPortion = _splitCashAmount;
       final elecPortion = _splitElectronicAmount;
-      if ((cashPortion + elecPortion - widget.grandTotal).abs() > 0.01) {
+      if (cashPortion < 0 || elecPortion < 0 || elecPortion > widget.grandTotal || (cashPortion + elecPortion - _splitDue).abs() > 0.01) {
         setState(() => _errorMessage = 'Split tenders do not match Grand Total.');
         return;
       }
@@ -559,3 +570,4 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
     }
   }
 }
+
