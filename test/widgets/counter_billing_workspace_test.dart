@@ -446,8 +446,7 @@ void main() {
           ),
         ),
       );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pumpAndSettle();
 
       // Zinger Burger has an Image widget
       final zingerTile = find.byKey(const ValueKey('menu_item_tile_101'));
@@ -459,11 +458,9 @@ void main() {
 
       // Both items are functional: tap Zinger Burger then Beef Smash
       await tester.tap(zingerTile);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pumpAndSettle();
       await tester.tap(beefTile);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pumpAndSettle();
 
       expect(find.text('Subtotal'), findsOneWidget);
       expect(find.text('Rs 1,200.00'), findsWidgets); // 550 + 650

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../../../core/auth/staff.dart';
 import '../../../core/catalog/catalog_image.dart';
@@ -173,6 +174,27 @@ class _CatalogPhotoGalleryDialogState extends State<CatalogPhotoGalleryDialog> {
     );
   }
 
+  Widget _buildThumbnailPreview(File file) {
+    const fallback = Center(
+      child: Icon(
+        Icons.broken_image_outlined,
+        color: WarmCounterColors.lightSecondaryText,
+        size: 32,
+      ),
+    );
+    try {
+      if (!file.existsSync()) return fallback;
+      final bytes = file.readAsBytesSync();
+      return Image.memory(
+        Uint8List.fromList(bytes),
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => fallback,
+      );
+    } catch (_) {
+      return fallback;
+    }
+  }
+
   Widget _buildImageTile(CatalogImage image) {
     final file = widget.mediaService.resolveFile(image.relativeFilePath);
 
@@ -199,25 +221,7 @@ class _CatalogPhotoGalleryDialogState extends State<CatalogPhotoGalleryDialog> {
               width: 72,
               height: 72,
               color: WarmCounterColors.lightSurfaceMuted,
-              child: file.existsSync()
-                  ? Image.file(
-                      file,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => const Center(
-                        child: Icon(
-                          Icons.broken_image_outlined,
-                          color: WarmCounterColors.lightSecondaryText,
-                          size: 32,
-                        ),
-                      ),
-                    )
-                  : const Center(
-                      child: Icon(
-                        Icons.broken_image_outlined,
-                        color: WarmCounterColors.lightSecondaryText,
-                        size: 32,
-                      ),
-                    ),
+              child: _buildThumbnailPreview(file),
             ),
           ),
           const SizedBox(width: WarmCounterSpacing.space16),

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -937,6 +938,20 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
     );
   }
 
+  Widget _buildSafeImage(File file, {required Widget Function() placeholder}) {
+    try {
+      if (!file.existsSync()) return placeholder();
+      final bytes = file.readAsBytesSync();
+      return Image.memory(
+        Uint8List.fromList(bytes),
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => placeholder(),
+      );
+    } catch (_) {
+      return placeholder();
+    }
+  }
+
   Widget _buildMenuItemTile(MenuItem item) {
     final imageFile = _resolveImageFile(_menuItemImages[item.id]);
 
@@ -956,11 +971,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
           children: [
             Expanded(
               child: imageFile != null
-                  ? Image.file(
-                      imageFile,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => _buildItemPlaceholder(item),
-                    )
+                  ? _buildSafeImage(imageFile, placeholder: () => _buildItemPlaceholder(item))
                   : _buildItemPlaceholder(item),
             ),
             Padding(
@@ -1018,11 +1029,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
                 fit: StackFit.expand,
                 children: [
                   imageFile != null
-                      ? Image.file(
-                          imageFile,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => _buildDealPlaceholder(deal),
-                        )
+                      ? _buildSafeImage(imageFile, placeholder: () => _buildDealPlaceholder(deal))
                       : _buildDealPlaceholder(deal),
                   Positioned(
                     top: 6,
