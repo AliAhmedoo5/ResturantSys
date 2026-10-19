@@ -45,6 +45,7 @@ void main() {
     expect((await catalog.getRawIngredient(mayo.id)).currentStock, 150);
     await sell([CartItem(menuItem: item, selectedModifiers: [normal])]);
     expect((await catalog.getRawIngredient(mayo.id)).currentStock, 130);
+    await expectLater(sell([CartItem(menuItem: item, selectedModifiers: [normal.copyWith(menuItemId: 999)])]), throwsStateError);
     await catalog.toggleMenuItemActive(item.id, false);
     await expectLater(sell([CartItem(menuItem: item, selectedModifiers: [normal])]), throwsStateError);
     expect((await orders.getOrders()).length, 3);

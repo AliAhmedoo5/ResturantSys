@@ -38,7 +38,7 @@ void main() {
     final group = await updated.createModifierGroup(menuItemId: item.id, name: 'Sauce', isRequired: true);
     expect((await updated.getModifierGroups()).single.id, group.id);
     await upgraded.close();
-    await upgraded.initialize();
-    expect((await updated.getModifierGroups()).single.id, group.id);
+    final reopened = CatalogAndRecipeController(database: await upgraded.initialize());
+    expect((await reopened.getModifierGroups()).single.id, group.id);
   });
 }
