@@ -245,6 +245,14 @@ void main() {
         'created_at': DateTime.now().toIso8601String(),
       });
 
+      final portionId = await db.insert('raw_ingredients', {
+        'name': 'Prepared portion', 'storage_unit': 'count', 'current_stock': 100,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+      await db.insert('recipes', {
+        'menu_item_id': itemId, 'raw_ingredient_id': portionId,
+        'quantity_per_recipe_unit': 1, 'created_at': DateTime.now().toIso8601String(),
+      });
       final dummyItem = MenuItem(
         id: itemId,
         categoryId: catId,
