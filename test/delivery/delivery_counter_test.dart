@@ -17,7 +17,7 @@ import 'package:resturant_sys/widgets/delivery/delivery_details_dialog.dart';
 
 void main() {
   testWidgets('Phone prefill, saved-address choice, and stale delivery checkout retain the counter cart', (tester) async {
-    tester.view.physicalSize = const Size(1366, 900);
+    tester.view.physicalSize = const Size(1366, 768);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -104,4 +104,5 @@ void main() {
     expect(tester.widget<TenderCheckoutDialog>(find.byType(TenderCheckoutDialog)).grandTotal, 500);
   });
 }
+
 
