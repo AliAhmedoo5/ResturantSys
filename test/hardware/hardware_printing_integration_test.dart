@@ -1,3 +1,4 @@
+import 'package:resturant_sys/core/catalog/storage_unit.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
@@ -74,6 +75,7 @@ void main() {
       );
 
       // 3. Commit order transaction to SQLite
+      await publishFixtures(catalogController);
       final checkoutResult = await orderController.checkoutOrder(
         businessDayId: day.id,
         shiftId: shift.id,
@@ -144,6 +146,7 @@ void main() {
       hardwareAdapter.shouldFailCounterPrint = true;
 
       // Checkout commits to SQLite successfully
+      await publishFixtures(catalogController);
       final checkoutResult = await orderController.checkoutOrder(
         businessDayId: day.id,
         shiftId: shift.id,
@@ -188,4 +191,16 @@ void main() {
       expect(hardwareAdapter.counterPrintedBytes.length, equals(2));
     });
   });
+}
+
+// Existing checkout scenarios use publishable fixtures. Missing recipes use a
+// separate counted ingredient so the scenario's stock assertions stay unchanged.
+Future<void> publishFixtures(CatalogAndRecipeController catalog) async {
+  for (final item in await catalog.getMenuItems()) {
+    if ((await catalog.getRecipeForMenuItem(item.id)).isEmpty) {
+      final ingredient = await catalog.createRawIngredient(name: 'Fixture portion ${item.id}', storageUnit: StorageUnit.count, currentStock: 1000);
+      await catalog.setRecipeForMenuItem(menuItemId: item.id, items: [(rawIngredientId: ingredient.id, quantity: 1.0)]);
+    }
+    await catalog.toggleMenuItemActive(item.id, true);
+  }
 }

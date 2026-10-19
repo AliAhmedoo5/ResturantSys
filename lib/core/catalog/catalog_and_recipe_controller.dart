@@ -4,6 +4,7 @@ import 'discount_preset.dart';
 import 'menu_category.dart';
 import 'menu_item.dart';
 import 'modifier.dart';
+import 'modifier_group.dart';
 import 'raw_ingredient.dart';
 import 'recipe_item.dart';
 import 'storage_unit.dart';
@@ -392,6 +393,44 @@ class CatalogAndRecipeController {
   // Modifiers CRUD
   // ---------------------------------------------------------------------------
 
+  Future<List<ModifierGroup>> getModifierGroups({int? menuItemId, DatabaseExecutor? executor}) async {
+    final rows = await (executor ?? database).query('modifier_groups', where: menuItemId == null ? null : 'menu_item_id = ?', whereArgs: menuItemId == null ? null : [menuItemId], orderBy: 'id');
+    return rows.map(ModifierGroup.fromMap).toList();
+  }
+
+  Future<ModifierGroup> createModifierGroup({required int menuItemId, required String name, String selectionMode = 'SINGLE', int minSelected = 0, int maxSelected = 1, bool isRequired = false}) async {
+    final group = ModifierGroup(id: 0, menuItemId: menuItemId, name: name, selectionMode: selectionMode, minSelected: minSelected, maxSelected: maxSelected, isRequired: isRequired);
+    group.validate();
+    final id = await database.insert('modifier_groups', group.toMap());
+    return ModifierGroup.fromMap({'id': id, ...group.toMap()});
+  }
+
+  Future<void> updateModifierGroup(ModifierGroup group) async {
+    group.validate();
+    await database.transaction((txn) async {
+      final options = await txn.query('modifiers', where: 'group_id = ? AND menu_item_id != ?', whereArgs: [group.id, group.menuItemId]);
+      if (options.isNotEmpty) throw StateError('A group cannot move away from its modifier menu item.');
+      await txn.update('modifier_groups', group.toMap(), where: 'id = ?', whereArgs: [group.id]);
+    });
+  }
+
+  Future<void> _validateModifier({required DatabaseExecutor executor, int? menuItemId, int? groupId, int? rawIngredientId, required double quantity, required double price}) async {
+    if (!quantity.isFinite || !price.isFinite || (rawIngredientId == null && quantity != 0)) throw ArgumentError('Modifier deltas must be finite and reference an ingredient.');
+    if (groupId != null) {
+      final rows = await executor.query('modifier_groups', where: 'id = ? AND menu_item_id = ?', whereArgs: [groupId, menuItemId]);
+      if (rows.isEmpty) throw StateError('The modifier group must belong to the same menu item.');
+    }
+  }
+
+  Future<Modifier> _modifierFromRow(Map<String, Object?> row, DatabaseExecutor executor) async {
+    ModifierGroup? group;
+    if (row['group_id'] != null) {
+      final groups = await executor.query('modifier_groups', where: 'id = ?', whereArgs: [row['group_id']]);
+      if (groups.isNotEmpty) group = ModifierGroup.fromMap(groups.first);
+    }
+    return Modifier.fromMap(row, group: group);
+  }
+
   Future<List<Modifier>> getModifiers({
     int? menuItemId,
     bool? activeOnly,
@@ -422,22 +461,25 @@ class CatalogAndRecipeController {
       ORDER BY m.name ASC;
     ''', args);
 
-    return rows.map((r) => Modifier.fromMap(r)).toList();
+    return Future.wait(rows.map((r) => _modifierFromRow(r, database)));
   }
 
   Future<Modifier> createModifier({
     int? menuItemId,
+    int? groupId,
     required String name,
     double priceDelta = 0.0,
     int? rawIngredientId,
     double ingredientQtyDelta = 0.0,
     bool isActive = true,
   }) async {
+    await _validateModifier(executor: database, menuItemId: menuItemId, groupId: groupId, rawIngredientId: rawIngredientId, quantity: ingredientQtyDelta, price: priceDelta);
     final now = _formatTimestamp(DateTime.now());
     final id = await database.insert(
       PosDatabaseConstants.tableModifiers,
       {
         'menu_item_id': menuItemId,
+        'group_id': groupId,
         'name': name.trim(),
         'price_delta': priceDelta,
         'raw_ingredient_id': rawIngredientId,
@@ -459,14 +501,16 @@ class CatalogAndRecipeController {
       WHERE m.id = ?;
     ''', [id]);
 
-    return Modifier.fromMap(rows.first);
+    return _modifierFromRow(rows.first, database);
   }
 
   Future<Modifier> updateModifier(Modifier modifier) async {
+    await _validateModifier(executor: database, menuItemId: modifier.menuItemId, groupId: modifier.groupId, rawIngredientId: modifier.rawIngredientId, quantity: modifier.ingredientQtyDelta, price: modifier.priceDelta);
     await database.update(
       PosDatabaseConstants.tableModifiers,
       {
         'menu_item_id': modifier.menuItemId,
+        'group_id': modifier.groupId,
         'name': modifier.name.trim(),
         'price_delta': modifier.priceDelta,
         'raw_ingredient_id': modifier.rawIngredientId,
@@ -489,7 +533,7 @@ class CatalogAndRecipeController {
       WHERE m.id = ?;
     ''', [modifier.id]);
 
-    return Modifier.fromMap(rows.first);
+    return _modifierFromRow(rows.first, database);
   }
 
   Future<void> deleteModifier(int id) async {

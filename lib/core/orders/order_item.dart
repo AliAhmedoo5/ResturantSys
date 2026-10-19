@@ -13,6 +13,7 @@ class OrderItem {
     required this.totalPrice,
     this.modifiersJson,
     this.dealChoicesJson,
+    this.bomJson,
     required this.createdAt,
   });
 
@@ -26,6 +27,7 @@ class OrderItem {
   final double totalPrice;
   final String? modifiersJson;
   final String? dealChoicesJson;
+  final String? bomJson;
   final DateTime createdAt;
 
   bool get isDeal => dealId != null;
@@ -64,6 +66,7 @@ class OrderItem {
       totalPrice: (map['total_price'] as num).toDouble(),
       modifiersJson: map['modifiers_json'] as String?,
       dealChoicesJson: map['deal_choices_json'] as String?,
+      bomJson: map['bom_json'] as String?,
       createdAt: DateTime.parse(map['created_at'] as String),
     );
   }
@@ -79,6 +82,7 @@ class OrderItem {
       'total_price': totalPrice,
       'modifiers_json': modifiersJson,
       'deal_choices_json': dealChoicesJson,
+      'bom_json': bomJson,
       'created_at': createdAt.toIso8601String(),
     };
   }

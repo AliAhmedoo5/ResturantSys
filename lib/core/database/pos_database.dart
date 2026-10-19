@@ -118,6 +118,7 @@ class PosDatabase {
     await _createProcurementAndWastageTables(db);
     await _createVendorKhataTables(db);
     await _createV9Tables(db);
+    await _upgradeToVersion10(db);
   }
 
   Future<void> _createOperationalAccountingTables(DatabaseExecutor executor) async {
@@ -425,6 +426,37 @@ class PosDatabase {
     if (oldVersion < 9) {
       await _upgradeToVersion9(db);
     }
+    if (oldVersion < 10) await _upgradeToVersion10(db);
+  }
+
+  Future<void> _upgradeToVersion10(DatabaseExecutor db) async {
+    await db.execute("""
+      CREATE TABLE modifier_groups (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        menu_item_id INTEGER NOT NULL REFERENCES menu_items(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        selection_mode TEXT NOT NULL CHECK(selection_mode IN ('SINGLE','MULTIPLE')),
+        min_selected INTEGER NOT NULL CHECK(min_selected >= 0),
+        max_selected INTEGER NOT NULL CHECK(max_selected >= 1 AND max_selected >= min_selected),
+        is_required INTEGER NOT NULL CHECK(is_required IN (0,1)),
+        CHECK(selection_mode != 'SINGLE' OR max_selected = 1)
+      )
+    """);
+    await db.execute('ALTER TABLE modifiers ADD COLUMN group_id INTEGER REFERENCES modifier_groups(id) ON DELETE RESTRICT');
+    await db.execute('ALTER TABLE order_items ADD COLUMN bom_json TEXT');
+    // Preserve legacy item-specific removal semantics once, as explicit deltas.
+    await db.execute("""
+      UPDATE modifiers SET ingredient_qty_delta = -(
+        SELECT quantity_per_recipe_unit FROM recipes r
+        WHERE r.menu_item_id = modifiers.menu_item_id AND r.raw_ingredient_id = modifiers.raw_ingredient_id
+      ) WHERE menu_item_id IS NOT NULL AND raw_ingredient_id IS NOT NULL
+        AND (ingredient_qty_delta = 0 OR lower(name) LIKE '%no %')
+        AND EXISTS (SELECT 1 FROM recipes r WHERE r.menu_item_id = modifiers.menu_item_id AND r.raw_ingredient_id = modifiers.raw_ingredient_id)
+    """);
+    // Global legacy removals need per-item quantities; keep them off the counter
+    // until a manager supplies explicit deltas.
+    await db.execute("UPDATE modifiers SET is_active = 0 WHERE menu_item_id IS NULL AND raw_ingredient_id IS NOT NULL AND (ingredient_qty_delta = 0 OR lower(name) LIKE '%no %')");
+    await db.execute("UPDATE menu_items SET is_active = 0 WHERE NOT EXISTS (SELECT 1 FROM recipes r WHERE r.menu_item_id = menu_items.id) OR EXISTS (SELECT 1 FROM recipes r WHERE r.menu_item_id = menu_items.id AND r.quantity_per_recipe_unit <= 0)");
   }
 
   Future<void> _createV9Tables(DatabaseExecutor executor) async {

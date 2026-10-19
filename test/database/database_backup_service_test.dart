@@ -160,7 +160,7 @@ void main() {
       final restoredDb = await databaseFactoryFfi.openDatabase(backupResult.localBackupPath!);
       
       final versionResult = await restoredDb.rawQuery('PRAGMA user_version;');
-      expect(versionResult.first.values.first, equals(9));
+      expect(versionResult.first.values.first, equals(PosDatabaseConstants.schemaVersion));
 
       final integrityResult = await restoredDb.rawQuery('PRAGMA integrity_check;');
       expect(integrityResult.first.values.first, equals('ok'));

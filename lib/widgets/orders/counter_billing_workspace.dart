@@ -8,6 +8,7 @@ import '../../core/catalog/discount_preset.dart';
 import '../../core/catalog/menu_category.dart';
 import '../../core/catalog/menu_item.dart';
 import '../../core/catalog/modifier.dart';
+import '../../core/catalog/modifier_group.dart';
 import '../../core/orders/cart_item.dart';
 import '../../core/orders/deal.dart';
 import '../../core/orders/dining_type.dart';
@@ -215,11 +216,14 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
       (m) => m.menuItemId == null || m.menuItemId == cartItem.menuItem!.id,
     ).toList();
 
+    final groups = widget.catalogController == null ? <ModifierGroup>[] : await widget.catalogController!.getModifierGroups(menuItemId: cartItem.menuItem!.id);
+    if (!mounted) return;
     final selected = await showDialog<List<Modifier>>(
       context: context,
       builder: (ctx) => ModifierSelectionDialog(
         itemName: cartItem.name,
         availableModifiers: itemModifiers,
+        groups: groups,
         initialSelected: cartItem.selectedModifiers,
       ),
     );

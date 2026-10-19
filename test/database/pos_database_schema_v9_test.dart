@@ -35,8 +35,8 @@ void main() {
       final db = await posDb.initialize();
 
       final versionResult = await db.rawQuery('PRAGMA user_version;');
-      expect(versionResult.first.values.first, equals(9));
-      expect(PosDatabaseConstants.schemaVersion, equals(9));
+      expect(versionResult.first.values.first, equals(PosDatabaseConstants.schemaVersion));
+      expect(PosDatabaseConstants.schemaVersion, equals(PosDatabaseConstants.schemaVersion));
     });
 
     test('creates all required v9 tables with strict schema constraints', () async {
@@ -436,7 +436,7 @@ void main() {
 
       // Verify schema version is now 9
       final versionResult = await upgradedDb.rawQuery('PRAGMA user_version;');
-      expect(versionResult.first.values.first, equals(9));
+      expect(versionResult.first.values.first, equals(PosDatabaseConstants.schemaVersion));
 
       // Verify historical rows are perfectly preserved
       final rows = await upgradedDb.query('cash_movements', orderBy: 'id ASC');

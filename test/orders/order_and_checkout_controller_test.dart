@@ -66,6 +66,7 @@ void main() {
 
       // Checkout Order 1 in Day 1
       final cart1 = [CartItem(menuItem: burger, quantity: 1)];
+      await publishFixtures(catalogController);
       final result1 = await orderController.checkoutOrder(
         businessDayId: day1.id,
         shiftId: shift1.id,
@@ -86,6 +87,7 @@ void main() {
 
       // Checkout Order 2 in Day 1
       final cart2 = [CartItem(menuItem: burger, quantity: 2)];
+      await publishFixtures(catalogController);
       final result2 = await orderController.checkoutOrder(
         businessDayId: day1.id,
         shiftId: shift1.id,
@@ -116,6 +118,7 @@ void main() {
       final tokenDay2 = await orderController.getNextTokenNumber(day2.id);
       expect(tokenDay2, equals(1));
 
+      await publishFixtures(catalogController);
       final result3 = await orderController.checkoutOrder(
         businessDayId: day2.id,
         shiftId: shift2.id,
@@ -160,6 +163,7 @@ void main() {
       expect(totals.grandTotal, equals(1080.0));
 
       // Settle via Split Tender: 500 Cash, 580 Raast QR
+      await publishFixtures(catalogController);
       final result = await orderController.checkoutOrder(
         businessDayId: day.id,
         shiftId: shift.id,
@@ -221,6 +225,7 @@ void main() {
       // Order 5 burgers: needs 5 patties, but stock is only 2!
       // Soft deduction policy: does NOT throw, stock becomes 2 - 5 = -3!
       final cart = [CartItem(menuItem: burger, quantity: 5)];
+      await publishFixtures(catalogController);
       final result = await orderController.checkoutOrder(
         businessDayId: day.id,
         shiftId: shift.id,
@@ -285,6 +290,7 @@ void main() {
       );
 
       // Create Deal: "Zinger Combo" base price 600
+      await publishFixtures(catalogController);
       final deal = await orderController.createDeal(
         name: 'Zinger Combo',
         basePrice: 600.0,
@@ -332,6 +338,7 @@ void main() {
       expect(cart.first.totalPrice, equals(1300.0));
 
       // Checkout
+      await publishFixtures(catalogController);
       final result = await orderController.checkoutOrder(
         businessDayId: day.id,
         shiftId: shift.id,
@@ -394,7 +401,7 @@ void main() {
         name: 'No Mayo',
         priceDelta: 0.0,
         rawIngredientId: mayo.id,
-        ingredientQtyDelta: 0.0,
+        ingredientQtyDelta: -20.0,
       );
 
       final cart = [
@@ -408,6 +415,7 @@ void main() {
       // Base: 500 + 60 = 560
       expect(cart.first.unitPrice, equals(560.0));
 
+      await publishFixtures(catalogController);
       await orderController.checkoutOrder(
         businessDayId: day.id,
         shiftId: shift.id,
@@ -452,6 +460,7 @@ void main() {
       );
 
       // 1. Order Dine-In: packaging must NOT be deducted
+      await publishFixtures(catalogController);
       await orderController.checkoutOrder(
         businessDayId: day.id,
         shiftId: shift.id,
@@ -467,6 +476,7 @@ void main() {
       expect(checkPackaging.currentStock, equals(100.0));
 
       // 2. Order Takeaway: packaging material IS automatically deducted (1 per order)
+      await publishFixtures(catalogController);
       await orderController.checkoutOrder(
         businessDayId: day.id,
         shiftId: shift.id,
@@ -482,6 +492,7 @@ void main() {
       expect(checkPackaging.currentStock, equals(99.0));
 
       // 3. Order Delivery: packaging material IS automatically deducted
+      await publishFixtures(catalogController);
       await orderController.checkoutOrder(
         businessDayId: day.id,
         shiftId: shift.id,
@@ -545,6 +556,7 @@ void main() {
         selectedModifiers: [extraCheeseMod],
       );
 
+      await publishFixtures(catalogController);
       final checkoutRes = await orderController.checkoutOrder(
         businessDayId: day.id,
         shiftId: shift.id,
@@ -613,6 +625,7 @@ void main() {
       final cat = await catalogController.createCategory(name: 'Drinks', displayOrder: 1, colorHex: '#0000FF');
       final drink = await catalogController.createMenuItem(categoryId: cat.id, name: 'Cola', basePrice: 100.0);
 
+      await publishFixtures(catalogController);
       final checkoutRes = await orderController.checkoutOrder(
         businessDayId: day.id,
         shiftId: shift.id,
@@ -662,6 +675,7 @@ void main() {
       final cat = await catalogController.createCategory(name: 'Sides', displayOrder: 1, colorHex: '#FFFF00');
       final fries = await catalogController.createMenuItem(categoryId: cat.id, name: 'Fries', basePrice: 200.0);
 
+      await publishFixtures(catalogController);
       final checkoutRes = await orderController.checkoutOrder(
         businessDayId: day.id,
         shiftId: shift.id,
@@ -707,4 +721,16 @@ void main() {
       expect(await orderController.isCashierVoidEnabled(), isTrue);
     });
   });
+}
+
+// Existing checkout scenarios use publishable fixtures. Missing recipes use a
+// separate counted ingredient so the scenario's stock assertions stay unchanged.
+Future<void> publishFixtures(CatalogAndRecipeController catalog) async {
+  for (final item in await catalog.getMenuItems()) {
+    if ((await catalog.getRecipeForMenuItem(item.id)).isEmpty) {
+      final ingredient = await catalog.createRawIngredient(name: 'Fixture portion ${item.id}', storageUnit: StorageUnit.count, currentStock: 1000);
+      await catalog.setRecipeForMenuItem(menuItemId: item.id, items: [(rawIngredientId: ingredient.id, quantity: 1.0)]);
+    }
+    await catalog.toggleMenuItemActive(item.id, true);
+  }
 }

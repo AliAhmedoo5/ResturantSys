@@ -53,7 +53,7 @@ class _MenuItemFormDialogState extends State<MenuItemFormDialog> {
     _selectedCategoryId = widget.item?.categoryId ??
         (widget.categories.isNotEmpty ? widget.categories.first.id : null);
     _isTaxInclusive = widget.item?.isTaxInclusive ?? true;
-    _isActive = widget.item?.isActive ?? true;
+    _isActive = widget.item?.isActive ?? false;
   }
 
   @override
