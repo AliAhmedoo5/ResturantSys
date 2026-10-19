@@ -101,7 +101,7 @@ void main() {
           home: AppShell(
             session: session,
             onAuthenticatePin: (pin) async {
-              if (pin == '1234') {
+              if (pin == '123456') {
                 return const Staff(
                   id: 2,
                   name: 'Manager Ali',
@@ -130,6 +130,10 @@ void main() {
       await tester.tap(find.text('3'));
       await tester.pump();
       await tester.tap(find.text('4'));
+      await tester.pump();
+      await tester.tap(find.text('5'));
+      await tester.pump();
+      await tester.tap(find.text('6'));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('unlock_pin_button')));
       await tester.pumpAndSettle();

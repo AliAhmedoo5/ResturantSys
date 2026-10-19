@@ -1071,16 +1071,16 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Configured Manager:', style: TextStyle(fontWeight: FontWeight.w600)),
-                  Text('${_createdManager?.name ?? "Manager"} (Admin)', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  const Expanded(child: Text('Configured Manager:', style: TextStyle(fontWeight: FontWeight.w600))),
+                  Expanded(child: Text('${_createdManager?.name ?? "Manager"} (Manager)', textAlign: TextAlign.end, style: const TextStyle(fontWeight: FontWeight.bold))),
                 ],
               ),
               const SizedBox(height: 8),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Configured Primary Cashier:', style: TextStyle(fontWeight: FontWeight.w600)),
-                  Text('${_createdCashier?.name ?? "Cashier"} (Front Counter)', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  const Expanded(child: Text('Configured Primary Cashier:', style: TextStyle(fontWeight: FontWeight.w600))),
+                  Expanded(child: Text('${_createdCashier?.name ?? "Cashier"} (Front Counter)', textAlign: TextAlign.end, style: const TextStyle(fontWeight: FontWeight.bold))),
                 ],
               ),
             ],

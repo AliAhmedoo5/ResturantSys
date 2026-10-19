@@ -71,8 +71,8 @@ void main() {
 
       Staff? completedCashier;
 
-      await tester.pumpWidget(
-        MaterialApp(
+      Future<void> mountWizard() async {
+        await tester.pumpWidget(MaterialApp(
           home: Scaffold(
             body: OnboardingWizard(
               authService: authService,
@@ -83,9 +83,10 @@ void main() {
               },
             ),
           ),
-        ),
-      );
-      await tester.pumpAndSettle();
+        ));
+        await tester.pumpAndSettle();
+      }
+      await mountWizard();
 
       // --- STEP 1: Restaurant Identity ---
       expect(find.text('Step 1: Restaurant Identity'), findsOneWidget);
@@ -178,6 +179,24 @@ void main() {
 
       await tapAndWait(tester, openDayBtn);
 
+      // Simulate restarting after the recipe and Business Day were persisted.
+      final originalDay = await tester.runAsync(shiftController.getActiveBusinessDay);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await mountWizard();
+      await tapAndWait(tester, step1NextBtn);
+      await tester.enterText(managerPinInput, '1234');
+      await tester.enterText(managerConfirmPinInput, '1234');
+      await tapAndWait(tester, step2NextBtn);
+      await tester.enterText(cashierPinInput, '9876');
+      await tester.enterText(cashierConfirmPinInput, '9876');
+      await tapAndWait(tester, step3NextBtn);
+      await tester.enterText(menuItemNameInput, 'Mafia Special Burger');
+      await tapAndWait(tester, step4NextBtn);
+      await tapAndWait(tester, openDayBtn);
+      expect((await tester.runAsync(catalogController.getMenuItems))!.length, 1);
+      expect((await tester.runAsync(authService.getAllStaff))!.length, 2);
+      expect((await tester.runAsync(shiftController.getActiveBusinessDay))!.id, originalDay!.id);
+
       // Should render the Switch to Cashier prompt
       expect(find.textContaining('Switch to Cashier'), findsWidgets);
       final switchCashierBtn = find.byKey(const ValueKey('switch_to_cashier_button'));
@@ -201,6 +220,11 @@ void main() {
       // Verify active business day exists
       final activeDay = await tester.runAsync(shiftController.getActiveBusinessDay);
       expect(activeDay, isNotNull);
+      final cashier = await tester.runAsync(() => authService.authenticateAndLogin('9876'));
+      final shift = await tester.runAsync(() => shiftController.openShift(
+        staffId: cashier!.id, openingFloat: 1000,
+      ));
+      expect(shift!.businessDayId, activeDay!.id);
     });
   });
 }
