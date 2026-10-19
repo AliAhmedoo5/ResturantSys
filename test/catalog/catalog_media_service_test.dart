@@ -4,7 +4,6 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/auth/staff_role.dart';
 import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
-import 'package:resturant_sys/core/catalog/catalog_image.dart';
 import 'package:resturant_sys/core/catalog/catalog_media_service.dart';
 import 'package:resturant_sys/core/catalog/storage_unit.dart';
 import 'package:resturant_sys/core/database/pos_database.dart';
