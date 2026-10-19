@@ -199,17 +199,25 @@ class _CatalogPhotoGalleryDialogState extends State<CatalogPhotoGalleryDialog> {
               width: 72,
               height: 72,
               color: WarmCounterColors.lightSurfaceMuted,
-              child: Image.file(
-                file,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => const Center(
-                  child: Icon(
-                    Icons.broken_image_outlined,
-                    color: WarmCounterColors.lightSecondaryText,
-                    size: 32,
-                  ),
-                ),
-              ),
+              child: file.existsSync()
+                  ? Image.file(
+                      file,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => const Center(
+                        child: Icon(
+                          Icons.broken_image_outlined,
+                          color: WarmCounterColors.lightSecondaryText,
+                          size: 32,
+                        ),
+                      ),
+                    )
+                  : const Center(
+                      child: Icon(
+                        Icons.broken_image_outlined,
+                        color: WarmCounterColors.lightSecondaryText,
+                        size: 32,
+                      ),
+                    ),
             ),
           ),
           const SizedBox(width: WarmCounterSpacing.space16),
@@ -425,7 +433,17 @@ class _CatalogPhotoGalleryDialogState extends State<CatalogPhotoGalleryDialog> {
               ),
             Expanded(
               child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
+                  ? const Center(
+                      child: SizedBox(
+                        width: 28,
+                        height: 28,
+                        child: CircularProgressIndicator(
+                          value: 0.75,
+                          strokeWidth: 2.5,
+                          color: WarmCounterColors.lightPrimaryAction,
+                        ),
+                      ),
+                    )
                   : _images.isEmpty
                       ? Center(
                           child: Column(

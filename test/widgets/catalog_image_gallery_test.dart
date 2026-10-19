@@ -94,7 +94,8 @@ void main() {
           ),
         ),
       );
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
       // Empty state visible
       expect(find.text('No photos attached yet.'), findsOneWidget);
@@ -104,13 +105,15 @@ void main() {
       final addPhotoButton = find.byKey(const ValueKey('open_add_photo_button'));
       expect(addPhotoButton, findsOneWidget);
       await tester.tap(addPhotoButton);
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
       // Sample upload button
       final sampleUploadButton = find.byKey(const ValueKey('add_sample_photo_button'));
       expect(sampleUploadButton, findsOneWidget);
       await tester.tap(sampleUploadButton);
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
       // After upload, empty state disappears and primary badge is shown
       expect(find.text('No photos attached yet.'), findsNothing);
@@ -153,7 +156,8 @@ void main() {
           ),
         ),
       );
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
       // Both images listed
       expect(find.byKey(ValueKey('gallery_image_tile_${img1.id}')), findsOneWidget);
@@ -165,7 +169,8 @@ void main() {
 
       // Tap "Make Primary" on img2
       await tester.tap(find.byKey(ValueKey('set_primary_image_${img2.id}')));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
       // img2 is now primary
       expect(find.byKey(ValueKey('primary_badge_${img2.id}')), findsOneWidget);
@@ -173,7 +178,8 @@ void main() {
 
       // Delete img1
       await tester.tap(find.byKey(ValueKey('delete_image_${img1.id}')));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
       // Only img2 remains
       expect(find.byKey(ValueKey('gallery_image_tile_${img1.id}')), findsNothing);
@@ -218,7 +224,8 @@ void main() {
 
       // Tap button to open gallery dialog
       await tester.tap(managePhotosButton);
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
       // Dialog opens
       expect(find.text('Photos: Gourmet Beef Burger'), findsOneWidget);
@@ -226,7 +233,8 @@ void main() {
 
       // Close dialog
       await tester.tap(find.byKey(const ValueKey('close_photo_gallery_button')));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
       expect(find.text('Photos: Gourmet Beef Burger'), findsNothing);
     });

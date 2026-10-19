@@ -899,13 +899,16 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
 
   File? _resolveImageFile(String? relativePath) {
     if (relativePath == null || relativePath.isEmpty) return null;
+    File file;
     if (widget.mediaService != null) {
-      return widget.mediaService!.resolveFile(relativePath);
+      file = widget.mediaService!.resolveFile(relativePath);
+    } else if (widget.catalogController != null) {
+      file = widget.catalogController!.mediaService.resolveFile(relativePath);
+    } else {
+      file = File(relativePath);
     }
-    if (widget.catalogController != null) {
-      return widget.catalogController!.mediaService.resolveFile(relativePath);
-    }
-    return File(relativePath);
+    if (!file.existsSync()) return null;
+    return file;
   }
 
   Widget _buildItemPlaceholder(MenuItem item) {
