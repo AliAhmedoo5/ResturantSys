@@ -112,7 +112,7 @@ void main() {
       expect(sampleUploadButton, findsOneWidget);
       await tester.runAsync(() async {
         await tester.tap(sampleUploadButton);
-        await Future.delayed(const Duration(milliseconds: 200));
+        await Future<void>.delayed(const Duration(milliseconds: 200));
         await tester.pump();
       });
       await tester.pump();
@@ -160,7 +160,7 @@ void main() {
             ),
           ),
         );
-        await Future.delayed(const Duration(milliseconds: 50));
+        await Future<void>.delayed(const Duration(milliseconds: 50));
         await tester.pump();
       });
 
@@ -175,7 +175,7 @@ void main() {
       // Tap "Make Primary" on img2
       await tester.runAsync(() async {
         await tester.tap(find.byKey(ValueKey('set_primary_image_${img2.id}')));
-        await Future.delayed(const Duration(milliseconds: 100));
+        await Future<void>.delayed(const Duration(milliseconds: 100));
         await tester.pump();
       });
       await tester.pump();
@@ -187,7 +187,7 @@ void main() {
       // Delete img1
       await tester.runAsync(() async {
         await tester.tap(find.byKey(ValueKey('delete_image_${img1.id}')));
-        await Future.delayed(const Duration(milliseconds: 100));
+        await Future<void>.delayed(const Duration(milliseconds: 100));
         await tester.pump();
       });
       await tester.pump();

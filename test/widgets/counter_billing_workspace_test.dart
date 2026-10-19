@@ -447,7 +447,7 @@ void main() {
             ),
           ),
         );
-        await Future.delayed(const Duration(milliseconds: 50));
+        await Future<void>.delayed(const Duration(milliseconds: 50));
         await tester.pump();
       });
 
