@@ -267,7 +267,7 @@ void main() {
 
         // Expected Cash = 5000 (float) + 1500 (in) - 400 (out) = 6100.0
         final closedShift = await controller.closeShift(
-          shiftId: shift.id,
+          shiftId: shift.id, staffId: shift.staffId,
           countedCash: 6100.0,
         );
 
@@ -293,7 +293,7 @@ void main() {
 
         // Expected cash = 6000.0. Cashier counts 5800.0 (shortage of 200.0, > 100.0 threshold)
         final closedShift = await controller.closeShift(
-          shiftId: shift.id,
+          shiftId: shift.id, staffId: shift.staffId,
           countedCash: 5800.0,
         );
 
@@ -319,7 +319,7 @@ void main() {
 
         // Expected = 4000.0. Cashier counts 4250.0 (+250 overage, > 100 threshold)
         final closedShift = await controller.closeShift(
-          shiftId: shift.id,
+          shiftId: shift.id, staffId: shift.staffId,
           countedCash: 4250.0,
         );
 
@@ -329,7 +329,7 @@ void main() {
 
       test('supervisor can review and resolve flagged discrepancy shifts asynchronously', () async {
         final shift = await controller.openShift(staffId: cashierId, openingFloat: 5000.0);
-        await controller.closeShift(shiftId: shift.id, countedCash: 4800.0); // 200 shortage
+        await controller.closeShift(shiftId: shift.id, staffId: shift.staffId, countedCash: 4800.0); // 200 shortage
 
         final flaggedList = await controller.getFlaggedShifts();
         expect(flaggedList.any((s) => s.id == shift.id), isTrue);

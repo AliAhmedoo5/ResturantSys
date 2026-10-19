@@ -101,7 +101,7 @@ void main() {
           home: AppShell(
             session: session,
             onAuthenticatePin: (pin) async {
-              if (pin == '1234') {
+              if (pin == '123456') {
                 return const Staff(
                   id: 2,
                   name: 'Manager Ali',
@@ -130,6 +130,12 @@ void main() {
       await tester.tap(find.text('3'));
       await tester.pump();
       await tester.tap(find.text('4'));
+      await tester.pump();
+      await tester.tap(find.text('5'));
+      await tester.pump();
+      await tester.tap(find.text('6'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('unlock_pin_button')));
       await tester.pumpAndSettle();
 
       // Should now be unlocked
@@ -266,15 +272,16 @@ void main() {
         customPath: inMemoryDatabasePath,
         seedDefaultStaff: false,
       );
-      final db = await posDb.initialize();
+      final db = (await tester.runAsync(posDb.initialize))!;
       addTearDown(() async {
-        await posDb.close();
+        await tester.runAsync(posDb.close);
       });
 
       final authService = AuthService(database: db);
       final shiftController = ShiftAndCashController(database: db);
       final catalogController = CatalogAndRecipeController(database: db);
 
+      await tester.runAsync(() async {
       await tester.pumpWidget(
         MaterialApp(
           theme: WarmCounterTheme.lightTheme,
@@ -287,6 +294,12 @@ void main() {
           ),
         ),
       );
+            for (var attempt = 0; attempt < 500; attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        await tester.pump();
+        if (find.byType(OnboardingWizard).evaluate().isNotEmpty) break;
+      }
+      });
       await tester.pumpAndSettle();
 
       expect(find.byType(OnboardingWizard), findsOneWidget);

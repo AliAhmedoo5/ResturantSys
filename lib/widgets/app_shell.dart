@@ -59,6 +59,8 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   AppWorkspaceTab _selectedWorkspace = AppWorkspaceTab.register;
   bool _isOnboardingRequired = false;
+  bool _checkingOnboarding = false;
+  bool _onboardingCheckFailed = false;
 
   @override
   void initState() {
@@ -68,19 +70,38 @@ class _AppShellState extends State<AppShell> {
 
   Future<void> _checkOnboarding() async {
     if (widget.authService != null) {
+      setState(() {
+        _checkingOnboarding = true;
+        _onboardingCheckFailed = false;
+      });
       try {
         final required = await widget.authService!.isOnboardingRequired();
         if (mounted) {
           setState(() {
             _isOnboardingRequired = required;
+            _checkingOnboarding = false;
           });
         }
-      } catch (_) {}
+      } catch (_) {
+        if (mounted) {
+          setState(() {
+            _checkingOnboarding = false;
+            _onboardingCheckFailed = true;
+          });
+        }
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_checkingOnboarding || _onboardingCheckFailed) {
+      return Scaffold(body: Center(
+        child: _checkingOnboarding
+            ? const CircularProgressIndicator()
+            : ElevatedButton(onPressed: _checkOnboarding, child: const Text('Unable to check setup. Retry')),
+      ));
+    }
     if (_isOnboardingRequired &&
         widget.authService != null &&
         widget.shiftController != null &&
@@ -97,7 +118,7 @@ class _AppShellState extends State<AppShell> {
               _isOnboardingRequired = false;
               _selectedWorkspace = AppWorkspaceTab.register;
             });
-            widget.session.login(cashierStaff);
+            widget.session.lock();
           },
         ),
       );
@@ -120,6 +141,8 @@ class _AppShellState extends State<AppShell> {
             ),
             body: PinLockScreen(
               key: const ValueKey('pin_lock_screen'),
+              maxPinLength: 8,
+              subtitle: 'Enter your 4–8 digit PIN, then tap Unlock',
               onPinSubmitted: (pin) async {
                 final authenticated = await widget.onAuthenticatePin(pin);
                 if (authenticated != null) {

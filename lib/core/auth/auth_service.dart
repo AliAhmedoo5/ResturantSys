@@ -52,6 +52,9 @@ class AuthService {
     }
 
     final row = results.first;
+    if (!StaffRole.isInteractiveCode(row['role'] as String)) {
+      return null;
+    }
     final staff = Staff.fromMap(
       row,
       departmentName: row['department_name'] as String?,
@@ -298,6 +301,7 @@ class AuthService {
     ''');
 
     return rows
+        .where((r) => StaffRole.isInteractiveCode(r['role'] as String))
         .map((r) => Staff.fromMap(
               r,
               departmentName: r['department_name'] as String?,
@@ -413,8 +417,8 @@ class AuthService {
 
   /// Checks whether first-run onboarding is required.
   ///
-  /// Returns `true` if the database has not marked onboarding as completed,
-  /// or if there are zero staff accounts or zero active cashier profiles.
+  /// Incomplete setup remains mandatory across restarts. Completed installations
+  /// with disabled cashiers use the Manager portal warning instead.
   Future<bool> isOnboardingRequired() async {
     final settingRows = await database.query(
       PosDatabaseConstants.tableSystemSettings,
@@ -422,15 +426,7 @@ class AuthService {
       whereArgs: [PosDatabaseConstants.settingOnboardingCompleted],
       limit: 1,
     );
-    if (settingRows.isNotEmpty && settingRows.first['value'] == 'true') {
-      return false;
-    }
-
-    final staffCountResult = await database.rawQuery(
-      'SELECT COUNT(*) as count FROM ${PosDatabaseConstants.tableStaff};',
-    );
-    final count = (staffCountResult.isNotEmpty ? staffCountResult.first['count'] as int? : 0) ?? 0;
-    return count == 0;
+    return settingRows.isEmpty || settingRows.first['value'] != 'true';
   }
 
   /// Checks whether there is at least one active Cashier profile.
@@ -444,6 +440,11 @@ class AuthService {
 
   /// Marks first-run onboarding as completed in system settings.
   Future<void> completeOnboarding() async {
+    final staff = await getAllStaff();
+    if (!staff.any((s) => s.isActive && s.role.isManager) ||
+        !staff.any((s) => s.isActive && s.role.isCashier)) {
+      throw StateError('Onboarding requires an active Manager and a distinct active Cashier.');
+    }
     final now = _formatTimestamp(DateTime.now());
     await database.insert(
       PosDatabaseConstants.tableSystemSettings,
@@ -454,5 +455,26 @@ class AuthService {
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+  /// Resume an interrupted setup only after verifying the existing role's PIN.
+  Future<Staff> provisionOnboardingStaff({
+    required String name,
+    required int departmentId,
+    required StaffRole role,
+    required String pin,
+  }) async {
+    if (!await isOnboardingRequired()) {
+      throw StateError('Onboarding is already complete.');
+    }
+    final existing = (await getAllStaff()).where((s) => s.role == role);
+    if (existing.isNotEmpty) {
+      final authenticated = await authenticateWithPin(pin);
+      if (authenticated == null || authenticated.role != role) {
+        throw StateError('Enter the existing ${role.displayName} PIN to resume setup.');
+      }
+      return authenticated;
+    }
+    return registerStaff(name: name, departmentId: departmentId, role: role, pin: pin);
   }
 }

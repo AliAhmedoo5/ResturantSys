@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      test-path:
+        description: Test file or directory to run
+        default: test
+        type: string
 
 jobs:
   test:
@@ -32,4 +37,6 @@ jobs:
 
       - name: Run tests
         timeout-minutes: 12
-        run: flutter test
+        env:
+          TEST_PATH: ${{ inputs.test-path || 'test' }}
+        run: flutter test --timeout 60s "$TEST_PATH"

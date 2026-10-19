@@ -286,6 +286,7 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
         onSubmitBlindCount: (countedCash) async {
           final closedShift = await widget.controller.closeShift(
             shiftId: shift.id,
+            staffId: widget.currentStaff.id,
             countedCash: countedCash,
           );
           await _refreshState();

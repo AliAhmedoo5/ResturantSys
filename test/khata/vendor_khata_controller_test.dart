@@ -267,7 +267,7 @@ void main() {
       await shiftController.openBusinessDay(openedByStaffId: testSupervisorId);
       final shift = await shiftController.openShift(staffId: testCashierId, openingFloat: 5000.0);
       await shiftController.closeShift(
-        shiftId: shift.id,
+        shiftId: shift.id, staffId: shift.staffId,
         countedCash: 5000.0,
       );
 

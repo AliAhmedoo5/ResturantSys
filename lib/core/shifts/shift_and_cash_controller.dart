@@ -452,11 +452,22 @@ class ShiftAndCashController {
   /// without freezing the POS (ADR-0006), allowing immediate shift handover to the next cashier.
   Future<Shift> closeShift({
     required int shiftId,
+    required int staffId,
     required double countedCash,
     DateTime? closedAt,
   }) async {
     if (countedCash < 0) {
       throw ArgumentError('Counted cash cannot be negative.');
+    }
+
+    final actor = await database.query(
+      PosDatabaseConstants.tableStaff,
+      where: 'id = ? AND is_active = 1 AND role = ?',
+      whereArgs: [staffId, StaffRole.cashier.code],
+      limit: 1,
+    );
+    if (actor.isEmpty) {
+      throw StateError('Authorization error: Only an active Cashier can close a cashier shift.');
     }
 
     final shiftRows = await database.query(

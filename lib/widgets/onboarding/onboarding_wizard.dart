@@ -184,7 +184,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
         orElse: () => depts.first,
       );
 
-      final manager = await widget.authService.registerStaff(
+      final manager = await widget.authService.provisionOnboardingStaff(
         name: _managerNameController.text.trim(),
         departmentId: mgmtDept.id,
         role: StaffRole.manager,
@@ -229,7 +229,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
         orElse: () => depts.first,
       );
 
-      final cashier = await widget.authService.registerStaff(
+      final cashier = await widget.authService.provisionOnboardingStaff(
         name: _cashierNameController.text.trim(),
         departmentId: counterDept.id,
         role: StaffRole.cashier,
@@ -259,7 +259,8 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
     try {
       // 1. Create or resolve Category
       final catName = _categoryNameController.text.trim();
-      final cat = await widget.catalogController.createCategory(
+      final categories = await widget.catalogController.getCategories();
+      final cat = categories.where((c) => c.name == catName).firstOrNull ?? await widget.catalogController.createCategory(
         name: catName,
         displayOrder: 1,
         colorHex: '#FFC400',
@@ -270,7 +271,8 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
       final initialStock = double.parse(_ingredientStockController.text.trim());
       final unitCost = double.parse(_ingredientCostController.text.trim());
 
-      final rawIngredient = await widget.catalogController.createRawIngredient(
+      final ingredients = await widget.catalogController.getRawIngredients();
+      final rawIngredient = ingredients.where((i) => i.name == ingredientName).firstOrNull ?? await widget.catalogController.createRawIngredient(
         name: ingredientName,
         storageUnit: _selectedStorageUnit,
         currentStock: initialStock,
@@ -283,10 +285,12 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
       final itemPrice = double.parse(_menuItemPriceController.text.trim());
       final recipeQty = double.parse(_recipeQtyController.text.trim());
 
-      final menuItem = await widget.catalogController.createMenuItem(
+      final menuItems = await widget.catalogController.getMenuItems();
+      final menuItem = menuItems.where((i) => i.name == itemName && i.categoryId == cat.id).firstOrNull ?? await widget.catalogController.createMenuItem(
         categoryId: cat.id,
         name: itemName,
         basePrice: itemPrice,
+        isActive: false,
         isTaxInclusive: true,
         taxRate: 0.0,
       );
@@ -297,6 +301,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
         rawIngredientId: rawIngredient.id,
         quantity: recipeQty,
       );
+      await widget.catalogController.toggleMenuItemActive(menuItem.id, true);
 
       setState(() {
         _isLoading = false;
@@ -318,7 +323,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
     });
 
     try {
-      final day = await widget.shiftController.openBusinessDay(
+      final day = await widget.shiftController.getActiveBusinessDay() ?? await widget.shiftController.openBusinessDay(
         openedByStaffId: _createdManager!.id,
       );
 
@@ -339,6 +344,8 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
     setState(() => _isLoading = true);
     try {
       await widget.authService.completeOnboarding();
+      if (!mounted) return;
+      setState(() => _isLoading = false);
       widget.onCompleted(_createdCashier!);
     } catch (e) {
       setState(() {
@@ -397,7 +404,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
               const Divider(height: 1, color: WarmCounterColors.lightBorder),
 
               // Active Step Form Content
-              Padding(
+              Flexible(child: Padding(
                 padding: const EdgeInsets.all(WarmCounterSpacing.space24),
                 child: SingleChildScrollView(
                   child: Column(
@@ -439,7 +446,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
                     ],
                   ),
                 ),
-              ),
+              )),
             ],
           ),
         ),
@@ -465,8 +472,9 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
         horizontal: WarmCounterSpacing.space24,
         vertical: WarmCounterSpacing.space16,
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Wrap(
+        spacing: WarmCounterSpacing.space12,
+        runSpacing: WarmCounterSpacing.space8,
         children: List.generate(steps.length, (index) {
           final isCompleted = index < _currentStep;
           final isCurrent = index == _currentStep;
@@ -1063,16 +1071,16 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Configured Manager:', style: TextStyle(fontWeight: FontWeight.w600)),
-                  Text('${_createdManager?.name ?? "Manager"} (Admin)', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  const Expanded(child: Text('Configured Manager:', style: TextStyle(fontWeight: FontWeight.w600))),
+                  Expanded(child: Text('${_createdManager?.name ?? "Manager"} (Manager)', textAlign: TextAlign.end, style: const TextStyle(fontWeight: FontWeight.bold))),
                 ],
               ),
               const SizedBox(height: 8),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Configured Primary Cashier:', style: TextStyle(fontWeight: FontWeight.w600)),
-                  Text('${_createdCashier?.name ?? "Cashier"} (Front Counter)', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  const Expanded(child: Text('Configured Primary Cashier:', style: TextStyle(fontWeight: FontWeight.w600))),
+                  Expanded(child: Text('${_createdCashier?.name ?? "Cashier"} (Front Counter)', textAlign: TextAlign.end, style: const TextStyle(fontWeight: FontWeight.bold))),
                 ],
               ),
             ],

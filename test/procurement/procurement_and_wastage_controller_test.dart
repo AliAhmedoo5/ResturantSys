@@ -197,9 +197,9 @@ void main() {
         costPerRecipeUnit: 0.80, // Rs. 0.80 / g = Rs. 800 / kg
       );
 
-      // 2. Kitchen Cook (default PIN 2222) logs burned stock (500g)
+      // 2. Manager (default PIN 1234) logs burned stock (500g)
       final wastage = await controller.recordKitchenWastage(
-        staffPin: PosDatabaseConstants.defaultKitchenPin, // 2222
+        staffPin: PosDatabaseConstants.defaultSupervisorPin, // 1234
         rawIngredientId: beefId,
         quantity: 500.0,
         reason: WastageReason.burned,
@@ -207,7 +207,7 @@ void main() {
       );
 
       expect(wastage.rawIngredientId, equals(beefId));
-      expect(wastage.staffName, equals(PosDatabaseConstants.defaultKitchenName));
+      expect(wastage.staffName, equals(PosDatabaseConstants.defaultSupervisorName));
       expect(wastage.quantity, equals(500.0));
       expect(wastage.reason, equals(WastageReason.burned));
       // Cost loss: 500g * Rs. 0.80 = Rs. 400.00
@@ -262,7 +262,7 @@ void main() {
 
       // Discard 5 buns when only 2 are in system stock (soft deduction)
       final wastage = await controller.recordKitchenWastage(
-        staffPin: PosDatabaseConstants.defaultKitchenPin,
+        staffPin: PosDatabaseConstants.defaultSupervisorPin,
         rawIngredientId: bunId,
         quantity: 5.0,
         reason: WastageReason.expired,

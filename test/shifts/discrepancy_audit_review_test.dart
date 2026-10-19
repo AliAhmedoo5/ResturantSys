@@ -59,7 +59,7 @@ void main() {
       // 2. Close shift with counted cash = 4,200 (expected = 5,000, variance = -800)
       // Discrepancy threshold is 100, so |-800| > 100 flags the shift
       final closedShift = await shiftController.closeShift(
-        shiftId: shift.id,
+        shiftId: shift.id, staffId: shift.staffId,
         countedCash: 4200.0,
       );
 

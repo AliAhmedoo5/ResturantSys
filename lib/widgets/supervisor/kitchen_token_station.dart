@@ -3,9 +3,9 @@ import '../../core/auth/staff.dart';
 import '../../core/orders/order.dart';
 import '../../core/orders/token_queue_controller.dart';
 import '../../core/theme/theme.dart';
-import '../pin_numpad.dart';
 
-/// Kitchen Token Station: Kitchen staff can authenticate with Kitchen PIN and mark tokens as Ready when plated on the pass.
+
+/// Kitchen Token Station: Managers mark tokens as Ready using their existing session.
 class KitchenTokenStation extends StatefulWidget {
   const KitchenTokenStation({
     super.key,
@@ -21,158 +21,14 @@ class KitchenTokenStation extends StatefulWidget {
 }
 
 class _KitchenTokenStationState extends State<KitchenTokenStation> {
-  Staff? _authenticatedCook;
-  String _enteredPin = '';
-  String? _pinError;
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.currentStaff != null && widget.currentStaff!.canAccessKitchen) {
-      _authenticatedCook = widget.currentStaff;
-    }
-  }
-
-  Future<void> _handlePinDigit(String digit) async {
-    if (_enteredPin.length < 4) {
-      final updatedPin = _enteredPin + digit;
-      setState(() {
-        _enteredPin = updatedPin;
-        _pinError = null;
-      });
-
-      if (updatedPin.length == 4) {
-        final staff = await widget.controller.authenticateKitchenPin(updatedPin);
-        if (mounted) {
-          if (staff != null) {
-            setState(() {
-              _authenticatedCook = staff;
-              _enteredPin = '';
-              _pinError = null;
-            });
-          } else {
-            setState(() {
-              _enteredPin = '';
-              _pinError = 'Invalid Kitchen PIN or unauthorized role.';
-            });
-          }
-        }
-      }
-    }
-  }
-
-  void _handlePinBackspace() {
-    if (_enteredPin.isNotEmpty) {
-      setState(() {
-        _enteredPin = _enteredPin.substring(0, _enteredPin.length - 1);
-        _pinError = null;
-      });
-    }
-  }
-
-  void _handlePinClear() {
-    setState(() {
-      _enteredPin = '';
-      _pinError = null;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (_authenticatedCook == null) {
-      return _buildPinLockScreen(context);
+    final staff = widget.currentStaff;
+    if (staff == null || !staff.isActive || !staff.role.isManager) {
+      return const Center(child: Text('Sign in as Manager to view the kitchen station.'));
     }
-
-    return _buildKitchenStationBoard(context, _authenticatedCook!);
+    return _buildKitchenStationBoard(context, staff);
   }
-
-  Widget _buildPinLockScreen(BuildContext context) {
-    return Center(
-      child: Container(
-        width: 420,
-        padding: const EdgeInsets.all(WarmCounterSpacing.space32),
-        decoration: BoxDecoration(
-          color: WarmCounterColors.lightCardBackground,
-          borderRadius: WarmCounterSpacing.panelBorderRadius,
-          border: Border.all(color: WarmCounterColors.lightBorder),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(WarmCounterSpacing.space12),
-              decoration: const BoxDecoration(
-                color: Color(0xFFFFF7ED), // Amber highlight
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.soup_kitchen_rounded,
-                size: 36,
-                color: Color(0xFFEA580C),
-              ),
-            ),
-            const SizedBox(height: WarmCounterSpacing.space16),
-            Text(
-              'Kitchen Token Station',
-              style: WarmCounterTypography.pageHeading.copyWith(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: WarmCounterSpacing.space4),
-            Text(
-              'Enter Kitchen Cook 4-Digit PIN to unlock station',
-              textAlign: TextAlign.center,
-              style: WarmCounterTypography.bodyMedium.copyWith(
-                color: WarmCounterColors.lightSecondaryText,
-              ),
-            ),
-            const SizedBox(height: WarmCounterSpacing.space24),
-
-            // PIN Dots Indicator
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(4, (index) {
-                final isFilled = index < _enteredPin.length;
-                return Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 8),
-                  width: 16,
-                  height: 16,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: isFilled
-                        ? const Color(0xFFEA580C)
-                        : WarmCounterColors.lightBorder,
-                  ),
-                );
-              }),
-            ),
-            const SizedBox(height: WarmCounterSpacing.space12),
-
-            if (_pinError != null) ...[
-              Text(
-                _pinError!,
-                style: const TextStyle(
-                  color: WarmCounterColors.lightDestructiveAction,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: WarmCounterSpacing.space12),
-            ],
-
-            PinNumpad(
-              onDigitPressed: _handlePinDigit,
-              onBackspacePressed: _handlePinBackspace,
-              onClearPressed: _handlePinClear,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildKitchenStationBoard(BuildContext context, Staff cook) {
     return ListenableBuilder(
       listenable: widget.controller,
@@ -241,17 +97,6 @@ class _KitchenTokenStationState extends State<KitchenTokenStation> {
                           icon: const Icon(Icons.refresh_rounded),
                           tooltip: 'Refresh',
                           onPressed: () => widget.controller.loadTokens(),
-                        ),
-                        const SizedBox(width: WarmCounterSpacing.space12),
-                        OutlinedButton.icon(
-                          onPressed: () => setState(() => _authenticatedCook = null),
-                          icon: const Icon(Icons.lock_rounded, size: 16),
-                          label: const Text('Lock Station'),
-                          style: OutlinedButton.styleFrom(
-                            shape: const RoundedRectangleBorder(
-                              borderRadius: WarmCounterSpacing.controlBorderRadius,
-                            ),
-                          ),
                         ),
                       ],
                     ),

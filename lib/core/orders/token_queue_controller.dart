@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../auth/auth_service.dart';
 import '../auth/staff.dart';
-import '../auth/staff_role.dart';
+
 import '../database/pos_database_constants.dart';
 import 'order.dart';
 import 'order_item.dart';
@@ -244,17 +244,6 @@ class TokenQueueController extends ChangeNotifier {
         return staff;
       }
       return null;
-    }
-    if (pin == '2222' || pin == '1234') {
-      return Staff(
-        id: 3,
-        name: 'Kitchen Cook',
-        departmentId: 2,
-        departmentName: 'Kitchen',
-        pinHash: pin,
-        role: StaffRole.manager,
-        isActive: true,
-      );
     }
     return null;
   }

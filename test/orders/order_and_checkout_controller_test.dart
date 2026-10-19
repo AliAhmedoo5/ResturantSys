@@ -105,7 +105,7 @@ void main() {
       expect(result2.order.tokenDisplay, equals('#02'));
 
       // Close shift 1 and day 1
-      await shiftController.closeShift(shiftId: shift1.id, countedCash: 2500.0);
+      await shiftController.closeShift(shiftId: shift1.id, staffId: shift1.staffId, countedCash: 2500.0);
       await shiftController.closeBusinessDay(closedByStaffId: 1);
 
       // Open Business Day 2 & Shift 2
