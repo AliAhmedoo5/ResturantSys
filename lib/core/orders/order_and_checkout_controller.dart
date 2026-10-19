@@ -1,3 +1,5 @@
+import '../delivery/delivery_controller.dart';
+import 'paisa_engine.dart';
 import 'dart:convert';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../catalog/discount_preset.dart';
@@ -382,6 +384,7 @@ class OrderAndCheckoutController {
     required List<CartItem> items,
     DiscountPreset? discount,
     required List<PaymentTender> payments,
+    DeliveryDetails? delivery,
   }) async {
     if (items.isEmpty) {
       throw ArgumentError('Cannot checkout an empty order.');
@@ -410,6 +413,21 @@ class OrderAndCheckoutController {
     final totals = calculateCartTotals(items: items, discount: discount);
 
     return await database.transaction((txn) async {
+      DeliveryArea? deliveryArea;
+      if (diningType == DiningType.delivery) {
+        if (delivery == null) throw const DeliveryCheckoutException('Select delivery details before payment. Your cart is unchanged.');
+        deliveryArea = await DeliveryController.validateCheckout(txn, delivery, PaisaEngine.rupeesToPaisa(totals.grandTotal));
+      }
+      final deliveryFeePaisa = deliveryArea?.deliveryFeePaisa ?? 0;
+      final grandTotalPaisa = PaisaEngine.rupeesToPaisa(totals.grandTotal) + deliveryFeePaisa;
+      final grandTotal = PaisaEngine.paisaToRupees(grandTotalPaisa);
+      if (deliveryArea != null) {
+        final paid = payments.fold<int>(0, (sum, p) => sum + PaisaEngine.rupeesToPaisa(p.amountTendered - p.changeReturned));
+        if (payments.any((p) => !p.amountTendered.isFinite || !p.changeReturned.isFinite || p.amountTendered < 0 || p.changeReturned < 0 || p.changeReturned > p.amountTendered) || paid != grandTotalPaisa) {
+          throw const DeliveryCheckoutException('Payment must cover the food total and fixed delivery fee exactly. Your cart is unchanged.');
+        }
+        await DeliveryController.rememberAddress(txn, delivery!);
+      }
       for (final item in items) { await _validateCartItem(item, txn); }
       // 1. Daily Sequential Token
       final tokenNumber = await getNextTokenNumber(businessDayId, txn);
@@ -427,7 +445,13 @@ class OrderAndCheckoutController {
           'discount_amount': totals.discountAmount,
           'discount_id': discount?.id,
           'tax_amount': totals.taxAmount,
-          'grand_total': totals.grandTotal,
+          'grand_total': grandTotal,
+          'delivery_area_id': deliveryArea?.id,
+          'delivery_area_name_snapshot': deliveryArea?.name,
+          'delivery_fee_paisa': deliveryFeePaisa,
+          'delivery_address_snapshot': deliveryArea == null ? null : delivery!.addressSnapshot,
+          'customer_phone': deliveryArea == null ? null : DeliveryController.normalizePhone(delivery!.phone),
+          'customer_name': deliveryArea == null ? null : delivery!.customerName.trim(),
           'payment_status': 'SETTLED',
           'token_status': TokenStatus.preparing.code,
           'created_at': formattedNow,
@@ -532,7 +556,13 @@ class OrderAndCheckoutController {
         discountAmount: totals.discountAmount,
         discountId: discount?.id,
         taxAmount: totals.taxAmount,
-        grandTotal: totals.grandTotal,
+        grandTotal: grandTotal,
+        deliveryAreaId: deliveryArea?.id,
+        deliveryAreaName: deliveryArea?.name,
+        deliveryFeePaisa: deliveryFeePaisa,
+        deliveryAddress: deliveryArea == null ? null : delivery!.addressSnapshot,
+        customerPhone: deliveryArea == null ? null : DeliveryController.normalizePhone(delivery!.phone),
+        customerName: deliveryArea == null ? null : delivery!.customerName.trim(),
         paymentStatus: 'SETTLED',
         createdAt: now,
         items: createdOrderItems,
@@ -1049,3 +1079,4 @@ class OrderAndCheckoutController {
     return OrderVoid.fromMap(rows.first);
   }
 }
+
