@@ -5,6 +5,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/auth/staff_role.dart';
 import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
+import 'package:resturant_sys/core/catalog/catalog_image.dart';
 import 'package:resturant_sys/core/catalog/catalog_media_service.dart';
 import 'package:resturant_sys/core/catalog/menu_category.dart';
 import 'package:resturant_sys/core/catalog/menu_item.dart';
@@ -12,6 +13,22 @@ import 'package:resturant_sys/core/database/pos_database.dart';
 import 'package:resturant_sys/core/theme/warm_counter_theme.dart';
 import 'package:resturant_sys/widgets/catalog/dialogs/catalog_photo_gallery_dialog.dart';
 import 'package:resturant_sys/widgets/catalog/supervisor_catalog_workspace.dart';
+
+Future<void> tapDialogActionAndWait(WidgetTester tester, Finder button) async {
+  await tester.runAsync(() async {
+    await tester.ensureVisible(button);
+    await tester.tap(button);
+    for (var attempt = 0; attempt < 200; attempt++) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      await tester.pump();
+      final state = tester.state<CatalogPhotoGalleryDialogState>(find.byType(CatalogPhotoGalleryDialog));
+      if (!state.isUploading && !state.isLoading && state.pendingAsyncAction == null) {
+        return;
+      }
+    }
+  });
+  await tester.pump();
+}
 
 void main() {
   setUpAll(() {
@@ -22,7 +39,6 @@ void main() {
   group('CatalogPhotoGalleryDialog & Supervisor Workspace Widget Tests', () {
     late Directory tempDir;
     late Directory mediaDir;
-    late String testDbPath;
     late PosDatabase posDb;
     late Database db;
     late CatalogMediaService mediaService;
@@ -49,13 +65,12 @@ void main() {
     ];
 
     setUp(() async {
-      tempDir = await Directory.systemTemp.createTemp('gallery_widget_test_');
+      tempDir = Directory.systemTemp.createTempSync('gallery_widget_test_');
       mediaDir = Directory('${tempDir.path}${Platform.pathSeparator}media');
-      await mediaDir.create(recursive: true);
-      testDbPath = '${tempDir.path}${Platform.pathSeparator}test_gallery.db';
+      mediaDir.createSync(recursive: true);
       posDb = PosDatabase(
         factory: databaseFactoryFfi,
-        customPath: testDbPath,
+        customPath: inMemoryDatabasePath,
       );
       db = await posDb.initialize();
       mediaService = CatalogMediaService(
@@ -70,8 +85,8 @@ void main() {
 
     tearDown(() async {
       await posDb.close();
-      if (await tempDir.exists()) {
-        await tempDir.delete(recursive: true);
+      if (tempDir.existsSync()) {
+        tempDir.deleteSync(recursive: true);
       }
     });
 
@@ -111,12 +126,7 @@ void main() {
       // Sample upload button
       final sampleUploadButton = find.byKey(const ValueKey('add_sample_photo_button'));
       expect(sampleUploadButton, findsOneWidget);
-      await tester.tap(sampleUploadButton);
-      final state1 = tester.state<CatalogPhotoGalleryDialogState>(find.byType(CatalogPhotoGalleryDialog));
-      if (state1.pendingAsyncAction != null) {
-        await tester.runAsync(() => state1.pendingAsyncAction!);
-      }
-      await tester.pump();
+      await tapDialogActionAndWait(tester, sampleUploadButton);
 
       // After upload, empty state disappears and primary badge is shown
       expect(find.text('No photos attached yet.'), findsNothing);
@@ -128,22 +138,26 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
 
-      // Seed two images in service
-      final img1 = await mediaService.saveImage(
-        staff: managerStaff,
-        entityType: 'deal',
-        entityId: 7,
-        bytes: samplePng,
-        originalFileName: 'deal_primary.png',
-      );
-      final img2 = await mediaService.saveImage(
-        staff: managerStaff,
-        entityType: 'deal',
-        entityId: 7,
-        bytes: samplePng,
-        originalFileName: 'deal_secondary.png',
-        isPrimary: false,
-      );
+      // Seed two images in service inside runAsync for SQLite isolate operations
+      late CatalogImage img1;
+      late CatalogImage img2;
+      await tester.runAsync(() async {
+        img1 = await mediaService.saveImage(
+          staff: managerStaff,
+          entityType: 'deal',
+          entityId: 7,
+          bytes: samplePng,
+          originalFileName: 'deal_primary.png',
+        );
+        img2 = await mediaService.saveImage(
+          staff: managerStaff,
+          entityType: 'deal',
+          entityId: 7,
+          bytes: samplePng,
+          originalFileName: 'deal_secondary.png',
+          isPrimary: false,
+        );
+      });
 
       await tester.pumpWidget(
         MaterialApp(
@@ -172,23 +186,14 @@ void main() {
       expect(find.byKey(ValueKey('set_primary_image_${img2.id}')), findsOneWidget);
 
       // Tap "Make Primary" on img2
-      await tester.tap(find.byKey(ValueKey('set_primary_image_${img2.id}')));
-      final state2 = tester.state<CatalogPhotoGalleryDialogState>(find.byType(CatalogPhotoGalleryDialog));
-      if (state2.pendingAsyncAction != null) {
-        await tester.runAsync(() => state2.pendingAsyncAction!);
-      }
-      await tester.pump();
+      await tapDialogActionAndWait(tester, find.byKey(ValueKey('set_primary_image_${img2.id}')));
 
       // img2 is now primary
       expect(find.byKey(ValueKey('primary_badge_${img2.id}')), findsOneWidget);
       expect(find.byKey(ValueKey('set_primary_image_${img1.id}')), findsOneWidget);
 
       // Delete img1
-      await tester.tap(find.byKey(ValueKey('delete_image_${img1.id}')));
-      if (state2.pendingAsyncAction != null) {
-        await tester.runAsync(() => state2.pendingAsyncAction!);
-      }
-      await tester.pump();
+      await tapDialogActionAndWait(tester, find.byKey(ValueKey('delete_image_${img1.id}')));
 
       // Only img2 remains
       expect(find.byKey(ValueKey('gallery_image_tile_${img1.id}')), findsNothing);
@@ -233,7 +238,17 @@ void main() {
       expect(managePhotosButton, findsOneWidget);
 
       // Tap button to open gallery dialog
-      await tester.tap(managePhotosButton);
+      await tester.runAsync(() async {
+        await tester.tap(managePhotosButton);
+        for (var attempt = 0; attempt < 200; attempt++) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+          await tester.pump();
+          if (find.byType(CatalogPhotoGalleryDialog).evaluate().isNotEmpty) {
+            final state = tester.state<CatalogPhotoGalleryDialogState>(find.byType(CatalogPhotoGalleryDialog));
+            if (!state.isLoading) break;
+          }
+        }
+      });
       await tester.pumpAndSettle();
 
       // Dialog opens

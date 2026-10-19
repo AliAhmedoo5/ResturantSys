@@ -43,6 +43,9 @@ class CatalogPhotoGalleryDialogState extends State<CatalogPhotoGalleryDialog> {
   bool _makePrimaryOnUpload = false;
   bool _isUploading = false;
 
+  bool get isLoading => _isLoading;
+  bool get isUploading => _isUploading;
+
   // 1x1 Transparent PNG for sample upload in testing/demo environments
   static const List<int> samplePngBytes = [
     0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
@@ -107,6 +110,8 @@ class CatalogPhotoGalleryDialogState extends State<CatalogPhotoGalleryDialog> {
         await _loadImages();
       } catch (e) {
         _showErrorSnackBar(e.toString());
+      } finally {
+        pendingAsyncAction = null;
       }
     }();
     pendingAsyncAction = action;
@@ -124,6 +129,8 @@ class CatalogPhotoGalleryDialogState extends State<CatalogPhotoGalleryDialog> {
         await _loadImages();
       } catch (e) {
         _showErrorSnackBar(e.toString());
+      } finally {
+        pendingAsyncAction = null;
       }
     }();
     pendingAsyncAction = action;
@@ -175,6 +182,7 @@ class CatalogPhotoGalleryDialogState extends State<CatalogPhotoGalleryDialog> {
         if (mounted) {
           setState(() => _isUploading = false);
         }
+        pendingAsyncAction = null;
       }
     }();
     pendingAsyncAction = action;

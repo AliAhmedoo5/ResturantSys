@@ -415,10 +415,15 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
 
-      // Create a temporary valid image file on disk
-      final tempDir = await Directory.systemTemp.createTemp('cashier_image_test_');
+      // Create a temporary valid image file on disk synchronously
+      final tempDir = Directory.systemTemp.createTempSync('cashier_image_test_');
+      addTearDown(() {
+        if (tempDir.existsSync()) {
+          tempDir.deleteSync(recursive: true);
+        }
+      });
       final validImgFile = File('${tempDir.path}${Platform.pathSeparator}zinger.png');
-      await validImgFile.writeAsBytes([
+      validImgFile.writeAsBytesSync([
         0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
         0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
         0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00,
@@ -468,8 +473,6 @@ void main() {
 
       expect(find.text('Subtotal'), findsOneWidget);
       expect(find.text('Rs 1,200.00'), findsWidgets); // 550 + 650
-
-      await tempDir.delete(recursive: true);
     });
 
     testWidgets('gracefully handles missing or corrupted image paths without crashing UI', (tester) async {
