@@ -148,7 +148,7 @@ class _CatalogPhotoGalleryDialogState extends State<CatalogPhotoGalleryDialog> {
         entityId: widget.entityId,
         bytes: bytes,
         originalFileName: fileName,
-        isPrimary: _makePrimaryOnUpload,
+        isPrimary: _makePrimaryOnUpload ? true : null,
       );
 
       _filePathController.clear();
@@ -156,6 +156,9 @@ class _CatalogPhotoGalleryDialogState extends State<CatalogPhotoGalleryDialog> {
       _showAddForm = false;
       await _loadImages();
     } catch (e) {
+      if (mounted) {
+        setState(() => _errorMessage = e.toString());
+      }
       _showErrorSnackBar(e.toString());
     } finally {
       if (mounted) {

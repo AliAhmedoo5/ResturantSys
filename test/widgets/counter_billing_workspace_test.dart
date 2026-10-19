@@ -427,26 +427,29 @@ void main() {
         0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
       ]);
 
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: WarmCounterTheme.lightTheme,
-          home: Scaffold(
-            body: CounterBillingWorkspace(
-              currentStaff: testStaff,
-              businessDayId: 1,
-              shiftId: 1,
-              initialCategories: testCategories,
-              initialMenuItems: testMenuItems,
-              initialDeals: testDeals,
-              initialMenuItemImages: {
-                101: validImgFile.path, // Zinger burger has image
-                // 102 (Beef Smash) has 0 images
-              },
+      await tester.runAsync(() async {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: WarmCounterTheme.lightTheme,
+            home: Scaffold(
+              body: CounterBillingWorkspace(
+                currentStaff: testStaff,
+                businessDayId: 1,
+                shiftId: 1,
+                initialCategories: testCategories,
+                initialMenuItems: testMenuItems,
+                initialDeals: testDeals,
+                initialMenuItemImages: {
+                  101: validImgFile.path, // Zinger burger has image
+                  // 102 (Beef Smash) has 0 images
+                },
+              ),
             ),
           ),
-        ),
-      );
-      await tester.pumpAndSettle();
+        );
+        await Future.delayed(const Duration(milliseconds: 50));
+        await tester.pump();
+      });
 
       // Zinger Burger has an Image widget
       final zingerTile = find.byKey(const ValueKey('menu_item_tile_101'));
@@ -458,9 +461,9 @@ void main() {
 
       // Both items are functional: tap Zinger Burger then Beef Smash
       await tester.tap(zingerTile);
-      await tester.pumpAndSettle();
+      await tester.pump();
       await tester.tap(beefTile);
-      await tester.pumpAndSettle();
+      await tester.pump();
 
       expect(find.text('Subtotal'), findsOneWidget);
       expect(find.text('Rs 1,200.00'), findsWidgets); // 550 + 650
