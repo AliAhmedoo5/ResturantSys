@@ -80,12 +80,23 @@ void main() {
     expect(addresses.single.customerName, 'Sara');
     expect(addresses.single.fullAddress, 'House 7');
     expect(addresses.single.landmark, 'School');
-    await delivery.archiveArea(staffId: 1, id: area.id);
+    await delivery.saveArea(staffId: 1, id: area.id, name: 'Garden', code: 'G', deliveryFeePaisa: 12550, minOrderPaisa: 45001);
+    await expectLater(commit(), throwsA(isA<DeliveryCheckoutException>()));
+    for (final example in [(12549, 575.0, -49), (12550, 576.0, 50), (12500, 575.0, 0)]) {
+      await delivery.saveArea(staffId: 1, id: area.id, name: 'Garden', code: 'G', deliveryFeePaisa: example.$1);
+      final rounded = await orders.checkoutOrder(businessDayId: day.id, shiftId: shift.id, cashierId: 2,
+        diningType: DiningType.delivery, items: cart, discount: discount,
+        delivery: DeliveryDetails(areaId: area.id, quotedFeePaisa: example.$1, phone: details.phone, fullAddress: details.fullAddress),
+        payments: [PaymentTender(method: PaymentMethod.cash, amountTendered: example.$2)]);
+      expect(rounded.order.cashRoundingPaisa, example.$3);
+      expect(rounded.order.deliveryFeePaisa, example.$1);
+    }    await delivery.archiveArea(staffId: 1, id: area.id);
     final saved = await orders.getOrder(result.order.id);
     expect(saved.deliveryAreaName, 'Garden');
     expect(saved.deliveryFeePaisa, 12550);
     expect(saved.deliveryAddress, contains('Call at gate'));
   });}
+
 
 
 
