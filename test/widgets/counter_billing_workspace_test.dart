@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
@@ -407,6 +408,105 @@ void main() {
 
       expect(find.byType(ReprintTrayDialog), findsOneWidget);
       expect(find.text('Hardware & Reprint Tray'), findsOneWidget);
+    });
+
+    testWidgets('renders primary thumbnail when image exists and falls back to placeholder with 0 images', (tester) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      // Create a temporary valid image file on disk
+      final tempDir = await Directory.systemTemp.createTemp('cashier_image_test_');
+      final validImgFile = File('${tempDir.path}${Platform.pathSeparator}zinger.png');
+      await validImgFile.writeAsBytes([
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
+        0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+        0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00,
+        0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
+        0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49,
+        0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+      ]);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: WarmCounterTheme.lightTheme,
+          home: Scaffold(
+            body: CounterBillingWorkspace(
+              currentStaff: testStaff,
+              businessDayId: 1,
+              shiftId: 1,
+              initialCategories: testCategories,
+              initialMenuItems: testMenuItems,
+              initialDeals: testDeals,
+              initialMenuItemImages: {
+                101: validImgFile.path, // Zinger burger has image
+                // 102 (Beef Smash) has 0 images
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Zinger Burger has an Image widget
+      final zingerTile = find.byKey(const ValueKey('menu_item_tile_101'));
+      expect(find.descendant(of: zingerTile, matching: find.byType(Image)), findsOneWidget);
+
+      // Beef Smash has placeholder icon
+      final beefTile = find.byKey(const ValueKey('menu_item_tile_102'));
+      expect(find.descendant(of: beefTile, matching: find.byIcon(Icons.restaurant_outlined)), findsOneWidget);
+
+      // Both items are functional: tap Zinger Burger then Beef Smash
+      await tester.tap(zingerTile);
+      await tester.pumpAndSettle();
+      await tester.tap(beefTile);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Subtotal'), findsOneWidget);
+      expect(find.text('Rs 1,200.00'), findsWidgets); // 550 + 650
+
+      await tempDir.delete(recursive: true);
+    });
+
+    testWidgets('gracefully handles missing or corrupted image paths without crashing UI', (tester) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: WarmCounterTheme.lightTheme,
+          home: Scaffold(
+            body: CounterBillingWorkspace(
+              currentStaff: testStaff,
+              businessDayId: 1,
+              shiftId: 1,
+              initialCategories: testCategories,
+              initialMenuItems: testMenuItems,
+              initialDeals: testDeals,
+              initialMenuItemImages: const {
+                101: r'C:\non_existent_directory\corrupted_photo.jpg',
+                102: r'C:\invalid_path\missing.png',
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // UI renders cleanly without crashing
+      expect(find.text('Zinger Burger'), findsOneWidget);
+      expect(find.text('Beef Smash'), findsOneWidget);
+
+      // Fallback placeholder icons are displayed
+      expect(find.byIcon(Icons.restaurant_outlined), findsAtLeastNWidgets(2));
+
+      // Items still tap-add to cart normally
+      await tester.tap(find.byKey(const ValueKey('menu_item_tile_101')));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Cart is empty'), findsNothing);
+      expect(find.text('Rs 550.00'), findsWidgets);
     });
   });
 }

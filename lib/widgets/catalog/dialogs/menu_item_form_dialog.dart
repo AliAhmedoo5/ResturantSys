@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:resturant_sys/core/auth/staff.dart';
+import 'package:resturant_sys/core/catalog/catalog_media_service.dart';
 import 'package:resturant_sys/core/catalog/menu_category.dart';
 import 'package:resturant_sys/core/catalog/menu_item.dart';
 import 'package:resturant_sys/core/theme/theme.dart';
+import 'catalog_photo_gallery_dialog.dart';
 
 /// Modal dialog for creating or updating a Menu Item with tax-inclusive pricing.
 class MenuItemFormDialog extends StatefulWidget {
@@ -11,10 +14,14 @@ class MenuItemFormDialog extends StatefulWidget {
     this.item,
     required this.categories,
     required this.onSave,
+    this.mediaService,
+    this.currentStaff,
   });
 
   final MenuItem? item;
   final List<MenuCategory> categories;
+  final CatalogMediaService? mediaService;
+  final Staff? currentStaff;
   final Future<void> Function({
     required int categoryId,
     required String name,
@@ -270,6 +277,30 @@ class _MenuItemFormDialogState extends State<MenuItemFormDialog> {
                   value: _isActive,
                   onChanged: (val) => setState(() => _isActive = val),
                 ),
+                if (widget.item != null && widget.mediaService != null) ...[
+                  const SizedBox(height: WarmCounterSpacing.space16),
+                  OutlinedButton.icon(
+                    key: const ValueKey('dialog_manage_photos_button'),
+                    icon: const Icon(Icons.photo_library_outlined, size: 18),
+                    label: const Text('Manage Item Photos'),
+                    onPressed: () {
+                      showDialog<void>(
+                        context: context,
+                        builder: (ctx) => CatalogPhotoGalleryDialog(
+                          mediaService: widget.mediaService!,
+                          entityType: 'menu_item',
+                          entityId: widget.item!.id,
+                          entityName: widget.item!.name,
+                          currentStaff: widget.currentStaff,
+                        ),
+                      );
+                    },
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: WarmCounterColors.lightPrimaryAction,
+                      side: const BorderSide(color: WarmCounterColors.lightPrimaryAction),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

@@ -10,6 +10,7 @@ import 'package:resturant_sys/core/catalog/raw_ingredient.dart';
 import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
 import 'package:resturant_sys/core/theme/theme.dart';
 import 'dialogs/category_form_dialog.dart';
+import 'dialogs/catalog_photo_gallery_dialog.dart';
 import 'dialogs/discount_preset_form_dialog.dart';
 import 'dialogs/menu_item_form_dialog.dart';
 import 'dialogs/modifier_form_dialog.dart';
@@ -271,6 +272,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
       builder: (ctx) => MenuItemFormDialog(
         item: item,
         categories: _categories,
+        mediaService: widget.controller?.mediaService,
         onSave: ({required categoryId, required name, required basePrice, required taxRate, required isTaxInclusive, required isActive}) async {
           if (widget.controller != null) {
             await widget.controller!.updateMenuItem(
@@ -300,6 +302,23 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
             });
           }
         },
+      ),
+    );
+  }
+
+  void _showPhotoGalleryDialog({
+    required String entityType,
+    required int entityId,
+    required String entityName,
+  }) {
+    if (widget.controller == null) return;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => CatalogPhotoGalleryDialog(
+        mediaService: widget.controller!.mediaService,
+        entityType: entityType,
+        entityId: entityId,
+        entityName: entityName,
       ),
     );
   }
@@ -1150,6 +1169,16 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                         ),
                       ),
                       const SizedBox(width: 8),
+                      IconButton(
+                        key: ValueKey('manage_photos_button_${item.id}'),
+                        icon: const Icon(Icons.photo_library_outlined, size: 20),
+                        tooltip: 'Manage Photos',
+                        onPressed: () => _showPhotoGalleryDialog(
+                          entityType: 'menu_item',
+                          entityId: item.id,
+                          entityName: item.name,
+                        ),
+                      ),
                       IconButton(
                         key: ValueKey('edit_menu_item_${item.id}'),
                         icon: const Icon(Icons.edit_outlined, size: 20),
