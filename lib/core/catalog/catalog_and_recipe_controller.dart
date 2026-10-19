@@ -111,7 +111,14 @@ class CatalogAndRecipeController {
       ORDER BY c.display_order ASC, m.name ASC;
     ''', args);
 
-    return rows.map((r) => MenuItem.fromMap(r, categoryName: r['category_name'] as String?)).toList();
+    final items = <MenuItem>[];
+    for (final row in rows) {
+      if (activeOnly == true) {
+        try { await validateRecipe(row['id'] as int); } on StateError { continue; }
+      }
+      items.add(MenuItem.fromMap(row, categoryName: row['category_name'] as String?));
+    }
+    return items;
   }
 
   Future<MenuItem> getMenuItem(int id) async {
@@ -186,10 +193,10 @@ class CatalogAndRecipeController {
   }
 
   Future<void> validateRecipe(int menuItemId, {DatabaseExecutor? executor}) async {
-    final rows = await (executor ?? database).query('recipes', where: 'menu_item_id = ?', whereArgs: [menuItemId]);
+    final rows = await (executor ?? database).rawQuery('SELECT r.*, i.id AS ingredient_exists FROM recipes r LEFT JOIN raw_ingredients i ON i.id = r.raw_ingredient_id WHERE r.menu_item_id = ?', [menuItemId]);
     if (rows.isEmpty || rows.any((row) {
       final qty = (row['quantity_per_recipe_unit'] as num).toDouble();
-      return !qty.isFinite || qty <= 0;
+      return row['ingredient_exists'] == null || !qty.isFinite || qty <= 0;
     })) {
       throw StateError('Recipe required: configure a complete positive BOM before activation.');
     }

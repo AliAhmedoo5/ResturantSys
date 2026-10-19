@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../catalog/discount_preset.dart';
 import '../catalog/modifier.dart';
+import '../catalog/catalog_and_recipe_controller.dart';
 import '../auth/staff_role.dart';
 import '../database/pos_database_constants.dart';
 import 'cart_item.dart';
@@ -190,6 +191,7 @@ class OrderAndCheckoutController {
         ));
       }
 
+      if (isActive) await validateDealRecipe(dealId, executor: txn);
       return Deal(
         id: dealId,
         name: name.trim(),
@@ -216,10 +218,40 @@ class OrderAndCheckoutController {
     final deals = <Deal>[];
     for (final row in dealRows) {
       final dealId = row['id'] as int;
+      if (activeOnly == true) {
+        try { await validateDealRecipe(dealId); } on StateError { continue; }
+      }
       final dealItems = await _getDealItemsForDeal(dealId, database);
       deals.add(Deal.fromMap(row, items: dealItems));
     }
     return deals;
+  }
+
+  Future<void> validateDealRecipe(int dealId, {DatabaseExecutor? executor}) async {
+    final db = executor ?? database;
+    final slots = await _getDealItemsForDeal(dealId, db);
+    if (slots.isEmpty) throw StateError('A published deal must contain at least one component.');
+    final catalog = CatalogAndRecipeController(database: database);
+    for (final slot in slots) {
+      final ids = {if (slot.defaultMenuItemId != null) slot.defaultMenuItemId!, ...slot.options.map((option) => option.menuItemId)};
+      if (slot.categoryId != null) {
+        final candidates = await db.query('menu_items', where: 'category_id = ? AND is_active = 1', whereArgs: [slot.categoryId]);
+        ids.addAll(candidates.map((row) => row['id'] as int));
+      }
+      if (ids.isEmpty) throw StateError('Every deal component needs a recipe-backed menu item.');
+      for (final id in ids) {
+        final rows = await db.query('menu_items', where: 'id = ? AND is_active = 1', whereArgs: [id]);
+        if (rows.isEmpty) throw StateError('Deal components must be active menu items.');
+        await catalog.validateRecipe(id, executor: db);
+      }
+    }
+  }
+
+  Future<void> toggleDealActive(int id, bool active) async {
+    await database.transaction((txn) async {
+      if (active) await validateDealRecipe(id, executor: txn);
+      await txn.update('deals', {'is_active': active ? 1 : 0}, where: 'id = ?', whereArgs: [id]);
+    });
   }
 
   Future<Deal> getDeal(int id) async {
