@@ -181,7 +181,18 @@ class CatalogAndRecipeController {
     );
   }
 
+  Future<void> validateRecipe(int menuItemId, {DatabaseExecutor? executor}) async {
+    final rows = await (executor ?? database).query('recipes', where: 'menu_item_id = ?', whereArgs: [menuItemId]);
+    if (rows.isEmpty || rows.any((row) {
+      final qty = (row['quantity_per_recipe_unit'] as num).toDouble();
+      return !qty.isFinite || qty <= 0;
+    })) {
+      throw StateError('Recipe required: configure a complete positive BOM before activation.');
+    }
+  }
+
   Future<void> toggleMenuItemActive(int id, bool isActive) async {
+    if (isActive) await validateRecipe(id);
     await database.update(
       PosDatabaseConstants.tableMenuItems,
       {'is_active': isActive ? 1 : 0},
