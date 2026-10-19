@@ -1,3 +1,4 @@
+import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:resturant_sys/core/database/pos_database.dart';
@@ -5,6 +6,31 @@ import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
 import 'package:resturant_sys/core/catalog/storage_unit.dart';
 
 void main() {
+  test('Deal publishing requires a recipe on every alternative', () async {
+    sqfliteFfiInit();
+    final store = PosDatabase(factory: databaseFactoryFfi, customPath: inMemoryDatabasePath);
+    final db = await store.initialize();
+    addTearDown(store.close);
+    final catalog = CatalogAndRecipeController(database: db);
+    final orders = OrderAndCheckoutController(database: db);
+    final cat = await catalog.createCategory(name: 'Drinks', displayOrder: 0, colorHex: '#000000');
+    final normal = await catalog.createMenuItem(categoryId: cat.id, name: 'Regular', basePrice: 10);
+    final large = await catalog.createMenuItem(categoryId: cat.id, name: 'Large', basePrice: 20);
+    final ingredient = await catalog.createRawIngredient(name: 'Cola', storageUnit: StorageUnit.ml);
+    await catalog.setRecipeForMenuItem(menuItemId: normal.id, items: [(rawIngredientId: ingredient.id, quantity: 200.0)]);
+    await catalog.toggleMenuItemActive(normal.id, true);
+    final slots = [DealItemDraft(groupName: 'Drink', defaultMenuItemId: normal.id, options: [DealOptionDraft(menuItemId: normal.id), DealOptionDraft(menuItemId: large.id)])];
+    await expectLater(orders.createDeal(name: 'Unsafe', basePrice: 10, isActive: true, items: slots), throwsStateError);
+    expect(await orders.getDeals(), isEmpty);
+    final draft = await orders.createDeal(name: 'Draft', basePrice: 10, isActive: false, items: slots);
+    expect((await orders.getDeal(draft.id)).isActive, isFalse);
+    await catalog.setRecipeForMenuItem(menuItemId: large.id, items: [(rawIngredientId: ingredient.id, quantity: 300.0)]);
+    await catalog.toggleMenuItemActive(large.id, true);
+    final valid = await orders.createDeal(name: 'Valid', basePrice: 10, isActive: true, items: slots);
+    expect((await orders.getDeals(activeOnly: true)).single.id, valid.id);
+    await catalog.removeRecipeItem(menuItemId: large.id, rawIngredientId: ingredient.id);
+    expect(await orders.getDeals(activeOnly: true), isEmpty);
+  });
   test('Recipe gate rejects activation and keeps incomplete drafts off counter', () async {
     sqfliteFfiInit();
     final store = PosDatabase(factory: databaseFactoryFfi, customPath: inMemoryDatabasePath);
