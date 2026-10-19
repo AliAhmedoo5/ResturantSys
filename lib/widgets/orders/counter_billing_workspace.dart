@@ -962,7 +962,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
             ),
             Padding(
               padding: const EdgeInsets.symmetric(
-                horizontal: WarmCounterSpacing.space10,
+                horizontal: WarmCounterSpacing.space8,
                 vertical: WarmCounterSpacing.space8,
               ),
               child: Column(
@@ -1041,7 +1041,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
             ),
             Padding(
               padding: const EdgeInsets.symmetric(
-                horizontal: WarmCounterSpacing.space10,
+                horizontal: WarmCounterSpacing.space8,
                 vertical: WarmCounterSpacing.space8,
               ),
               child: Column(

@@ -278,7 +278,7 @@ void main() {
         name: 'Chicken Patty',
         storageUnit: StorageUnit.kg,
         currentStock: 100.0,
-        costPerUnit: 400.0,
+        costPerRecipeUnit: 400.0,
       );
 
       // 2. Create menu item draft (0 images attached)
@@ -289,10 +289,10 @@ void main() {
       );
 
       // Attach valid BOM recipe
-      await catalogController.setRecipeBOM(
+      await catalogController.setRecipeForMenuItem(
         menuItemId: item.id,
         items: [
-          RecipeItemDraft(rawIngredientId: ing.id, quantityPerRecipeUnit: 0.15),
+          (rawIngredientId: ing.id, quantity: 0.15),
         ],
       );
 
