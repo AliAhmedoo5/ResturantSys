@@ -1,3 +1,4 @@
+import 'package:resturant_sys/core/delivery/delivery_controller.dart';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -491,6 +492,7 @@ void main() {
       checkPackaging = await catalogController.getRawIngredient(packaging.id);
       expect(checkPackaging.currentStock, equals(99.0));
 
+      final area = await DeliveryController(database: db).saveArea(staffId: 1, name: 'Local', code: 'LOCAL', deliveryFeePaisa: 0);
       // 3. Order Delivery: packaging material IS automatically deducted
       await publishFixtures(catalogController);
       await orderController.checkoutOrder(
@@ -498,6 +500,7 @@ void main() {
         shiftId: shift.id,
         cashierId: 2,
         diningType: DiningType.delivery,
+        delivery: DeliveryDetails(areaId: area.id, quotedFeePaisa: 0, phone: '03001234567', fullAddress: 'House 1'),
         items: [CartItem(menuItem: burger, quantity: 1)],
         payments: [
           const PaymentTender(method: PaymentMethod.cash, amountTendered: 400.0),
@@ -734,3 +737,4 @@ Future<void> publishFixtures(CatalogAndRecipeController catalog) async {
     await catalog.toggleMenuItemActive(item.id, true);
   }
 }
+
