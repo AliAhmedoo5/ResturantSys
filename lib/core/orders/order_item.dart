@@ -13,6 +13,7 @@ class OrderItem {
     required this.totalPrice,
     this.modifiersJson,
     this.dealChoicesJson,
+    this.bomJson,
     required this.createdAt,
   });
 
@@ -26,9 +27,18 @@ class OrderItem {
   final double totalPrice;
   final String? modifiersJson;
   final String? dealChoicesJson;
+  final String? bomJson;
   final DateTime createdAt;
 
   bool get isDeal => dealId != null;
+
+  /// Quantities consumed by this entire sold line, frozen at checkout.
+  /// Null identifies a legacy order whose BOM was not captured.
+  Map<int, double>? get decodedBom {
+    if (bomJson == null) return null;
+    final values = jsonDecode(bomJson!) as Map<String, dynamic>;
+    return values.map((key, value) => MapEntry(int.parse(key), (value as num).toDouble()));
+  }
 
   List<Map<String, dynamic>> get decodedModifiers {
     if (modifiersJson == null || modifiersJson!.isEmpty) return [];
@@ -64,6 +74,7 @@ class OrderItem {
       totalPrice: (map['total_price'] as num).toDouble(),
       modifiersJson: map['modifiers_json'] as String?,
       dealChoicesJson: map['deal_choices_json'] as String?,
+      bomJson: map['bom_json'] as String?,
       createdAt: DateTime.parse(map['created_at'] as String),
     );
   }
@@ -79,6 +90,7 @@ class OrderItem {
       'total_price': totalPrice,
       'modifiers_json': modifiersJson,
       'deal_choices_json': dealChoicesJson,
+      'bom_json': bomJson,
       'created_at': createdAt.toIso8601String(),
     };
   }

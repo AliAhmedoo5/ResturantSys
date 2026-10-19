@@ -89,6 +89,13 @@ class ExcelReportingEngine {
 
     for (final itemRow in settledOrderItems) {
       final item = OrderItem.fromMap(itemRow);
+      final bom = item.decodedBom;
+      if (bom != null) {
+        for (final entry in bom.entries) {
+          recipeUsageMap[entry.key] = (recipeUsageMap[entry.key] ?? 0) + entry.value;
+        }
+        continue;
+      }
       final modifiers = item.decodedModifiers;
       final removedIngredientIds = <int>{};
       final positiveModifiers = <(int rawIngredientId, double delta)>[];

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/catalog/modifier.dart';
+import '../../core/catalog/modifier_group.dart';
 import '../../core/theme/theme.dart';
 
 /// Modal sheet for selecting item customizations (+Add-ons with price/BOM addition, -Removals with 0g BOM).
@@ -10,9 +11,11 @@ class ModifierSelectionDialog extends StatefulWidget {
     required this.itemName,
     required this.availableModifiers,
     this.initialSelected = const [],
+    this.groups = const [],
   });
 
   final String itemName;
+  final List<ModifierGroup> groups;
   final List<Modifier> availableModifiers;
   final List<Modifier> initialSelected;
 
@@ -22,6 +25,13 @@ class ModifierSelectionDialog extends StatefulWidget {
 
 class _ModifierSelectionDialogState extends State<ModifierSelectionDialog> {
   late final Set<int> _selectedIds;
+  String? _error;
+
+  List<ModifierGroup> get _groups => {
+    for (final group in widget.groups) group.id: group,
+    for (final modifier in widget.availableModifiers)
+      if (modifier.group != null) modifier.group!.id: modifier.group!,
+  }.values.toList();
   final NumberFormat _currencyFormat = NumberFormat('#,##0.00', 'en_US');
 
   @override
@@ -33,8 +43,8 @@ class _ModifierSelectionDialogState extends State<ModifierSelectionDialog> {
   @override
   Widget build(BuildContext context) {
     // Separate into Add-ons (+ price/ingredient) and Removals (- price 0 / 'No')
-    final addOns = widget.availableModifiers.where((m) => m.priceDelta > 0 || m.ingredientQtyDelta > 0).toList();
-    final removals = widget.availableModifiers.where((m) => m.priceDelta <= 0 && m.ingredientQtyDelta <= 0).toList();
+    final addOns = widget.availableModifiers.where((m) => m.groupId == null && (m.priceDelta > 0 || m.ingredientQtyDelta > 0)).toList();
+    final removals = widget.availableModifiers.where((m) => m.groupId == null && m.priceDelta <= 0 && m.ingredientQtyDelta <= 0).toList();
 
     return Dialog(
       shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.panelBorderRadius),
@@ -80,6 +90,7 @@ class _ModifierSelectionDialogState extends State<ModifierSelectionDialog> {
               Expanded(
                 child: ListView(
                   children: [
+                    for (final group in _groups) _buildGroup(group),
                     if (addOns.isNotEmpty) ...[
                       Text(
                         '+ Add-ons (Price & BOM Addition)',
@@ -103,7 +114,7 @@ class _ModifierSelectionDialogState extends State<ModifierSelectionDialog> {
                       const SizedBox(height: WarmCounterSpacing.space8),
                       ...removals.map(_buildModifierTile),
                     ],
-                    if (addOns.isEmpty && removals.isEmpty)
+                    if (widget.availableModifiers.isEmpty)
                       Center(
                         child: Padding(
                           padding: const EdgeInsets.all(32.0),
@@ -121,6 +132,8 @@ class _ModifierSelectionDialogState extends State<ModifierSelectionDialog> {
 
               const Divider(height: WarmCounterSpacing.space24, color: WarmCounterColors.lightBorder),
 
+              if (_error != null)
+                Text(_error!, key: const ValueKey('modifier_selection_error'), style: const TextStyle(color: WarmCounterColors.lightDestructiveAction)),
               // Bottom Apply
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
@@ -152,11 +165,42 @@ class _ModifierSelectionDialogState extends State<ModifierSelectionDialog> {
     );
   }
 
+  Widget _buildGroup(ModifierGroup group) {
+    final options = widget.availableModifiers.where((m) => m.groupId == group.id).toList();
+    final selected = options.where((m) => _selectedIds.contains(m.id)).firstOrNull;
+    final content = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(group.name, style: WarmCounterTypography.bodyMedium.copyWith(fontWeight: FontWeight.bold)),
+      Text('${group.isRequired ? 'Required: ' : ''}Choose ${group.requiredCount} to ${group.maxSelected}', style: WarmCounterTypography.caption),
+      ...options.map(_buildModifierTile),
+      const SizedBox(height: WarmCounterSpacing.space16),
+    ]);
+    if (group.selectionMode != 'SINGLE') return content;
+    return RadioGroup<int>(groupValue: selected?.id, onChanged: (value) {
+      if (value == null) {
+        if (selected != null) _toggleModifier(selected, false);
+      } else {
+        _toggleModifier(options.firstWhere((m) => m.id == value), true);
+      }
+    }, child: content);
+  }
+
   Widget _buildModifierTile(Modifier mod) {
     final isSelected = _selectedIds.contains(mod.id);
     final priceLabel = mod.priceDelta > 0
         ? '+Rs ${_currencyFormat.format(mod.priceDelta)}'
         : 'Rs 0.00';
+
+    final group = _groups.where((g) => g.id == mod.groupId).firstOrNull;
+    if (group?.selectionMode == 'SINGLE') {
+      return RadioListTile<int>(
+        key: ValueKey('modifier_tile_${mod.id}'),
+        value: mod.id,
+        toggleable: !(group?.isRequired ?? false),
+        title: Text(mod.name, style: WarmCounterTypography.bodyMedium),
+        subtitle: Text(priceLabel),
+        activeColor: WarmCounterColors.lightPrimaryAction,
+      );
+    }
 
     return CheckboxListTile(
       key: ValueKey('modifier_tile_${mod.id}'),
@@ -172,20 +216,27 @@ class _ModifierSelectionDialogState extends State<ModifierSelectionDialog> {
       ),
       value: isSelected,
       activeColor: WarmCounterColors.lightPrimaryAction,
-      onChanged: (val) {
-        setState(() {
-          if (val == true) {
-            _selectedIds.add(mod.id);
-          } else {
-            _selectedIds.remove(mod.id);
-          }
-        });
-      },
+      onChanged: (val) => _toggleModifier(mod, val == true),
     );
+  }
+
+  void _toggleModifier(Modifier mod, bool selected) {
+    setState(() {
+      final group = _groups.where((g) => g.id == mod.groupId).firstOrNull;
+      final current = widget.availableModifiers.where((m) => _selectedIds.contains(m.id)).toList();
+      final updated = ModifierSelection.select(current, mod.copyWith(group: group), selected: selected);
+      _selectedIds..clear()..addAll(updated.map((m) => m.id));
+      _error = null;
+    });
   }
 
   void _handleApply() {
     final selected = widget.availableModifiers.where((m) => _selectedIds.contains(m.id)).toList();
-    Navigator.of(context).pop(selected);
+    try {
+      ModifierSelection.validate(selected, _groups);
+      Navigator.of(context).pop(selected);
+    } on StateError catch (error) {
+      setState(() => _error = error.message);
+    }
   }
 }

@@ -90,15 +90,18 @@ void main() {
         basePrice: 1160.0,
         taxRate: 16.0,
         isTaxInclusive: true,
-        isActive: true,
+        isActive: false,
       );
+      final portion = await controller.createRawIngredient(name: "Portion", storageUnit: StorageUnit.count);
+      await controller.setRecipeForMenuItem(menuItemId: item.id, items: [(rawIngredientId: portion.id, quantity: 1.0)]);
+      await controller.toggleMenuItemActive(item.id, true);
 
       expect(item.name, equals('Zinger Deluxe'));
       expect(item.categoryName, equals('Fast Food'));
       expect(item.basePrice, equals(1160.0));
       expect(item.taxRate, equals(16.0));
       expect(item.isTaxInclusive, isTrue);
-      expect(item.isActive, isTrue);
+      expect((await controller.getMenuItem(item.id)).isActive, isTrue);
 
       // Verify tax-inclusive back calculations:
       // net = 1160 / 1.16 = 1000.0

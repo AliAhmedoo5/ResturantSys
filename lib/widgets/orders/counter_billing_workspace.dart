@@ -8,6 +8,7 @@ import '../../core/catalog/discount_preset.dart';
 import '../../core/catalog/menu_category.dart';
 import '../../core/catalog/menu_item.dart';
 import '../../core/catalog/modifier.dart';
+import '../../core/catalog/modifier_group.dart';
 import '../../core/orders/cart_item.dart';
 import '../../core/orders/deal.dart';
 import '../../core/orders/dining_type.dart';
@@ -197,29 +198,64 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
     );
 
     if (choices != null && mounted) {
-      setState(() {
-        _cartItems.add(CartItem(
-          deal: deal,
-          quantity: 1,
-          selectedDealChoices: choices,
-        ));
-      });
+      final draft = CartItem(deal: deal, quantity: 1, selectedDealChoices: choices);
+      final modifiers = await _chooseDealModifiers(draft);
+      if (modifiers == null || !mounted) return;
+      setState(() => _cartItems.add(draft.copyWith(selectedModifiers: modifiers)));
     }
+  }
+
+  Future<List<Modifier>?> _chooseDealModifiers(CartItem item) async {
+    final result = <Modifier>[];
+    // Global options apply to the whole deal. Item-specific groups are chosen
+    // once per component menu item, including repeated portions of that item.
+    final globals = _allModifiers.where((m) => m.menuItemId == null).toList();
+    if (globals.isNotEmpty) {
+      final selected = await showDialog<List<Modifier>>(context: context, builder: (_) => ModifierSelectionDialog(
+        itemName: item.name, availableModifiers: globals,
+        initialSelected: item.selectedModifiers.where((m) => m.menuItemId == null).toList(),
+      ));
+      if (selected == null || !mounted) return null;
+      result.addAll(selected);
+    }
+    for (final id in item.selectedDealChoices.map((c) => c.menuItemId).toSet()) {
+      final options = _allModifiers.where((m) => m.menuItemId == id).toList();
+      final groups = widget.catalogController == null
+          ? <ModifierGroup>[for (final option in options) if (option.group != null) option.group!]
+          : await widget.catalogController!.getModifierGroups(menuItemId: id);
+      if (!mounted) return null;
+      if (options.isEmpty && groups.isEmpty) continue;
+      final name = item.selectedDealChoices.firstWhere((c) => c.menuItemId == id).menuItemName;
+      final selected = await showDialog<List<Modifier>>(context: context, builder: (_) => ModifierSelectionDialog(
+        itemName: name, availableModifiers: options, groups: groups,
+        initialSelected: item.selectedModifiers.where((m) => m.menuItemId == id).toList(),
+      ));
+      if (selected == null || !mounted) return null;
+      result.addAll(selected);
+    }
+    return result;
   }
 
   Future<void> _openModifierSelection(int index) async {
     final cartItem = _cartItems[index];
-    if (cartItem.menuItem == null) return;
+    if (cartItem.isDeal) {
+      final selected = await _chooseDealModifiers(cartItem);
+      if (selected != null && mounted) setState(() => _cartItems[index] = cartItem.copyWith(selectedModifiers: selected));
+      return;
+    }
 
     final itemModifiers = _allModifiers.where(
       (m) => m.menuItemId == null || m.menuItemId == cartItem.menuItem!.id,
     ).toList();
 
+    final groups = widget.catalogController == null ? <ModifierGroup>[] : await widget.catalogController!.getModifierGroups(menuItemId: cartItem.menuItem!.id);
+    if (!mounted) return;
     final selected = await showDialog<List<Modifier>>(
       context: context,
       builder: (ctx) => ModifierSelectionDialog(
         itemName: cartItem.name,
         availableModifiers: itemModifiers,
+        groups: groups,
         initialSelected: cartItem.selectedModifiers,
       ),
     );
@@ -1175,8 +1211,8 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
                   }).toList(),
                 ),
 
-              // Customize button for Menu Items
-              if (item.menuItem != null)
+              // Both menu items and deal components support customizations.
+              if (item.menuItem != null || item.deal != null)
                 InkWell(
                   key: ValueKey('customize_item_$index'),
                   onTap: () => _openModifierSelection(index),

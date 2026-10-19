@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../catalog/discount_preset.dart';
 import '../catalog/modifier.dart';
+import '../catalog/modifier_group.dart';
+import '../catalog/catalog_and_recipe_controller.dart';
 import '../auth/staff_role.dart';
 import '../database/pos_database_constants.dart';
 import 'cart_item.dart';
@@ -190,6 +192,7 @@ class OrderAndCheckoutController {
         ));
       }
 
+      if (isActive) await validateDealRecipe(dealId, executor: txn);
       return Deal(
         id: dealId,
         name: name.trim(),
@@ -216,10 +219,40 @@ class OrderAndCheckoutController {
     final deals = <Deal>[];
     for (final row in dealRows) {
       final dealId = row['id'] as int;
+      if (activeOnly == true) {
+        try { await validateDealRecipe(dealId); } on StateError { continue; }
+      }
       final dealItems = await _getDealItemsForDeal(dealId, database);
       deals.add(Deal.fromMap(row, items: dealItems));
     }
     return deals;
+  }
+
+  Future<void> validateDealRecipe(int dealId, {DatabaseExecutor? executor}) async {
+    final db = executor ?? database;
+    final slots = await _getDealItemsForDeal(dealId, db);
+    if (slots.isEmpty) throw StateError('A published deal must contain at least one component.');
+    final catalog = CatalogAndRecipeController(database: database);
+    for (final slot in slots) {
+      final ids = {if (slot.defaultMenuItemId != null) slot.defaultMenuItemId!, ...slot.options.map((option) => option.menuItemId)};
+      if (slot.categoryId != null) {
+        final candidates = await db.query('menu_items', where: 'category_id = ? AND is_active = 1', whereArgs: [slot.categoryId]);
+        ids.addAll(candidates.map((row) => row['id'] as int));
+      }
+      if (ids.isEmpty) throw StateError('Every deal component needs a recipe-backed menu item.');
+      for (final id in ids) {
+        final rows = await db.query('menu_items', where: 'id = ? AND is_active = 1', whereArgs: [id]);
+        if (rows.isEmpty) throw StateError('Deal components must be active menu items.');
+        await catalog.validateRecipe(id, executor: db);
+      }
+    }
+  }
+
+  Future<void> toggleDealActive(int id, bool active) async {
+    await database.transaction((txn) async {
+      if (active) await validateDealRecipe(id, executor: txn);
+      await txn.update('deals', {'is_active': active ? 1 : 0}, where: 'id = ?', whereArgs: [id]);
+    });
   }
 
   Future<Deal> getDeal(int id) async {
@@ -377,6 +410,7 @@ class OrderAndCheckoutController {
     final totals = calculateCartTotals(items: items, discount: discount);
 
     return await database.transaction((txn) async {
+      for (final item in items) { await _validateCartItem(item, txn); }
       // 1. Daily Sequential Token
       final tokenNumber = await getNextTokenNumber(businessDayId, txn);
 
@@ -421,6 +455,8 @@ class OrderAndCheckoutController {
           );
         }
 
+        final bom = await _lineBom(cartItem, txn);
+        final bomJson = jsonEncode(bom.map((key, value) => MapEntry('$key', value)));
         final itemId = await txn.insert(
           PosDatabaseConstants.tableOrderItems,
           {
@@ -433,6 +469,7 @@ class OrderAndCheckoutController {
             'total_price': cartItem.totalPrice,
             'modifiers_json': modifiersJson,
             'deal_choices_json': dealChoicesJson,
+            'bom_json': bomJson,
             'created_at': formattedNow,
           },
         );
@@ -448,6 +485,7 @@ class OrderAndCheckoutController {
           totalPrice: cartItem.totalPrice,
           modifiersJson: modifiersJson,
           dealChoicesJson: dealChoicesJson,
+          bomJson: bomJson,
           createdAt: now,
         ));
       }
@@ -506,6 +544,61 @@ class OrderAndCheckoutController {
         lowStockWarnings: lowStockWarnings,
       );
     });
+  }
+
+  Future<void> _validateCartItem(CartItem item, DatabaseExecutor txn) async {
+    if (item.quantity <= 0 || (item.menuItem == null) == (item.deal == null)) throw StateError('Choose one valid menu item or deal per line.');
+    final catalog = CatalogAndRecipeController(database: database);
+    final componentIds = <int>[];
+    if (item.menuItem != null) {
+      if (item.selectedDealChoices.isNotEmpty) throw StateError('Menu items cannot contain deal choices.');
+      componentIds.add(item.menuItem!.id);
+    } else {
+      final deals = await txn.query('deals', where: 'id = ? AND is_active = 1', whereArgs: [item.deal!.id]);
+      if (deals.isEmpty) throw StateError('This deal is no longer active.');
+      await validateDealRecipe(item.deal!.id, executor: txn);
+      final slots = await _getDealItemsForDeal(item.deal!.id, txn);
+      if (item.selectedDealChoices.length != slots.length || item.selectedDealChoices.map((c) => c.dealItemId).toSet().length != slots.length) throw StateError('Select exactly one option for each deal component.');
+      for (final slot in slots) {
+        final choices = item.selectedDealChoices.where((c) => c.dealItemId == slot.id);
+        if (choices.length != 1) throw StateError('Missing deal component.');
+        final choice = choices.single;
+        final allowed = {if (slot.defaultMenuItemId != null) slot.defaultMenuItemId!, ...slot.options.map((o) => o.menuItemId)};
+        if (slot.categoryId != null && slot.options.isEmpty) {
+          final rows = await txn.query('menu_items', where: 'category_id = ? AND is_active = 1', whereArgs: [slot.categoryId]);
+          allowed.addAll(rows.map((r) => r['id'] as int));
+        }
+        if (!allowed.contains(choice.menuItemId)) throw StateError('This menu item is not an allowed deal choice.');
+        componentIds.add(choice.menuItemId);
+      }
+    }
+    final canonical = <Modifier>[];
+    for (final supplied in item.selectedModifiers) {
+      final rows = await txn.query('modifiers', where: 'id = ? AND is_active = 1', whereArgs: [supplied.id]);
+      if (rows.isEmpty) throw StateError('Selected modifier is no longer available.');
+      final current = Modifier.fromMap(rows.single);
+      if ((current.menuItemId != null && !componentIds.contains(current.menuItemId)) || current.menuItemId != supplied.menuItemId || current.rawIngredientId != supplied.rawIngredientId || current.ingredientQtyDelta != supplied.ingredientQtyDelta || current.priceDelta != supplied.priceDelta || current.groupId != supplied.groupId) throw StateError('Modifier changed; select it again.');
+      if (!current.ingredientQtyDelta.isFinite || (current.rawIngredientId == null && current.ingredientQtyDelta != 0)) throw StateError('Invalid modifier ingredient delta.');
+      if (current.rawIngredientId != null && (await txn.query('raw_ingredients', where: 'id = ?', whereArgs: [current.rawIngredientId])).isEmpty) throw StateError('Modifier ingredient no longer exists.');
+      canonical.add(current);
+    }
+    final groups = <ModifierGroup>[];
+    for (final id in componentIds.toSet()) {
+      final rows = await txn.query('menu_items', where: 'id = ? AND is_active = 1', whereArgs: [id]);
+      if (rows.isEmpty) throw StateError('This menu item is no longer active.');
+      await catalog.validateRecipe(id, executor: txn);
+      groups.addAll(await catalog.getModifierGroups(menuItemId: id, executor: txn));
+    }
+    ModifierSelection.validate(canonical, groups);
+  }
+
+  Future<Map<int, double>> _lineBom(CartItem item, DatabaseExecutor executor) async {
+    final quantities = <int, double>{};
+    final ids = item.menuItem != null ? [item.menuItem!.id] : item.selectedDealChoices.map((c) => c.menuItemId);
+    for (final id in ids) {
+      await _accumulateMenuItemDeductions(menuItemId: id, quantity: item.quantity, selectedModifiers: item.selectedModifiers.where((m) => m.menuItemId == null || m.menuItemId == id).toList(), deductions: quantities, executor: executor);
+    }
+    return quantities;
   }
 
   /// Finds raw ingredient ID representing takeaway packaging box / materials.
@@ -612,43 +705,20 @@ class OrderAndCheckoutController {
     required Map<int, double> deductions,
     required DatabaseExecutor executor,
   }) async {
-    // 1. Fetch item recipe
-    final recipes = await executor.query(
-      PosDatabaseConstants.tableRecipes,
-      where: 'menu_item_id = ?',
-      whereArgs: [menuItemId],
-    );
-
-    // Identify removals: modifiers where ingredientQtyDelta == 0.0 (or negative) with a rawIngredientId
-    final removedIngredientIds = <int>{};
-    for (final mod in selectedModifiers) {
-      if (mod.rawIngredientId != null &&
-          (mod.ingredientQtyDelta == 0.0 || mod.name.toLowerCase().contains('no '))) {
-        removedIngredientIds.add(mod.rawIngredientId!);
+    final recipes = await executor.query('recipes', where: 'menu_item_id = ?', whereArgs: [menuItemId]);
+    final perPortion = <int, double>{for (final row in recipes) row['raw_ingredient_id'] as int: (row['quantity_per_recipe_unit'] as num).toDouble()};
+    // Sum deltas in stable ID order, independent of click order or option names.
+    final modifiers = [...selectedModifiers]..sort((a, b) => a.id.compareTo(b.id));
+    for (final mod in modifiers) {
+      if (mod.menuItemId != null && mod.menuItemId != menuItemId) continue;
+      if (mod.rawIngredientId != null) {
+        final id = mod.rawIngredientId!;
+        perPortion[id] = (perPortion[id] ?? 0) + mod.ingredientQtyDelta;
       }
     }
-
-    for (final recipe in recipes) {
-      final ingredientId = recipe['raw_ingredient_id'] as int;
-      final recipeQty = (recipe['quantity_per_recipe_unit'] as num).toDouble();
-
-      // If removal was selected for this ingredient, deduction is 0g (ADR-0002)
-      if (removedIngredientIds.contains(ingredientId)) {
-        continue;
-      }
-
-      deductions[ingredientId] = (deductions[ingredientId] ?? 0.0) + (recipeQty * quantity);
-    }
-
-    // 2. Modifiers: Add-ons with positive ingredient deltas
-    for (final mod in selectedModifiers) {
-      if (mod.rawIngredientId != null &&
-          mod.ingredientQtyDelta > 0.0 &&
-          !removedIngredientIds.contains(mod.rawIngredientId!)) {
-        final ingredientId = mod.rawIngredientId!;
-        final delta = mod.ingredientQtyDelta;
-        deductions[ingredientId] = (deductions[ingredientId] ?? 0.0) + (delta * quantity);
-      }
+    for (final entry in perPortion.entries) {
+      if (!entry.value.isFinite || entry.value < 0) throw StateError('Modifier deltas cannot make recipe consumption negative.');
+      deductions[entry.key] = (deductions[entry.key] ?? 0) + entry.value * quantity;
     }
   }
 
@@ -899,6 +969,13 @@ class OrderAndCheckoutController {
     required Map<int, double> reversals,
     required DatabaseExecutor executor,
   }) async {
+    final bom = item.decodedBom;
+    if (bom != null) {
+      for (final entry in bom.entries) {
+        reversals[entry.key] = (reversals[entry.key] ?? 0) + entry.value;
+      }
+      return;
+    }
     final modifiers = item.decodedModifiers;
     final removedIngredientIds = <int>{};
     final positiveModifiers = <(int rawIngredientId, double delta)>[];

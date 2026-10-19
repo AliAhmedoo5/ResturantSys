@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:resturant_sys/core/catalog/menu_item.dart';
 import 'package:resturant_sys/core/catalog/modifier.dart';
+import 'package:resturant_sys/core/catalog/modifier_group.dart';
 import 'package:resturant_sys/core/catalog/raw_ingredient.dart';
 import 'package:resturant_sys/core/theme/theme.dart';
 
@@ -11,14 +12,17 @@ class ModifierFormDialog extends StatefulWidget {
     this.modifier,
     required this.menuItems,
     required this.rawIngredients,
+    this.groups = const [],
     required this.onSave,
   });
 
   final Modifier? modifier;
+  final List<ModifierGroup> groups;
   final List<MenuItem> menuItems;
   final List<RawIngredient> rawIngredients;
   final Future<void> Function({
     int? menuItemId,
+    int? groupId,
     required String name,
     required double priceDelta,
     int? rawIngredientId,
@@ -36,6 +40,7 @@ class _ModifierFormDialogState extends State<ModifierFormDialog> {
   late final TextEditingController _priceDeltaController;
   late final TextEditingController _qtyDeltaController;
   late int? _selectedMenuItemId;
+  int? _selectedGroupId;
   late int? _selectedRawIngredientId;
   late bool _isActive;
   bool _isSaving = false;
@@ -51,6 +56,7 @@ class _ModifierFormDialogState extends State<ModifierFormDialog> {
       text: widget.modifier != null ? widget.modifier!.ingredientQtyDelta.toString() : '0.0',
     );
     _selectedMenuItemId = widget.modifier?.menuItemId;
+    _selectedGroupId = widget.modifier?.groupId;
     _selectedRawIngredientId = widget.modifier?.rawIngredientId;
     _isActive = widget.modifier?.isActive ?? true;
   }
@@ -83,6 +89,7 @@ class _ModifierFormDialogState extends State<ModifierFormDialog> {
 
       await widget.onSave(
         menuItemId: _selectedMenuItemId,
+        groupId: _selectedGroupId,
         name: name,
         priceDelta: priceDelta,
         rawIngredientId: _selectedRawIngredientId,
@@ -140,7 +147,23 @@ class _ModifierFormDialogState extends State<ModifierFormDialog> {
                       );
                     }),
                   ],
-                  onChanged: (val) => setState(() => _selectedMenuItemId = val),
+                  onChanged: (val) => setState(() {
+                    _selectedMenuItemId = val;
+                    _selectedGroupId = null;
+                  }),
+                ),
+                const SizedBox(height: WarmCounterSpacing.space16),
+                DropdownButtonFormField<int?>(
+                  key: ValueKey('modifier_group_dropdown_${_selectedMenuItemId ?? 'global'}'),
+                  initialValue: _selectedGroupId,
+                  decoration: const InputDecoration(labelText: 'Modifier group'),
+                  items: [
+                    const DropdownMenuItem<int?>(value: null, child: Text('Ungrouped')),
+                    ...widget.groups.where((g) => g.menuItemId == _selectedMenuItemId).map(
+                      (g) => DropdownMenuItem<int?>(value: g.id, child: Text(g.name)),
+                    ),
+                  ],
+                  onChanged: (value) => setState(() => _selectedGroupId = value),
                 ),
                 const SizedBox(height: WarmCounterSpacing.space16),
                 TextFormField(

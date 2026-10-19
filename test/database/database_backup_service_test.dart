@@ -1,3 +1,4 @@
+import 'package:resturant_sys/core/database/pos_database_constants.dart';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -160,7 +161,7 @@ void main() {
       final restoredDb = await databaseFactoryFfi.openDatabase(backupResult.localBackupPath!);
       
       final versionResult = await restoredDb.rawQuery('PRAGMA user_version;');
-      expect(versionResult.first.values.first, equals(9));
+      expect(versionResult.first.values.first, equals(PosDatabaseConstants.schemaVersion));
 
       final integrityResult = await restoredDb.rawQuery('PRAGMA integrity_check;');
       expect(integrityResult.first.values.first, equals('ok'));

@@ -5,6 +5,7 @@ import 'package:resturant_sys/core/catalog/discount_preset.dart';
 import 'package:resturant_sys/core/catalog/menu_category.dart';
 import 'package:resturant_sys/core/catalog/menu_item.dart';
 import 'package:resturant_sys/core/catalog/modifier.dart';
+import 'package:resturant_sys/core/catalog/modifier_group.dart';
 import 'package:resturant_sys/core/catalog/raw_ingredient.dart';
 import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
 import 'package:resturant_sys/core/theme/theme.dart';
@@ -12,6 +13,7 @@ import 'dialogs/category_form_dialog.dart';
 import 'dialogs/discount_preset_form_dialog.dart';
 import 'dialogs/menu_item_form_dialog.dart';
 import 'dialogs/modifier_form_dialog.dart';
+import 'dialogs/modifier_group_form_dialog.dart';
 import 'dialogs/raw_ingredient_form_dialog.dart';
 import 'dialogs/recipe_builder_dialog.dart';
 import '../procurement/kitchen_wastage_dialog.dart';
@@ -33,6 +35,7 @@ class SupervisorCatalogWorkspace extends StatefulWidget {
     this.initialMenuItems,
     this.initialRawIngredients,
     this.initialModifiers,
+    this.initialModifierGroups,
     this.initialDiscounts,
   });
 
@@ -43,6 +46,7 @@ class SupervisorCatalogWorkspace extends StatefulWidget {
   final List<MenuItem>? initialMenuItems;
   final List<RawIngredient>? initialRawIngredients;
   final List<Modifier>? initialModifiers;
+  final List<ModifierGroup>? initialModifierGroups;
   final List<DiscountPreset>? initialDiscounts;
 
   @override
@@ -53,8 +57,10 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
   bool _isLoading = true;
   List<MenuCategory> _categories = [];
   List<MenuItem> _menuItems = [];
+  List<MenuItem> _allMenuItems = [];
   List<RawIngredient> _rawIngredients = [];
   List<Modifier> _modifiers = [];
+  List<ModifierGroup> _modifierGroups = [];
   List<DiscountPreset> _discounts = [];
   bool _cashierVoidEnabled = true;
 
@@ -82,12 +88,14 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
         setState(() {
           _categories = List.from(widget.initialCategories ?? []);
           _menuItems = List.from(widget.initialMenuItems ?? []);
+          _allMenuItems = List.from(widget.initialMenuItems ?? []);
           var ings = List<RawIngredient>.from(widget.initialRawIngredients ?? []);
           if (_lowStockFilterOnly) {
             ings = ings.where((i) => i.isLowStock).toList();
           }
           _rawIngredients = ings;
           _modifiers = List.from(widget.initialModifiers ?? []);
+          _modifierGroups = List.from(widget.initialModifierGroups ?? []);
           _discounts = List.from(widget.initialDiscounts ?? []);
           _isLoading = false;
         });
@@ -97,17 +105,21 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
 
     setState(() => _isLoading = true);
     final categories = await widget.controller!.getCategories();
-    final items = await widget.controller!.getMenuItems(categoryId: _menuItemCategoryFilter);
+    final allItems = await widget.controller!.getMenuItems();
+    final items = allItems.where((item) => _menuItemCategoryFilter == null || item.categoryId == _menuItemCategoryFilter).toList();
     final ingredients = await widget.controller!.getRawIngredients(lowStockOnly: _lowStockFilterOnly ? true : null);
     final modifiers = await widget.controller!.getModifiers();
+    final groups = await widget.controller!.getModifierGroups();
     final discounts = await widget.controller!.getDiscountPresets();
 
     if (mounted) {
       setState(() {
         _categories = categories;
         _menuItems = items;
+        _allMenuItems = allItems;
         _rawIngredients = ingredients;
         _modifiers = modifiers;
+        _modifierGroups = groups;
         _discounts = discounts;
         _isLoading = false;
       });
@@ -333,8 +345,12 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
 
   Future<void> _toggleMenuItemActive(MenuItem item, bool active) async {
     if (widget.controller != null) {
-      await widget.controller!.toggleMenuItemActive(item.id, active);
-      await _loadAllCatalogData();
+      try {
+        await widget.controller!.toggleMenuItemActive(item.id, active);
+        await _loadAllCatalogData();
+      } on StateError catch (error) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+      }
     } else {
       setState(() {
         final idx = _menuItems.indexWhere((m) => m.id == item.id);
@@ -482,16 +498,62 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
   // Modifier Actions
   // ---------------------------------------------------------------------------
 
+  void _showModifierGroupDialog([ModifierGroup? group]) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => ModifierGroupFormDialog(
+        group: group,
+        menuItems: _allMenuItems,
+        onSave: (updated) async {
+          if (widget.controller != null) {
+            if (group == null) {
+              await widget.controller!.createModifierGroup(
+                menuItemId: updated.menuItemId,
+                name: updated.name,
+                selectionMode: updated.selectionMode,
+                minSelected: updated.minSelected,
+                maxSelected: updated.maxSelected,
+                isRequired: updated.isRequired,
+              );
+            } else {
+              await widget.controller!.updateModifierGroup(updated);
+            }
+            await _loadAllCatalogData();
+          } else {
+            setState(() {
+              if (group == null) {
+                _modifierGroups.add(ModifierGroup(
+                  id: _modifierGroups.fold<int>(0, (max, group) => group.id > max ? group.id : max) + 1,
+                  menuItemId: updated.menuItemId,
+                  name: updated.name,
+                  selectionMode: updated.selectionMode,
+                  minSelected: updated.minSelected,
+                  maxSelected: updated.maxSelected,
+                  isRequired: updated.isRequired,
+                ));
+              } else {
+                final index = _modifierGroups.indexWhere((g) => g.id == group.id);
+                _modifierGroups[index] = updated;
+              }
+            });
+          }
+        },
+      ),
+    );
+  }
+
   void _showAddModifierDialog() {
     showDialog<void>(
       context: context,
       builder: (ctx) => ModifierFormDialog(
-        menuItems: _menuItems,
+        menuItems: _allMenuItems,
         rawIngredients: _rawIngredients,
-        onSave: ({menuItemId, required name, required priceDelta, rawIngredientId, required ingredientQtyDelta, required bool isActive}) async {
+        groups: _modifierGroups,
+        onSave: ({menuItemId, groupId, required name, required priceDelta, rawIngredientId, required ingredientQtyDelta, required bool isActive}) async {
           if (widget.controller != null) {
             await widget.controller!.createModifier(
               menuItemId: menuItemId,
+              groupId: groupId,
               name: name,
               priceDelta: priceDelta,
               rawIngredientId: rawIngredientId,
@@ -504,6 +566,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
               _modifiers.add(Modifier(
                 id: _modifiers.length + 1,
                 menuItemId: menuItemId,
+              groupId: groupId,
                 name: name,
                 priceDelta: priceDelta,
                 rawIngredientId: rawIngredientId,
@@ -522,13 +585,17 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
       context: context,
       builder: (ctx) => ModifierFormDialog(
         modifier: modifier,
-        menuItems: _menuItems,
+        menuItems: _allMenuItems,
         rawIngredients: _rawIngredients,
-        onSave: ({menuItemId, required name, required priceDelta, rawIngredientId, required ingredientQtyDelta, required bool isActive}) async {
+        groups: _modifierGroups,
+        onSave: ({menuItemId, groupId, required name, required priceDelta, rawIngredientId, required ingredientQtyDelta, required bool isActive}) async {
           if (widget.controller != null) {
             await widget.controller!.updateModifier(
               modifier.copyWith(
+                clearGroup: groupId == null,
+                clearMenuItem: menuItemId == null,
                 menuItemId: menuItemId,
+              groupId: groupId,
                 name: name,
                 priceDelta: priceDelta,
                 rawIngredientId: rawIngredientId,
@@ -542,7 +609,10 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
               final idx = _modifiers.indexWhere((m) => m.id == modifier.id);
               if (idx != -1) {
                 _modifiers[idx] = modifier.copyWith(
+                clearGroup: groupId == null,
+                clearMenuItem: menuItemId == null,
                   menuItemId: menuItemId,
+              groupId: groupId,
                   name: name,
                   priceDelta: priceDelta,
                   rawIngredientId: rawIngredientId,
@@ -1333,6 +1403,24 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
           ),
           const SizedBox(height: WarmCounterSpacing.space16),
 
+          OutlinedButton.icon(
+            key: const ValueKey('add_modifier_group_button'),
+            onPressed: () => _showModifierGroupDialog(),
+            icon: const Icon(Icons.playlist_add),
+            label: const Text('Add Modifier Group'),
+          ),
+          for (final group in _modifierGroups)
+            ListTile(
+              title: Text(group.name),
+              subtitle: Text('${_allMenuItems.where((item) => item.id == group.menuItemId).firstOrNull?.name ?? 'Menu item'} · ${group.selectionMode} · ${group.minSelected}–${group.maxSelected}${group.isRequired ? ' · Required' : ''}'),
+              trailing: IconButton(
+                key: ValueKey('edit_modifier_group_${group.id}'),
+                tooltip: 'Edit modifier group',
+                icon: const Icon(Icons.edit_outlined),
+                onPressed: () => _showModifierGroupDialog(group),
+              ),
+            ),
+          const SizedBox(height: WarmCounterSpacing.space16),
           if (_modifiers.isEmpty)
             _buildEmptyState('No modifiers configured. Tap "Add Modifier" to configure extras or removals.')
           else
