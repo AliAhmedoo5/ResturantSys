@@ -66,6 +66,16 @@ void main() {
     final result = await commit();
     expect(result.order.grandTotal, 575.50);
     expect(result.order.deliveryFeePaisa, 12550);
+    final cashResult = await orders.checkoutOrder(businessDayId: day.id, shiftId: shift.id, cashierId: 2,
+      diningType: DiningType.delivery, items: cart, discount: discount, delivery: details,
+      payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 600, changeReturned: 24)]);
+    expect(cashResult.order.grandTotal, 575.50);
+    expect(cashResult.order.cashRoundingPaisa, 50);
+    final splitResult = await orders.checkoutOrder(businessDayId: day.id, shiftId: shift.id, cashierId: 2,
+      diningType: DiningType.delivery, items: cart, discount: discount, delivery: details,
+      payments: [const PaymentTender(method: PaymentMethod.raast, amountTendered: 200.25), const PaymentTender(method: PaymentMethod.cash, amountTendered: 375)]);
+    expect(splitResult.order.cashRoundingPaisa, -25);
+    expect((await orders.getOrder(splitResult.order.id)).cashRoundingPaisa, -25);
     final addresses = await delivery.lookupAddresses('0300123');
     expect(addresses.single.customerName, 'Sara');
     expect(addresses.single.fullAddress, 'House 7');
@@ -76,4 +86,5 @@ void main() {
     expect(saved.deliveryFeePaisa, 12550);
     expect(saved.deliveryAddress, contains('Call at gate'));
   });}
+
 

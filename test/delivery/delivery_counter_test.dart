@@ -60,9 +60,14 @@ void main() {
       initialCategories: [category], initialMenuItems: [food], initialDeals: const [], initialModifiers: const [], initialDiscounts: const [], initialNextTokenNumber: 1,
     ))));
     await tester.tap(find.byKey(ValueKey('menu_item_tile_${food.id}')));
+    await settle();
+    expect(find.text('Burger'), findsNWidgets(2));
     await tester.tap(find.byKey(const ValueKey('dining_type_DELIVERY')));
+    await tester.pump();
     await tester.tap(find.byKey(const ValueKey('proceed_to_tender_button')));
     await settle();
+    for (var attempt = 0; attempt < 50 && find.byKey(const ValueKey('delivery_phone')).evaluate().isEmpty; attempt++) { await settle(); }
+    expect(find.byKey(const ValueKey('delivery_phone')), findsOneWidget);
     await tester.enterText(find.byKey(const ValueKey('delivery_phone')), '0300123');
     await settle();
     expect(tester.widget<TextFormField>(find.byKey(const ValueKey('delivery_address'))).controller!.text, isEmpty);
@@ -92,9 +97,11 @@ void main() {
     expect(find.text('Burger'), findsNWidgets(2));
     expect(await tester.runAsync(() => orders.getOrders()), isEmpty);
     await tester.tap(find.byKey(const ValueKey('dining_type_TAKEAWAY')));
+    await tester.pump();
     await tester.tap(find.byKey(const ValueKey('proceed_to_tender_button')));
     await tester.pumpAndSettle();
     expect(find.byType(DeliveryDetailsDialog), findsNothing);
     expect(tester.widget<TenderCheckoutDialog>(find.byType(TenderCheckoutDialog)).grandTotal, 500);
   });
 }
+
