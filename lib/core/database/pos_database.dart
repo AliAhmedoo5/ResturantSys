@@ -119,6 +119,7 @@ class PosDatabase {
     await _createVendorKhataTables(db);
     await _createV9Tables(db);
     await _upgradeToVersion10(db);
+    await _upgradeToVersion11(db);
   }
 
   Future<void> _createOperationalAccountingTables(DatabaseExecutor executor) async {
@@ -427,6 +428,11 @@ class PosDatabase {
       await _upgradeToVersion9(db);
     }
     if (oldVersion < 10) await _upgradeToVersion10(db);
+    if (oldVersion < 11) await _upgradeToVersion11(db);
+  }
+
+  Future<void> _upgradeToVersion11(DatabaseExecutor db) async {
+    await db.execute('ALTER TABLE delivery_areas ADD COLUMN archived_at TEXT;');
   }
 
   Future<void> _upgradeToVersion10(DatabaseExecutor db) async {
@@ -774,3 +780,4 @@ class PosDatabase {
     }
   }
 }
+
