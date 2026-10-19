@@ -137,8 +137,9 @@ class CatalogAndRecipeController {
     required double basePrice,
     double taxRate = 0.0,
     bool isTaxInclusive = true,
-    bool isActive = true,
+    bool isActive = false,
   }) async {
+    if (isActive) throw StateError("Save a draft and configure its recipe before activation.");
     final now = _formatTimestamp(DateTime.now());
     final id = await database.insert(
       PosDatabaseConstants.tableMenuItems,
@@ -157,7 +158,9 @@ class CatalogAndRecipeController {
   }
 
   Future<MenuItem> updateMenuItem(MenuItem item) async {
-    await database.update(
+    await database.transaction((txn) async {
+    if (item.isActive) await validateRecipe(item.id, executor: txn);
+    await txn.update(
       PosDatabaseConstants.tableMenuItems,
       {
         'category_id': item.categoryId,
@@ -170,6 +173,7 @@ class CatalogAndRecipeController {
       where: 'id = ?',
       whereArgs: [item.id],
     );
+    });
     return getMenuItem(item.id);
   }
 
@@ -192,13 +196,10 @@ class CatalogAndRecipeController {
   }
 
   Future<void> toggleMenuItemActive(int id, bool isActive) async {
-    if (isActive) await validateRecipe(id);
-    await database.update(
-      PosDatabaseConstants.tableMenuItems,
-      {'is_active': isActive ? 1 : 0},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    await database.transaction((txn) async {
+      if (isActive) await validateRecipe(id, executor: txn);
+      await txn.update(PosDatabaseConstants.tableMenuItems, {'is_active': isActive ? 1 : 0}, where: 'id = ?', whereArgs: [id]);
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -321,6 +322,7 @@ class CatalogAndRecipeController {
     required int rawIngredientId,
     required double quantity,
   }) async {
+    if (!quantity.isFinite || quantity <= 0) throw ArgumentError("Recipe quantities must be positive and finite.");
     final now = _formatTimestamp(DateTime.now());
     await database.rawInsert('''
       INSERT INTO ${PosDatabaseConstants.tableRecipes} 
@@ -338,17 +340,20 @@ class CatalogAndRecipeController {
     required int menuItemId,
     required int rawIngredientId,
   }) async {
-    await database.delete(
-      PosDatabaseConstants.tableRecipes,
-      where: 'menu_item_id = ? AND raw_ingredient_id = ?',
-      whereArgs: [menuItemId, rawIngredientId],
-    );
+    await database.transaction((txn) async {
+      await txn.delete('recipes', where: 'menu_item_id = ? AND raw_ingredient_id = ?', whereArgs: [menuItemId, rawIngredientId]);
+      final remaining = await txn.query('recipes', where: 'menu_item_id = ?', whereArgs: [menuItemId]);
+      if (remaining.isEmpty) await txn.update('menu_items', {'is_active': 0}, where: 'id = ?', whereArgs: [menuItemId]);
+    });
   }
 
   Future<void> setRecipeForMenuItem({
     required int menuItemId,
     required List<({int rawIngredientId, double quantity})> items,
   }) async {
+    for (final item in items) {
+      if (!item.quantity.isFinite || item.quantity <= 0) throw ArgumentError('Recipe quantities must be positive and finite.');
+    }
     final now = _formatTimestamp(DateTime.now());
     await database.transaction((txn) async {
       await txn.delete(
@@ -367,6 +372,7 @@ class CatalogAndRecipeController {
         });
       }
       await batch.commit(noResult: true);
+      if (items.isEmpty) await txn.update('menu_items', {'is_active': 0}, where: 'id = ?', whereArgs: [menuItemId]);
     });
   }
 
