@@ -1404,7 +1404,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
           for (final group in _modifierGroups)
             ListTile(
               title: Text(group.name),
-              subtitle: Text('${_menuItems.where((item) => item.id == group.menuItemId).firstOrNull?.name ?? 'Menu item'} · ${group.selectionMode} · ${group.minSelected}–${group.maxSelected}${group.isRequired ? ' · Required' : ''}'),
+              subtitle: Text('${_menuItems.where((item) => item.id == group.menuItemId).firstOrNull?.name ?? 'Menu item'} Â· ${group.selectionMode} Â· ${group.minSelected}â€“${group.maxSelected}${group.isRequired ? ' Â· Required' : ''}'),
               trailing: IconButton(
                 key: ValueKey('edit_modifier_group_${group.id}'),
                 tooltip: 'Edit modifier group',

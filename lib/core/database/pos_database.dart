@@ -430,6 +430,8 @@ class PosDatabase {
   }
 
   Future<void> _upgradeToVersion10(DatabaseExecutor db) async {
+    await _createCatalogAndRecipeTables(db);
+    await _createOrderItemsAndDealsTables(db);
     await db.execute("""
       CREATE TABLE modifier_groups (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
