@@ -577,7 +577,7 @@ class OrderAndCheckoutController {
       final rows = await txn.query('modifiers', where: 'id = ? AND is_active = 1', whereArgs: [supplied.id]);
       if (rows.isEmpty) throw StateError('Selected modifier is no longer available.');
       final current = Modifier.fromMap(rows.single);
-      if ((current.menuItemId != null && !componentIds.contains(current.menuItemId)) || current.rawIngredientId != supplied.rawIngredientId || current.ingredientQtyDelta != supplied.ingredientQtyDelta || current.priceDelta != supplied.priceDelta || current.groupId != supplied.groupId) throw StateError('Modifier changed; select it again.');
+      if ((current.menuItemId != null && !componentIds.contains(current.menuItemId)) || current.menuItemId != supplied.menuItemId || current.rawIngredientId != supplied.rawIngredientId || current.ingredientQtyDelta != supplied.ingredientQtyDelta || current.priceDelta != supplied.priceDelta || current.groupId != supplied.groupId) throw StateError('Modifier changed; select it again.');
       if (!current.ingredientQtyDelta.isFinite || (current.rawIngredientId == null && current.ingredientQtyDelta != 0)) throw StateError('Invalid modifier ingredient delta.');
       if (current.rawIngredientId != null && (await txn.query('raw_ingredients', where: 'id = ?', whereArgs: [current.rawIngredientId])).isEmpty) throw StateError('Modifier ingredient no longer exists.');
       canonical.add(current);
@@ -969,11 +969,10 @@ class OrderAndCheckoutController {
     required Map<int, double> reversals,
     required DatabaseExecutor executor,
   }) async {
-    if (item.bomJson != null) {
-      final quantities = jsonDecode(item.bomJson!) as Map<String, dynamic>;
-      for (final entry in quantities.entries) {
-        final id = int.parse(entry.key);
-        reversals[id] = (reversals[id] ?? 0) + (entry.value as num).toDouble();
+    final bom = item.decodedBom;
+    if (bom != null) {
+      for (final entry in bom.entries) {
+        reversals[entry.key] = (reversals[entry.key] ?? 0) + entry.value;
       }
       return;
     }

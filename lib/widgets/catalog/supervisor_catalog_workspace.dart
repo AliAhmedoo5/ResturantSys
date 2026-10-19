@@ -57,6 +57,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
   bool _isLoading = true;
   List<MenuCategory> _categories = [];
   List<MenuItem> _menuItems = [];
+  List<MenuItem> _allMenuItems = [];
   List<RawIngredient> _rawIngredients = [];
   List<Modifier> _modifiers = [];
   List<ModifierGroup> _modifierGroups = [];
@@ -87,6 +88,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
         setState(() {
           _categories = List.from(widget.initialCategories ?? []);
           _menuItems = List.from(widget.initialMenuItems ?? []);
+          _allMenuItems = List.from(widget.initialMenuItems ?? []);
           var ings = List<RawIngredient>.from(widget.initialRawIngredients ?? []);
           if (_lowStockFilterOnly) {
             ings = ings.where((i) => i.isLowStock).toList();
@@ -103,7 +105,8 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
 
     setState(() => _isLoading = true);
     final categories = await widget.controller!.getCategories();
-    final items = await widget.controller!.getMenuItems(categoryId: _menuItemCategoryFilter);
+    final allItems = await widget.controller!.getMenuItems();
+    final items = allItems.where((item) => _menuItemCategoryFilter == null || item.categoryId == _menuItemCategoryFilter).toList();
     final ingredients = await widget.controller!.getRawIngredients(lowStockOnly: _lowStockFilterOnly ? true : null);
     final modifiers = await widget.controller!.getModifiers();
     final groups = await widget.controller!.getModifierGroups();
@@ -113,6 +116,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
       setState(() {
         _categories = categories;
         _menuItems = items;
+        _allMenuItems = allItems;
         _rawIngredients = ingredients;
         _modifiers = modifiers;
         _modifierGroups = groups;
@@ -495,7 +499,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
       context: context,
       builder: (context) => ModifierGroupFormDialog(
         group: group,
-        menuItems: _menuItems,
+        menuItems: _allMenuItems,
         onSave: (updated) async {
           if (widget.controller != null) {
             if (group == null) {
@@ -538,7 +542,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
     showDialog<void>(
       context: context,
       builder: (ctx) => ModifierFormDialog(
-        menuItems: _menuItems,
+        menuItems: _allMenuItems,
         rawIngredients: _rawIngredients,
         groups: _modifierGroups,
         onSave: ({menuItemId, groupId, required name, required priceDelta, rawIngredientId, required ingredientQtyDelta, required bool isActive}) async {
@@ -577,7 +581,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
       context: context,
       builder: (ctx) => ModifierFormDialog(
         modifier: modifier,
-        menuItems: _menuItems,
+        menuItems: _allMenuItems,
         rawIngredients: _rawIngredients,
         groups: _modifierGroups,
         onSave: ({menuItemId, groupId, required name, required priceDelta, rawIngredientId, required ingredientQtyDelta, required bool isActive}) async {

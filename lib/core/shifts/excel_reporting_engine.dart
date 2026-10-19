@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:archive/archive.dart';
 import 'package:intl/intl.dart';
@@ -90,11 +89,10 @@ class ExcelReportingEngine {
 
     for (final itemRow in settledOrderItems) {
       final item = OrderItem.fromMap(itemRow);
-      if (item.bomJson != null) {
-        final quantities = jsonDecode(item.bomJson!) as Map<String, dynamic>;
-        for (final entry in quantities.entries) {
-          final id = int.parse(entry.key);
-          recipeUsageMap[id] = (recipeUsageMap[id] ?? 0) + (entry.value as num).toDouble();
+      final bom = item.decodedBom;
+      if (bom != null) {
+        for (final entry in bom.entries) {
+          recipeUsageMap[entry.key] = (recipeUsageMap[entry.key] ?? 0) + entry.value;
         }
         continue;
       }

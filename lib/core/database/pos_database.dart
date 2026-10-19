@@ -433,7 +433,7 @@ class PosDatabase {
     await _createCatalogAndRecipeTables(db);
     await _createOrderItemsAndDealsTables(db);
     await db.execute("""
-      CREATE TABLE modifier_groups (
+      CREATE TABLE IF NOT EXISTS modifier_groups (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         menu_item_id INTEGER NOT NULL REFERENCES menu_items(id) ON DELETE CASCADE,
         name TEXT NOT NULL,
@@ -444,8 +444,16 @@ class PosDatabase {
         CHECK(selection_mode != 'SINGLE' OR max_selected = 1)
       )
     """);
-    await db.execute('ALTER TABLE modifiers ADD COLUMN group_id INTEGER REFERENCES modifier_groups(id) ON DELETE RESTRICT');
-    await db.execute('ALTER TABLE order_items ADD COLUMN bom_json TEXT');
+    final modifierColumns = await db.rawQuery('PRAGMA table_info(modifiers)');
+    final migratingLegacyModifiers = !modifierColumns.any((column) => column['name'] == 'group_id');
+    if (migratingLegacyModifiers) {
+      await db.execute('ALTER TABLE modifiers ADD COLUMN group_id INTEGER REFERENCES modifier_groups(id) ON DELETE RESTRICT');
+    }
+    final orderColumns = await db.rawQuery('PRAGMA table_info(order_items)');
+    if (!orderColumns.any((column) => column['name'] == 'bom_json')) {
+      await db.execute('ALTER TABLE order_items ADD COLUMN bom_json TEXT');
+    }
+    if (migratingLegacyModifiers) {
     // Preserve legacy item-specific removal semantics once, as explicit deltas.
     await db.execute("""
       UPDATE modifiers SET ingredient_qty_delta = -(
@@ -458,6 +466,7 @@ class PosDatabase {
     // Global legacy removals need per-item quantities; keep them off the counter
     // until a manager supplies explicit deltas.
     await db.execute("UPDATE modifiers SET is_active = 0 WHERE menu_item_id IS NULL AND raw_ingredient_id IS NOT NULL AND (ingredient_qty_delta = 0 OR lower(name) LIKE '%no %')");
+    }
     await db.execute("UPDATE menu_items SET is_active = 0 WHERE NOT EXISTS (SELECT 1 FROM recipes r WHERE r.menu_item_id = menu_items.id) OR EXISTS (SELECT 1 FROM recipes r WHERE r.menu_item_id = menu_items.id AND r.quantity_per_recipe_unit <= 0)");
   }
 

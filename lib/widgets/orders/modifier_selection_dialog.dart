@@ -223,14 +223,9 @@ class _ModifierSelectionDialogState extends State<ModifierSelectionDialog> {
   void _toggleModifier(Modifier mod, bool selected) {
     setState(() {
       final group = _groups.where((g) => g.id == mod.groupId).firstOrNull;
-      if (selected && group?.selectionMode == 'SINGLE') {
-        _selectedIds.removeAll(widget.availableModifiers.where((m) => m.groupId == group!.id).map((m) => m.id));
-      }
-      if (selected) {
-        _selectedIds.add(mod.id);
-      } else {
-        _selectedIds.remove(mod.id);
-      }
+      final current = widget.availableModifiers.where((m) => _selectedIds.contains(m.id)).toList();
+      final updated = ModifierSelection.select(current, mod.copyWith(group: group), selected: selected);
+      _selectedIds..clear()..addAll(updated.map((m) => m.id));
       _error = null;
     });
   }

@@ -32,6 +32,14 @@ class OrderItem {
 
   bool get isDeal => dealId != null;
 
+  /// Quantities consumed by this entire sold line, frozen at checkout.
+  /// Null identifies a legacy order whose BOM was not captured.
+  Map<int, double>? get decodedBom {
+    if (bomJson == null) return null;
+    final values = jsonDecode(bomJson!) as Map<String, dynamic>;
+    return values.map((key, value) => MapEntry(int.parse(key), (value as num).toDouble()));
+  }
+
   List<Map<String, dynamic>> get decodedModifiers {
     if (modifiersJson == null || modifiersJson!.isEmpty) return [];
     try {
