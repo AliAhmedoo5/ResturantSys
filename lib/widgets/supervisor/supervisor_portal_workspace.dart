@@ -1,3 +1,5 @@
+import '../../core/delivery/delivery_controller.dart';
+import '../delivery/delivery_areas_workspace.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/auth/auth_service.dart';
@@ -23,6 +25,7 @@ import '../../core/database/pos_database_constants.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 enum SupervisorPortalTab {
+  deliveryAreas('Delivery Areas', Icons.delivery_dining),
   staff('Staff & Departments', Icons.badge_rounded),
   toggles('Feature Toggles', Icons.toggle_on_rounded),
   discrepancies('Discrepancy Review', Icons.assignment_late_rounded),
@@ -765,6 +768,9 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
 
   Widget _buildTabContent(BuildContext context) {
     switch (_activeTab) {
+      case SupervisorPortalTab.deliveryAreas:
+        if (widget.orderController == null || widget.currentStaff == null) return const Center(child: Text('Delivery areas unavailable.'));
+        return DeliveryAreasWorkspace(controller: DeliveryController(database: widget.orderController!.database), staffId: widget.currentStaff!.id);
       case SupervisorPortalTab.staff:
         return _buildStaffAndDepartmentsView(context);
       case SupervisorPortalTab.toggles:
@@ -1695,4 +1701,5 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
     );
   }
 }
+
 
