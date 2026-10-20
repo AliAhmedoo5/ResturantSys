@@ -243,6 +243,7 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
                     DropdownButtonFormField<String>(
                       key: const ValueKey('cash_movement_category_dropdown'),
                       initialValue: _selectedCategory,
+                      isExpanded: true,
                       decoration: const InputDecoration(
                         filled: true,
                         fillColor: WarmCounterColors.lightPageBackground,
@@ -252,7 +253,7 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
                           borderSide: BorderSide(color: WarmCounterColors.lightBorder),
                         ),
                       ),
-                      items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                      items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c, overflow: TextOverflow.ellipsis))).toList(),
                       onChanged: (val) {
                         if (val != null) setState(() => _selectedCategory = val);
                       },
