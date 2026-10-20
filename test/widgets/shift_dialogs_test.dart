@@ -133,14 +133,29 @@ void main() {
       expect(find.textContaining('Expected Cash'), findsNothing);
       expect(find.textContaining('System Balance'), findsNothing);
 
-      // Enter direct count or denomination
+      final submitBtn = find.byKey(const ValueKey('submit_blind_close_button'));
+
+      // Validate empty count rejection
+      await tester.tap(submitBtn);
+      await tester.pumpAndSettle();
+      expect(find.text('Please enter physical counted cash amount.'), findsOneWidget);
+      expect(submittedCount, isNull);
+
+      // Validate negative count rejection
       final totalInput = find.byKey(const ValueKey('direct_counted_cash_input'));
       expect(totalInput, findsOneWidget);
+      await tester.enterText(totalInput, '-100');
+      await tester.pump();
 
+      await tester.tap(submitBtn);
+      await tester.pumpAndSettle();
+      expect(find.text('Physical counted cash cannot be negative.'), findsOneWidget);
+      expect(submittedCount, isNull);
+
+      // Valid count submission
       await tester.enterText(totalInput, '7450');
       await tester.pump();
 
-      final submitBtn = find.byKey(const ValueKey('submit_blind_close_button'));
       await tester.tap(submitBtn);
       await tester.pumpAndSettle();
 
@@ -335,14 +350,80 @@ void main() {
       await tester.pump();
       expect(cashMovementClicked, isTrue);
 
-      // Cashier must NOT see Interim X-Report to prevent peeking expected totals prior to blind handover
-      expect(find.byKey(const ValueKey('btn_interim_xreport')), findsNothing);
+      // Interim X-Report is accessible to Cashiers during an active shift
+      final interimXReportBtn = find.byKey(const ValueKey('btn_interim_xreport'));
+      expect(interimXReportBtn, findsOneWidget);
 
       final closeShiftBtn = find.byKey(const ValueKey('btn_close_shift'));
       await tester.ensureVisible(closeShiftBtn);
       await tester.tap(closeShiftBtn);
       await tester.pump();
       expect(closeShiftClicked, isTrue);
+    });
+
+    testWidgets('BusinessDayBar shows discrepancy badge and queue button for supervisor', (tester) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      bool discrepancyQueueClicked = false;
+
+      const supervisor = Staff(
+        id: 2,
+        name: 'Manager Ali',
+        departmentId: 3,
+        departmentName: 'Management',
+        pinHash: 'dummy',
+        role: StaffRole.supervisor,
+        isActive: true,
+      );
+
+      final businessDay = BusinessDay(
+        id: 1,
+        openedAt: DateTime(2026, 10, 11, 8, 0),
+        openedByStaffId: 2,
+        status: BusinessDayStatus.open,
+      );
+
+      final shift = Shift(
+        id: 5,
+        businessDayId: 1,
+        staffId: 1,
+        openedAt: DateTime(2026, 10, 11, 8, 30),
+        openingFloat: 5000.0,
+        status: ShiftStatus.open,
+        staffName: 'Zeeshan Cashier',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: WarmCounterTheme.lightTheme,
+          home: Scaffold(
+            body: BusinessDayBar(
+              currentStaff: supervisor,
+              activeBusinessDay: businessDay,
+              activeShift: shift,
+              flaggedShiftsCount: 3,
+              onOpenBusinessDayTap: () {},
+              onCloseBusinessDayTap: () {},
+              onOpenShiftTap: () {},
+              onCashMovementTap: () {},
+              onInterimXReportTap: () {},
+              onCloseShiftTap: () {},
+              onDiscrepancyQueueTap: () => discrepancyQueueClicked = true,
+            ),
+          ),
+        ),
+      );
+
+      // Discrepancy queue button with badge
+      final queueBtn = find.byKey(const ValueKey('btn_discrepancy_queue'));
+      expect(queueBtn, findsOneWidget);
+      expect(find.text('3'), findsOneWidget);
+
+      await tester.tap(queueBtn);
+      await tester.pump();
+      expect(discrepancyQueueClicked, isTrue);
     });
 
     testWidgets('BusinessDayBar shows Interim X-Report for supervisor and triggers it', (tester) async {
