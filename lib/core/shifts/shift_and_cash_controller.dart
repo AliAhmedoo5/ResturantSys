@@ -26,7 +26,7 @@ class ShiftAndCashController {
   /// Validates that [staffId] belongs to an active staff member with [requiredRole].
   ///
   /// Throws [StateError] if staff is not found, inactive, or has the wrong role.
-  Future<void> _assertActiveRole(int staffId, StaffRole requiredRole, String errorMessage) async {
+  Future<Map<String, dynamic>> _assertActiveRole(int staffId, StaffRole requiredRole, String errorMessage) async {
     final staffRow = await database.query(
       PosDatabaseConstants.tableStaff,
       where: 'id = ? AND is_active = 1',
@@ -40,6 +40,7 @@ class ShiftAndCashController {
     if (role != requiredRole) {
       throw StateError(errorMessage);
     }
+    return staffRow.first;
   }
 
   // ===========================================================================
@@ -342,7 +343,7 @@ class ShiftAndCashController {
     }
 
     // Manager credentials cannot operate cashier shifts (ADR-0009)
-    await _assertActiveRole(
+    final staffRow = await _assertActiveRole(
       staffId,
       StaffRole.cashier,
       'Authorization error: Manager credentials cannot operate cashier shifts.',
@@ -365,7 +366,7 @@ class ShiftAndCashController {
       },
     );
 
-    final staffName = staffRow.isNotEmpty ? staffRow.first['name'] as String? : null;
+    final staffName = staffRow['name'] as String?;
 
     return CashMovement(
       id: id,
