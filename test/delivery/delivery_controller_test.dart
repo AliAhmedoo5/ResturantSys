@@ -90,13 +90,12 @@ void main() {
         payments: [PaymentTender(method: PaymentMethod.cash, amountTendered: example.$2)]);
       expect(rounded.order.cashRoundingPaisa, example.$3);
       expect(rounded.order.deliveryFeePaisa, example.$1);
-    }    await delivery.archiveArea(staffId: 1, id: area.id);
+    }
+    await delivery.archiveArea(staffId: 1, id: area.id);
     final saved = await orders.getOrder(result.order.id);
     expect(saved.deliveryAreaName, 'Garden');
     expect(saved.deliveryFeePaisa, 12550);
     expect(saved.deliveryAddress, contains('Call at gate'));
-  });}
-
-
-
+  });
+}
 
