@@ -23,6 +23,25 @@ class ShiftAndCashController {
         '${twoDigits(dt.hour)}:${twoDigits(dt.minute)}:${twoDigits(dt.second)}';
   }
 
+  /// Validates that [staffId] belongs to an active staff member with [requiredRole].
+  ///
+  /// Throws [StateError] if staff is not found, inactive, or has the wrong role.
+  Future<void> _assertActiveRole(int staffId, StaffRole requiredRole, String errorMessage) async {
+    final staffRow = await database.query(
+      PosDatabaseConstants.tableStaff,
+      where: 'id = ? AND is_active = 1',
+      whereArgs: [staffId],
+      limit: 1,
+    );
+    if (staffRow.isEmpty) {
+      throw StateError('Staff #$staffId not found or inactive.');
+    }
+    final role = StaffRole.fromCode(staffRow.first['role'] as String);
+    if (role != requiredRole) {
+      throw StateError(errorMessage);
+    }
+  }
+
   // ===========================================================================
   // BUSINESS DAY STATE MACHINE
   // ===========================================================================
@@ -323,19 +342,11 @@ class ShiftAndCashController {
     }
 
     // Manager credentials cannot operate cashier shifts (ADR-0009)
-    final staffRow = await database.query(
-      PosDatabaseConstants.tableStaff,
-      where: 'id = ? AND is_active = 1',
-      whereArgs: [staffId],
-      limit: 1,
+    await _assertActiveRole(
+      staffId,
+      StaffRole.cashier,
+      'Authorization error: Manager credentials cannot operate cashier shifts.',
     );
-    if (staffRow.isEmpty) {
-      throw StateError('Staff #$staffId not found or inactive.');
-    }
-    final role = StaffRole.fromCode(staffRow.first['role'] as String);
-    if (role != StaffRole.cashier) {
-      throw StateError('Authorization error: Manager credentials cannot operate cashier shifts.');
-    }
 
     final effectiveCreatedAt = createdAt ?? DateTime.now();
     final formattedCreatedAt = _formatTimestamp(effectiveCreatedAt);
@@ -404,30 +415,20 @@ class ShiftAndCashController {
   /// Sets the configurable supervisor discrepancy threshold in system settings.
   ///
   /// Throws [ArgumentError] if [threshold] is negative.
-  /// Throws [StateError] if [managerStaffId] is provided and does not belong to an active Manager.
+  /// Throws [StateError] if [managerStaffId] does not belong to an active Manager.
   Future<void> setDiscrepancyThreshold(
     double threshold, {
-    int? managerStaffId,
+    required int managerStaffId,
   }) async {
     if (threshold < 0) {
       throw ArgumentError('Discrepancy threshold cannot be negative.');
     }
 
-    if (managerStaffId != null) {
-      final staffRow = await database.query(
-        PosDatabaseConstants.tableStaff,
-        where: 'id = ? AND is_active = 1',
-        whereArgs: [managerStaffId],
-        limit: 1,
-      );
-      if (staffRow.isEmpty) {
-        throw StateError('Staff #$managerStaffId not found or inactive.');
-      }
-      final role = StaffRole.fromCode(staffRow.first['role'] as String);
-      if (role != StaffRole.manager) {
-        throw StateError('Authorization error: Only Managers can configure the discrepancy threshold.');
-      }
-    }
+    await _assertActiveRole(
+      managerStaffId,
+      StaffRole.manager,
+      'Authorization error: Only Managers can configure the discrepancy threshold.',
+    );
 
     final now = _formatTimestamp(DateTime.now());
     await database.insert(
@@ -501,15 +502,11 @@ class ShiftAndCashController {
       throw ArgumentError('Counted cash cannot be negative.');
     }
 
-    final actor = await database.query(
-      PosDatabaseConstants.tableStaff,
-      where: 'id = ? AND is_active = 1 AND role = ?',
-      whereArgs: [staffId, StaffRole.cashier.code],
-      limit: 1,
+    await _assertActiveRole(
+      staffId,
+      StaffRole.cashier,
+      'Authorization error: Only an active Cashier can close a cashier shift.',
     );
-    if (actor.isEmpty) {
-      throw StateError('Authorization error: Only an active Cashier can close a cashier shift.');
-    }
 
     final shiftRows = await database.query(
       PosDatabaseConstants.tableShifts,
@@ -623,19 +620,11 @@ class ShiftAndCashController {
       throw ArgumentError('Resolution notes are mandatory for supervisor audit.');
     }
 
-    final staffRow = await database.query(
-      PosDatabaseConstants.tableStaff,
-      where: 'id = ? AND is_active = 1',
-      whereArgs: [supervisorStaffId],
-      limit: 1,
+    await _assertActiveRole(
+      supervisorStaffId,
+      StaffRole.manager,
+      'Authorization error: Only Managers can resolve shift discrepancies.',
     );
-    if (staffRow.isEmpty) {
-      throw StateError('Staff #$supervisorStaffId not found or inactive.');
-    }
-    final role = StaffRole.fromCode(staffRow.first['role'] as String);
-    if (role != StaffRole.manager) {
-      throw StateError('Authorization error: Only Managers can resolve shift discrepancies.');
-    }
 
     final shiftRows = await database.query(
       PosDatabaseConstants.tableShifts,
