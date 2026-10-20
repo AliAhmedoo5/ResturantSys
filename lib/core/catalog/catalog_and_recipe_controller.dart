@@ -1,5 +1,6 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../database/pos_database_constants.dart';
+import 'catalog_media_service.dart';
 import 'discount_preset.dart';
 import 'menu_category.dart';
 import 'menu_item.dart';
@@ -10,11 +11,16 @@ import 'recipe_item.dart';
 import 'storage_unit.dart';
 
 /// Domain controller managing Menu Categories, Menu Items with tax-inclusive pricing,
-/// Raw Ingredients, Recipe Bill of Materials (BOM), Modifiers, and Pre-Approved Discounts.
+/// Raw Ingredients, Recipe Bill of Materials (BOM), Modifiers, Pre-Approved Discounts,
+/// and Catalog Media Storage.
 class CatalogAndRecipeController {
-  CatalogAndRecipeController({required this.database});
+  CatalogAndRecipeController({
+    required this.database,
+    CatalogMediaService? mediaService,
+  }) : mediaService = mediaService ?? CatalogMediaService(database: database);
 
   final Database database;
+  final CatalogMediaService mediaService;
 
   static String _formatTimestamp(DateTime dt) {
     String twoDigits(int n) => n.toString().padLeft(2, '0');
