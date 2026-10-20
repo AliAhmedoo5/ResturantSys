@@ -1,3 +1,6 @@
+import '../../core/delivery/delivery_controller.dart';
+import '../../core/orders/paisa_engine.dart';
+import '../delivery/delivery_details_dialog.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -93,6 +96,8 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
   // Cart State
   final List<CartItem> _cartItems = [];
   int _nextTokenNumber = 1;
+  DeliveryDetails? _deliveryDetails;
+  bool _checkoutOpen = false;
 
   final NumberFormat _currencyFormat = NumberFormat('#,##0.00', 'en_US');
 
@@ -328,6 +333,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
     setState(() {
       _cartItems.clear();
       _selectedDiscount = null;
+      _deliveryDetails = null;
     });
   }
 
@@ -336,13 +342,26 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
   // ---------------------------------------------------------------------------
 
   Future<void> _openTenderCheckout() async {
-    if (_cartItems.isEmpty) return;
+    if (_cartItems.isEmpty || _checkoutOpen) return;
+    _checkoutOpen = true;
+    try {
+    if (_selectedDiningType == DiningType.delivery) {
+      if (widget.orderController == null) return;
+      final details = await showDialog<DeliveryDetails>(context: context, builder: (_) => DeliveryDetailsDialog(
+        controller: DeliveryController(database: widget.orderController!.database),
+        foodTotalPaisa: PaisaEngine.rupeesToPaisa(_cartTotals.grandTotal), initial: _deliveryDetails));
+      if (details == null || !mounted) return;
+      _deliveryDetails = details;
+    } else {
+      _deliveryDetails = null;
+    }
 
     final totals = _cartTotals;
     final completed = await showDialog<bool>(
       context: context,
       builder: (ctx) => TenderCheckoutDialog(
-        grandTotal: totals.grandTotal,
+        roundPhysicalCash: _selectedDiningType == DiningType.delivery,
+        grandTotal: totals.grandTotal + (_deliveryDetails?.quotedFeePaisa ?? 0) / 100,
         onCompleteCheckout: (tenders) async {
             if (widget.orderController != null) {
               final result = await widget.orderController!.checkoutOrder(
@@ -353,6 +372,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
                 items: List.of(_cartItems),
                 discount: _selectedDiscount,
                 payments: tenders,
+                delivery: _deliveryDetails,
               );
 
               // Decoupled hardware printing executed strictly AFTER transaction commit
@@ -377,10 +397,13 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
       await _refreshToken();
       widget.onOrderCompleted?.call();
     }
+    } finally { _checkoutOpen = false; }
   }
 
   /// Instant checkout with exact cash on Numpad Enter
   Future<void> _handleExactCashCheckout() async {
+    if (_selectedDiningType == DiningType.delivery) { await _openTenderCheckout(); return; }
+    if (_checkoutOpen) return;
     if (_cartItems.isEmpty) return;
     final totals = _cartTotals;
 
@@ -1405,3 +1428,6 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
     );
   }
 }
+
+
+
