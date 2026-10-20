@@ -1,3 +1,4 @@
+import '../../core/theme/warm_counter_typography.dart';
 import 'package:flutter/material.dart';
 import '../../core/delivery/delivery_controller.dart';
 
@@ -74,15 +75,16 @@ class _DeliveryDetailsDialogState extends State<DeliveryDetailsDialog> {
       TextFormField(key: const ValueKey('delivery_name'), controller: _name, decoration: const InputDecoration(labelText: 'Customer name')),
       DropdownButtonFormField<int>(key: ValueKey('delivery_area_$_areaId'), initialValue: _areaId, isExpanded: true,
         decoration: const InputDecoration(labelText: 'Active delivery area'), items: _areas.map((a) => DropdownMenuItem(value: a.id,
-          child: Text('${a.name} • Rs ${(a.deliveryFeePaisa / 100).toStringAsFixed(2)}', overflow: TextOverflow.ellipsis))).toList(),
+          child: Text('${a.name} • Rs ${(a.deliveryFeePaisa / 100).toStringAsFixed(2)}', overflow: TextOverflow.ellipsis, textAlign: TextAlign.right, style: WarmCounterTypography.tabularNumbers))).toList(),
         onChanged: (id) => setState(() => _areaId = id), validator: (v) => v == null ? 'Select an active area' : null),
       if (_areas.isEmpty) const Text('No active delivery areas. Ask a Manager to enable an area, or choose Takeaway / Dine-In.'),
       TextFormField(key: const ValueKey('delivery_address'), controller: _address, decoration: const InputDecoration(labelText: 'Full address'), maxLines: 2,
         validator: (v) => v!.trim().isEmpty ? 'Enter an address' : null),
       TextFormField(controller: _landmark, decoration: const InputDecoration(labelText: 'Landmark')),
       TextFormField(controller: _notes, decoration: const InputDecoration(labelText: 'Delivery notes')),
-      if (_areaId != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text('Fixed delivery fee: Rs ${(_areas.firstWhere((a) => a.id == _areaId).deliveryFeePaisa / 100).toStringAsFixed(2)} • Food discounts do not apply to delivery.')),
+      if (_areaId != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text('Fixed delivery fee: Rs ${(_areas.firstWhere((a) => a.id == _areaId).deliveryFeePaisa / 100).toStringAsFixed(2)} • Food discounts do not apply to delivery.', textAlign: TextAlign.right, style: WarmCounterTypography.tabularNumbers)),
       if (_error != null) Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
     ])))), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Back to cart')),
       FilledButton(onPressed: _loading || _areas.isEmpty ? null : _continue, child: const Text('Continue to payment'))]);
 }
+

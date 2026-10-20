@@ -23,11 +23,11 @@ class Order {
     this.items = const [],
     this.payments = const [],
     this.cashierName,
-    this.deliveryAreaId, this.deliveryAreaName, this.deliveryAddress, this.customerPhone, this.customerName, this.deliveryFeePaisa = 0,
+    this.deliveryAreaId, this.deliveryAreaName, this.deliveryAddress, this.customerPhone, this.customerName, this.deliveryFeePaisa = 0, this.cashRoundingPaisa = 0,
   });
 
   final int? deliveryAreaId;
-  final int deliveryFeePaisa;
+  final int deliveryFeePaisa, cashRoundingPaisa;
   final String? deliveryAreaName, deliveryAddress, customerPhone, customerName;
   final int id;
   final int businessDayId;
@@ -65,6 +65,7 @@ class Order {
       deliveryAreaName: map['delivery_area_name_snapshot'] as String?,
       deliveryAddress: map['delivery_address_snapshot'] as String?,
       deliveryFeePaisa: map['delivery_fee_paisa'] as int? ?? 0,
+      cashRoundingPaisa: map['cash_rounding_paisa'] as int? ?? 0,
       customerPhone: map['customer_phone'] as String?,
       customerName: map['customer_name'] as String?,
       businessDayId: map['business_day_id'] as int,
@@ -94,6 +95,7 @@ class Order {
       'delivery_area_name_snapshot': deliveryAreaName,
       'delivery_address_snapshot': deliveryAddress,
       'delivery_fee_paisa': deliveryFeePaisa,
+      'cash_rounding_paisa': cashRoundingPaisa,
       'customer_phone': customerPhone,
       'customer_name': customerName,
       'business_day_id': businessDayId,
@@ -112,4 +114,5 @@ class Order {
     };
   }
 }
+
 

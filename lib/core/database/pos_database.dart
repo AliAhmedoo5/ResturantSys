@@ -432,7 +432,10 @@ class PosDatabase {
   }
 
   Future<void> _upgradeToVersion11(DatabaseExecutor db) async {
-    await db.execute('ALTER TABLE delivery_areas ADD COLUMN archived_at TEXT;');
+    final columns = await db.rawQuery('PRAGMA table_info(delivery_areas)');
+    if (!columns.any((column) => column['name'] == 'archived_at')) {
+      await db.execute('ALTER TABLE delivery_areas ADD COLUMN archived_at TEXT;');
+    }
   }
 
   Future<void> _upgradeToVersion10(DatabaseExecutor db) async {
@@ -780,4 +783,5 @@ class PosDatabase {
     }
   }
 }
+
 

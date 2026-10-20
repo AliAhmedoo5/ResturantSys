@@ -715,10 +715,13 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
         borderRadius: WarmCounterSpacing.panelBorderRadius,
         border: Border.all(color: WarmCounterColors.lightBorder),
       ),
-      child: Row(
+      child: Wrap(
+        spacing: 4,
+        runSpacing: 4,
         children: SupervisorPortalTab.values.map((tab) {
           final isSelected = _activeTab == tab;
-          return Expanded(
+          return SizedBox(
+            width: 185,
             child: InkWell(
               key: ValueKey('portal_tab_${tab.name}'),
               onTap: () => setState(() => _activeTab = tab),
@@ -735,8 +738,10 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                       ? Border.all(color: WarmCounterColors.lightPrimaryAction)
                       : null,
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                child: Wrap(
+        spacing: 4,
+        runSpacing: 4,
+                  alignment: WrapAlignment.center,
                   children: [
                     Icon(
                       tab.icon,
@@ -1701,5 +1706,6 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
     );
   }
 }
+
 
 
