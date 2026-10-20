@@ -493,8 +493,10 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
             borderRadius: WarmCounterSpacing.controlBorderRadius,
             border: Border.all(color: isMatched ? Colors.green : Colors.red),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          child: Wrap(
+            spacing: 12,
+            runSpacing: 4,
+            alignment: WrapAlignment.spaceBetween,
             children: [
               Text(
                 'Total Allocated: Rs ${_currencyFormat.format(_splitTotalPaid)}',
@@ -579,5 +581,6 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
     }
   }
 }
+
 
 
