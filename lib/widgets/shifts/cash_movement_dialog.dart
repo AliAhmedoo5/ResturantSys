@@ -107,149 +107,168 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
       shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.panelBorderRadius),
       backgroundColor: WarmCounterColors.lightCardBackground,
       child: Container(
-        width: 520,
+        width: 540,
+        constraints: const BoxConstraints(maxHeight: 760),
         padding: const EdgeInsets.all(WarmCounterSpacing.space24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(WarmCounterSpacing.space8),
-                  decoration: BoxDecoration(
-                    color: _selectedType == CashMovementType.payIn
-                        ? WarmCounterColors.lightActiveNavHighlight
-                        : WarmCounterColors.lightDestructiveHighlight,
-                    borderRadius: WarmCounterSpacing.controlBorderRadius,
-                  ),
-                  child: Icon(
-                    _selectedType == CashMovementType.payIn
-                        ? Icons.add_circle_outline_rounded
-                        : Icons.remove_circle_outline_rounded,
-                    color: _selectedType == CashMovementType.payIn
-                        ? WarmCounterColors.lightPrimaryAction
-                        : WarmCounterColors.lightDestructiveAction,
-                    size: 28,
-                  ),
-                ),
-                const SizedBox(width: WarmCounterSpacing.space12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Record Cash Movement',
-                        style: WarmCounterTypography.pageHeading.copyWith(fontSize: 20),
-                      ),
-                      Text(
-                        'Audited mid-shift drawer Pay-In or Pay-Out',
-                        style: WarmCounterTypography.caption.copyWith(
-                          color: WarmCounterColors.lightSecondaryText,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const Divider(height: WarmCounterSpacing.space32, color: WarmCounterColors.lightBorder),
-
-            // Type Selector (Pay-In vs Pay-Out)
-            Row(
-              children: [
-                Expanded(
-                  child: InkWell(
-                    key: const ValueKey('movement_type_payin'),
-                    onTap: () => setState(() => _selectedType = CashMovementType.payIn),
-                    borderRadius: WarmCounterSpacing.controlBorderRadius,
-                    child: Container(
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: _selectedType == CashMovementType.payIn
-                            ? WarmCounterColors.lightActiveNavHighlight
-                            : WarmCounterColors.lightPageBackground,
-                        border: Border.all(
-                          color: _selectedType == CashMovementType.payIn
-                              ? WarmCounterColors.lightPrimaryAction
-                              : WarmCounterColors.lightBorder,
-                          width: _selectedType == CashMovementType.payIn ? 2 : 1,
-                        ),
-                        borderRadius: WarmCounterSpacing.controlBorderRadius,
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        'Pay-In (+ Cash In)',
-                        style: WarmCounterTypography.bodyMedium.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: _selectedType == CashMovementType.payIn
-                              ? WarmCounterColors.lightPrimaryAction
-                              : WarmCounterColors.lightSecondaryText,
-                        ),
-                      ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(WarmCounterSpacing.space8),
+                    decoration: BoxDecoration(
+                      color: _selectedType == CashMovementType.payIn
+                          ? WarmCounterColors.lightActiveNavHighlight
+                          : WarmCounterColors.lightDestructiveHighlight,
+                      borderRadius: WarmCounterSpacing.controlBorderRadius,
+                    ),
+                    child: Icon(
+                      _selectedType == CashMovementType.payIn
+                          ? Icons.add_circle_outline_rounded
+                          : Icons.remove_circle_outline_rounded,
+                      color: _selectedType == CashMovementType.payIn
+                          ? WarmCounterColors.lightPrimaryAction
+                          : WarmCounterColors.lightDestructiveAction,
+                      size: 28,
                     ),
                   ),
-                ),
-                const SizedBox(width: WarmCounterSpacing.space12),
-                Expanded(
-                  child: InkWell(
-                    key: const ValueKey('movement_type_payout'),
-                    onTap: () => setState(() => _selectedType = CashMovementType.payOut),
-                    borderRadius: WarmCounterSpacing.controlBorderRadius,
-                    child: Container(
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: _selectedType == CashMovementType.payOut
-                            ? WarmCounterColors.lightDestructiveHighlight
-                            : WarmCounterColors.lightPageBackground,
-                        border: Border.all(
-                          color: _selectedType == CashMovementType.payOut
-                              ? WarmCounterColors.lightDestructiveAction
-                              : WarmCounterColors.lightBorder,
-                          width: _selectedType == CashMovementType.payOut ? 2 : 1,
+                  const SizedBox(width: WarmCounterSpacing.space12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Record Cash Movement',
+                          style: WarmCounterTypography.pageHeading.copyWith(fontSize: 20),
                         ),
-                        borderRadius: WarmCounterSpacing.controlBorderRadius,
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        'Pay-Out (- Cash Out)',
-                        style: WarmCounterTypography.bodyMedium.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: _selectedType == CashMovementType.payOut
-                              ? WarmCounterColors.lightDestructiveAction
-                              : WarmCounterColors.lightSecondaryText,
+                        Text(
+                          'Audited mid-shift drawer Pay-In or Pay-Out',
+                          style: WarmCounterTypography.caption.copyWith(
+                            color: WarmCounterColors.lightSecondaryText,
+                          ),
                         ),
-                      ),
+                      ],
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: WarmCounterSpacing.space16),
-
-            // Category Selector
-            Text(
-              'Movement Category',
-              style: WarmCounterTypography.bodyMedium.copyWith(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: WarmCounterSpacing.space8),
-            DropdownButtonFormField<String>(
-              key: const ValueKey('cash_movement_category_dropdown'),
-              initialValue: _selectedCategory,
-              decoration: const InputDecoration(
-                filled: true,
-                fillColor: WarmCounterColors.lightPageBackground,
-                contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                border: OutlineInputBorder(
-                  borderRadius: WarmCounterSpacing.controlBorderRadius,
-                  borderSide: BorderSide(color: WarmCounterColors.lightBorder),
-                ),
+                ],
               ),
-              items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-              onChanged: (val) {
-                if (val != null) setState(() => _selectedCategory = val);
-              },
-            ),
+              const Divider(height: WarmCounterSpacing.space32, color: WarmCounterColors.lightBorder),
+
+              // Type Selector (Pay-In vs Pay-Out)
+              Row(
+                children: [
+                  Expanded(
+                    child: InkWell(
+                      key: const ValueKey('movement_type_payin'),
+                      onTap: () => setState(() => _selectedType = CashMovementType.payIn),
+                      borderRadius: WarmCounterSpacing.controlBorderRadius,
+                      child: Container(
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: _selectedType == CashMovementType.payIn
+                              ? WarmCounterColors.lightActiveNavHighlight
+                              : WarmCounterColors.lightPageBackground,
+                          border: Border.all(
+                            color: _selectedType == CashMovementType.payIn
+                                ? WarmCounterColors.lightPrimaryAction
+                                : WarmCounterColors.lightBorder,
+                            width: _selectedType == CashMovementType.payIn ? 2 : 1,
+                          ),
+                          borderRadius: WarmCounterSpacing.controlBorderRadius,
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          'Pay-In (+ Cash In)',
+                          style: WarmCounterTypography.bodyMedium.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: _selectedType == CashMovementType.payIn
+                                ? WarmCounterColors.lightPrimaryAction
+                                : WarmCounterColors.lightSecondaryText,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: WarmCounterSpacing.space12),
+                  Expanded(
+                    child: InkWell(
+                      key: const ValueKey('movement_type_payout'),
+                      onTap: () => setState(() => _selectedType = CashMovementType.payOut),
+                      borderRadius: WarmCounterSpacing.controlBorderRadius,
+                      child: Container(
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: _selectedType == CashMovementType.payOut
+                              ? WarmCounterColors.lightDestructiveHighlight
+                              : WarmCounterColors.lightPageBackground,
+                          border: Border.all(
+                            color: _selectedType == CashMovementType.payOut
+                                ? WarmCounterColors.lightDestructiveAction
+                                : WarmCounterColors.lightBorder,
+                            width: _selectedType == CashMovementType.payOut ? 2 : 1,
+                          ),
+                          borderRadius: WarmCounterSpacing.controlBorderRadius,
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          'Pay-Out (- Cash Out)',
+                          style: WarmCounterTypography.bodyMedium.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: _selectedType == CashMovementType.payOut
+                                ? WarmCounterColors.lightDestructiveAction
+                                : WarmCounterColors.lightSecondaryText,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: WarmCounterSpacing.space16),
+
+              // Category Selector with non-overflowing Wrap category chips
+              Text(
+                'Movement Category',
+                style: WarmCounterTypography.bodyMedium.copyWith(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: WarmCounterSpacing.space8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _categories.map((c) {
+                  final isSelected = _selectedCategory == c;
+                  return ChoiceChip(
+                    key: ValueKey('category_chip_${c.replaceAll(' ', '_').toLowerCase()}'),
+                    label: Text(c),
+                    selected: isSelected,
+                    selectedColor: WarmCounterColors.lightActiveNavHighlight,
+                    onSelected: (selected) {
+                      if (selected) setState(() => _selectedCategory = c);
+                    },
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: WarmCounterSpacing.space12),
+              DropdownButtonFormField<String>(
+                key: const ValueKey('cash_movement_category_dropdown'),
+                value: _selectedCategory,
+                decoration: const InputDecoration(
+                  filled: true,
+                  fillColor: WarmCounterColors.lightPageBackground,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  border: OutlineInputBorder(
+                    borderRadius: WarmCounterSpacing.controlBorderRadius,
+                    borderSide: BorderSide(color: WarmCounterColors.lightBorder),
+                  ),
+                ),
+                items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                onChanged: (val) {
+                  if (val != null) setState(() => _selectedCategory = val);
+                },
+              ),
             const SizedBox(height: WarmCounterSpacing.space16),
 
             // Amount Input
@@ -343,6 +362,7 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 }

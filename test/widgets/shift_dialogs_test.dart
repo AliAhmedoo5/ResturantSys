@@ -350,9 +350,8 @@ void main() {
       await tester.pump();
       expect(cashMovementClicked, isTrue);
 
-      // Interim X-Report is accessible to Cashiers during an active shift
-      final interimXReportBtn = find.byKey(const ValueKey('btn_interim_xreport'));
-      expect(interimXReportBtn, findsOneWidget);
+      // Cashier must NOT see Interim X-Report to prevent leaking expected totals prior to blind handover (ADR-0003 & ADR-0006)
+      expect(find.byKey(const ValueKey('btn_interim_xreport')), findsNothing);
 
       final closeShiftBtn = find.byKey(const ValueKey('btn_close_shift'));
       await tester.ensureVisible(closeShiftBtn);

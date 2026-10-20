@@ -246,8 +246,9 @@ void main() {
       expect(thresholdInput, findsOneWidget);
       expect(saveBtn, findsOneWidget);
 
-      // Verify default threshold 100.00
-      expect(find.text('100.00'), findsOneWidget);
+      // Verify default threshold 100.00 via threshold input field
+      final thresholdField = tester.widget<TextField>(thresholdInput);
+      expect(thresholdField.controller?.text, equals('100.00'));
 
       // Update threshold to 250.00
       await tester.enterText(thresholdInput, '250.00');

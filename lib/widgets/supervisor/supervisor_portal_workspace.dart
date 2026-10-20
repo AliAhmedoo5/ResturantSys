@@ -507,9 +507,10 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
     setState(() => _isSavingThreshold = true);
     try {
       if (widget.shiftController != null) {
+        final managerId = widget.currentStaff?.id ?? 1;
         await widget.shiftController!.setDiscrepancyThreshold(
           parsed,
-          managerStaffId: widget.currentStaff?.id,
+          managerStaffId: managerId,
         );
       }
       if (mounted) {

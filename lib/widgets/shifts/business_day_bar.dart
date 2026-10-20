@@ -151,17 +151,18 @@ class BusinessDayBar extends StatelessWidget {
                             ),
                           ),
                         ],
-                        // Interim X-Report accessible to both cashiers and supervisors during an active shift
-                        const SizedBox(width: WarmCounterSpacing.space8),
-                        OutlinedButton.icon(
-                          key: const ValueKey('btn_interim_xreport'),
-                          icon: const Icon(Icons.receipt_long_rounded, size: 18),
-                          label: const Text('Interim X-Report'),
-                          onPressed: onInterimXReportTap,
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
+                        if (isSupervisor) ...[
+                          const SizedBox(width: WarmCounterSpacing.space8),
+                          OutlinedButton.icon(
+                            key: const ValueKey('btn_interim_xreport'),
+                            icon: const Icon(Icons.receipt_long_rounded, size: 18),
+                            label: const Text('Interim X-Report'),
+                            onPressed: onInterimXReportTap,
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
+                            ),
                           ),
-                        ),
+                        ],
                       ],
 
                       if (isSupervisor) ...[
