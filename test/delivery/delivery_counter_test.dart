@@ -84,6 +84,8 @@ void main() {
     await settle();
     expect(tester.widget<TextFormField>(find.byKey(const ValueKey('delivery_name'))).controller!.text, 'Sara');
     expect(find.text('Home'), findsOneWidget);
+    await tester.ensureVisible(find.text('Home'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Home'));
     await tester.pump();
     expect(tester.widget<TextFormField>(find.byKey(const ValueKey('delivery_address'))).controller!.text, 'Home');
@@ -113,6 +115,7 @@ void main() {
     expect(tester.widget<TenderCheckoutDialog>(find.byType(TenderCheckoutDialog)).grandTotal, 500);
   });
 }
+
 
 
 

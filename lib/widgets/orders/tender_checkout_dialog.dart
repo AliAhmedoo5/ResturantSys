@@ -268,11 +268,20 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
   Widget _buildCashTenderBody() {
     final tendered = _cashTenderAmount;
     final change = _cashReturnChange;
-    final isShort = tendered < widget.grandTotal;
+    final isShort = tendered < _cashDue;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (widget.roundPhysicalCash)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              'Cash payable: Rs ${_currencyFormat.format(_cashDue)} (rounding: Rs ${_currencyFormat.format(_cashDue - widget.grandTotal)})',
+              textAlign: TextAlign.right,
+              style: WarmCounterTypography.tabularNumbers,
+            ),
+          ),
         // Quick Denominations
         Text(
           'Quick Cash Presets:',
@@ -342,7 +351,7 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
               const SizedBox(height: 6),
               Text(
                 isShort
-                    ? 'Rs ${_currencyFormat.format(widget.grandTotal - tendered)}'
+                    ? 'Rs ${_currencyFormat.format(_cashDue - tendered)}'
                     : 'Rs ${_currencyFormat.format(change)}',
                 key: const ValueKey('return_change_display'),
                 style: WarmCounterTypography.tokenAndChange.copyWith(
@@ -537,7 +546,7 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
         setState(() => _errorMessage = 'Split tenders do not match Grand Total.');
         return;
       }
-      if (cashPortion > 0) {
+      if (cashPortion > 0 || (widget.roundPhysicalCash && elecPortion < widget.grandTotal)) {
         tenders.add(PaymentTender(
           method: PaymentMethod.cash,
           amountTendered: cashPortion,
@@ -570,4 +579,5 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
     }
   }
 }
+
 

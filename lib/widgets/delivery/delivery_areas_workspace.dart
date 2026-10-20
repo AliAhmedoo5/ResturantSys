@@ -45,12 +45,25 @@ class _DeliveryAreasWorkspaceState extends State<DeliveryAreasWorkspace> {
     Expanded(child: _loading ? const Center(child: CircularProgressIndicator()) : _areas.isEmpty ? const Center(child: Text('Add an area to enable delivery checkout.')) : ListView.builder(
       itemCount: _areas.length, itemBuilder: (context, index) { final area = _areas[index]; return ListTile(
         title: Text('${area.name} (${area.code}) • ${area.isActive ? "Active" : "Inactive"}'),
-        subtitle: Text('${area.coverageDescription}\nFee Rs ${(area.deliveryFeePaisa / 100).toStringAsFixed(2)} • Minimum Rs ${(area.minOrderPaisa / 100).toStringAsFixed(2)}'),
-        isThreeLine: true,
-        subtitleTextStyle: WarmCounterTypography.tabularNumbers.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-        trailing: Row(mainAxisSize: MainAxisSize.min, children: [IconButton(tooltip: 'Edit area', onPressed: () => _edit(area), icon: const Icon(Icons.edit)),
-          IconButton(tooltip: 'Archive area', onPressed: () => _archive(area), icon: const Icon(Icons.archive_outlined))]));
-      })),
+        subtitle: Text(area.coverageDescription),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text('Fee Rs ${(area.deliveryFeePaisa / 100).toStringAsFixed(2)}',
+                  textAlign: TextAlign.right, style: WarmCounterTypography.tabularNumbers),
+                Text('Minimum Rs ${(area.minOrderPaisa / 100).toStringAsFixed(2)}',
+                  textAlign: TextAlign.right, style: WarmCounterTypography.tabularNumbers),
+              ],
+            ),
+            IconButton(tooltip: 'Edit area', onPressed: () => _edit(area), icon: const Icon(Icons.edit)),
+            IconButton(tooltip: 'Archive area', onPressed: () => _archive(area), icon: const Icon(Icons.archive_outlined)),
+          ],
+        ),
+      );      })),
   ]);
 }
 
@@ -101,4 +114,5 @@ class _AreaDialogState extends State<_AreaDialog> {
     ])))), actions: [TextButton(onPressed: _saving ? null : () => Navigator.pop(context), child: const Text('Cancel')),
       FilledButton(onPressed: _saving ? null : _save, child: Text(_saving ? 'Saving…' : 'Save area'))]);
 }
+
 
