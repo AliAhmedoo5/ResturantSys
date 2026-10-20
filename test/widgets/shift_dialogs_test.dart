@@ -97,6 +97,7 @@ void main() {
       await tester.pump();
 
       final submitBtn = find.byKey(const ValueKey('submit_cash_movement_button'));
+      await tester.ensureVisible(submitBtn);
       await tester.tap(submitBtn);
       await tester.pumpAndSettle();
 
