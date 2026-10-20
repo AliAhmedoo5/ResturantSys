@@ -48,6 +48,21 @@ void main() {
       }
     });
 
+    test('Walk-in cash rounds half-up and records the rounding variance', () async {
+      final day = await shiftController.openBusinessDay(openedByStaffId: 1);
+      final shift = await shiftController.openShift(staffId: 2, openingFloat: 0);
+      final category = await catalogController.createCategory(name: 'Rounding', displayOrder: 1, colorHex: '#FFFFFF');
+      final item = await catalogController.createMenuItem(categoryId: category.id, name: 'Tea', basePrice: 100.50);
+      await publishFixtures(catalogController);
+      final result = await orderController.checkoutOrder(
+        businessDayId: day.id, shiftId: shift.id, cashierId: 2,
+        diningType: DiningType.dineIn, items: [CartItem(menuItem: item)],
+        payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 101)],
+      );
+      expect(result.order.cashRoundingPaisa, 50);
+      expect((await orderController.getOrder(result.order.id)).cashRoundingPaisa, 50);
+    });
+
     test('Daily sequential token increments (#01, #02...) and resets at new Business Day', () async {
       // 1. Open Business Day 1 & Shift
       final day1 = await shiftController.openBusinessDay(openedByStaffId: 1);
