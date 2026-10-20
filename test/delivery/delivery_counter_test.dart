@@ -51,10 +51,19 @@ void main() {
     });
     addTearDown(() => store.close());
     Future<void> settle() async {
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
-      await tester.pumpAndSettle();
-    }
-    await tester.pumpWidget(MaterialApp(home: Scaffold(body: CounterBillingWorkspace(
+      // Build the dialog first so its SQLite lookup starts, then allow real
+      // isolate work to finish between frames instead of advancing fake time.
+      for (var attempt = 0; attempt < 50; attempt++) {
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+        await tester.pump(const Duration(milliseconds: 100));
+        if (find.byType(CircularProgressIndicator).evaluate().isEmpty) {
+          await tester.pumpAndSettle();
+          return;
+        }
+      }
+      fail('SQLite-backed screen did not become ready');
+    }    await tester.pumpWidget(MaterialApp(home: Scaffold(body: CounterBillingWorkspace(
       currentStaff: const Staff(id: 2, name: 'Cashier', departmentId: 1, pinHash: '', role: StaffRole.cashier, isActive: true),
       businessDayId: dayId, shiftId: shiftId, orderController: orders,
       initialCategories: [category], initialMenuItems: [food], initialDeals: const [], initialModifiers: const [], initialDiscounts: const [], initialNextTokenNumber: 1,
@@ -104,5 +113,6 @@ void main() {
     expect(tester.widget<TenderCheckoutDialog>(find.byType(TenderCheckoutDialog)).grandTotal, 500);
   });
 }
+
 
 

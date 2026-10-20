@@ -1,12 +1,14 @@
 import '../../core/delivery/delivery_controller.dart';
 import '../../core/orders/paisa_engine.dart';
 import '../delivery/delivery_details_dialog.dart';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../../core/auth/auth_service.dart';
 import '../../core/auth/staff.dart';
 import '../../core/catalog/catalog_and_recipe_controller.dart';
+import '../../core/catalog/catalog_media_service.dart';
 import '../../core/catalog/discount_preset.dart';
 import '../../core/catalog/menu_category.dart';
 import '../../core/catalog/menu_item.dart';
@@ -33,6 +35,7 @@ class CounterBillingWorkspace extends StatefulWidget {
     super.key,
     this.orderController,
     this.catalogController,
+    this.mediaService,
     this.reprintTrayController,
     this.authService,
     required this.currentStaff,
@@ -45,10 +48,14 @@ class CounterBillingWorkspace extends StatefulWidget {
     this.initialDiscounts,
     this.initialModifiers,
     this.initialNextTokenNumber,
+    this.initialMenuItemImages,
+    this.initialDealImages,
+    this.imageBuilder,
   });
 
   final OrderAndCheckoutController? orderController;
   final CatalogAndRecipeController? catalogController;
+  final CatalogMediaService? mediaService;
   final ReprintTrayController? reprintTrayController;
   final AuthService? authService;
   final Staff currentStaff;
@@ -62,6 +69,9 @@ class CounterBillingWorkspace extends StatefulWidget {
   final List<DiscountPreset>? initialDiscounts;
   final List<Modifier>? initialModifiers;
   final int? initialNextTokenNumber;
+  final Map<int, String>? initialMenuItemImages;
+  final Map<int, String>? initialDealImages;
+  final Widget Function(BuildContext context, File file)? imageBuilder;
 
   @override
   State<CounterBillingWorkspace> createState() => _CounterBillingWorkspaceState();
@@ -74,6 +84,8 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
   List<Deal> _deals = [];
   List<DiscountPreset> _discounts = [];
   List<Modifier> _allModifiers = [];
+  Map<int, String> _menuItemImages = {};
+  Map<int, String> _dealImages = {};
   bool _isLoading = true;
 
   // Active View State
@@ -92,6 +104,13 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialMenuItemImages != null) {
+      _menuItemImages = Map.from(widget.initialMenuItemImages!);
+    }
+    if (widget.initialDealImages != null) {
+      _dealImages = Map.from(widget.initialDealImages!);
+    }
+
     if (widget.initialCategories != null ||
         widget.initialMenuItems != null ||
         widget.initialDeals != null) {
@@ -129,6 +148,23 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
         ? await widget.orderController!.getNextTokenNumber(widget.businessDayId)
         : 1;
 
+    final service = widget.mediaService ??
+        (widget.catalogController != null
+            ? widget.catalogController!.mediaService
+            : null);
+    Map<int, String> itemImages = {};
+    Map<int, String> dealImages = {};
+    if (service != null) {
+      try {
+        final rawItemImages = await service.getPrimaryImagesForEntities('menu_item');
+        final rawDealImages = await service.getPrimaryImagesForEntities('deal');
+        itemImages = rawItemImages.map((k, v) => MapEntry(k, v.relativeFilePath));
+        dealImages = rawDealImages.map((k, v) => MapEntry(k, v.relativeFilePath));
+      } catch (_) {
+        // Suppress image lookup errors
+      }
+    }
+
     if (mounted) {
       setState(() {
         _categories = categories;
@@ -136,6 +172,8 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
         _deals = deals;
         _discounts = discounts;
         _allModifiers = modifiers;
+        if (itemImages.isNotEmpty) _menuItemImages = itemImages;
+        if (dealImages.isNotEmpty) _dealImages = dealImages;
         _nextTokenNumber = token;
         _selectedCategoryId = categories.isNotEmpty ? categories.first.id : null;
         _isLoading = false;
@@ -884,34 +922,105 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
     );
   }
 
+  File? _resolveImageFile(String? relativePath) {
+    if (relativePath == null || relativePath.isEmpty) return null;
+    File file;
+    if (widget.mediaService != null) {
+      file = widget.mediaService!.resolveFile(relativePath);
+    } else if (widget.catalogController != null) {
+      file = widget.catalogController!.mediaService.resolveFile(relativePath);
+    } else {
+      file = File(relativePath);
+    }
+    if (!file.existsSync()) return null;
+    return file;
+  }
+
+  Widget _buildItemPlaceholder(MenuItem item) {
+    return Container(
+      color: WarmCounterColors.lightSurfaceMuted,
+      child: Center(
+        child: Icon(
+          Icons.restaurant_outlined,
+          color: WarmCounterColors.lightSecondaryText.withValues(alpha: 0.5),
+          size: 32,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDealPlaceholder(Deal deal) {
+    return Container(
+      color: const Color(0xFFE8F5E9),
+      child: Center(
+        child: Icon(
+          Icons.local_offer_outlined,
+          color: WarmCounterColors.lightPrimaryAction.withValues(alpha: 0.5),
+          size: 32,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSafeImage(File file, {required Widget Function() placeholder}) {
+    if (!file.existsSync()) return placeholder();
+    if (widget.imageBuilder != null) {
+      return widget.imageBuilder!(context, file);
+    }
+    return Image.file(
+      file,
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) => placeholder(),
+    );
+  }
+
   Widget _buildMenuItemTile(MenuItem item) {
+    final imageFile = _resolveImageFile(_menuItemImages[item.id]);
+
     return InkWell(
       key: ValueKey('menu_item_tile_${item.id}'),
       onTap: () => _addMenuItemToCart(item),
       borderRadius: WarmCounterSpacing.panelBorderRadius,
       child: Container(
-        padding: const EdgeInsets.all(WarmCounterSpacing.space12),
         decoration: BoxDecoration(
           color: WarmCounterColors.lightCardBackground,
           borderRadius: WarmCounterSpacing.panelBorderRadius,
           border: Border.all(color: WarmCounterColors.lightBorder),
         ),
+        clipBehavior: Clip.antiAlias,
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              item.name,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: WarmCounterTypography.bodyMedium.copyWith(fontWeight: FontWeight.bold),
+            Expanded(
+              child: imageFile != null
+                  ? _buildSafeImage(imageFile, placeholder: () => _buildItemPlaceholder(item))
+                  : _buildItemPlaceholder(item),
             ),
-            Text(
-              'Rs ${_currencyFormat.format(item.basePrice)}',
-              style: WarmCounterTypography.tabularPrice.copyWith(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: WarmCounterColors.lightPrimaryAction,
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: WarmCounterSpacing.space8,
+                vertical: WarmCounterSpacing.space8,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    item.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: WarmCounterTypography.bodyMedium.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Rs ${_currencyFormat.format(item.basePrice)}',
+                    style: WarmCounterTypography.tabularPrice.copyWith(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: WarmCounterColors.lightPrimaryAction,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -921,50 +1030,72 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
   }
 
   Widget _buildDealTile(Deal deal) {
+    final imageFile = _resolveImageFile(_dealImages[deal.id]);
+
     return InkWell(
       key: ValueKey('deal_tile_${deal.id}'),
       onTap: () => _openDealSelection(deal),
       borderRadius: WarmCounterSpacing.panelBorderRadius,
       child: Container(
-        padding: const EdgeInsets.all(WarmCounterSpacing.space12),
         decoration: BoxDecoration(
           color: const Color(0xFFF1F8E9), // Light green tint for Deals
           borderRadius: WarmCounterSpacing.panelBorderRadius,
           border: Border.all(color: WarmCounterColors.lightPrimaryAction, width: 1.5),
         ),
+        clipBehavior: Clip.antiAlias,
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: WarmCounterColors.lightPrimaryAction,
-                    borderRadius: BorderRadius.circular(4),
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  imageFile != null
+                      ? _buildSafeImage(imageFile, placeholder: () => _buildDealPlaceholder(deal))
+                      : _buildDealPlaceholder(deal),
+                  Positioned(
+                    top: 6,
+                    left: 6,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: WarmCounterColors.lightPrimaryAction,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text(
+                        'DEAL',
+                        style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
+                    ),
                   ),
-                  child: const Text(
-                    'DEAL',
-                    style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  deal.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: WarmCounterTypography.bodyMedium.copyWith(fontWeight: FontWeight.bold),
-                ),
-              ],
+                ],
+              ),
             ),
-            Text(
-              'Rs ${_currencyFormat.format(deal.basePrice)}',
-              style: WarmCounterTypography.tabularPrice.copyWith(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: WarmCounterColors.lightPrimaryAction,
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: WarmCounterSpacing.space8,
+                vertical: WarmCounterSpacing.space8,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    deal.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: WarmCounterTypography.bodyMedium.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Rs ${_currencyFormat.format(deal.basePrice)}',
+                    style: WarmCounterTypography.tabularPrice.copyWith(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: WarmCounterColors.lightPrimaryAction,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -1297,5 +1428,6 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
     );
   }
 }
+
 
 

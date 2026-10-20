@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
@@ -10,6 +11,7 @@ import 'package:resturant_sys/core/catalog/raw_ingredient.dart';
 import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
 import 'package:resturant_sys/core/theme/theme.dart';
 import 'dialogs/category_form_dialog.dart';
+import 'dialogs/catalog_photo_gallery_dialog.dart';
 import 'dialogs/discount_preset_form_dialog.dart';
 import 'dialogs/menu_item_form_dialog.dart';
 import 'dialogs/modifier_form_dialog.dart';
@@ -37,6 +39,7 @@ class SupervisorCatalogWorkspace extends StatefulWidget {
     this.initialModifiers,
     this.initialModifierGroups,
     this.initialDiscounts,
+    this.imageBuilder,
   });
 
   final CatalogAndRecipeController? controller;
@@ -48,6 +51,7 @@ class SupervisorCatalogWorkspace extends StatefulWidget {
   final List<Modifier>? initialModifiers;
   final List<ModifierGroup>? initialModifierGroups;
   final List<DiscountPreset>? initialDiscounts;
+  final Widget Function(BuildContext context, File file)? imageBuilder;
 
   @override
   State<SupervisorCatalogWorkspace> createState() => _SupervisorCatalogWorkspaceState();
@@ -271,6 +275,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
       builder: (ctx) => MenuItemFormDialog(
         item: item,
         categories: _categories,
+        mediaService: widget.controller?.mediaService,
         onSave: ({required categoryId, required name, required basePrice, required taxRate, required isTaxInclusive, required isActive}) async {
           if (widget.controller != null) {
             await widget.controller!.updateMenuItem(
@@ -300,6 +305,24 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
             });
           }
         },
+      ),
+    );
+  }
+
+  void _showPhotoGalleryDialog({
+    required String entityType,
+    required int entityId,
+    required String entityName,
+  }) {
+    if (widget.controller == null) return;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => CatalogPhotoGalleryDialog(
+        mediaService: widget.controller!.mediaService,
+        entityType: entityType,
+        entityId: entityId,
+        entityName: entityName,
+        imageBuilder: widget.imageBuilder,
       ),
     );
   }
@@ -1150,6 +1173,16 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                         ),
                       ),
                       const SizedBox(width: 8),
+                      IconButton(
+                        key: ValueKey('manage_photos_button_${item.id}'),
+                        icon: const Icon(Icons.photo_library_outlined, size: 20),
+                        tooltip: 'Manage Photos',
+                        onPressed: () => _showPhotoGalleryDialog(
+                          entityType: 'menu_item',
+                          entityId: item.id,
+                          entityName: item.name,
+                        ),
+                      ),
                       IconButton(
                         key: ValueKey('edit_menu_item_${item.id}'),
                         icon: const Icon(Icons.edit_outlined, size: 20),
