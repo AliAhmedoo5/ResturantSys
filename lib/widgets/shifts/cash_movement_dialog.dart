@@ -22,11 +22,12 @@ class CashMovementDialog extends StatefulWidget {
 
 class _CashMovementDialogState extends State<CashMovementDialog> {
   CashMovementType _selectedType = CashMovementType.payIn;
-  String _selectedCategory = 'Petty Cash';
+  String _selectedCategory = 'Counter Change Replenishment';
   final TextEditingController _amountController = TextEditingController();
   final TextEditingController _notesController = TextEditingController();
 
   final List<String> _categories = const [
+    'Counter Change Replenishment',
     'Petty Cash',
     'Milk',
     'Ice',

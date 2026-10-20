@@ -325,15 +325,16 @@ class ShiftAndCashController {
     // Manager credentials cannot operate cashier shifts (ADR-0009)
     final staffRow = await database.query(
       PosDatabaseConstants.tableStaff,
-      where: 'id = ?',
+      where: 'id = ? AND is_active = 1',
       whereArgs: [staffId],
       limit: 1,
     );
-    if (staffRow.isNotEmpty) {
-      final role = StaffRole.fromCode(staffRow.first['role'] as String);
-      if (role != StaffRole.cashier) {
-        throw StateError('Authorization error: Manager credentials cannot operate cashier shifts.');
-      }
+    if (staffRow.isEmpty) {
+      throw StateError('Staff #$staffId not found or inactive.');
+    }
+    final role = StaffRole.fromCode(staffRow.first['role'] as String);
+    if (role != StaffRole.cashier) {
+      throw StateError('Authorization error: Manager credentials cannot operate cashier shifts.');
     }
 
     final effectiveCreatedAt = createdAt ?? DateTime.now();
@@ -398,6 +399,46 @@ class ShiftAndCashController {
       if (val != null) return val;
     }
     return double.parse(PosDatabaseConstants.defaultDiscrepancyThreshold);
+  }
+
+  /// Sets the configurable supervisor discrepancy threshold in system settings.
+  ///
+  /// Throws [ArgumentError] if [threshold] is negative.
+  /// Throws [StateError] if [managerStaffId] is provided and does not belong to an active Manager.
+  Future<void> setDiscrepancyThreshold(
+    double threshold, {
+    int? managerStaffId,
+  }) async {
+    if (threshold < 0) {
+      throw ArgumentError('Discrepancy threshold cannot be negative.');
+    }
+
+    if (managerStaffId != null) {
+      final staffRow = await database.query(
+        PosDatabaseConstants.tableStaff,
+        where: 'id = ? AND is_active = 1',
+        whereArgs: [managerStaffId],
+        limit: 1,
+      );
+      if (staffRow.isEmpty) {
+        throw StateError('Staff #$managerStaffId not found or inactive.');
+      }
+      final role = StaffRole.fromCode(staffRow.first['role'] as String);
+      if (role != StaffRole.manager) {
+        throw StateError('Authorization error: Only Managers can configure the discrepancy threshold.');
+      }
+    }
+
+    final now = _formatTimestamp(DateTime.now());
+    await database.insert(
+      PosDatabaseConstants.tableSystemSettings,
+      {
+        'key': PosDatabaseConstants.settingDiscrepancyThreshold,
+        'value': threshold.toStringAsFixed(2),
+        'updated_at': now,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   /// Computes settled cash order totals for a shift.
@@ -569,6 +610,9 @@ class ShiftAndCashController {
   }
 
   /// Asynchronously marks a flagged shift discrepancy as RESOLVED with supervisor notes.
+  ///
+  /// Enforces Manager-only authorization (StaffRole.manager) per ADR-0009.
+  /// The shift's discrepancy variance, counted cash, and expected cash remain immutable.
   Future<Shift> resolveDiscrepancy({
     required int shiftId,
     required int supervisorStaffId,
@@ -577,6 +621,20 @@ class ShiftAndCashController {
   }) async {
     if (resolutionNotes.trim().isEmpty) {
       throw ArgumentError('Resolution notes are mandatory for supervisor audit.');
+    }
+
+    final staffRow = await database.query(
+      PosDatabaseConstants.tableStaff,
+      where: 'id = ? AND is_active = 1',
+      whereArgs: [supervisorStaffId],
+      limit: 1,
+    );
+    if (staffRow.isEmpty) {
+      throw StateError('Staff #$supervisorStaffId not found or inactive.');
+    }
+    final role = StaffRole.fromCode(staffRow.first['role'] as String);
+    if (role != StaffRole.manager) {
+      throw StateError('Authorization error: Only Managers can resolve shift discrepancies.');
     }
 
     final shiftRows = await database.query(
