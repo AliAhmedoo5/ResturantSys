@@ -354,13 +354,26 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
       _deliveryDetails = details;
     } else {
       _deliveryDetails = null;
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Customer Details'),
+          content: const Text('No delivery details are required for this walk-in order.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Back to cart')),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Skip delivery details')),
+          ],
+        ),
+      );
+      if (proceed != true || !mounted) return;
     }
 
     final totals = _cartTotals;
     final completed = await showDialog<bool>(
       context: context,
       builder: (ctx) => TenderCheckoutDialog(
-        roundPhysicalCash: _selectedDiningType == DiningType.delivery,
+        roundPhysicalCash: true,
+        allowCod: _selectedDiningType == DiningType.delivery,
         grandTotal: totals.grandTotal + (_deliveryDetails?.quotedFeePaisa ?? 0) / 100,
         onCompleteCheckout: (tenders) async {
             if (widget.orderController != null) {
@@ -400,58 +413,6 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
     } finally { _checkoutOpen = false; }
   }
 
-  /// Instant checkout with exact cash on Numpad Enter
-  Future<void> _handleExactCashCheckout() async {
-    if (_selectedDiningType == DiningType.delivery) { await _openTenderCheckout(); return; }
-    if (_checkoutOpen) return;
-    if (_cartItems.isEmpty) return;
-    final totals = _cartTotals;
-
-    try {
-      if (widget.orderController != null) {
-        final result = await widget.orderController!.checkoutOrder(
-          businessDayId: widget.businessDayId,
-          shiftId: widget.shiftId,
-          cashierId: widget.currentStaff.id,
-          diningType: _selectedDiningType,
-          items: List.of(_cartItems),
-          discount: _selectedDiscount,
-          payments: [
-            PaymentTender(
-              method: PaymentMethod.cash,
-              amountTendered: totals.grandTotal,
-              changeReturned: 0.0,
-            ),
-          ],
-        );
-
-        // Decoupled hardware printing executed strictly AFTER transaction commit
-        if (widget.reprintTrayController != null) {
-          await widget.reprintTrayController!.dispatchOrderPrinting(
-            order: result.order,
-            isCashPaid: true,
-          );
-        }
-
-        if (mounted) {
-          _showCheckoutSuccessBanner(result);
-        }
-      }
-
-      if (mounted) {
-        _clearCart();
-        await _refreshToken();
-        widget.onOrderCompleted?.call();
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Checkout failed: $e')),
-        );
-      }
-    }
-  }
-
   void _showCheckoutSuccessBanner(CheckoutResult result) {
     final token = result.order.tokenDisplay;
     final total = _currencyFormat.format(result.order.grandTotal);
@@ -466,7 +427,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                'Order Placed! Token $token | Settled: Rs $total (${result.order.diningType.displayName})',
+                'Order Placed! Token $token | ${result.order.paymentStatus == 'COLLECTION_DUE' ? 'Collection Due' : 'Settled'}: Rs $total (${result.order.diningType.displayName})',
                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
             ),
@@ -495,7 +456,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
   Map<ShortcutActivator, VoidCallback> _buildKeyboardBindings() {
     final bindings = <ShortcutActivator, VoidCallback>{
       const SingleActivator(LogicalKeyboardKey.space): () => _openTenderCheckout(),
-      const SingleActivator(LogicalKeyboardKey.numpadEnter): () => _handleExactCashCheckout(),
+      const SingleActivator(LogicalKeyboardKey.numpadEnter): () => _openTenderCheckout(),
       const SingleActivator(LogicalKeyboardKey.escape): () => _clearCart(),
     };
 
@@ -619,7 +580,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
             if (widget.orderController != null) _buildVoidOrderButton(),
             if (widget.reprintTrayController != null) _buildReprintTrayButton(),
             Text(
-              '[Space] Tender | [Numpad Enter] Exact | [Esc] Clear',
+              '[Space / Numpad Enter] Checkout | [Esc] Clear',
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.end,
               style: WarmCounterTypography.caption.copyWith(
@@ -1428,6 +1389,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
     );
   }
 }
+
 
 
 

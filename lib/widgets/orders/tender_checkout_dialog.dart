@@ -12,11 +12,13 @@ class TenderCheckoutDialog extends StatefulWidget {
     super.key,
     required this.grandTotal,
     required this.onCompleteCheckout,
-    this.roundPhysicalCash = false,
+    this.roundPhysicalCash = true,
+    this.allowCod = false,
   });
 
   final double grandTotal;
   final bool roundPhysicalCash;
+  final bool allowCod;
   final Future<void> Function(List<PaymentTender> tenders) onCompleteCheckout;
 
   @override
@@ -56,30 +58,24 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
     super.dispose();
   }
 
-  double _roundCash(double amount) => widget.roundPhysicalCash
-      ? ((PaisaEngine.rupeesToPaisa(amount) + 50) ~/ 100).toDouble() : amount;
-  double get _cashDue => _roundCash(widget.grandTotal);
-  double get _splitDue => widget.roundPhysicalCash
-      ? _splitElectronicAmount + _roundCash(widget.grandTotal - _splitElectronicAmount) : widget.grandTotal;
-
-  double get _cashTenderAmount {
-    return double.tryParse(_cashTenderController.text) ?? 0.0;
+  int? _parsePaisa(String text) {
+    if (!RegExp(r'^\d+(?:\.\d{1,2})?$').hasMatch(text.trim())) return null;
+    final parts = text.trim().split('.');
+    return int.tryParse('${parts.first}${(parts.length == 1 ? '' : parts.last).padRight(2, '0')}');
   }
 
+  int get _totalPaisa => PaisaEngine.rupeesToPaisa(widget.grandTotal);
+  int _roundCashPaisa(int paisa) => ((paisa + 50) ~/ 100) * 100;
+  double get _cashDue => _roundCashPaisa(_totalPaisa) / 100;
+  int get _splitElectronicPaisa => _parsePaisa(_splitElectronicController.text) ?? 0;
+  double get _splitDue => (_splitElectronicPaisa + _roundCashPaisa(_totalPaisa - _splitElectronicPaisa)) / 100;
+  double get _cashTenderAmount => (_parsePaisa(_cashTenderController.text) ?? 0) / 100;
   double get _cashReturnChange {
-    final tendered = _cashTenderAmount;
-    final change = tendered - _cashDue;
-    return change > 0 ? change : 0.0;
+    final change = (_parsePaisa(_cashTenderController.text) ?? 0) - _roundCashPaisa(_totalPaisa);
+    return change > 0 ? change / 100 : 0;
   }
-
-  double get _splitCashAmount {
-    return double.tryParse(_splitCashController.text) ?? 0.0;
-  }
-
-  double get _splitElectronicAmount {
-    return double.tryParse(_splitElectronicController.text) ?? 0.0;
-  }
-
+  double get _splitCashAmount => (_parsePaisa(_splitCashController.text) ?? 0) / 100;
+  double get _splitElectronicAmount => _splitElectronicPaisa / 100;
   double get _splitTotalPaid => _splitCashAmount + _splitElectronicAmount;
 
   @override
@@ -146,16 +142,13 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
               ),
               const SizedBox(height: WarmCounterSpacing.space16),
 
-              // Tender Method Switcher
-              Row(
+              // All methods are recorded manually by the cashier.
+              Wrap(
+                spacing: WarmCounterSpacing.space8,
+                runSpacing: WarmCounterSpacing.space8,
                 children: [
-                  _buildTenderTab(PaymentMethod.cash, 'Cash', Icons.payments_rounded),
-                  const SizedBox(width: WarmCounterSpacing.space8),
-                  _buildTenderTab(PaymentMethod.card, 'Card', Icons.credit_card_rounded),
-                  const SizedBox(width: WarmCounterSpacing.space8),
-                  _buildTenderTab(PaymentMethod.raast, 'Raast QR', Icons.qr_code_2_rounded),
-                  const SizedBox(width: WarmCounterSpacing.space8),
-                  _buildTenderTab(PaymentMethod.split, 'Split Tender', Icons.call_split_rounded),
+                  for (final method in PaymentMethod.values.where((method) => (widget.allowCod || method != PaymentMethod.cod)))
+                    _buildTenderTab(method, method.displayName, method == PaymentMethod.cash ? Icons.payments_rounded : Icons.credit_card_rounded),
                 ],
               ),
               const Divider(height: WarmCounterSpacing.space24, color: WarmCounterColors.lightBorder),
@@ -213,7 +206,8 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
 
   Widget _buildTenderTab(PaymentMethod method, String label, IconData icon) {
     final isSelected = _selectedMethod == method;
-    return Expanded(
+    return SizedBox(
+      width: 132,
       child: InkWell(
         key: ValueKey('tender_tab_${method.name}'),
         onTap: () => setState(() => _selectedMethod = method),
@@ -259,11 +253,12 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
       case PaymentMethod.jazzCash:
       case PaymentMethod.easypaisa:
       case PaymentMethod.bankTransfer:
-      case PaymentMethod.cod:
       case PaymentMethod.card:
-        return _buildElectronicTenderBody(PaymentMethod.card);
+        return _buildElectronicTenderBody(_selectedMethod);
       case PaymentMethod.raast:
         return _buildElectronicTenderBody(PaymentMethod.raast);
+      case PaymentMethod.cod:
+        return const Text('Collection Due: no cash is received now. Payment is collected during rider trip settlement.');
       case PaymentMethod.split:
         return _buildSplitTenderBody();
     }
@@ -406,11 +401,11 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      isRaast ? 'Raast Instant Payment QR' : 'Card Reader Terminal',
+                      method.displayName,
                       style: WarmCounterTypography.bodyMedium.copyWith(fontWeight: FontWeight.bold),
                     ),
                     Text(
-                      'Present QR or terminal to customer for Rs ${_currencyFormat.format(widget.grandTotal)}',
+                      'Manually confirm Rs ${_currencyFormat.format(widget.grandTotal)} received before completing checkout.',
                       style: WarmCounterTypography.caption.copyWith(color: WarmCounterColors.lightSecondaryText),
                     ),
                   ],
@@ -438,7 +433,7 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
   }
 
   Widget _buildSplitTenderBody() {
-    final isMatched = (_splitTotalPaid - _splitDue).abs() < 0.01;
+    final isMatched = PaisaEngine.rupeesToPaisa(_splitTotalPaid) == PaisaEngine.rupeesToPaisa(_splitDue);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -528,6 +523,11 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
     final tenders = <PaymentTender>[];
 
     if (_selectedMethod == PaymentMethod.cash) {
+      final cashPaisa = _parsePaisa(_cashTenderController.text);
+      if (cashPaisa == null || cashPaisa % 100 != 0) {
+        setState(() => _errorMessage = 'Enter physical cash in whole rupees.');
+        return;
+      }
       final cash = _cashTenderAmount;
       if (cash < _cashDue) {
         setState(() => _errorMessage = 'Cash tendered is less than Grand Total.');
@@ -538,7 +538,10 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
         amountTendered: cash,
         changeReturned: _cashReturnChange,
       ));
-    } else if (_selectedMethod == PaymentMethod.card || _selectedMethod == PaymentMethod.raast) {
+    } else if (_selectedMethod == PaymentMethod.cod) {
+      if (!widget.allowCod) return;
+      tenders.add(PaymentTender(method: PaymentMethod.cod, amountTendered: 0));
+    } else if (_selectedMethod != PaymentMethod.split) {
       tenders.add(PaymentTender(
         method: _selectedMethod,
         amountTendered: widget.grandTotal,
@@ -546,9 +549,15 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
         referenceCode: _referenceController.text.trim().isEmpty ? null : _referenceController.text.trim(),
       ));
     } else if (_selectedMethod == PaymentMethod.split) {
+      final cashPaisa = _parsePaisa(_splitCashController.text);
+      final electronicPaisa = _parsePaisa(_splitElectronicController.text);
+      if (cashPaisa == null || cashPaisa % 100 != 0 || electronicPaisa == null) {
+        setState(() => _errorMessage = 'Enter whole-rupee cash and electronic amounts with at most two decimal places.');
+        return;
+      }
       final cashPortion = _splitCashAmount;
       final elecPortion = _splitElectronicAmount;
-      if (cashPortion < 0 || elecPortion < 0 || elecPortion > widget.grandTotal || (cashPortion + elecPortion - _splitDue).abs() > 0.01) {
+      if (cashPortion < 0 || elecPortion < 0 || elecPortion > widget.grandTotal || cashPaisa + electronicPaisa != PaisaEngine.rupeesToPaisa(_splitDue)) {
         setState(() => _errorMessage = 'Split tenders do not match Grand Total.');
         return;
       }
