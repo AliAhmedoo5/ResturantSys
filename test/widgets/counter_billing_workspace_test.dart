@@ -192,6 +192,7 @@ void main() {
       await tester.pumpWidget(buildTestHarness());
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('menu_item_tile_101')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('proceed_to_tender_button')));
       await tester.pumpAndSettle();
       expect(find.text('Customer Details'), findsOneWidget);
@@ -532,4 +533,5 @@ void main() {
     });
   });
 }
+
 
