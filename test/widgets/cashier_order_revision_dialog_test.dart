@@ -1,79 +1,228 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
-import 'package:resturant_sys/core/catalog/menu_item.dart';
-import 'package:resturant_sys/core/catalog/storage_unit.dart';
-import 'package:resturant_sys/core/database/pos_database.dart';
+import 'package:sqflite_common/sqlite_api.dart';
 import 'package:resturant_sys/core/orders/cart_item.dart';
 import 'package:resturant_sys/core/orders/dining_type.dart';
 import 'package:resturant_sys/core/orders/order.dart';
+import 'package:resturant_sys/core/orders/order_item.dart';
 import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
+import 'package:resturant_sys/core/orders/order_revision.dart';
 import 'package:resturant_sys/core/orders/payment_method.dart';
-import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
+import 'package:resturant_sys/core/orders/token_status.dart';
+import 'package:resturant_sys/core/utils/paisa_engine.dart';
 import 'package:resturant_sys/widgets/orders/cashier_order_revision_dialog.dart';
 
+class FakeOrderController implements OrderAndCheckoutController {
+  FakeOrderController({required this.order, this.pendingRefundPaisa = 0});
+
+  Order order;
+  int pendingRefundPaisa;
+  OrderRevision? lastRevision;
+  RefundResult? lastRefund;
+  String? lastCancelReason;
+  String? lastRevisionReason;
+
+  @override
+  Database get database => throw UnimplementedError();
+
+  @override
+  Future<int> getOrderPendingRefundPaisa(int orderId) async {
+    return pendingRefundPaisa;
+  }
+
+  @override
+  Future<Order> getOrder(int id) async => order;
+
+  @override
+  Future<OrderRevision> cancelOrder({
+    required int orderId,
+    required int cashierId,
+    required String reason,
+    required String commandId,
+  }) async {
+    lastCancelReason = reason;
+    pendingRefundPaisa = PaisaEngine.rupeesToPaisa(order.grandTotal);
+    order = Order(
+      id: order.id,
+      businessDayId: order.businessDayId,
+      shiftId: order.shiftId,
+      cashierId: cashierId,
+      tokenNumber: order.tokenNumber,
+      diningType: order.diningType,
+      subtotal: 0.0,
+      grandTotal: 0.0,
+      paymentStatus: 'REFUND_PENDING',
+      tokenStatus: order.tokenStatus,
+      createdAt: order.createdAt,
+      items: const [],
+      currentRevision: order.currentRevision + 1,
+    );
+    final rev = OrderRevision(
+      id: 1,
+      orderId: orderId,
+      revisionNo: order.currentRevision,
+      action: 'CANCEL',
+      reason: reason,
+      cashierId: cashierId,
+      businessDayId: order.businessDayId,
+      createdAtUtc: DateTime.now().toUtc(),
+      oldTotalPaisa: 100000,
+      newTotalPaisa: 0,
+      moneyDeltaPaisa: -100000,
+      priorSnapshotJson: '{}',
+      newSnapshotJson: '{}',
+      commandId: commandId,
+      lines: const [],
+    );
+    lastRevision = rev;
+    return rev;
+  }
+
+  @override
+  Future<OrderRevision> reviseOrder({
+    required int orderId,
+    required int cashierId,
+    required String reason,
+    required String commandId,
+    required List<CartItem> newItems,
+    String action = 'CHANGE',
+  }) async {
+    lastRevisionReason = reason;
+    final newSubtotal = newItems.fold<double>(0.0, (sum, i) => sum + i.totalPrice);
+    final oldTotalPaisa = PaisaEngine.rupeesToPaisa(order.grandTotal);
+    final newTotalPaisa = PaisaEngine.rupeesToPaisa(newSubtotal);
+    if (newTotalPaisa < oldTotalPaisa) {
+      pendingRefundPaisa = oldTotalPaisa - newTotalPaisa;
+    }
+    order = Order(
+      id: order.id,
+      businessDayId: order.businessDayId,
+      shiftId: order.shiftId,
+      cashierId: cashierId,
+      tokenNumber: order.tokenNumber,
+      diningType: order.diningType,
+      subtotal: newSubtotal,
+      grandTotal: newSubtotal,
+      paymentStatus: pendingRefundPaisa > 0 ? 'REFUND_PENDING' : order.paymentStatus,
+      tokenStatus: order.tokenStatus,
+      createdAt: order.createdAt,
+      items: newItems
+          .map((ci) => OrderItem(
+                id: 1,
+                orderId: order.id,
+                menuItemId: ci.menuItem?.id,
+                name: ci.name,
+                quantity: ci.quantity,
+                unitPrice: ci.unitPrice,
+                totalPrice: ci.totalPrice,
+                createdAt: DateTime.now(),
+              ))
+          .toList(),
+      currentRevision: order.currentRevision + 1,
+    );
+    final rev = OrderRevision(
+      id: 2,
+      orderId: orderId,
+      revisionNo: order.currentRevision,
+      action: action,
+      reason: reason,
+      cashierId: cashierId,
+      businessDayId: order.businessDayId,
+      createdAtUtc: DateTime.now().toUtc(),
+      oldTotalPaisa: oldTotalPaisa,
+      newTotalPaisa: newTotalPaisa,
+      moneyDeltaPaisa: newTotalPaisa - oldTotalPaisa,
+      priorSnapshotJson: '{}',
+      newSnapshotJson: '{}',
+      commandId: commandId,
+      lines: const [],
+    );
+    lastRevision = rev;
+    return rev;
+  }
+
+  @override
+  Future<RefundResult> recordCashierRefund({
+    required int orderId,
+    required int shiftId,
+    required int cashierId,
+    required int amountPaisa,
+    required PaymentMethod method,
+    String? referenceCode,
+    required String reason,
+    String? commandId,
+  }) async {
+    pendingRefundPaisa = 0;
+    order = Order(
+      id: order.id,
+      businessDayId: order.businessDayId,
+      shiftId: shiftId,
+      cashierId: cashierId,
+      tokenNumber: order.tokenNumber,
+      diningType: order.diningType,
+      subtotal: order.subtotal,
+      grandTotal: order.grandTotal,
+      paymentStatus: order.grandTotal == 0 ? 'CANCELLED' : 'SETTLED',
+      tokenStatus: order.tokenStatus,
+      createdAt: order.createdAt,
+      items: order.items,
+      currentRevision: order.currentRevision,
+    );
+    final res = RefundResult(
+      orderId: orderId,
+      shiftId: shiftId,
+      cashierId: cashierId,
+      amountPaisa: amountPaisa,
+      method: method,
+      referenceCode: referenceCode,
+      reason: reason,
+      cashMovementId: method == PaymentMethod.cash ? 1 : null,
+      paymentStatus: order.paymentStatus,
+      recordedAt: DateTime.now(),
+    );
+    lastRefund = res;
+    return res;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 void main() {
-  setUpAll(() {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
-  });
-
   group('CashierOrderRevisionDialog Widget Tests', () {
-    late Directory tempDir;
-    late String testDbPath;
-    late PosDatabase posDb;
-    late Database db;
-    late CatalogAndRecipeController catalogController;
-    late ShiftAndCashController shiftController;
-    late OrderAndCheckoutController orderController;
-
-    late int businessDayId;
-    late int shiftId;
     const cashierId = 2;
-    late MenuItem burger;
-    late Order order;
+    const shiftId = 10;
+    late Order initialOrder;
+    late FakeOrderController fakeOrderController;
 
-    setUp(() async {
-      tempDir = await Directory.systemTemp.createTemp('widget_rev_test_');
-      testDbPath = '${tempDir.path}${Platform.pathSeparator}widget_rev.db';
-      posDb = PosDatabase(
-        factory: databaseFactoryFfi,
-        customPath: testDbPath,
-      );
-      db = await posDb.initialize();
-      catalogController = CatalogAndRecipeController(database: db);
-      shiftController = ShiftAndCashController(database: db);
-      orderController = OrderAndCheckoutController(database: db);
-
-      final day = await shiftController.openBusinessDay(openedByStaffId: 1);
-      businessDayId = day.id;
-      final shift = await shiftController.openShift(staffId: cashierId, openingFloat: 5000.0);
-      shiftId = shift.id;
-
-      final cat = await catalogController.createCategory(name: 'Cat', displayOrder: 1, colorHex: '#FFAA00');
-      burger = await catalogController.createMenuItem(categoryId: cat.id, name: 'Zinger Burger', basePrice: 500.0);
-      final ing = await catalogController.createRawIngredient(name: 'Chicken', storageUnit: StorageUnit.kg, currentStock: 50);
-      await catalogController.setRecipeForMenuItem(menuItemId: burger.id, items: [(rawIngredientId: ing.id, quantity: 0.2)]);
-      await catalogController.toggleMenuItemActive(burger.id, true);
-
-      final checkout = await orderController.checkoutOrder(
-        businessDayId: businessDayId,
+    setUp(() {
+      initialOrder = Order(
+        id: 1,
+        businessDayId: 1,
         shiftId: shiftId,
         cashierId: cashierId,
+        tokenNumber: 1,
         diningType: DiningType.dineIn,
-        items: [CartItem(menuItem: burger, quantity: 2)],
-        payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 1000.0)],
+        subtotal: 1000.0,
+        grandTotal: 1000.0,
+        paymentStatus: 'SETTLED',
+        tokenStatus: TokenStatus.confirmed,
+        createdAt: DateTime.now(),
+        currentRevision: 0,
+        items: [
+          OrderItem(
+            id: 1,
+            orderId: 1,
+            menuItemId: 101,
+            name: 'Zinger Burger',
+            quantity: 2,
+            unitPrice: 500.0,
+            totalPrice: 1000.0,
+            createdAt: DateTime.now(),
+          ),
+        ],
       );
-      order = checkout.order;
-    });
-
-    tearDown(() async {
-      await posDb.close();
-      if (await tempDir.exists()) {
-        await tempDir.delete(recursive: true);
-      }
+      fakeOrderController = FakeOrderController(order: initialOrder);
     });
 
     testWidgets('renders dialog with order details and stage notice without requiring PIN', (tester) async {
@@ -88,10 +237,10 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: CashierOrderRevisionDialog(
-              order: order,
+              order: initialOrder,
               cashierId: cashierId,
               shiftId: shiftId,
-              orderController: orderController,
+              orderController: fakeOrderController,
             ),
           ),
         ),
@@ -100,7 +249,7 @@ void main() {
 
       expect(find.byKey(const ValueKey('cashier_order_revision_dialog')), findsOneWidget);
       expect(find.text('#01'), findsOneWidget);
-      expect(find.textContaining('Order #${order.id} Revision'), findsOneWidget);
+      expect(find.textContaining('Order #${initialOrder.id} Revision'), findsOneWidget);
       expect(find.textContaining('Cashier Autonomy (No PIN)'), findsOneWidget);
 
       // Buttons present
@@ -122,10 +271,10 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: CashierOrderRevisionDialog(
-              order: order,
+              order: initialOrder,
               cashierId: cashierId,
               shiftId: shiftId,
-              orderController: orderController,
+              orderController: fakeOrderController,
               onRevisionCompleted: () => callbackCalled = true,
             ),
           ),
@@ -145,8 +294,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(callbackCalled, isTrue);
+      expect(fakeOrderController.lastCancelReason, equals('Customer changed mind'));
 
-      // Pending refund banner should now appear since order was paid with cash
+      // Pending refund banner should now appear since order was cancelled and paid with cash
       expect(find.byKey(const ValueKey('pending_refund_banner')), findsOneWidget);
       expect(find.byKey(const ValueKey('disburse_cash_refund_button')), findsOneWidget);
 
@@ -154,7 +304,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('disburse_cash_refund_button')));
       await tester.pumpAndSettle();
 
-      final updated = await orderController.getOrder(order.id);
+      final updated = await fakeOrderController.getOrder(initialOrder.id);
       expect(updated.isCancelled, isTrue);
       expect(updated.isRefundPending, isFalse);
     });
@@ -173,10 +323,10 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: CashierOrderRevisionDialog(
-              order: order,
+              order: initialOrder,
               cashierId: cashierId,
               shiftId: shiftId,
-              orderController: orderController,
+              orderController: fakeOrderController,
               onRevisionCompleted: () => callbackCalled = true,
             ),
           ),
@@ -200,9 +350,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(callbackCalled, isTrue);
+      expect(fakeOrderController.lastRevisionReason, equals('Customer changed quantity to 1'));
 
-      // Verify updated order in database
-      final updated = await orderController.getOrder(order.id);
+      // Verify updated order
+      final updated = await fakeOrderController.getOrder(initialOrder.id);
       expect(updated.currentRevision, 1);
       expect(updated.items.first.quantity, 1);
       expect(updated.isRefundPending, isTrue);
