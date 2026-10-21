@@ -434,6 +434,7 @@ class PosDatabase {
   }
 
   Future<void> _upgradeToVersion12(DatabaseExecutor db) async {
+    await _createOperationalAccountingTables(db);
     final orderColumns = await db.rawQuery('PRAGMA table_info(orders)');
     if (!orderColumns.any((c) => c['name'] == 'checkout_command_id')) {
       await db.execute("ALTER TABLE orders ADD COLUMN checkout_command_id TEXT");

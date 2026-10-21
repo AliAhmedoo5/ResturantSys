@@ -1,3 +1,5 @@
+import 'package:resturant_sys/core/procurement/procurement_and_wastage_controller.dart';
+import 'package:resturant_sys/core/procurement/desi_unit.dart';
 import 'package:resturant_sys/core/delivery/delivery_controller.dart';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
@@ -118,6 +120,28 @@ void main() {
       expect(saved.paymentStatus, 'COLLECTION_DUE');
       expect(saved.payments.single.amountTenderedPaisa, 0);
       expect(saved.grandTotal, 150.49);
+    });
+
+    test('Negative ingredients and packaging persist Manager alerts and purchases offset them once', () async {
+      final day = await shiftController.openBusinessDay(openedByStaffId: 1);
+      final shift = await shiftController.openShift(staffId: 2, openingFloat: 0);
+      final category = await catalogController.createCategory(name: 'Stock', displayOrder: 1, colorHex: '#FFFFFF');
+      final item = await catalogController.createMenuItem(categoryId: category.id, name: 'Stock tea', basePrice: 100);
+      final ingredient = await catalogController.createRawIngredient(name: 'Tea portion', storageUnit: StorageUnit.count, currentStock: 0);
+      final packaging = await catalogController.createRawIngredient(name: 'Takeaway packaging', storageUnit: StorageUnit.count, currentStock: -1);
+      await catalogController.setRecipeForMenuItem(menuItemId: item.id, items: [(rawIngredientId: ingredient.id, quantity: 1.0)]);
+      await catalogController.toggleMenuItemActive(item.id, true);
+      await orderController.checkoutOrder(commandId: 'negative-stock', businessDayId: day.id, shiftId: shift.id, cashierId: 2,
+        diningType: DiningType.takeaway, items: [CartItem(menuItem: item)],
+        payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 100)]);
+      expect((await orderController.getManagerStockAlerts()).map((a) => a.currentStock).toList()..sort(), [-2.0, -1.0]);
+      final procurement = ProcurementAndWastageController(database: db);
+      for (final id in [ingredient.id, packaging.id]) {
+        await procurement.recordMandiPurchase(rawIngredientId: id, unit: DesiUnit.darjan, quantity: 1, totalCost: 100);
+      }
+      expect((await catalogController.getRawIngredient(ingredient.id)).currentStock, 11);
+      expect((await catalogController.getRawIngredient(packaging.id)).currentStock, 10);
+      expect(await orderController.getManagerStockAlerts(), isEmpty);
     });
 
     test('Daily sequential token increments (#01, #02...) and resets at new Business Day', () async {
