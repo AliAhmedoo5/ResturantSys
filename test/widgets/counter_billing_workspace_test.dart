@@ -9,6 +9,8 @@ import 'package:resturant_sys/core/catalog/menu_category.dart';
 import 'package:resturant_sys/core/catalog/menu_item.dart';
 import 'package:resturant_sys/core/catalog/modifier.dart';
 import 'package:resturant_sys/core/orders/deal.dart';
+import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
+import 'package:resturant_sys/core/orders/payment_method.dart';
 import 'package:resturant_sys/core/orders/deal_item.dart';
 import 'package:resturant_sys/core/orders/deal_item_option.dart';
 import 'package:resturant_sys/core/hardware/in_memory_hardware_adapter.dart';
@@ -371,6 +373,29 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const ValueKey('apply_modifiers_button')), findsOneWidget);
+    });
+
+    testWidgets('delivery COD records collection due without cash received', (tester) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      List<PaymentTender>? submitted;
+      await tester.pumpWidget(MaterialApp(home: Scaffold(body: Builder(builder: (context) => TextButton(
+        onPressed: () => showDialog<void>(context: context, builder: (_) => TenderCheckoutDialog(
+          grandTotal: 625.50,
+          allowCod: true,
+          onCompleteCheckout: (tenders) async { submitted = tenders; },
+        )), child: const Text('Pay'),
+      )))));
+      await tester.tap(find.text('Pay'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('tender_tab_cod')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Collection Due'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('commit_checkout_button')));
+      await tester.pumpAndSettle();
+      expect(submitted!.single.method, PaymentMethod.cod);
+      expect(submitted!.single.amountTendered, 0);
     });
 
     testWidgets('tender dialog calculates return change in large numerals for cash payment', (tester) async {
