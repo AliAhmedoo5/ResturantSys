@@ -587,6 +587,13 @@ class OrderAndCheckoutController {
         executor: txn,
       );
 
+      for (final warning in lowStockWarnings) {
+        await txn.insert('checkout_stock_alerts', {
+          'order_id': orderId, 'ingredient_id': warning.ingredientId,
+          'stock_at_checkout': warning.currentStock, 'created_at': formattedNow,
+        });
+      }
+
       final order = Order(
         id: orderId,
         businessDayId: businessDayId,
@@ -617,6 +624,22 @@ class OrderAndCheckoutController {
         lowStockWarnings: lowStockWarnings,
       );
     });
+  }
+
+  /// Outstanding stock alerts survive checkout and clear naturally on replenishment.
+  Future<List<LowStockWarning>> getManagerStockAlerts() async {
+    final rows = await database.rawQuery("""
+      SELECT DISTINCT i.* FROM raw_ingredients i
+      JOIN checkout_stock_alerts a ON a.ingredient_id = i.id
+      WHERE i.current_stock <= i.low_stock_threshold
+      ORDER BY i.current_stock, i.name
+    """);
+    return rows.map((row) => LowStockWarning(
+      ingredientId: row['id'] as int, ingredientName: row['name'] as String,
+      currentStock: (row['current_stock'] as num).toDouble(),
+      threshold: (row['low_stock_threshold'] as num).toDouble(),
+      storageUnit: row['storage_unit'] as String,
+    )).toList();
   }
 
   Future<void> _validateCartItem(CartItem item, DatabaseExecutor txn) async {
