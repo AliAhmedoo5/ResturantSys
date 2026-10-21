@@ -112,9 +112,12 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('proceed_to_tender_button')));
     await tester.pumpAndSettle();
     expect(find.byType(DeliveryDetailsDialog), findsNothing);
+    await tester.tap(find.text('Skip delivery details'));
+    await tester.pumpAndSettle();
     expect(tester.widget<TenderCheckoutDialog>(find.byType(TenderCheckoutDialog)).grandTotal, 500);
   });
 }
+
 
 
 

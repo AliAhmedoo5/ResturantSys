@@ -354,6 +354,18 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
       _deliveryDetails = details;
     } else {
       _deliveryDetails = null;
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Customer Details'),
+          content: const Text('No delivery details are required for this walk-in order.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Back to cart')),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Skip delivery details')),
+          ],
+        ),
+      );
+      if (proceed != true || !mounted) return;
     }
 
     final totals = _cartTotals;
@@ -1428,6 +1440,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
     );
   }
 }
+
 
 
 
