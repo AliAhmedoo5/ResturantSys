@@ -404,13 +404,6 @@ class OrderAndCheckoutController {
     String? commandId,
   }) async {
     if (commandId != null && commandId.trim().isEmpty) throw ArgumentError('Checkout command ID must not be blank.');
-    if (items.isEmpty) {
-      throw ArgumentError('Cannot checkout an empty order.');
-    }
-    if (payments.isEmpty) {
-      throw ArgumentError('Order must have at least one payment tender.');
-    }
-
     // Hard-block Manager credentials from initiating checkout or tenders (ADR-0009)
     final staffRows = await database.query(
       PosDatabaseConstants.tableStaff,
@@ -428,7 +421,6 @@ class OrderAndCheckoutController {
 
     final now = DateTime.now();
     final formattedNow = _formatTimestamp(now);
-    final totals = calculateCartTotals(items: items, discount: discount);
 
     return await database.transaction((txn) async {
       if (commandId != null) {
@@ -445,6 +437,21 @@ class OrderAndCheckoutController {
             items: lines.map(OrderItem.fromMap).toList(), payments: tenders.map(OrderPayment.fromMap).toList()));
         }
       }
+    if (items.isEmpty) {
+      throw ArgumentError('Cannot checkout an empty order.');
+    }
+    if (payments.isEmpty) {
+      throw ArgumentError('Order must have at least one payment tender.');
+    }
+
+      final activeSession = await txn.rawQuery("""
+        SELECT s.id FROM shifts s JOIN business_days d ON d.id = s.business_day_id
+        JOIN staff st ON st.id = s.staff_id
+        WHERE s.id = ? AND s.business_day_id = ? AND s.staff_id = ?
+          AND s.status = 'OPEN' AND d.status = 'OPEN' AND st.is_active = 1
+      """, [shiftId, businessDayId, cashierId]);
+      if (activeSession.isEmpty) throw StateError('Checkout requires the cashier current open shift and business day.');
+      final totals = calculateCartTotals(items: items, discount: discount);
       DeliveryArea? deliveryArea;
       if (diningType == DiningType.delivery) {
         if (delivery == null) throw const DeliveryCheckoutException('Select delivery details before payment. Your cart is unchanged.');
@@ -463,6 +470,15 @@ class OrderAndCheckoutController {
       } else {
         if (payments.any((p) => !p.amountTendered.isFinite || !p.changeReturned.isFinite || p.amountTendered < 0 || p.changeReturned < 0 || p.changeReturned > p.amountTendered || p.method == PaymentMethod.split)) {
           throw const DeliveryCheckoutException('Enter valid individual payment tenders. Your cart is unchanged.');
+        }
+        for (final tender in payments) {
+          final received = tender.amountTendered * 100;
+          final returned = tender.changeReturned * 100;
+          if ((received - received.round()).abs() > 0.000001 || (returned - returned.round()).abs() > 0.000001 ||
+              (tender.method == PaymentMethod.cash && (received.round() % 100 != 0 || returned.round() % 100 != 0)) ||
+              (tender.method != PaymentMethod.cash && tender.changeReturned != 0)) {
+            throw const DeliveryCheckoutException('Record exact paisa for digital tenders and whole rupees for cash received and change.');
+          }
         }
         final digitalPaid = payments.where((p) => p.method != PaymentMethod.cash).fold<int>(0,
           (sum, p) => sum + PaisaEngine.rupeesToPaisa(p.amountTendered) - PaisaEngine.rupeesToPaisa(p.changeReturned));
