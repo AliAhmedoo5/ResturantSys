@@ -185,6 +185,21 @@ void main() {
       expect(find.byKey(const ValueKey('proceed_to_tender_button')), findsOneWidget);
     });
 
+    testWidgets('walk-in checkout requires customer details before manual tender', (tester) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      await tester.pumpWidget(buildTestHarness());
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('menu_item_tile_101')));
+      await tester.tap(find.byKey(const ValueKey('proceed_to_tender_button')));
+      await tester.pumpAndSettle();
+      expect(find.text('Customer Details'), findsOneWidget);
+      expect(find.byType(TenderCheckoutDialog), findsNothing);
+      await tester.tap(find.text('Skip delivery details'));
+      await tester.pumpAndSettle();
+      expect(find.byType(TenderCheckoutDialog), findsOneWidget);
+    });
     testWidgets('tap on menu item adds to cart and updates subtotal & grand total', (tester) async {
       tester.view.physicalSize = const Size(1920, 1080);
       tester.view.devicePixelRatio = 1.0;
@@ -517,3 +532,4 @@ void main() {
     });
   });
 }
+
