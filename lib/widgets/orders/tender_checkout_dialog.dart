@@ -13,10 +13,12 @@ class TenderCheckoutDialog extends StatefulWidget {
     required this.grandTotal,
     required this.onCompleteCheckout,
     this.roundPhysicalCash = false,
+    this.allowCod = false,
   });
 
   final double grandTotal;
   final bool roundPhysicalCash;
+  final bool allowCod;
   final Future<void> Function(List<PaymentTender> tenders) onCompleteCheckout;
 
   @override
@@ -151,7 +153,7 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
                 spacing: WarmCounterSpacing.space8,
                 runSpacing: WarmCounterSpacing.space8,
                 children: [
-                  for (final method in PaymentMethod.values.where((method) => method != PaymentMethod.cod))
+                  for (final method in PaymentMethod.values.where((method) => (widget.allowCod || method != PaymentMethod.cod)))
                     _buildTenderTab(method, method.displayName, method == PaymentMethod.cash ? Icons.payments_rounded : Icons.credit_card_rounded),
                 ],
               ),
@@ -257,11 +259,12 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
       case PaymentMethod.jazzCash:
       case PaymentMethod.easypaisa:
       case PaymentMethod.bankTransfer:
-      case PaymentMethod.cod:
       case PaymentMethod.card:
         return _buildElectronicTenderBody(_selectedMethod);
       case PaymentMethod.raast:
         return _buildElectronicTenderBody(PaymentMethod.raast);
+      case PaymentMethod.cod:
+        return const Text('Collection Due: no cash is received now. Payment is collected during rider trip settlement.');
       case PaymentMethod.split:
         return _buildSplitTenderBody();
     }
@@ -536,6 +539,9 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
         amountTendered: cash,
         changeReturned: _cashReturnChange,
       ));
+    } else if (_selectedMethod == PaymentMethod.cod) {
+      if (!widget.allowCod) return;
+      tenders.add(PaymentTender(method: PaymentMethod.cod, amountTendered: 0));
     } else if (_selectedMethod != PaymentMethod.split) {
       tenders.add(PaymentTender(
         method: _selectedMethod,

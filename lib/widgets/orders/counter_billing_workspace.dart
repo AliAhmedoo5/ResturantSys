@@ -373,6 +373,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
       context: context,
       builder: (ctx) => TenderCheckoutDialog(
         roundPhysicalCash: _selectedDiningType == DiningType.delivery,
+        allowCod: _selectedDiningType == DiningType.delivery,
         grandTotal: totals.grandTotal + (_deliveryDetails?.quotedFeePaisa ?? 0) / 100,
         onCompleteCheckout: (tenders) async {
             if (widget.orderController != null) {
@@ -426,7 +427,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                'Order Placed! Token $token | Settled: Rs $total (${result.order.diningType.displayName})',
+                'Order Placed! Token $token | ${result.order.paymentStatus == 'COLLECTION_DUE' ? 'Collection Due' : 'Settled'}: Rs $total (${result.order.diningType.displayName})',
                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
             ),
