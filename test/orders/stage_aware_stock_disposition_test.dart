@@ -58,7 +58,7 @@ void main() {
         name: 'Beef Patty',
         storageUnit: StorageUnit.count,
         currentStock: 100.0,
-        costPerUnit: 150.0,
+        costPerRecipeUnit: 150.0,
       );
 
       await catalogController.setRecipeForMenuItem(
@@ -76,7 +76,7 @@ void main() {
     });
 
     test('Confirmed stage (unstarted prep): canceled items restore raw inventory with RESTOCK_RAW', () async {
-      final initialStock = (await catalogController.getRawIngredient(patty.id))!.currentStock;
+      final initialStock = (await catalogController.getRawIngredient(patty.id)).currentStock;
       expect(initialStock, equals(100.0));
 
       final checkout = await orderController.checkoutOrder(
@@ -89,7 +89,7 @@ void main() {
       );
 
       // Stock was deducted by 2 (100 -> 98)
-      expect((await catalogController.getRawIngredient(patty.id))!.currentStock, equals(98.0));
+      expect((await catalogController.getRawIngredient(patty.id)).currentStock, equals(98.0));
 
       // Mark order as CONFIRMED (food preparation has not commenced)
       await db.update(
@@ -109,7 +109,7 @@ void main() {
       expect(revision.lines.first.bomDisposition, equals('RESTOCK_RAW'));
 
       // Raw inventory is restored to 100.0
-      final restoredStock = (await catalogController.getRawIngredient(patty.id))!.currentStock;
+      final restoredStock = (await catalogController.getRawIngredient(patty.id)).currentStock;
       expect(restoredStock, equals(100.0));
 
       // No entry created in kitchen_wastage
@@ -127,7 +127,7 @@ void main() {
         payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 1000.0)],
       );
 
-      expect((await catalogController.getRawIngredient(patty.id))!.currentStock, equals(98.0));
+      expect((await catalogController.getRawIngredient(patty.id)).currentStock, equals(98.0));
 
       // Order is in PREPARING stage (kitchen has started cooking)
       await db.update(
@@ -148,7 +148,7 @@ void main() {
       expect(revision.lines.first.bomDisposition, equals('WASTED_COOKED'));
 
       // Bulk inventory MUST NOT be restored: remains at 98.0
-      final stockAfter = (await catalogController.getRawIngredient(patty.id))!.currentStock;
+      final stockAfter = (await catalogController.getRawIngredient(patty.id)).currentStock;
       expect(stockAfter, equals(98.0));
 
       // Posted to kitchen wastage ledger

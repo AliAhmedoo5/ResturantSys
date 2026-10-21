@@ -5,7 +5,6 @@ import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
 import 'package:resturant_sys/core/catalog/menu_item.dart';
 import 'package:resturant_sys/core/catalog/storage_unit.dart';
 import 'package:resturant_sys/core/database/pos_database.dart';
-import 'package:resturant_sys/core/database/pos_database_constants.dart';
 import 'package:resturant_sys/core/orders/cart_item.dart';
 import 'package:resturant_sys/core/orders/dining_type.dart';
 import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';

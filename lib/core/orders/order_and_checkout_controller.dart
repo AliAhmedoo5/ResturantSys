@@ -33,6 +33,35 @@ class CheckoutTokenEvent {
   final String action, paymentStatus;
 }
 
+/// Result of an explicit Cashier disbursement action (cash payout or digital refund).
+class RefundResult {
+  const RefundResult({
+    required this.orderId,
+    required this.shiftId,
+    required this.cashierId,
+    required this.amountPaisa,
+    required this.method,
+    this.referenceCode,
+    required this.reason,
+    this.cashMovementId,
+    required this.paymentStatus,
+    required this.recordedAt,
+  });
+
+  final int orderId;
+  final int shiftId;
+  final int cashierId;
+  final int amountPaisa;
+  final PaymentMethod method;
+  final String? referenceCode;
+  final String reason;
+  final int? cashMovementId;
+  final String paymentStatus;
+  final DateTime recordedAt;
+
+  bool get isCashPayout => cashMovementId != null;
+}
+
 /// Draft definition when creating or configuring a deal item slot.
 class DealItemDraft {
   const DealItemDraft({
@@ -896,9 +925,8 @@ class OrderAndCheckoutController {
     return orders;
   }
 
-  Future<Order> getOrder(int id, {DatabaseExecutor? executor}) async {
-    final exec = executor ?? database;
-    final rows = await exec.rawQuery('''
+  Future<Order> getOrder(int id) async {
+    final rows = await database.rawQuery('''
       SELECT o.*, st.name as cashier_name
       FROM ${PosDatabaseConstants.tableOrders} o
       JOIN ${PosDatabaseConstants.tableStaff} st ON o.cashier_id = st.id
@@ -909,14 +937,13 @@ class OrderAndCheckoutController {
       throw StateError('Order with id $id not found.');
     }
 
-    final items = await getOrderItems(id, executor: exec);
-    final payments = await getOrderPayments(id, executor: exec);
+    final items = await getOrderItems(id);
+    final payments = await getOrderPayments(id);
     return Order.fromMap(rows.first, items: items, payments: payments, cashierName: rows.first['cashier_name'] as String?);
   }
 
-  Future<List<OrderItem>> getOrderItems(int orderId, {DatabaseExecutor? executor}) async {
-    final exec = executor ?? database;
-    final rows = await exec.query(
+  Future<List<OrderItem>> getOrderItems(int orderId) async {
+    final rows = await database.query(
       PosDatabaseConstants.tableOrderItems,
       where: 'order_id = ?',
       whereArgs: [orderId],
@@ -925,9 +952,18 @@ class OrderAndCheckoutController {
     return rows.map((r) => OrderItem.fromMap(r)).toList();
   }
 
-  Future<List<OrderPayment>> getOrderPayments(int orderId, {DatabaseExecutor? executor}) async {
-    final exec = executor ?? database;
-    final rows = await exec.query(
+  Future<List<OrderItem>> _getOrderItemsTxn(int orderId, DatabaseExecutor txn) async {
+    final rows = await txn.query(
+      PosDatabaseConstants.tableOrderItems,
+      where: 'order_id = ?',
+      whereArgs: [orderId],
+      orderBy: 'id ASC',
+    );
+    return rows.map((r) => OrderItem.fromMap(r)).toList();
+  }
+
+  Future<List<OrderPayment>> getOrderPayments(int orderId) async {
+    final rows = await database.query(
       PosDatabaseConstants.tableOrderPayments,
       where: 'order_id = ?',
       whereArgs: [orderId],
@@ -1272,7 +1308,7 @@ class OrderAndCheckoutController {
       final formattedNow = _formatTimestamp(now);
       final utcNowIso = now.toUtc().toIso8601String();
 
-      final oldOrderItems = await getOrderItems(orderId, executor: txn);
+      final oldOrderItems = await _getOrderItemsTxn(orderId, txn);
       final priorSnapshot = {
         'order_id': order.id,
         'token_number': order.tokenNumber,
@@ -1329,11 +1365,11 @@ class OrderAndCheckoutController {
           } else {
             final ingRows = await txn.query(
               PosDatabaseConstants.tableRawIngredients,
-              columns: ['cost_per_unit'],
+              columns: ['cost_per_recipe_unit'],
               where: 'id = ?',
               whereArgs: [ingId],
             );
-            final costPerUnit = ingRows.isNotEmpty ? (ingRows.first['cost_per_unit'] as num?)?.toDouble() ?? 0.0 : 0.0;
+            final costPerUnit = ingRows.isNotEmpty ? (ingRows.first['cost_per_recipe_unit'] as num?)?.toDouble() ?? 0.0 : 0.0;
             final costLoss = qty * costPerUnit;
             await txn.insert(
               PosDatabaseConstants.tableKitchenWastage,
@@ -1386,7 +1422,7 @@ class OrderAndCheckoutController {
         'subtotal': 0.0,
         'tax_amount': 0.0,
         'payment_status': newPaymentStatus,
-        'items': [],
+        'items': <Map<String, dynamic>>[],
       };
 
       final revisionId = await txn.insert(
@@ -1505,7 +1541,7 @@ class OrderAndCheckoutController {
       final formattedNow = _formatTimestamp(now);
       final utcNowIso = now.toUtc().toIso8601String();
 
-      final oldOrderItems = await getOrderItems(orderId, executor: txn);
+      final oldOrderItems = await _getOrderItemsTxn(orderId, txn);
       final priorSnapshot = {
         'order_id': order.id,
         'token_number': order.tokenNumber,
@@ -1517,9 +1553,8 @@ class OrderAndCheckoutController {
         'items': oldOrderItems.map((i) => i.toMap()).toList(),
       };
 
-      final totals = await calculateCartTotals(
+      final totals = calculateCartTotals(
         items: newItems,
-        diningType: order.diningType,
       );
 
       final oldTotalPaisa = PaisaEngine.rupeesToPaisa(order.grandTotal);
@@ -1659,11 +1694,11 @@ class OrderAndCheckoutController {
           } else {
             final ingRows = await txn.query(
               PosDatabaseConstants.tableRawIngredients,
-              columns: ['cost_per_unit'],
+              columns: ['cost_per_recipe_unit'],
               where: 'id = ?',
               whereArgs: [ingId],
             );
-            final costPerUnit = ingRows.isNotEmpty ? (ingRows.first['cost_per_unit'] as num?)?.toDouble() ?? 0.0 : 0.0;
+            final costPerUnit = ingRows.isNotEmpty ? (ingRows.first['cost_per_recipe_unit'] as num?)?.toDouble() ?? 0.0 : 0.0;
             final costLoss = returnedQty * costPerUnit;
             await txn.insert(
               PosDatabaseConstants.tableKitchenWastage,

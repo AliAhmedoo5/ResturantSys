@@ -465,6 +465,24 @@ class ShiftAndCashController {
     return 0.0;
   }
 
+  /// Calculates expected drawer cash balance for [shiftId] accounting for
+  /// opening float, settled/prepaid cash sales, pay-ins, and pay-outs (including refunds).
+  Future<double> calculateExpectedCash(int shiftId) async {
+    final shift = await getShift(shiftId);
+    final movements = await getCashMovements(shiftId);
+    double totalPayIn = 0.0;
+    double totalPayOut = 0.0;
+    for (final m in movements) {
+      if (m.isPayIn) {
+        totalPayIn += m.amount;
+      } else {
+        totalPayOut += m.amount;
+      }
+    }
+    final cashSales = await calculateCashSales(shiftId);
+    return shift.openingFloat + cashSales + totalPayIn - totalPayOut;
+  }
+
   /// Computes card and Raast tender sales for a shift.
   Future<Map<String, double>> calculateTenderSales(int shiftId) async {
     final result = {'CARD': 0.0, 'RAAST': 0.0};

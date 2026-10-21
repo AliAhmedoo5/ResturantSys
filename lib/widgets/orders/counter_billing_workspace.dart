@@ -611,8 +611,8 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
         ),
       ),
       style: ElevatedButton.styleFrom(
-        backgroundColor: WarmCounterColors.cartelYellow,
-        foregroundColor: WarmCounterColors.obsidianBlack,
+        backgroundColor: WarmCounterColors.lightWarningHighlight,
+        foregroundColor: WarmCounterColors.lightPrimaryText,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         minimumSize: const Size(110, WarmCounterSpacing.minTouchTargetSize),
       ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../../core/catalog/menu_item.dart';
 import '../../core/orders/cart_item.dart';
 import '../../core/orders/order.dart';
 import '../../core/orders/order_and_checkout_controller.dart';
@@ -60,13 +61,13 @@ class _CashierOrderRevisionDialogState
     // Clone order items to editable cart items
     _revisedItems = widget.order.items.map((oi) {
       return CartItem(
-        menuItem: oi.menuItemId != null
-            ? null // preserved as name & price
-            : null,
-        deal: null,
+        menuItem: MenuItem(
+          id: oi.menuItemId ?? 1,
+          categoryId: 1,
+          name: oi.name,
+          basePrice: oi.unitPrice,
+        ),
         quantity: oi.quantity,
-        customName: oi.name,
-        customPrice: oi.unitPrice,
       );
     }).toList();
 
@@ -146,7 +147,7 @@ class _CashierOrderRevisionDialogState
             content: Text(
               'Order ${widget.order.tokenDisplay} revised successfully.',
             ),
-            backgroundColor: WarmCounterColors.lightSuccess,
+            backgroundColor: WarmCounterColors.lightPrimaryAction,
           ),
         );
         if ((_pendingRefundPaisa ?? 0) == 0) {
@@ -236,7 +237,7 @@ class _CashierOrderRevisionDialogState
             content: Text(
               'Refund of Rs ${_currencyFormat.format(_pendingRefundPaisa! / 100)} recorded successfully.',
             ),
-            backgroundColor: WarmCounterColors.lightSuccess,
+            backgroundColor: WarmCounterColors.lightPrimaryAction,
           ),
         );
         Navigator.of(context).pop();
@@ -254,7 +255,7 @@ class _CashierOrderRevisionDialogState
 
     return Dialog(
       key: const ValueKey('cashier_order_revision_dialog'),
-      backgroundColor: WarmCounterColors.lightSurface,
+      backgroundColor: WarmCounterColors.lightCardBackground,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 720, maxHeight: 680),
@@ -269,7 +270,7 @@ class _CashierOrderRevisionDialogState
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: WarmCounterColors.cartelYellow,
+                      color: WarmCounterColors.lightWarningHighlight,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
@@ -277,7 +278,7 @@ class _CashierOrderRevisionDialogState
                       style: const TextStyle(
                         fontWeight: FontWeight.w900,
                         fontSize: 18,
-                        color: WarmCounterColors.obsidianBlack,
+                        color: WarmCounterColors.lightPrimaryText,
                       ),
                     ),
                   ),
@@ -291,7 +292,7 @@ class _CashierOrderRevisionDialogState
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            color: WarmCounterColors.lightTextPrimary,
+                            color: WarmCounterColors.lightPrimaryText,
                           ),
                         ),
                         Text(
@@ -299,7 +300,7 @@ class _CashierOrderRevisionDialogState
                           style: TextStyle(
                             fontSize: 12,
                             color: isUnstarted
-                                ? WarmCounterColors.lightSuccess
+                                ? WarmCounterColors.lightPrimaryAction
                                 : Colors.deepOrange,
                             fontWeight: FontWeight.w600,
                           ),
@@ -321,12 +322,12 @@ class _CashierOrderRevisionDialogState
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
                   color: isUnstarted
-                      ? WarmCounterColors.lightSuccess.withAlpha(25)
+                      ? WarmCounterColors.lightPrimaryAction.withAlpha(25)
                       : Colors.deepOrange.withAlpha(25),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                     color: isUnstarted
-                        ? WarmCounterColors.lightSuccess
+                        ? WarmCounterColors.lightPrimaryAction
                         : Colors.deepOrange,
                     width: 0.8,
                   ),
@@ -337,7 +338,7 @@ class _CashierOrderRevisionDialogState
                       isUnstarted ? Icons.inventory_2_outlined : Icons.delete_outline,
                       size: 18,
                       color: isUnstarted
-                          ? WarmCounterColors.lightSuccess
+                          ? WarmCounterColors.lightPrimaryAction
                           : Colors.deepOrange,
                     ),
                     const SizedBox(width: 8),
@@ -350,7 +351,7 @@ class _CashierOrderRevisionDialogState
                           fontSize: 11,
                           fontWeight: FontWeight.w500,
                           color: isUnstarted
-                              ? WarmCounterColors.lightSuccess
+                              ? WarmCounterColors.lightPrimaryAction
                               : Colors.deepOrange.shade800,
                         ),
                       ),
@@ -515,7 +516,7 @@ class _CashierOrderRevisionDialogState
                         style: const TextStyle(
                           fontWeight: FontWeight.w900,
                           fontSize: 16,
-                          color: WarmCounterColors.obsidianBlack,
+                          color: WarmCounterColors.lightPrimaryText,
                         ),
                       ),
                     ],
@@ -583,8 +584,8 @@ class _CashierOrderRevisionDialogState
                   ElevatedButton.icon(
                     key: const ValueKey('apply_revision_button'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: WarmCounterColors.cartelYellow,
-                      foregroundColor: WarmCounterColors.obsidianBlack,
+                      backgroundColor: WarmCounterColors.lightPrimaryAction,
+                      foregroundColor: WarmCounterColors.lightTextOnPrimary,
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                     ),
                     icon: _isSubmitting
