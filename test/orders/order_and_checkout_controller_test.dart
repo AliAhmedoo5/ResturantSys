@@ -144,6 +144,24 @@ void main() {
       expect(await orderController.getManagerStockAlerts(), isEmpty);
     });
 
+    test('Canceled tokens stay burned with an immutable allocation and cancellation history', () async {
+      final day = await shiftController.openBusinessDay(openedByStaffId: 1);
+      final shift = await shiftController.openShift(staffId: 2, openingFloat: 0);
+      final category = await catalogController.createCategory(name: 'Audit', displayOrder: 1, colorHex: '#FFFFFF');
+      final item = await catalogController.createMenuItem(categoryId: category.id, name: 'Audit tea', basePrice: 100);
+      await publishFixtures(catalogController);
+      Future<CheckoutResult> submit() => orderController.checkoutOrder(businessDayId: day.id, shiftId: shift.id, cashierId: 2,
+        diningType: DiningType.dineIn, items: [CartItem(menuItem: item)], payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 100)]);
+      final first = await submit();
+      await orderController.voidOrder(orderId: first.order.id, supervisorStaffId: 1, cashierStaffId: 2, reason: VoidReason.customerCancelled);
+      final second = await submit();
+      expect(second.order.tokenNumber, 2);
+      final audit = await orderController.getTokenAudit(day.id);
+      expect(audit.map((e) => e.action), ['ALLOCATED', 'STATUS_CHANGED', 'ALLOCATED']);
+      expect(audit.map((e) => e.tokenNumber), [1, 1, 2]);
+      expect((await orderController.getOrderVoid(first.order.id))!.reason, VoidReason.customerCancelled);
+    });
+
     test('Daily sequential token increments (#01, #02...) and resets at new Business Day', () async {
       // 1. Open Business Day 1 & Shift
       final day1 = await shiftController.openBusinessDay(openedByStaffId: 1);
