@@ -398,6 +398,36 @@ void main() {
       expect(submitted!.single.amountTendered, 0);
     });
 
+    testWidgets('cash tender rejects invalid precision and rounds half-up for walk-in orders', (tester) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      List<PaymentTender>? submitted;
+      await tester.pumpWidget(MaterialApp(home: Scaffold(body: Builder(builder: (context) => TextButton(
+        onPressed: () => showDialog<void>(context: context, builder: (_) => TenderCheckoutDialog(
+          grandTotal: 625.50,
+          onCompleteCheckout: (tenders) async { submitted = tenders; },
+        )), child: const Text('Pay'),
+      )))));
+      await tester.tap(find.text('Pay'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('tender_tab_cod')), findsNothing);
+      for (final invalid in ['626.001', 'NaN', 'Infinity', '626.50']) {
+        await tester.enterText(find.byKey(const ValueKey('cash_tendered_input')), invalid);
+        await tester.tap(find.byKey(const ValueKey('commit_checkout_button')));
+        await tester.pumpAndSettle();
+        expect(submitted, isNull);
+        expect(find.byType(TenderCheckoutDialog), findsOneWidget);
+      }
+      await tester.enterText(find.byKey(const ValueKey('cash_tendered_input')), '700');
+      await tester.pumpAndSettle();
+      expect(find.text('Rs 74.00'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('commit_checkout_button')));
+      await tester.pumpAndSettle();
+      expect(submitted!.single.amountTendered, 700);
+      expect(submitted!.single.changeReturned, 74);
+    });
+
     testWidgets('tender dialog calculates return change in large numerals for cash payment', (tester) async {
       tester.view.physicalSize = const Size(1920, 1080);
       tester.view.devicePixelRatio = 1.0;
