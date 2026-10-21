@@ -111,6 +111,7 @@ void main() {
       TokenQueueController? tokenQueueController,
       ReprintTrayController? reprintTrayController,
       ShiftAndCashController? shiftController,
+      double? initialDiscrepancyThreshold,
     }) {
       return MaterialApp(
         theme: WarmCounterTheme.lightTheme,
@@ -127,6 +128,7 @@ void main() {
             onFinalizeBusinessDay: onFinalizeBusinessDay,
             tokenQueueController: tokenQueueController,
             reprintTrayController: reprintTrayController,
+            initialDiscrepancyThreshold: initialDiscrepancyThreshold,
           ),
         ),
       );
@@ -224,6 +226,42 @@ void main() {
       await tester.tap(tokenTrayFinder);
       await tester.pumpAndSettle();
       expect(tester.widget<SwitchListTile>(tokenTrayFinder).value, isTrue);
+    });
+
+    testWidgets('allows manager to view and configure discrepancy threshold in operational settings', (tester) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      await tester.pumpWidget(createTestApp());
+      await tester.pumpAndSettle();
+
+      // Switch to Feature Toggles tab
+      await tester.tap(find.byKey(const ValueKey('portal_tab_toggles')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Shift Cash Discrepancy Threshold (PKR)'), findsOneWidget);
+      final thresholdInput = find.byKey(const ValueKey('discrepancy_threshold_input'));
+      final saveBtn = find.byKey(const ValueKey('save_discrepancy_threshold_button'));
+      expect(thresholdInput, findsOneWidget);
+      expect(saveBtn, findsOneWidget);
+
+      // Verify default threshold 100.00 via threshold input field
+      final thresholdField = tester.widget<TextField>(thresholdInput);
+      expect(thresholdField.controller?.text, equals('100.00'));
+
+      // Update threshold to 250.00
+      await tester.enterText(thresholdInput, '250.00');
+      await tester.pump();
+      await tester.tap(saveBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Discrepancy threshold updated to PKR 250.00'), findsOneWidget);
+
+      // Verify Discrepancy Audit Review shows active threshold
+      await tester.tap(find.byKey(const ValueKey('portal_tab_discrepancies')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Active Threshold: PKR 250.00'), findsOneWidget);
     });
 
     testWidgets('discrepancy audit review displays flagged shift and allows resolution', (tester) async {

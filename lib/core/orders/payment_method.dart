@@ -6,6 +6,7 @@ enum PaymentMethod {
   easypaisa('EASYPAISA', 'Easypaisa'),
   bankTransfer('BANK_TRANSFER', 'Bank Transfer'),
   raast('RAAST', 'Raast QR'),
+  cod('COD', 'Cash on Delivery'),
   split('SPLIT', 'Split Tender');
 
   const PaymentMethod(this.code, this.displayName);

@@ -66,18 +66,39 @@ class _BlindShiftCloseDialogState extends State<BlindShiftCloseDialog> {
   }
 
   Future<void> _submit() async {
+    if (!_useDenominationCounter) {
+      final text = _directCountController.text.trim();
+      if (text.isEmpty) {
+        setState(() {
+          _errorMessage = 'Please enter physical counted cash amount.';
+        });
+        return;
+      }
+      final parsed = double.tryParse(text);
+      if (parsed == null || parsed < 0) {
+        setState(() {
+          _errorMessage = 'Physical counted cash cannot be negative.';
+        });
+        return;
+      }
+    } else {
+      final coinsText = _looseCoinsController.text.trim();
+      if (coinsText.isNotEmpty) {
+        final coins = double.tryParse(coinsText);
+        if (coins == null || coins < 0) {
+          setState(() {
+            _errorMessage = 'Loose coins amount cannot be negative.';
+          });
+          return;
+        }
+      }
+    }
+
     final total = _computeTotal();
 
     if (total < 0) {
       setState(() {
         _errorMessage = 'Physical counted cash cannot be negative.';
-      });
-      return;
-    }
-
-    if (!_useDenominationCounter && _directCountController.text.trim().isEmpty) {
-      setState(() {
-        _errorMessage = 'Please enter physical counted cash amount.';
       });
       return;
     }

@@ -434,13 +434,19 @@ class PosDatabase {
   }
 
   Future<void> _upgradeToVersion12(DatabaseExecutor db) async {
-    await db.execute("ALTER TABLE orders ADD COLUMN checkout_command_id TEXT");
+    await _createOperationalAccountingTables(db);
+    final orderColumns = await db.rawQuery('PRAGMA table_info(orders)');
+    if (!orderColumns.any((c) => c['name'] == 'checkout_command_id')) {
+      await db.execute("ALTER TABLE orders ADD COLUMN checkout_command_id TEXT");
+    }
+    final paymentColumns = await db.rawQuery('PRAGMA table_info(order_payments)');
     for (final column in ['amount_tendered', 'change_returned']) {
+      if (paymentColumns.any((c) => c['name'] == '${column}_paisa')) continue;
       await db.execute('ALTER TABLE order_payments ADD COLUMN ${column}_paisa INTEGER');
       await db.execute('UPDATE order_payments SET ${column}_paisa = CAST(ROUND($column * 100) AS INTEGER)');
     }
 
-    await db.execute("CREATE UNIQUE INDEX idx_checkout_command ON orders(checkout_command_id) WHERE checkout_command_id IS NOT NULL");
+    await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_checkout_command ON orders(checkout_command_id) WHERE checkout_command_id IS NOT NULL");
   }
 
   Future<void> _upgradeToVersion11(DatabaseExecutor db) async {

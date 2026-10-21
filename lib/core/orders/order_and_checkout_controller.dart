@@ -438,7 +438,13 @@ class OrderAndCheckoutController {
       final grandTotalPaisa = PaisaEngine.rupeesToPaisa(totals.grandTotal) + deliveryFeePaisa;
       final grandTotal = PaisaEngine.paisaToRupees(grandTotalPaisa);
       var cashRoundingPaisa = 0;
-      {
+      final isCod = payments.any((p) => p.method == PaymentMethod.cod);
+      if (isCod) {
+        if (diningType != DiningType.delivery || payments.length != 1 || payments.single.amountTendered != 0 || payments.single.changeReturned != 0) {
+          throw StateError('COD requires delivery and records zero received until collection.');
+        }
+        await DeliveryController.rememberAddress(txn, delivery!);
+      } else {
         if (payments.any((p) => !p.amountTendered.isFinite || !p.changeReturned.isFinite || p.amountTendered < 0 || p.changeReturned < 0 || p.changeReturned > p.amountTendered || p.method == PaymentMethod.split)) {
           throw const DeliveryCheckoutException('Enter valid individual payment tenders. Your cart is unchanged.');
         }
@@ -480,7 +486,7 @@ class OrderAndCheckoutController {
           'delivery_address_snapshot': deliveryArea == null ? null : delivery!.addressSnapshot,
           'customer_phone': deliveryArea == null ? null : DeliveryController.normalizePhone(delivery!.phone),
           'customer_name': deliveryArea == null ? null : delivery!.customerName.trim(),
-          'payment_status': 'SETTLED',
+          'payment_status': isCod ? 'COLLECTION_DUE' : 'SETTLED',
           'token_status': TokenStatus.preparing.code,
           'created_at': formattedNow,
         },
@@ -600,7 +606,7 @@ class OrderAndCheckoutController {
         deliveryAddress: deliveryArea == null ? null : delivery!.addressSnapshot,
         customerPhone: deliveryArea == null ? null : DeliveryController.normalizePhone(delivery!.phone),
         customerName: deliveryArea == null ? null : delivery!.customerName.trim(),
-        paymentStatus: 'SETTLED',
+        paymentStatus: isCod ? 'COLLECTION_DUE' : 'SETTLED',
         createdAt: now,
         items: createdOrderItems,
         payments: createdPayments,

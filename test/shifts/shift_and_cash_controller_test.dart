@@ -345,6 +345,214 @@ void main() {
         final flaggedAfter = await controller.getFlaggedShifts();
         expect(flaggedAfter.any((s) => s.id == shift.id), isFalse);
       });
+
+      test('cashier can record autonomous PAY_IN and PAY_OUT with approved_by = NULL', () async {
+        final shift = await controller.openShift(staffId: cashierId, openingFloat: 5000.0);
+
+        final payIn = await controller.recordCashMovement(
+          shiftId: shift.id,
+          staffId: cashierId,
+          type: CashMovementType.payIn,
+          amount: 1200.0,
+          category: 'Counter Change Replenishment',
+          notes: 'Replenished change coins',
+        );
+
+        final payOut = await controller.recordCashMovement(
+          shiftId: shift.id,
+          staffId: cashierId,
+          type: CashMovementType.payOut,
+          amount: 300.0,
+          category: 'Milk',
+          notes: 'Tea milk expense',
+        );
+
+        expect(payIn.approvedBy, isNull);
+        expect(payOut.approvedBy, isNull);
+
+        // Verify approved_by is NULL in raw database rows
+        final rows = await db.query('cash_movements', where: 'shift_id = ?', whereArgs: [shift.id]);
+        expect(rows.length, equals(2));
+        for (final r in rows) {
+          expect(r['approved_by'], isNull);
+        }
+      });
+
+      test('manager credentials are strictly blocked from cashier movements and shift operations (ADR-0009)', () async {
+        final shift = await controller.openShift(staffId: cashierId, openingFloat: 5000.0);
+
+        // Manager cannot record drawer cash movements on cashier shifts
+        expect(
+          () => controller.recordCashMovement(
+            shiftId: shift.id,
+            staffId: supervisorId,
+            type: CashMovementType.payIn,
+            amount: 500.0,
+            category: 'Petty Cash',
+            notes: 'Manager drawer movement attempt',
+          ),
+          throwsA(isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('Manager credentials cannot operate cashier shifts'),
+          )),
+        );
+
+        // Manager cannot open cashier shifts
+        expect(
+          () => controller.openShift(staffId: supervisorId, openingFloat: 3000.0),
+          throwsA(isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('Manager credentials cannot open or operate cashier shifts'),
+          )),
+        );
+
+        // Manager cannot close cashier shifts
+        expect(
+          () => controller.closeShift(shiftId: shift.id, staffId: supervisorId, countedCash: 5000.0),
+          throwsA(isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('Only an active Cashier can close a cashier shift'),
+          )),
+        );
+      });
+
+      test('manager can configure discrepancy threshold; cashier is blocked', () async {
+        // Manager successfully updates threshold
+        await controller.setDiscrepancyThreshold(250.0, managerStaffId: supervisorId);
+        expect(await controller.getDiscrepancyThreshold(), equals(250.0));
+
+        // Cashier is strictly blocked from updating threshold
+        expect(
+          () => controller.setDiscrepancyThreshold(50.0, managerStaffId: cashierId),
+          throwsA(isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('Only Managers can configure the discrepancy threshold'),
+          )),
+        );
+
+        // Negative threshold rejected
+        expect(
+          () => controller.setDiscrepancyThreshold(-10.0, managerStaffId: supervisorId),
+          throwsA(isA<ArgumentError>().having(
+            (e) => e.message,
+            'message',
+            contains('cannot be negative'),
+          )),
+        );
+      });
+
+      test('discrepancy flagging correctly evaluates variance against manager-configured threshold', () async {
+        // Set threshold to 150.0
+        await controller.setDiscrepancyThreshold(150.0, managerStaffId: supervisorId);
+
+        // 1. Variance <= threshold (+100 overage) -> CLEAN
+        final shift1 = await controller.openShift(staffId: cashierId, openingFloat: 3000.0);
+        final closed1 = await controller.closeShift(shiftId: shift1.id, staffId: cashierId, countedCash: 3100.0);
+        expect(closed1.discrepancy, equals(100.0));
+        expect(closed1.discrepancyStatus, equals(DiscrepancyStatus.clean));
+
+        // 2. Variance <= threshold (-150 shortage, exactly on boundary) -> CLEAN
+        final shift2 = await controller.openShift(staffId: cashierId, openingFloat: 3000.0);
+        final closed2 = await controller.closeShift(shiftId: shift2.id, staffId: cashierId, countedCash: 2850.0);
+        expect(closed2.discrepancy, equals(-150.0));
+        expect(closed2.discrepancyStatus, equals(DiscrepancyStatus.clean));
+
+        // 3. Shortage > threshold (-160 shortage) -> FLAGGED
+        final shift3 = await controller.openShift(staffId: cashierId, openingFloat: 3000.0);
+        final closed3 = await controller.closeShift(shiftId: shift3.id, staffId: cashierId, countedCash: 2840.0);
+        expect(closed3.discrepancy, equals(-160.0));
+        expect(closed3.discrepancyStatus, equals(DiscrepancyStatus.flagged));
+
+        // 4. Overage > threshold (+175 overage) -> FLAGGED
+        final shift4 = await controller.openShift(staffId: cashierId, openingFloat: 3000.0);
+        final closed4 = await controller.closeShift(shiftId: shift4.id, staffId: cashierId, countedCash: 3175.0);
+        expect(closed4.discrepancy, equals(175.0));
+        expect(closed4.discrepancyStatus, equals(DiscrepancyStatus.flagged));
+      });
+
+      test('only manager can resolve discrepancy; cashier is blocked and shift figures remain immutable', () async {
+        final shift = await controller.openShift(staffId: cashierId, openingFloat: 5000.0);
+        final closed = await controller.closeShift(shiftId: shift.id, staffId: cashierId, countedCash: 4500.0);
+        expect(closed.discrepancyStatus, equals(DiscrepancyStatus.flagged));
+        expect(closed.discrepancy, equals(-500.0));
+        expect(closed.expectedCash, equals(5000.0));
+        expect(closed.countedCash, equals(4500.0));
+
+        // Cashier cannot resolve discrepancy
+        expect(
+          () => controller.resolveDiscrepancy(
+            shiftId: closed.id,
+            supervisorStaffId: cashierId,
+            resolutionNotes: 'Cashier attempt to self-resolve',
+          ),
+          throwsA(isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('Only Managers can resolve shift discrepancies'),
+          )),
+        );
+
+        // Manager resolves discrepancy
+        final resolved = await controller.resolveDiscrepancy(
+          shiftId: closed.id,
+          supervisorStaffId: supervisorId,
+          resolutionNotes: 'Shortage reviewed and approved by manager after examining camera footage',
+        );
+
+        expect(resolved.discrepancyStatus, equals(DiscrepancyStatus.resolved));
+        expect(resolved.resolvedByStaffId, equals(supervisorId));
+        expect(resolved.resolutionNotes, contains('camera footage'));
+        expect(resolved.resolvedAt, isNotNull);
+
+        // Core financial figures remain completely immutable
+        expect(resolved.discrepancy, equals(-500.0));
+        expect(resolved.expectedCash, equals(5000.0));
+        expect(resolved.countedCash, equals(4500.0));
+        expect(resolved.openingFloat, equals(5000.0));
+      });
+
+      test('generating X-Report and closing shifts NEVER closes the Business Day', () async {
+        final activeDayBefore = await controller.getActiveBusinessDay();
+        expect(activeDayBefore, isNotNull);
+        expect(activeDayBefore!.isOpen, isTrue);
+
+        final shift = await controller.openShift(staffId: cashierId, openingFloat: 4000.0);
+
+        // Generate Interim X-Report
+        final interimXReport = await controller.generateXReport(shift.id);
+        expect(interimXReport.isInterim, isTrue);
+        expect(interimXReport.openingFloat, equals(4000.0));
+
+        // Business Day still open
+        final dayAfterInterim = await controller.getActiveBusinessDay();
+        expect(dayAfterInterim?.id, equals(activeDayBefore.id));
+        expect(dayAfterInterim?.isOpen, isTrue);
+
+        // Close shift (even with a discrepancy flag)
+        final closedShift = await controller.closeShift(shiftId: shift.id, staffId: cashierId, countedCash: 3500.0);
+        expect(closedShift.isClosed, isTrue);
+        expect(closedShift.isFlagged, isTrue);
+
+        // Generate Closing X-Report
+        final closingXReport = await controller.generateXReport(shift.id);
+        expect(closingXReport.isInterim, isFalse);
+        expect(closingXReport.discrepancy, equals(-500.0));
+
+        // Business Day is STILL open!
+        final dayAfterClose = await controller.getActiveBusinessDay();
+        expect(dayAfterClose?.id, equals(activeDayBefore.id));
+        expect(dayAfterClose?.isOpen, isTrue);
+
+        // Printable string contains thermal layout
+        final printable = closingXReport.toPrintableString();
+        expect(printable, contains('RESTURANT POS'));
+        expect(printable, contains('SHIFT CLOSING X-REPORT'));
+        expect(printable, contains('Discrepancy:'));
+      });
     });
   });
 }
