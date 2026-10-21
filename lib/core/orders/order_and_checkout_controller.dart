@@ -17,6 +17,9 @@ import 'order.dart';
 import 'order_item.dart';
 import 'order_payment.dart';
 import 'order_void.dart';
+import 'order_revision.dart';
+import 'order_revision_line.dart';
+import '../shifts/cash_movement.dart';
 import 'payment_method.dart';
 import 'token_status.dart';
 
@@ -28,6 +31,35 @@ class CheckoutTokenEvent {
         revision = row['revision'] as int;
   final int orderId, tokenNumber, revision;
   final String action, paymentStatus;
+}
+
+/// Result of an explicit Cashier disbursement action (cash payout or digital refund).
+class RefundResult {
+  const RefundResult({
+    required this.orderId,
+    required this.shiftId,
+    required this.cashierId,
+    required this.amountPaisa,
+    required this.method,
+    this.referenceCode,
+    required this.reason,
+    this.cashMovementId,
+    required this.paymentStatus,
+    required this.recordedAt,
+  });
+
+  final int orderId;
+  final int shiftId;
+  final int cashierId;
+  final int amountPaisa;
+  final PaymentMethod method;
+  final String? referenceCode;
+  final String reason;
+  final int? cashMovementId;
+  final String paymentStatus;
+  final DateTime recordedAt;
+
+  bool get isCashPayout => cashMovementId != null;
 }
 
 /// Draft definition when creating or configuring a deal item slot.
@@ -920,6 +952,16 @@ class OrderAndCheckoutController {
     return rows.map((r) => OrderItem.fromMap(r)).toList();
   }
 
+  Future<List<OrderItem>> _getOrderItemsTxn(int orderId, DatabaseExecutor txn) async {
+    final rows = await txn.query(
+      PosDatabaseConstants.tableOrderItems,
+      where: 'order_id = ?',
+      whereArgs: [orderId],
+      orderBy: 'id ASC',
+    );
+    return rows.map((r) => OrderItem.fromMap(r)).toList();
+  }
+
   Future<List<OrderPayment>> getOrderPayments(int orderId) async {
     final rows = await database.query(
       PosDatabaseConstants.tableOrderPayments,
@@ -1176,6 +1218,799 @@ class OrderAndCheckoutController {
     if (rows.isEmpty) return null;
     return OrderVoid.fromMap(rows.first);
   }
+
+  // ===========================================================================
+  // AUTONOMOUS CASHIER ORDER REVISIONS, STAGE-AWARE STOCK & DECOUPLED REFUNDS
+  // ===========================================================================
+
+  Future<Map<int, double>> _computeBOMForOrderItem(
+    OrderItem item,
+    DatabaseExecutor executor,
+  ) async {
+    final quantities = <int, double>{};
+    if (item.menuItemId != null) {
+      await _accumulateMenuItemDeductions(
+        menuItemId: item.menuItemId!,
+        quantity: item.quantity,
+        selectedModifiers: [],
+        deductions: quantities,
+        executor: executor,
+      );
+    } else if (item.dealId != null) {
+      for (final choice in item.decodedDealChoices) {
+        final menuItemId = choice['menu_item_id'] as int?;
+        if (menuItemId != null) {
+          await _accumulateMenuItemDeductions(
+            menuItemId: menuItemId,
+            quantity: item.quantity,
+            selectedModifiers: [],
+            deductions: quantities,
+            executor: executor,
+          );
+        }
+      }
+    }
+    return quantities;
+  }
+
+  /// Cancels a confirmed order autonomously without requiring a Manager PIN.
+  /// Appends an immutable record to `order_revisions` and `order_revision_lines`.
+  /// Stage-aware stock disposition:
+  /// - Confirmed (unstarted prep): RESTOCK_RAW (restores raw ingredients to bulk stock).
+  /// - Preparing, Ready, Out for Delivery: WASTED_COOKED (posts to kitchen_wastage, cannot restore).
+  /// Decoupled refund:
+  /// - If prepaid, marks balance as Refund Owed/Pending (payment_status = 'REFUND_PENDING') without opening drawer.
+  /// - Concurrent calls with identical commandId are strictly idempotent.
+  Future<OrderRevision> cancelOrder({
+    required int orderId,
+    required int cashierId,
+    required String reason,
+    required String commandId,
+  }) async {
+    final trimmedReason = reason.trim();
+    if (trimmedReason.isEmpty) {
+      throw ArgumentError('Cancellation reason is mandatory.');
+    }
+
+    final existingRevisions = await database.query(
+      PosDatabaseConstants.tableOrderRevisions,
+      where: 'command_id = ?',
+      whereArgs: [commandId],
+    );
+    if (existingRevisions.isNotEmpty) {
+      final revRow = existingRevisions.first;
+      final revId = revRow['id'] as int;
+      final lineRows = await database.query(
+        PosDatabaseConstants.tableOrderRevisionLines,
+        where: 'revision_id = ?',
+        whereArgs: [revId],
+      );
+      final lines = lineRows.map((lr) => OrderRevisionLine.fromMap(lr)).toList();
+      return OrderRevision.fromMap(revRow, lines: lines);
+    }
+
+    final order = await getOrder(orderId);
+    if (order.isVoided || order.paymentStatus == 'CANCELLED') {
+      throw StateError('Cannot cancel order #$orderId: Order is already voided or canceled.');
+    }
+
+    final bdayRows = await database.query(
+      PosDatabaseConstants.tableBusinessDays,
+      where: 'id = ?',
+      whereArgs: [order.businessDayId],
+    );
+    if (bdayRows.isNotEmpty && bdayRows.first['status'] != 'OPEN') {
+      throw StateError('Cannot cancel order: Business Day is closed.');
+    }
+
+    return await database.transaction((txn) async {
+      final now = DateTime.now();
+      final formattedNow = _formatTimestamp(now);
+      final utcNowIso = now.toUtc().toIso8601String();
+
+      final oldOrderItems = await _getOrderItemsTxn(orderId, txn);
+      final priorSnapshot = {
+        'order_id': order.id,
+        'token_number': order.tokenNumber,
+        'grand_total': order.grandTotal,
+        'subtotal': order.subtotal,
+        'tax_amount': order.taxAmount,
+        'payment_status': order.paymentStatus,
+        'token_status': order.tokenStatus.code,
+        'items': oldOrderItems.map((i) => i.toMap()).toList(),
+      };
+
+      final oldTotalPaisa = PaisaEngine.rupeesToPaisa(order.grandTotal);
+      const newTotalPaisa = 0;
+      final moneyDeltaPaisa = -oldTotalPaisa;
+
+      final nextRevisionNo = order.currentRevision + 1;
+      final priorRevRows = await txn.query(
+        PosDatabaseConstants.tableOrderRevisions,
+        columns: ['id'],
+        where: 'order_id = ?',
+        whereArgs: [orderId],
+        orderBy: 'revision_no DESC',
+        limit: 1,
+      );
+      final priorRevisionId = priorRevRows.isNotEmpty ? priorRevRows.first['id'] as int : null;
+
+      final isUnstartedPrep = order.tokenStatus == TokenStatus.confirmed;
+      final disposition = isUnstartedPrep ? 'RESTOCK_RAW' : 'WASTED_COOKED';
+
+      final linesToInsert = <Map<String, Object?>>[];
+      for (final oldItem in oldOrderItems) {
+        final itemBom = oldItem.decodedBom ?? await _computeBOMForOrderItem(oldItem, txn);
+        linesToInsert.add({
+          'original_order_line_id': oldItem.id,
+          'item_id': oldItem.menuItemId ?? oldItem.dealId,
+          'action': 'CANCEL',
+          'old_qty_decimal': '${oldItem.quantity}',
+          'new_qty_decimal': '0',
+          'line_price_delta_paisa': -PaisaEngine.rupeesToPaisa(oldItem.totalPrice),
+          'bom_disposition': disposition,
+          'ingredient_delta_snapshot_json': jsonEncode(
+            itemBom.entries.map((e) => {'ingredient_id': e.key, 'qty_delta': -e.value}).toList(),
+          ),
+        });
+
+        for (final entry in itemBom.entries) {
+          final ingId = entry.key;
+          final qty = entry.value;
+          if (isUnstartedPrep) {
+            await txn.rawUpdate(
+              'UPDATE ${PosDatabaseConstants.tableRawIngredients} SET current_stock = current_stock + ? WHERE id = ?',
+              [qty, ingId],
+            );
+          } else {
+            final ingRows = await txn.query(
+              PosDatabaseConstants.tableRawIngredients,
+              columns: ['cost_per_recipe_unit'],
+              where: 'id = ?',
+              whereArgs: [ingId],
+            );
+            final costPerUnit = ingRows.isNotEmpty ? (ingRows.first['cost_per_recipe_unit'] as num?)?.toDouble() ?? 0.0 : 0.0;
+            final costLoss = qty * costPerUnit;
+            await txn.insert(
+              PosDatabaseConstants.tableKitchenWastage,
+              {
+                'staff_id': cashierId,
+                'raw_ingredient_id': ingId,
+                'quantity': qty,
+                'cost_loss': costLoss,
+                'reason': 'WASTED_COOKED',
+                'notes': 'Order #${order.id} canceled cooked wastage: $trimmedReason',
+                'created_at': formattedNow,
+              },
+            );
+          }
+        }
+      }
+
+      final paymentRows = await txn.query(
+        PosDatabaseConstants.tableOrderPayments,
+        where: 'order_id = ?',
+        whereArgs: [orderId],
+      );
+      final totalPaidPaisa = paymentRows.fold<int>(
+        0,
+        (sum, r) => sum + ((r['amount_tendered_paisa'] as int?) ?? PaisaEngine.rupeesToPaisa((r['amount_tendered'] as num).toDouble()))
+                        - ((r['change_returned_paisa'] as int?) ?? PaisaEngine.rupeesToPaisa((r['change_returned'] as num?)?.toDouble() ?? 0.0)),
+      );
+
+      final wasPrepaid = totalPaidPaisa > 0 || order.isSettled;
+      final newPaymentStatus = wasPrepaid ? 'REFUND_PENDING' : 'CANCELLED';
+
+      await txn.update(
+        PosDatabaseConstants.tableOrders,
+        {
+          'current_revision': nextRevisionNo,
+          'grand_total': 0.0,
+          'subtotal': 0.0,
+          'tax_amount': 0.0,
+          'discount_amount': 0.0,
+          'payment_status': newPaymentStatus,
+        },
+        where: 'id = ?',
+        whereArgs: [orderId],
+      );
+
+      final newSnapshot = {
+        'order_id': order.id,
+        'revision_no': nextRevisionNo,
+        'grand_total': 0.0,
+        'subtotal': 0.0,
+        'tax_amount': 0.0,
+        'payment_status': newPaymentStatus,
+        'items': <Map<String, dynamic>>[],
+      };
+
+      final revisionId = await txn.insert(
+        PosDatabaseConstants.tableOrderRevisions,
+        {
+          'order_id': orderId,
+          'revision_no': nextRevisionNo,
+          'prior_revision_id': priorRevisionId,
+          'action': 'CANCEL',
+          'reason': trimmedReason,
+          'cashier_id': cashierId,
+          'business_day_id': order.businessDayId,
+          'created_at_utc': utcNowIso,
+          'old_total_paisa': oldTotalPaisa,
+          'new_total_paisa': newTotalPaisa,
+          'money_delta_paisa': moneyDeltaPaisa,
+          'prior_snapshot_json': jsonEncode(priorSnapshot),
+          'new_snapshot_json': jsonEncode(newSnapshot),
+          'command_id': commandId,
+        },
+      );
+
+      final createdLines = <OrderRevisionLine>[];
+      for (final line in linesToInsert) {
+        final lineId = await txn.insert(
+          PosDatabaseConstants.tableOrderRevisionLines,
+          {
+            'revision_id': revisionId,
+            ...line,
+          },
+        );
+        createdLines.add(OrderRevisionLine.fromMap({
+          'id': lineId,
+          'revision_id': revisionId,
+          ...line,
+        }));
+      }
+
+      return OrderRevision(
+        id: revisionId,
+        orderId: orderId,
+        revisionNo: nextRevisionNo,
+        priorRevisionId: priorRevisionId,
+        action: 'CANCEL',
+        reason: trimmedReason,
+        cashierId: cashierId,
+        businessDayId: order.businessDayId,
+        createdAtUtc: now.toUtc(),
+        oldTotalPaisa: oldTotalPaisa,
+        newTotalPaisa: newTotalPaisa,
+        moneyDeltaPaisa: moneyDeltaPaisa,
+        priorSnapshotJson: jsonEncode(priorSnapshot),
+        newSnapshotJson: jsonEncode(newSnapshot),
+        commandId: commandId,
+        lines: createdLines,
+      );
+    });
+  }
+
+  /// Revises an existing order autonomously without requiring a Manager PIN.
+  /// Appends an immutable record to `order_revisions` and `order_revision_lines`.
+  /// Stage-aware stock disposition:
+  /// - Confirmed (unstarted prep): RESTOCK_RAW (restores raw ingredients to bulk stock).
+  /// - Preparing, Ready, Out for Delivery: WASTED_COOKED (posts to kitchen_wastage, cannot restore).
+  /// - Additions / increases: DEDUCT_RAW (deducts raw ingredient bulk stock).
+  /// Decoupled refund:
+  /// - If order was prepaid and monetary total is reduced, flags balance as Refund Owed/Pending
+  ///   (payment_status = 'REFUND_PENDING') without opening drawer.
+  /// - Concurrent calls with identical commandId are strictly idempotent.
+  Future<OrderRevision> reviseOrder({
+    required int orderId,
+    required int cashierId,
+    required String reason,
+    required String commandId,
+    required List<CartItem> newItems,
+    String action = 'CHANGE',
+  }) async {
+    final trimmedReason = reason.trim();
+    if (trimmedReason.isEmpty) {
+      throw ArgumentError('Revision reason is mandatory.');
+    }
+
+    final existingRevisions = await database.query(
+      PosDatabaseConstants.tableOrderRevisions,
+      where: 'command_id = ?',
+      whereArgs: [commandId],
+    );
+    if (existingRevisions.isNotEmpty) {
+      final revRow = existingRevisions.first;
+      final revId = revRow['id'] as int;
+      final lineRows = await database.query(
+        PosDatabaseConstants.tableOrderRevisionLines,
+        where: 'revision_id = ?',
+        whereArgs: [revId],
+      );
+      final lines = lineRows.map((lr) => OrderRevisionLine.fromMap(lr)).toList();
+      return OrderRevision.fromMap(revRow, lines: lines);
+    }
+
+    final order = await getOrder(orderId);
+    if (order.isVoided || order.paymentStatus == 'CANCELLED') {
+      throw StateError('Cannot revise order #$orderId: Order is already voided or canceled.');
+    }
+
+    final bdayRows = await database.query(
+      PosDatabaseConstants.tableBusinessDays,
+      where: 'id = ?',
+      whereArgs: [order.businessDayId],
+    );
+    if (bdayRows.isNotEmpty && bdayRows.first['status'] != 'OPEN') {
+      throw StateError('Cannot revise order: Business Day is closed.');
+    }
+
+    return await database.transaction((txn) async {
+      final now = DateTime.now();
+      final formattedNow = _formatTimestamp(now);
+      final utcNowIso = now.toUtc().toIso8601String();
+
+      final oldOrderItems = await _getOrderItemsTxn(orderId, txn);
+      final priorSnapshot = {
+        'order_id': order.id,
+        'token_number': order.tokenNumber,
+        'grand_total': order.grandTotal,
+        'subtotal': order.subtotal,
+        'tax_amount': order.taxAmount,
+        'payment_status': order.paymentStatus,
+        'token_status': order.tokenStatus.code,
+        'items': oldOrderItems.map((i) => i.toMap()).toList(),
+      };
+
+      final totals = calculateCartTotals(
+        items: newItems,
+      );
+
+      final oldTotalPaisa = PaisaEngine.rupeesToPaisa(order.grandTotal);
+      final newTotalPaisa = PaisaEngine.rupeesToPaisa(totals.grandTotal);
+      final moneyDeltaPaisa = newTotalPaisa - oldTotalPaisa;
+
+      final nextRevisionNo = order.currentRevision + 1;
+      final priorRevRows = await txn.query(
+        PosDatabaseConstants.tableOrderRevisions,
+        columns: ['id'],
+        where: 'order_id = ?',
+        whereArgs: [orderId],
+        orderBy: 'revision_no DESC',
+        limit: 1,
+      );
+      final priorRevisionId = priorRevRows.isNotEmpty ? priorRevRows.first['id'] as int : null;
+
+      final isUnstartedPrep = order.tokenStatus == TokenStatus.confirmed;
+
+      final oldIngredientTotals = <int, double>{};
+      for (final oldItem in oldOrderItems) {
+        final bom = oldItem.decodedBom ?? await _computeBOMForOrderItem(oldItem, txn);
+        for (final entry in bom.entries) {
+          oldIngredientTotals[entry.key] = (oldIngredientTotals[entry.key] ?? 0.0) + entry.value;
+        }
+      }
+
+      final newIngredientTotals = <int, double>{};
+      for (final newItem in newItems) {
+        final bom = await _lineBom(newItem, txn);
+        for (final entry in bom.entries) {
+          newIngredientTotals[entry.key] = (newIngredientTotals[entry.key] ?? 0.0) + entry.value;
+        }
+      }
+
+      final linesToInsert = <Map<String, Object?>>[];
+      final matchedItemIndices = <int>{};
+
+      for (final oldItem in oldOrderItems) {
+        final matchIdx = newItems.indexWhere((ni) =>
+            !matchedItemIndices.contains(newItems.indexOf(ni)) &&
+            ((oldItem.menuItemId != null && ni.menuItem?.id == oldItem.menuItemId) ||
+             (oldItem.dealId != null && ni.deal?.id == oldItem.dealId)));
+
+        if (matchIdx == -1) {
+          final itemBom = oldItem.decodedBom ?? await _computeBOMForOrderItem(oldItem, txn);
+          final disposition = isUnstartedPrep ? 'RESTOCK_RAW' : 'WASTED_COOKED';
+          linesToInsert.add({
+            'original_order_line_id': oldItem.id,
+            'item_id': oldItem.menuItemId ?? oldItem.dealId,
+            'action': 'REMOVE',
+            'old_qty_decimal': '${oldItem.quantity}',
+            'new_qty_decimal': '0',
+            'line_price_delta_paisa': -PaisaEngine.rupeesToPaisa(oldItem.totalPrice),
+            'bom_disposition': disposition,
+            'ingredient_delta_snapshot_json': jsonEncode(
+              itemBom.entries.map((e) => {'ingredient_id': e.key, 'qty_delta': -e.value}).toList(),
+            ),
+          });
+        } else {
+          matchedItemIndices.add(matchIdx);
+          final matchedNew = newItems[matchIdx];
+          if (matchedNew.quantity != oldItem.quantity) {
+            final oldQty = oldItem.quantity;
+            final newQty = matchedNew.quantity;
+            final qtyDelta = newQty - oldQty;
+            final priceDelta = PaisaEngine.rupeesToPaisa(matchedNew.totalPrice) - PaisaEngine.rupeesToPaisa(oldItem.totalPrice);
+            final itemBom = await _lineBom(matchedNew, txn);
+            final disposition = qtyDelta < 0
+                ? (isUnstartedPrep ? 'RESTOCK_RAW' : 'WASTED_COOKED')
+                : 'DEDUCT_RAW';
+            linesToInsert.add({
+              'original_order_line_id': oldItem.id,
+              'item_id': oldItem.menuItemId ?? oldItem.dealId,
+              'action': 'CHANGE_QTY',
+              'old_qty_decimal': '$oldQty',
+              'new_qty_decimal': '$newQty',
+              'line_price_delta_paisa': priceDelta,
+              'bom_disposition': disposition,
+              'ingredient_delta_snapshot_json': jsonEncode(
+                itemBom.entries.map((e) => {'ingredient_id': e.key, 'qty_delta': e.value * (qtyDelta / newQty)}).toList(),
+              ),
+            });
+          }
+        }
+      }
+
+      for (int i = 0; i < newItems.length; i++) {
+        if (!matchedItemIndices.contains(i)) {
+          final newItem = newItems[i];
+          final itemBom = await _lineBom(newItem, txn);
+          linesToInsert.add({
+            'original_order_line_id': null,
+            'item_id': newItem.menuItem?.id ?? newItem.deal?.id,
+            'action': 'ADD',
+            'old_qty_decimal': '0',
+            'new_qty_decimal': '${newItem.quantity}',
+            'line_price_delta_paisa': PaisaEngine.rupeesToPaisa(newItem.totalPrice),
+            'bom_disposition': 'DEDUCT_RAW',
+            'ingredient_delta_snapshot_json': jsonEncode(
+              itemBom.entries.map((e) => {'ingredient_id': e.key, 'qty_delta': e.value}).toList(),
+            ),
+          });
+        }
+      }
+
+      if (linesToInsert.isEmpty) {
+        linesToInsert.add({
+          'original_order_line_id': null,
+          'item_id': null,
+          'action': action,
+          'old_qty_decimal': '1',
+          'new_qty_decimal': '1',
+          'line_price_delta_paisa': moneyDeltaPaisa,
+          'bom_disposition': isUnstartedPrep ? 'RESTOCK_RAW' : 'WASTED_COOKED',
+          'ingredient_delta_snapshot_json': '[]',
+        });
+      }
+
+      final allIngredientIds = {...oldIngredientTotals.keys, ...newIngredientTotals.keys};
+      for (final ingId in allIngredientIds) {
+        final oldQty = oldIngredientTotals[ingId] ?? 0.0;
+        final newQty = newIngredientTotals[ingId] ?? 0.0;
+        final diff = newQty - oldQty;
+        if (diff > 0) {
+          await txn.rawUpdate(
+            'UPDATE ${PosDatabaseConstants.tableRawIngredients} SET current_stock = current_stock - ? WHERE id = ?',
+            [diff, ingId],
+          );
+        } else if (diff < 0) {
+          final returnedQty = -diff;
+          if (isUnstartedPrep) {
+            await txn.rawUpdate(
+              'UPDATE ${PosDatabaseConstants.tableRawIngredients} SET current_stock = current_stock + ? WHERE id = ?',
+              [returnedQty, ingId],
+            );
+          } else {
+            final ingRows = await txn.query(
+              PosDatabaseConstants.tableRawIngredients,
+              columns: ['cost_per_recipe_unit'],
+              where: 'id = ?',
+              whereArgs: [ingId],
+            );
+            final costPerUnit = ingRows.isNotEmpty ? (ingRows.first['cost_per_recipe_unit'] as num?)?.toDouble() ?? 0.0 : 0.0;
+            final costLoss = returnedQty * costPerUnit;
+            await txn.insert(
+              PosDatabaseConstants.tableKitchenWastage,
+              {
+                'staff_id': cashierId,
+                'raw_ingredient_id': ingId,
+                'quantity': returnedQty,
+                'cost_loss': costLoss,
+                'reason': 'WASTED_COOKED',
+                'notes': 'Order #${order.id} revision cooked wastage: $trimmedReason',
+                'created_at': formattedNow,
+              },
+            );
+          }
+        }
+      }
+
+      final paymentRows = await txn.query(
+        PosDatabaseConstants.tableOrderPayments,
+        where: 'order_id = ?',
+        whereArgs: [orderId],
+      );
+      final totalPaidPaisa = paymentRows.fold<int>(
+        0,
+        (sum, r) => sum + ((r['amount_tendered_paisa'] as int?) ?? PaisaEngine.rupeesToPaisa((r['amount_tendered'] as num).toDouble()))
+                        - ((r['change_returned_paisa'] as int?) ?? PaisaEngine.rupeesToPaisa((r['change_returned'] as num?)?.toDouble() ?? 0.0)),
+      );
+
+      String newPaymentStatus = order.paymentStatus;
+      if (totalPaidPaisa > newTotalPaisa) {
+        newPaymentStatus = 'REFUND_PENDING';
+      }
+
+      await txn.update(
+        PosDatabaseConstants.tableOrders,
+        {
+          'current_revision': nextRevisionNo,
+          'subtotal': totals.subtotal,
+          'tax_amount': totals.taxAmount,
+          'grand_total': totals.grandTotal,
+          'payment_status': newPaymentStatus,
+        },
+        where: 'id = ?',
+        whereArgs: [orderId],
+      );
+
+      await txn.delete(
+        PosDatabaseConstants.tableOrderItems,
+        where: 'order_id = ?',
+        whereArgs: [orderId],
+      );
+
+      final createdOrderItems = <OrderItem>[];
+      for (final cartItem in newItems) {
+        String? modifiersJson;
+        if (cartItem.selectedModifiers.isNotEmpty) {
+          modifiersJson = jsonEncode(cartItem.selectedModifiers.map((m) => {
+            'id': m.id,
+            'name': m.name,
+            'price_delta': m.priceDelta,
+            'raw_ingredient_id': m.rawIngredientId,
+            'ingredient_qty_delta': m.ingredientQtyDelta,
+          }).toList());
+        }
+
+        String? dealChoicesJson;
+        if (cartItem.selectedDealChoices.isNotEmpty) {
+          dealChoicesJson = jsonEncode(
+            cartItem.selectedDealChoices.map((c) => c.toJson()).toList(),
+          );
+        }
+
+        final bom = await _lineBom(cartItem, txn);
+        final bomJson = jsonEncode(bom.map((key, value) => MapEntry('$key', value)));
+        final itemId = await txn.insert(
+          PosDatabaseConstants.tableOrderItems,
+          {
+            'order_id': orderId,
+            'menu_item_id': cartItem.menuItem?.id,
+            'deal_id': cartItem.deal?.id,
+            'name': cartItem.name,
+            'quantity': cartItem.quantity,
+            'unit_price': cartItem.unitPrice,
+            'total_price': cartItem.totalPrice,
+            'modifiers_json': modifiersJson,
+            'deal_choices_json': dealChoicesJson,
+            'bom_json': bomJson,
+            'created_at': formattedNow,
+          },
+        );
+
+        createdOrderItems.add(OrderItem(
+          id: itemId,
+          orderId: orderId,
+          menuItemId: cartItem.menuItem?.id,
+          dealId: cartItem.deal?.id,
+          name: cartItem.name,
+          quantity: cartItem.quantity,
+          unitPrice: cartItem.unitPrice,
+          totalPrice: cartItem.totalPrice,
+          modifiersJson: modifiersJson,
+          dealChoicesJson: dealChoicesJson,
+          bomJson: bomJson,
+          createdAt: now,
+        ));
+      }
+
+      final newSnapshot = {
+        'order_id': order.id,
+        'revision_no': nextRevisionNo,
+        'grand_total': totals.grandTotal,
+        'subtotal': totals.subtotal,
+        'tax_amount': totals.taxAmount,
+        'payment_status': newPaymentStatus,
+        'items': createdOrderItems.map((i) => i.toMap()).toList(),
+      };
+
+      final revisionId = await txn.insert(
+        PosDatabaseConstants.tableOrderRevisions,
+        {
+          'order_id': orderId,
+          'revision_no': nextRevisionNo,
+          'prior_revision_id': priorRevisionId,
+          'action': action,
+          'reason': trimmedReason,
+          'cashier_id': cashierId,
+          'business_day_id': order.businessDayId,
+          'created_at_utc': utcNowIso,
+          'old_total_paisa': oldTotalPaisa,
+          'new_total_paisa': newTotalPaisa,
+          'money_delta_paisa': moneyDeltaPaisa,
+          'prior_snapshot_json': jsonEncode(priorSnapshot),
+          'new_snapshot_json': jsonEncode(newSnapshot),
+          'command_id': commandId,
+        },
+      );
+
+      final createdLines = <OrderRevisionLine>[];
+      for (final line in linesToInsert) {
+        final lineId = await txn.insert(
+          PosDatabaseConstants.tableOrderRevisionLines,
+          {
+            'revision_id': revisionId,
+            ...line,
+          },
+        );
+        createdLines.add(OrderRevisionLine.fromMap({
+          'id': lineId,
+          'revision_id': revisionId,
+          ...line,
+        }));
+      }
+
+      return OrderRevision(
+        id: revisionId,
+        orderId: orderId,
+        revisionNo: nextRevisionNo,
+        priorRevisionId: priorRevisionId,
+        action: action,
+        reason: trimmedReason,
+        cashierId: cashierId,
+        businessDayId: order.businessDayId,
+        createdAtUtc: now.toUtc(),
+        oldTotalPaisa: oldTotalPaisa,
+        newTotalPaisa: newTotalPaisa,
+        moneyDeltaPaisa: moneyDeltaPaisa,
+        priorSnapshotJson: jsonEncode(priorSnapshot),
+        newSnapshotJson: jsonEncode(newSnapshot),
+        commandId: commandId,
+        lines: createdLines,
+      );
+    });
+  }
+
+  /// Executes an explicit cashier disbursement action (drawer cash payout or digital refund).
+  /// Decouples order reductions/cancellations from cash drawer opening.
+  /// Cash refunds insert a `PAY_OUT` movement into `cash_movements` preserving cash drawer variance integrity.
+  Future<RefundResult> recordCashierRefund({
+    required int orderId,
+    required int shiftId,
+    required int cashierId,
+    required int amountPaisa,
+    required PaymentMethod method,
+    String? referenceCode,
+    required String reason,
+    String? commandId,
+  }) async {
+    if (amountPaisa <= 0) {
+      throw ArgumentError('Refund amount must be greater than zero.');
+    }
+    final trimmedReason = reason.trim();
+    if (trimmedReason.isEmpty) {
+      throw ArgumentError('Refund reason is mandatory.');
+    }
+
+    final order = await getOrder(orderId);
+
+    return await database.transaction((txn) async {
+      final now = DateTime.now();
+      final formattedNow = _formatTimestamp(now);
+
+      int? cashMovementId;
+      if (method == PaymentMethod.cash) {
+        cashMovementId = await txn.insert(
+          PosDatabaseConstants.tableCashMovements,
+          {
+            'shift_id': shiftId,
+            'staff_id': cashierId,
+            'type': CashMovementType.payOut.dbValue,
+            'amount': PaisaEngine.paisaToRupees(amountPaisa),
+            'category': 'REFUND',
+            'notes': 'Order #$orderId refund: $trimmedReason',
+            'approved_by': null,
+            'created_at': formattedNow,
+          },
+        );
+      }
+
+      // Record refund payment line in order_payments
+      // Negative amount records the refund credit
+      await txn.insert(
+        PosDatabaseConstants.tableOrderPayments,
+        {
+          'order_id': orderId,
+          'payment_method': method.code,
+          'amount_tendered': -PaisaEngine.paisaToRupees(amountPaisa),
+          'change_returned': 0.0,
+          'amount_tendered_paisa': -amountPaisa,
+          'change_returned_paisa': 0,
+          'reference_code': referenceCode ?? (commandId ?? 'REFUND-$orderId'),
+        },
+      );
+
+      final paymentRows = await txn.query(
+        PosDatabaseConstants.tableOrderPayments,
+        where: 'order_id = ?',
+        whereArgs: [orderId],
+      );
+      final netPaidPaisa = paymentRows.fold<int>(
+        0,
+        (sum, r) => sum + ((r['amount_tendered_paisa'] as int?) ?? PaisaEngine.rupeesToPaisa((r['amount_tendered'] as num).toDouble()))
+                        - ((r['change_returned_paisa'] as int?) ?? PaisaEngine.rupeesToPaisa((r['change_returned'] as num?)?.toDouble() ?? 0.0)),
+      );
+
+      final grandTotalPaisa = PaisaEngine.rupeesToPaisa(order.grandTotal);
+      String updatedStatus = order.paymentStatus;
+      if (netPaidPaisa <= grandTotalPaisa) {
+        updatedStatus = grandTotalPaisa == 0 ? 'CANCELLED' : 'SETTLED';
+        await txn.update(
+          PosDatabaseConstants.tableOrders,
+          {'payment_status': updatedStatus},
+          where: 'id = ?',
+          whereArgs: [orderId],
+        );
+      }
+
+      return RefundResult(
+        orderId: orderId,
+        shiftId: shiftId,
+        cashierId: cashierId,
+        amountPaisa: amountPaisa,
+        method: method,
+        referenceCode: referenceCode,
+        reason: trimmedReason,
+        cashMovementId: cashMovementId,
+        paymentStatus: updatedStatus,
+        recordedAt: now,
+      );
+    });
+  }
+
+  /// Retrieves all immutable revisions recorded for [orderId], ordered chronologically.
+  Future<List<OrderRevision>> getOrderRevisions(int orderId) async {
+    final revRows = await database.query(
+      PosDatabaseConstants.tableOrderRevisions,
+      where: 'order_id = ?',
+      whereArgs: [orderId],
+      orderBy: 'revision_no ASC',
+    );
+    final revisions = <OrderRevision>[];
+    for (final r in revRows) {
+      final revId = r['id'] as int;
+      final lineRows = await database.query(
+        PosDatabaseConstants.tableOrderRevisionLines,
+        where: 'revision_id = ?',
+        whereArgs: [revId],
+        orderBy: 'id ASC',
+      );
+      final lines = lineRows.map((lr) => OrderRevisionLine.fromMap(lr)).toList();
+      revisions.add(OrderRevision.fromMap(r, lines: lines));
+    }
+    return revisions;
+  }
+
+  /// Calculates net pending refund amount in integer paisa for [orderId].
+  Future<int> getOrderPendingRefundPaisa(int orderId) async {
+    final order = await getOrder(orderId);
+    final paymentRows = await database.query(
+      PosDatabaseConstants.tableOrderPayments,
+      where: 'order_id = ?',
+      whereArgs: [orderId],
+    );
+    final netPaidPaisa = paymentRows.fold<int>(
+      0,
+      (sum, r) => sum + ((r['amount_tendered_paisa'] as int?) ?? PaisaEngine.rupeesToPaisa((r['amount_tendered'] as num).toDouble()))
+                      - ((r['change_returned_paisa'] as int?) ?? PaisaEngine.rupeesToPaisa((r['change_returned'] as num?)?.toDouble() ?? 0.0)),
+    );
+    final grandTotalPaisa = PaisaEngine.rupeesToPaisa(order.grandTotal);
+    final pending = netPaidPaisa - grandTotalPaisa;
+    return pending > 0 ? pending : 0;
+  }
 }
+
 
 

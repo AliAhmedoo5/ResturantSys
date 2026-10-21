@@ -23,6 +23,7 @@ import '../../core/orders/payment_method.dart';
 import '../../core/hardware/in_memory_hardware_adapter.dart';
 import '../../core/hardware/reprint_tray_controller.dart';
 import '../../core/theme/theme.dart';
+import 'cashier_order_revision_dialog.dart';
 import 'deal_selection_dialog.dart';
 import 'modifier_selection_dialog.dart';
 import 'reprint_tray_dialog.dart';
@@ -577,6 +578,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
           crossAxisAlignment: WrapCrossAlignment.center,
           alignment: WrapAlignment.end,
           children: [
+            if (widget.orderController != null) _buildReviseOrderButton(),
             if (widget.orderController != null) _buildVoidOrderButton(),
             if (widget.reprintTrayController != null) _buildReprintTrayButton(),
             Text(
@@ -592,6 +594,114 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
         ),
       ],
     );
+  }
+
+  Widget _buildReviseOrderButton() {
+    return ElevatedButton.icon(
+      key: const ValueKey('open_revise_order_button'),
+      icon: const Icon(
+        Icons.edit_note,
+        size: 16,
+      ),
+      label: const Text(
+        'Revise / Cancel',
+        style: TextStyle(
+          fontWeight: FontWeight.w600,
+          fontSize: 12,
+        ),
+      ),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: WarmCounterColors.lightWarningHighlight,
+        foregroundColor: WarmCounterColors.lightPrimaryText,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        minimumSize: const Size(110, WarmCounterSpacing.minTouchTargetSize),
+      ),
+      onPressed: _openReviseOrderFlow,
+    );
+  }
+
+  Future<void> _openReviseOrderFlow() async {
+    if (widget.orderController == null) return;
+
+    final recentOrders = await widget.orderController!.getOrders(
+      businessDayId: widget.businessDayId,
+      limit: 15,
+    );
+    final eligibleOrders = recentOrders
+        .where((o) => !o.isVoided && !o.isCancelled)
+        .toList();
+
+    if (eligibleOrders.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No active orders available to revise or cancel.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+
+    if (!mounted) return;
+
+    final selectedOrder = await showDialog<Order>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Select Order to Revise / Cancel'),
+        shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.panelBorderRadius),
+        content: SizedBox(
+          width: 440,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: eligibleOrders.length,
+            itemBuilder: (ctx, i) {
+              final o = eligibleOrders[i];
+              return ListTile(
+                key: ValueKey('select_order_to_revise_${o.id}'),
+                title: Text(
+                  'Order #${o.id} • Token ${o.tokenDisplay}',
+                  style: WarmCounterTypography.tabularNumbers.copyWith(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+                subtitle: Text(
+                  'Rs ${_currencyFormat.format(o.grandTotal)} • Stage: ${o.tokenStatus.displayName} • ${o.diningType.displayName}',
+                  style: WarmCounterTypography.tabularNumbers.copyWith(
+                    fontSize: 12,
+                    color: WarmCounterColors.lightSecondaryText,
+                  ),
+                ),
+                onTap: () => Navigator.of(ctx).pop(o),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+
+    if (selectedOrder != null && mounted) {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => CashierOrderRevisionDialog(
+          order: selectedOrder,
+          cashierId: widget.currentStaff.id,
+          shiftId: widget.shiftId,
+          orderController: widget.orderController!,
+          onRevisionCompleted: () {
+            _refreshToken();
+            widget.onOrderCompleted?.call();
+          },
+        ),
+      );
+    }
   }
 
   Widget _buildVoidOrderButton() {

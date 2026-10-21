@@ -19,6 +19,11 @@ enum WastageReason {
     code: 'TESTING',
     displayName: 'R&D / Testing',
     description: 'Recipe testing, quality sampling, or staff culinary training',
+  ),
+  wastedCooked(
+    code: 'WASTED_COOKED',
+    displayName: 'Cooked Wastage / Order Revision',
+    description: 'Item removed or order canceled after food preparation commenced',
   );
 
   const WastageReason({

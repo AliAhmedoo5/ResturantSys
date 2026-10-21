@@ -451,8 +451,9 @@ class ShiftAndCashController {
         FROM ${PosDatabaseConstants.tableOrderPayments} op
         JOIN ${PosDatabaseConstants.tableOrders} o ON op.order_id = o.id
         WHERE o.shift_id = ? 
-          AND o.payment_status = 'SETTLED' 
-          AND op.payment_method = 'CASH';
+          AND o.payment_status IN ('SETTLED', 'REFUND_PENDING', 'CANCELLED', 'REFUNDED') 
+          AND op.payment_method = 'CASH'
+          AND op.amount_tendered > 0;
       ''', [shiftId]);
 
       if (rows.isNotEmpty) {
@@ -462,6 +463,40 @@ class ShiftAndCashController {
       // Graceful fallback if orders table is empty or being initialized
     }
     return 0.0;
+  }
+
+  /// Retrieves a shift by [id].
+  Future<Shift> getShift(int id) async {
+    final shiftRows = await database.rawQuery('''
+      SELECT sh.*, st.name as staff_name
+      FROM ${PosDatabaseConstants.tableShifts} sh
+      LEFT JOIN ${PosDatabaseConstants.tableStaff} st ON sh.staff_id = st.id
+      WHERE sh.id = ?;
+    ''', [id]);
+
+    if (shiftRows.isEmpty) {
+      throw StateError('Shift #$id not found.');
+    }
+
+    return Shift.fromMap(shiftRows.first);
+  }
+
+  /// Calculates expected drawer cash balance for [shiftId] accounting for
+  /// opening float, settled/prepaid cash sales, pay-ins, and pay-outs (including refunds).
+  Future<double> calculateExpectedCash(int shiftId) async {
+    final shift = await getShift(shiftId);
+    final movements = await getCashMovements(shiftId);
+    double totalPayIn = 0.0;
+    double totalPayOut = 0.0;
+    for (final m in movements) {
+      if (m.isPayIn) {
+        totalPayIn += m.amount;
+      } else {
+        totalPayOut += m.amount;
+      }
+    }
+    final cashSales = await calculateCashSales(shiftId);
+    return shift.openingFloat + cashSales + totalPayIn - totalPayOut;
   }
 
   /// Computes card and Raast tender sales for a shift.
