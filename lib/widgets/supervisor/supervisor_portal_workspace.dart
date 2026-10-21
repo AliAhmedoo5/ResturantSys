@@ -708,7 +708,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
               key: const ValueKey('manager_stock_alert'),
               backgroundColor: WarmCounterColors.lightDestructiveHighlight,
               leading: const Icon(Icons.warning_amber_rounded, color: WarmCounterColors.lightDestructiveAction),
-              content: Text('Low stock — replenish now: ${_stockAlerts.map((a) => '${a.ingredientName}: ${a.currentStock} ${a.storageUnit}').join('; ')}', maxLines: 3, overflow: TextOverflow.ellipsis),
+              content: Text('Low stock  -  replenish now: ${_stockAlerts.map((a) => '${a.ingredientName}: ${a.currentStock} ${a.storageUnit}').join('; ')}', maxLines: 3, overflow: TextOverflow.ellipsis),
               actions: [TextButton(onPressed: _loadStockAlerts, child: const Text('Refresh stock'))],
             ),
             const SizedBox(height: 8),
