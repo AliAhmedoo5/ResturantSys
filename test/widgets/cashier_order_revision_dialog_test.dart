@@ -9,7 +9,7 @@ import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
 import 'package:resturant_sys/core/orders/order_revision.dart';
 import 'package:resturant_sys/core/orders/payment_method.dart';
 import 'package:resturant_sys/core/orders/token_status.dart';
-import 'package:resturant_sys/core/utils/paisa_engine.dart';
+import 'package:resturant_sys/core/orders/paisa_engine.dart';
 import 'package:resturant_sys/widgets/orders/cashier_order_revision_dialog.dart';
 
 class FakeOrderController implements OrderAndCheckoutController {
