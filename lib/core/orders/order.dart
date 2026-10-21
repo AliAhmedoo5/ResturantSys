@@ -20,10 +20,17 @@ class Order {
     required this.paymentStatus,
     required this.createdAt,
     this.tokenStatus = TokenStatus.preparing,
+    this.currentRevision = 1,
     this.items = const [],
     this.payments = const [],
     this.cashierName,
-    this.deliveryAreaId, this.deliveryAreaName, this.deliveryAddress, this.customerPhone, this.customerName, this.deliveryFeePaisa = 0, this.cashRoundingPaisa = 0,
+    this.deliveryAreaId,
+    this.deliveryAreaName,
+    this.deliveryAddress,
+    this.customerPhone,
+    this.customerName,
+    this.deliveryFeePaisa = 0,
+    this.cashRoundingPaisa = 0,
   });
 
   final int? deliveryAreaId;
@@ -43,6 +50,7 @@ class Order {
   final String paymentStatus;
   final DateTime createdAt;
   final TokenStatus tokenStatus;
+  final int currentRevision;
   final List<OrderItem> items;
   final List<OrderPayment> payments;
   final String? cashierName;
@@ -52,6 +60,9 @@ class Order {
 
   bool get isSettled => paymentStatus == 'SETTLED';
   bool get isVoided => paymentStatus == 'VOIDED';
+  bool get isCancelled => paymentStatus == 'CANCELLED';
+  bool get isRefundPending =>
+      paymentStatus == 'REFUND_PENDING' || paymentStatus == 'REFUND_OWED';
 
   factory Order.fromMap(
     Map<String, Object?> map, {
@@ -83,6 +94,7 @@ class Order {
       tokenStatus: map['token_status'] != null
           ? TokenStatus.fromCode(map['token_status'] as String)
           : TokenStatus.preparing,
+      currentRevision: (map['current_revision'] as int?) ?? 1,
       items: items,
       payments: payments,
       cashierName: cashierName ?? map['cashier_name'] as String?,
@@ -111,8 +123,7 @@ class Order {
       'payment_status': paymentStatus,
       'created_at': createdAt.toIso8601String(),
       'token_status': tokenStatus.code,
+      'current_revision': currentRevision,
     };
   }
 }
-
-

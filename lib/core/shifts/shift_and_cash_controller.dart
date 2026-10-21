@@ -451,8 +451,9 @@ class ShiftAndCashController {
         FROM ${PosDatabaseConstants.tableOrderPayments} op
         JOIN ${PosDatabaseConstants.tableOrders} o ON op.order_id = o.id
         WHERE o.shift_id = ? 
-          AND o.payment_status = 'SETTLED' 
-          AND op.payment_method = 'CASH';
+          AND o.payment_status IN ('SETTLED', 'REFUND_PENDING', 'CANCELLED', 'REFUNDED') 
+          AND op.payment_method = 'CASH'
+          AND op.amount_tendered > 0;
       ''', [shiftId]);
 
       if (rows.isNotEmpty) {
