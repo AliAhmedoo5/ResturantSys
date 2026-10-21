@@ -32,6 +32,5 @@ jobs:
 
       - name: Run tests
         timeout-minutes: 12
-        run: flutter test test/widgets/counter_billing_workspace_test.dart test/delivery/delivery_counter_test.dart test/delivery/delivery_rounding_dialog_test.dart
-
+        run: flutter test
 
