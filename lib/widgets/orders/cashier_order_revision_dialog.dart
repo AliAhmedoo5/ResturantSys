@@ -409,10 +409,10 @@ class _CashierOrderRevisionDialogState
                       const SizedBox(width: 8),
                       OutlinedButton(
                         key: const ValueKey('confirm_digital_refund_button'),
-                        child: const Text('Digital'),
                         onPressed: _isSubmitting
                             ? null
                             : () => _handleDisburseRefund(PaymentMethod.jazzCash),
+                        child: const Text('Digital'),
                       ),
                     ],
                   ),

@@ -54,7 +54,7 @@ void main() {
     });
 
     test('OrderRevision and OrderRevisionLine map serialization round-trip', () {
-      final line = const OrderRevisionLine(
+      const line = OrderRevisionLine(
         id: 1,
         revisionId: 10,
         originalOrderLineId: 101,

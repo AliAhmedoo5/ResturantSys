@@ -465,6 +465,22 @@ class ShiftAndCashController {
     return 0.0;
   }
 
+  /// Retrieves a shift by [id].
+  Future<Shift> getShift(int id) async {
+    final shiftRows = await database.rawQuery('''
+      SELECT sh.*, st.name as staff_name
+      FROM ${PosDatabaseConstants.tableShifts} sh
+      LEFT JOIN ${PosDatabaseConstants.tableStaff} st ON sh.staff_id = st.id
+      WHERE sh.id = ?;
+    ''', [id]);
+
+    if (shiftRows.isEmpty) {
+      throw StateError('Shift #$id not found.');
+    }
+
+    return Shift.fromMap(shiftRows.first);
+  }
+
   /// Calculates expected drawer cash balance for [shiftId] accounting for
   /// opening float, settled/prepaid cash sales, pay-ins, and pay-outs (including refunds).
   Future<double> calculateExpectedCash(int shiftId) async {
