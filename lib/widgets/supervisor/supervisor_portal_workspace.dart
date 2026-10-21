@@ -57,6 +57,7 @@ class SupervisorPortalWorkspace extends StatefulWidget {
     this.initialDiscrepancies,
     this.initialZReport,
     this.onFinalizeBusinessDay,
+    this.initialDiscrepancyThreshold,
   });
 
   final AuthService? authService;
@@ -72,6 +73,7 @@ class SupervisorPortalWorkspace extends StatefulWidget {
   final List<Shift>? initialDiscrepancies;
   final ZReport? initialZReport;
   final Future<void> Function()? onFinalizeBusinessDay;
+  final double? initialDiscrepancyThreshold;
 
   @override
   State<SupervisorPortalWorkspace> createState() => _SupervisorPortalWorkspaceState();
@@ -91,6 +93,9 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
   bool _tokenTrayEnabled = true;
   bool _cashierVoidEnabled = true;
   bool _isLoadingToggles = true;
+  double _discrepancyThreshold = 100.0;
+  final TextEditingController _thresholdController = TextEditingController();
+  bool _isSavingThreshold = false;
 
   // Discrepancy Review State
   List<Shift> _discrepancyShifts = [];
@@ -129,8 +134,19 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
       _activeZReport = widget.initialZReport;
       _isLoadingZReport = false;
     }
+    if (widget.initialDiscrepancyThreshold != null) {
+      _discrepancyThreshold = widget.initialDiscrepancyThreshold!;
+    }
+    _thresholdController.text = _discrepancyThreshold.toStringAsFixed(2);
 
     _loadAllData();
+  }
+
+  @override
+  void dispose() {
+    _usbPathController.dispose();
+    _thresholdController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadAllData() async {
@@ -180,6 +196,13 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
     try {
       final tokenTray = await widget.orderController!.isTokenTrayEnabled();
       final cashierVoid = await widget.orderController!.isCashierVoidEnabled();
+      if (widget.shiftController != null) {
+        try {
+          final threshold = await widget.shiftController!.getDiscrepancyThreshold();
+          _discrepancyThreshold = threshold;
+          _thresholdController.text = threshold.toStringAsFixed(2);
+        } catch (_) {}
+      }
       if (mounted) {
         setState(() {
           _tokenTrayEnabled = tokenTray;
@@ -471,6 +494,44 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
     setState(() => _cashierVoidEnabled = enabled);
     if (widget.orderController != null) {
       await widget.orderController!.setCashierVoidEnabled(enabled);
+    }
+  }
+
+  Future<void> _handleSaveDiscrepancyThreshold() async {
+    final text = _thresholdController.text.trim();
+    final parsed = double.tryParse(text);
+    if (parsed == null || parsed < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a valid non-negative threshold amount.')),
+      );
+      return;
+    }
+
+    setState(() => _isSavingThreshold = true);
+    try {
+      if (widget.shiftController != null) {
+        final managerId = widget.currentStaff?.id ?? 1;
+        await widget.shiftController!.setDiscrepancyThreshold(
+          parsed,
+          managerStaffId: managerId,
+        );
+      }
+      if (mounted) {
+        setState(() {
+          _discrepancyThreshold = parsed;
+          _isSavingThreshold = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Discrepancy threshold updated to PKR ' + _currencyFormat.format(parsed))),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSavingThreshold = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceFirst('StateError: ', '').replaceFirst('ArgumentError: ', ''))),
+        );
+      }
     }
   }
 
@@ -1131,6 +1192,88 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                 child: const Icon(Icons.cancel_rounded, color: WarmCounterColors.lightDestructiveAction),
               ),
             ),
+            const Divider(height: WarmCounterSpacing.space24, color: WarmCounterColors.lightBorder),
+
+            // Discrepancy Threshold Setting
+            Container(
+              padding: const EdgeInsets.all(WarmCounterSpacing.space16),
+              decoration: BoxDecoration(
+                color: WarmCounterColors.lightPageBackground,
+                borderRadius: WarmCounterSpacing.controlBorderRadius,
+                border: Border.all(color: WarmCounterColors.lightBorder),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: const BoxDecoration(
+                          color: WarmCounterColors.lightCardBackground,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.price_change_rounded, color: WarmCounterColors.lightPrimaryAction),
+                      ),
+                      const SizedBox(width: WarmCounterSpacing.space12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Shift Cash Discrepancy Threshold (PKR)',
+                              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                            ),
+                            Text(
+                              'Variance exceeding this threshold triggers an immutable Discrepancy Flag upon blind shift close.',
+                              style: WarmCounterTypography.caption.copyWith(
+                                color: WarmCounterColors.lightSecondaryText,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: WarmCounterSpacing.space16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          key: const ValueKey('discrepancy_threshold_input'),
+                          controller: _thresholdController,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: const InputDecoration(
+                            prefixText: 'PKR ',
+                            hintText: '100.00',
+                            filled: true,
+                            fillColor: WarmCounterColors.lightCardBackground,
+                            border: OutlineInputBorder(
+                              borderRadius: WarmCounterSpacing.controlBorderRadius,
+                            ),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: WarmCounterSpacing.space12),
+                      ElevatedButton(
+                        key: const ValueKey('save_discrepancy_threshold_button'),
+                        onPressed: _isSavingThreshold ? null : _handleSaveDiscrepancyThreshold,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: WarmCounterColors.lightPrimaryAction,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: WarmCounterSpacing.controlBorderRadius,
+                          ),
+                        ),
+                        child: Text(_isSavingThreshold ? 'Saving...' : 'Update Threshold'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -1173,7 +1316,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                     ),
                   ),
                   Text(
-                    'Historical shift log of counted cash discrepancies with resolution audit notes.',
+                    'Historical shift log of counted cash discrepancies with resolution audit notes. Active Threshold: PKR ' + _currencyFormat.format(_discrepancyThreshold),
                     style: WarmCounterTypography.secondaryLabel.copyWith(
                       color: WarmCounterColors.lightSecondaryText,
                     ),

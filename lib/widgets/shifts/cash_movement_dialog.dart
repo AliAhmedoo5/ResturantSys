@@ -22,11 +22,12 @@ class CashMovementDialog extends StatefulWidget {
 
 class _CashMovementDialogState extends State<CashMovementDialog> {
   CashMovementType _selectedType = CashMovementType.payIn;
-  String _selectedCategory = 'Petty Cash';
+  String _selectedCategory = 'Counter Change Replenishment';
   final TextEditingController _amountController = TextEditingController();
   final TextEditingController _notesController = TextEditingController();
 
   final List<String> _categories = const [
+    'Counter Change Replenishment',
     'Petty Cash',
     'Milk',
     'Ice',
@@ -106,7 +107,8 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
       shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.panelBorderRadius),
       backgroundColor: WarmCounterColors.lightCardBackground,
       child: Container(
-        width: 520,
+        width: 540,
+        constraints: const BoxConstraints(maxHeight: 650),
         padding: const EdgeInsets.all(WarmCounterSpacing.space24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -152,161 +154,171 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
                 ),
               ],
             ),
-            const Divider(height: WarmCounterSpacing.space32, color: WarmCounterColors.lightBorder),
+            const Divider(height: WarmCounterSpacing.space24, color: WarmCounterColors.lightBorder),
 
-            // Type Selector (Pay-In vs Pay-Out)
-            Row(
-              children: [
-                Expanded(
-                  child: InkWell(
-                    key: const ValueKey('movement_type_payin'),
-                    onTap: () => setState(() => _selectedType = CashMovementType.payIn),
-                    borderRadius: WarmCounterSpacing.controlBorderRadius,
-                    child: Container(
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: _selectedType == CashMovementType.payIn
-                            ? WarmCounterColors.lightActiveNavHighlight
-                            : WarmCounterColors.lightPageBackground,
-                        border: Border.all(
-                          color: _selectedType == CashMovementType.payIn
-                              ? WarmCounterColors.lightPrimaryAction
-                              : WarmCounterColors.lightBorder,
-                          width: _selectedType == CashMovementType.payIn ? 2 : 1,
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Type Selector (Pay-In vs Pay-Out)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            key: const ValueKey('movement_type_payin'),
+                            onTap: () => setState(() => _selectedType = CashMovementType.payIn),
+                            borderRadius: WarmCounterSpacing.controlBorderRadius,
+                            child: Container(
+                              height: 48,
+                              decoration: BoxDecoration(
+                                color: _selectedType == CashMovementType.payIn
+                                    ? WarmCounterColors.lightActiveNavHighlight
+                                    : WarmCounterColors.lightPageBackground,
+                                border: Border.all(
+                                  color: _selectedType == CashMovementType.payIn
+                                      ? WarmCounterColors.lightPrimaryAction
+                                      : WarmCounterColors.lightBorder,
+                                  width: _selectedType == CashMovementType.payIn ? 2 : 1,
+                                ),
+                                borderRadius: WarmCounterSpacing.controlBorderRadius,
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                'Pay-In (+ Cash In)',
+                                style: WarmCounterTypography.bodyMedium.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: _selectedType == CashMovementType.payIn
+                                      ? WarmCounterColors.lightPrimaryAction
+                                      : WarmCounterColors.lightSecondaryText,
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
-                        borderRadius: WarmCounterSpacing.controlBorderRadius,
+                        const SizedBox(width: WarmCounterSpacing.space12),
+                        Expanded(
+                          child: InkWell(
+                            key: const ValueKey('movement_type_payout'),
+                            onTap: () => setState(() => _selectedType = CashMovementType.payOut),
+                            borderRadius: WarmCounterSpacing.controlBorderRadius,
+                            child: Container(
+                              height: 48,
+                              decoration: BoxDecoration(
+                                color: _selectedType == CashMovementType.payOut
+                                    ? WarmCounterColors.lightDestructiveHighlight
+                                    : WarmCounterColors.lightPageBackground,
+                                border: Border.all(
+                                  color: _selectedType == CashMovementType.payOut
+                                      ? WarmCounterColors.lightDestructiveAction
+                                      : WarmCounterColors.lightBorder,
+                                  width: _selectedType == CashMovementType.payOut ? 2 : 1,
+                                ),
+                                borderRadius: WarmCounterSpacing.controlBorderRadius,
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                'Pay-Out (- Cash Out)',
+                                style: WarmCounterTypography.bodyMedium.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: _selectedType == CashMovementType.payOut
+                                      ? WarmCounterColors.lightDestructiveAction
+                                      : WarmCounterColors.lightSecondaryText,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: WarmCounterSpacing.space16),
+
+                    // Category Selector
+                    Text(
+                      'Movement Category',
+                      style: WarmCounterTypography.bodyMedium.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: WarmCounterSpacing.space8),
+                    DropdownButtonFormField<String>(
+                      key: const ValueKey('cash_movement_category_dropdown'),
+                      initialValue: _selectedCategory,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        filled: true,
+                        fillColor: WarmCounterColors.lightPageBackground,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        border: OutlineInputBorder(
+                          borderRadius: WarmCounterSpacing.controlBorderRadius,
+                          borderSide: BorderSide(color: WarmCounterColors.lightBorder),
+                        ),
                       ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        'Pay-In (+ Cash In)',
-                        style: WarmCounterTypography.bodyMedium.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: _selectedType == CashMovementType.payIn
-                              ? WarmCounterColors.lightPrimaryAction
-                              : WarmCounterColors.lightSecondaryText,
+                      items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c, overflow: TextOverflow.ellipsis))).toList(),
+                      onChanged: (val) {
+                        if (val != null) setState(() => _selectedCategory = val);
+                      },
+                    ),
+                    const SizedBox(height: WarmCounterSpacing.space16),
+
+                    // Amount Input
+                    Text(
+                      'Amount (Rs)',
+                      style: WarmCounterTypography.bodyMedium.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: WarmCounterSpacing.space8),
+                    TextField(
+                      key: const ValueKey('cash_movement_amount_input'),
+                      controller: _amountController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      style: WarmCounterTypography.tabularNumbers.copyWith(fontSize: 18, fontWeight: FontWeight.bold),
+                      decoration: InputDecoration(
+                        prefixText: 'Rs ',
+                        hintText: '0.00',
+                        errorText: _amountError,
+                        filled: true,
+                        fillColor: WarmCounterColors.lightPageBackground,
+                        border: const OutlineInputBorder(
+                          borderRadius: WarmCounterSpacing.controlBorderRadius,
+                          borderSide: BorderSide(color: WarmCounterColors.lightBorder),
                         ),
                       ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: WarmCounterSpacing.space12),
-                Expanded(
-                  child: InkWell(
-                    key: const ValueKey('movement_type_payout'),
-                    onTap: () => setState(() => _selectedType = CashMovementType.payOut),
-                    borderRadius: WarmCounterSpacing.controlBorderRadius,
-                    child: Container(
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: _selectedType == CashMovementType.payOut
-                            ? WarmCounterColors.lightDestructiveHighlight
-                            : WarmCounterColors.lightPageBackground,
-                        border: Border.all(
-                          color: _selectedType == CashMovementType.payOut
-                              ? WarmCounterColors.lightDestructiveAction
-                              : WarmCounterColors.lightBorder,
-                          width: _selectedType == CashMovementType.payOut ? 2 : 1,
-                        ),
-                        borderRadius: WarmCounterSpacing.controlBorderRadius,
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        'Pay-Out (- Cash Out)',
-                        style: WarmCounterTypography.bodyMedium.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: _selectedType == CashMovementType.payOut
-                              ? WarmCounterColors.lightDestructiveAction
-                              : WarmCounterColors.lightSecondaryText,
+                    const SizedBox(height: WarmCounterSpacing.space16),
+
+                    // Mandatory Notes
+                    Text(
+                      'Mandatory Reason / Note',
+                      style: WarmCounterTypography.bodyMedium.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: WarmCounterSpacing.space8),
+                    TextField(
+                      key: const ValueKey('cash_movement_notes_input'),
+                      controller: _notesController,
+                      maxLines: 2,
+                      decoration: InputDecoration(
+                        hintText: 'e.g. Purchased 2 packs of milk from grocery / Change replenishment',
+                        errorText: _notesError,
+                        filled: true,
+                        fillColor: WarmCounterColors.lightPageBackground,
+                        border: const OutlineInputBorder(
+                          borderRadius: WarmCounterSpacing.controlBorderRadius,
+                          borderSide: BorderSide(color: WarmCounterColors.lightBorder),
                         ),
                       ),
                     ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: WarmCounterSpacing.space16),
 
-            // Category Selector
-            Text(
-              'Movement Category',
-              style: WarmCounterTypography.bodyMedium.copyWith(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: WarmCounterSpacing.space8),
-            DropdownButtonFormField<String>(
-              key: const ValueKey('cash_movement_category_dropdown'),
-              initialValue: _selectedCategory,
-              decoration: const InputDecoration(
-                filled: true,
-                fillColor: WarmCounterColors.lightPageBackground,
-                contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                border: OutlineInputBorder(
-                  borderRadius: WarmCounterSpacing.controlBorderRadius,
-                  borderSide: BorderSide(color: WarmCounterColors.lightBorder),
-                ),
-              ),
-              items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-              onChanged: (val) {
-                if (val != null) setState(() => _selectedCategory = val);
-              },
-            ),
-            const SizedBox(height: WarmCounterSpacing.space16),
-
-            // Amount Input
-            Text(
-              'Amount (Rs)',
-              style: WarmCounterTypography.bodyMedium.copyWith(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: WarmCounterSpacing.space8),
-            TextField(
-              key: const ValueKey('cash_movement_amount_input'),
-              controller: _amountController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              style: WarmCounterTypography.tabularNumbers.copyWith(fontSize: 18, fontWeight: FontWeight.bold),
-              decoration: InputDecoration(
-                prefixText: 'Rs ',
-                hintText: '0.00',
-                errorText: _amountError,
-                filled: true,
-                fillColor: WarmCounterColors.lightPageBackground,
-                border: const OutlineInputBorder(
-                  borderRadius: WarmCounterSpacing.controlBorderRadius,
-                  borderSide: BorderSide(color: WarmCounterColors.lightBorder),
+                    if (_generalError != null) ...[
+                      const SizedBox(height: WarmCounterSpacing.space12),
+                      Text(
+                        _generalError!,
+                        style: const TextStyle(color: WarmCounterColors.lightDestructiveAction, fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ),
             const SizedBox(height: WarmCounterSpacing.space16),
-
-            // Mandatory Notes
-            Text(
-              'Mandatory Reason / Note',
-              style: WarmCounterTypography.bodyMedium.copyWith(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: WarmCounterSpacing.space8),
-            TextField(
-              key: const ValueKey('cash_movement_notes_input'),
-              controller: _notesController,
-              maxLines: 2,
-              decoration: InputDecoration(
-                hintText: 'e.g. Purchased 2 packs of milk from grocery / Change replenishment',
-                errorText: _notesError,
-                filled: true,
-                fillColor: WarmCounterColors.lightPageBackground,
-                border: const OutlineInputBorder(
-                  borderRadius: WarmCounterSpacing.controlBorderRadius,
-                  borderSide: BorderSide(color: WarmCounterColors.lightBorder),
-                ),
-              ),
-            ),
-
-            if (_generalError != null) ...[
-              const SizedBox(height: WarmCounterSpacing.space12),
-              Text(
-                _generalError!,
-                style: const TextStyle(color: WarmCounterColors.lightDestructiveAction, fontSize: 13, fontWeight: FontWeight.w600),
-              ),
-            ],
-
-            const SizedBox(height: WarmCounterSpacing.space24),
             Row(
               children: [
                 Expanded(
