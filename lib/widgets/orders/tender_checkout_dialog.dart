@@ -256,6 +256,9 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
     switch (_selectedMethod) {
       case PaymentMethod.cash:
         return _buildCashTenderBody();
+      case PaymentMethod.jazzCash:
+      case PaymentMethod.easypaisa:
+      case PaymentMethod.bankTransfer:
       case PaymentMethod.card:
         return _buildElectronicTenderBody(PaymentMethod.card);
       case PaymentMethod.raast:

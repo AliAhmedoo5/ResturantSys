@@ -35,7 +35,7 @@ void main() {
     expect(() => ModifierSelection.validate([], [group]), throwsStateError);
     expect(() => ModifierSelection.validate([none, extra], [group]), throwsStateError);
     Future<void> sell(List<CartItem> items) async {
-      await orders.checkoutOrder(businessDayId: day.id, shiftId: shift.id, cashierId: 2, diningType: DiningType.dineIn, items: items, payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 1000)]);
+      await orders.checkoutOrder(businessDayId: day.id, shiftId: shift.id, cashierId: 2, diningType: DiningType.dineIn, items: items, payments: [PaymentTender(method: PaymentMethod.cash, amountTendered: orders.calculateCartTotals(items: items).grandTotal)]);
     }
     await expectLater(sell([CartItem(menuItem: item)]), throwsStateError);
     await expectLater(sell([CartItem(menuItem: item, selectedModifiers: [none, extra])]), throwsStateError);

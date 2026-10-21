@@ -2,6 +2,9 @@
 enum PaymentMethod {
   cash('CASH', 'Cash'),
   card('CARD', 'Card'),
+  jazzCash('JAZZCASH', 'JazzCash'),
+  easypaisa('EASYPAISA', 'Easypaisa'),
+  bankTransfer('BANK_TRANSFER', 'Bank Transfer'),
   raast('RAAST', 'Raast QR'),
   split('SPLIT', 'Split Tender');
 

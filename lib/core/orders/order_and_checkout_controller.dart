@@ -385,7 +385,9 @@ class OrderAndCheckoutController {
     DiscountPreset? discount,
     required List<PaymentTender> payments,
     DeliveryDetails? delivery,
+    String? commandId,
   }) async {
+    if (commandId != null && commandId.trim().isEmpty) throw ArgumentError('Checkout command ID must not be blank.');
     if (items.isEmpty) {
       throw ArgumentError('Cannot checkout an empty order.');
     }
@@ -413,6 +415,20 @@ class OrderAndCheckoutController {
     final totals = calculateCartTotals(items: items, discount: discount);
 
     return await database.transaction((txn) async {
+      if (commandId != null) {
+        final committed = await txn.query('orders', where: 'checkout_command_id = ?', whereArgs: [commandId]);
+        if (committed.isNotEmpty) {
+          final prior = committed.single;
+          if (prior['cashier_id'] != cashierId || prior['business_day_id'] != businessDayId || prior['shift_id'] != shiftId) {
+            throw StateError('Checkout command belongs to a different cashier session.');
+          }
+          final id = prior['id'] as int;
+          final lines = await txn.query('order_items', where: 'order_id = ?', whereArgs: [id]);
+          final tenders = await txn.query('order_payments', where: 'order_id = ?', whereArgs: [id]);
+          return CheckoutResult(order: Order.fromMap(prior,
+            items: lines.map(OrderItem.fromMap).toList(), payments: tenders.map(OrderPayment.fromMap).toList()));
+        }
+      }
       DeliveryArea? deliveryArea;
       if (diningType == DiningType.delivery) {
         if (delivery == null) throw const DeliveryCheckoutException('Select delivery details before payment. Your cart is unchanged.');
@@ -446,6 +462,7 @@ class OrderAndCheckoutController {
       final orderId = await txn.insert(
         PosDatabaseConstants.tableOrders,
         {
+          'checkout_command_id': commandId,
           'business_day_id': businessDayId,
           'shift_id': shiftId,
           'cashier_id': cashierId,
@@ -540,6 +557,8 @@ class OrderAndCheckoutController {
             'order_id': orderId,
             'payment_method': tender.method.code,
             'amount_tendered': tender.amountTendered,
+            'amount_tendered_paisa': PaisaEngine.rupeesToPaisa(tender.amountTendered),
+            'change_returned_paisa': PaisaEngine.rupeesToPaisa(tender.changeReturned),
             'change_returned': tender.changeReturned,
             'reference_code': tender.referenceCode,
           },

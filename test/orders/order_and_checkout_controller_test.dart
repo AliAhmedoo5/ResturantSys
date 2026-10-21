@@ -63,6 +63,44 @@ void main() {
       expect((await orderController.getOrder(result.order.id)).cashRoundingPaisa, 50);
     });
 
+    test('Retrying a checkout command returns the same order and consumes stock once', () async {
+      final day = await shiftController.openBusinessDay(openedByStaffId: 1);
+      final shift = await shiftController.openShift(staffId: 2, openingFloat: 0);
+      final category = await catalogController.createCategory(name: 'Retry', displayOrder: 1, colorHex: '#FFFFFF');
+      final item = await catalogController.createMenuItem(categoryId: category.id, name: 'Retry tea', basePrice: 100);
+      await publishFixtures(catalogController);
+      Future<CheckoutResult> submit() => orderController.checkoutOrder(
+        commandId: 'checkout-retry-1', businessDayId: day.id, shiftId: shift.id, cashierId: 2,
+        diningType: DiningType.dineIn, items: [CartItem(menuItem: item)],
+        payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 100)],
+      );
+      final first = await submit();
+      final stocks = await catalogController.getRawIngredients();
+      final retry = await submit();
+      expect(retry.order.id, first.order.id);
+      expect(await orderController.getNextTokenNumber(day.id), 2);
+      expect((await catalogController.getRawIngredients()).map((i) => i.currentStock), stocks.map((i) => i.currentStock));
+    });
+
+    test('Digital manual tenders retain exact paisa without cash rounding', () async {
+      final day = await shiftController.openBusinessDay(openedByStaffId: 1);
+      final shift = await shiftController.openShift(staffId: 2, openingFloat: 0);
+      final category = await catalogController.createCategory(name: 'Digital', displayOrder: 1, colorHex: '#FFFFFF');
+      final item = await catalogController.createMenuItem(categoryId: category.id, name: 'Digital tea', basePrice: 100.49);
+      await publishFixtures(catalogController);
+      for (final method in [PaymentMethod.jazzCash, PaymentMethod.easypaisa, PaymentMethod.bankTransfer, PaymentMethod.card, PaymentMethod.raast]) {
+        final result = await orderController.checkoutOrder(
+          businessDayId: day.id, shiftId: shift.id, cashierId: 2,
+          diningType: DiningType.dineIn, items: [CartItem(menuItem: item)],
+          payments: [PaymentTender(method: method, amountTendered: 100.49, referenceCode: 'manual-reference')],
+        );
+        final saved = await orderController.getOrder(result.order.id);
+        expect(saved.cashRoundingPaisa, 0);
+        expect(saved.payments.single.amountTenderedPaisa, 10049);
+        expect(saved.payments.single.paymentMethod, method);
+      }
+    });
+
     test('Daily sequential token increments (#01, #02...) and resets at new Business Day', () async {
       // 1. Open Business Day 1 & Shift
       final day1 = await shiftController.openBusinessDay(openedByStaffId: 1);
