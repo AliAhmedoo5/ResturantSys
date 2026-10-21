@@ -162,6 +162,31 @@ void main() {
       expect((await orderController.getOrderVoid(first.order.id))!.reason, VoidReason.customerCancelled);
     });
 
+    test('Invalid monetary tenders and closed sessions cannot commit or burn tokens', () async {
+      final day = await shiftController.openBusinessDay(openedByStaffId: 1);
+      final shift = await shiftController.openShift(staffId: 2, openingFloat: 0);
+      final category = await catalogController.createCategory(name: 'Validation', displayOrder: 1, colorHex: '#FFFFFF');
+      final item = await catalogController.createMenuItem(categoryId: category.id, name: 'Validation tea', basePrice: 100);
+      await publishFixtures(catalogController);
+      Future<CheckoutResult> submit(PaymentTender tender, {String? command}) => orderController.checkoutOrder(commandId: command,
+        businessDayId: day.id, shiftId: shift.id, cashierId: 2, diningType: DiningType.dineIn,
+        items: [CartItem(menuItem: item)], payments: [tender]);
+      for (final tender in [
+        const PaymentTender(method: PaymentMethod.card, amountTendered: 101, changeReturned: 1),
+        const PaymentTender(method: PaymentMethod.card, amountTendered: 100.001),
+        const PaymentTender(method: PaymentMethod.cash, amountTendered: 100.50, changeReturned: 0.50),
+      ]) {
+        await expectLater(submit(tender), throwsA(isA<Exception>()));
+      }
+      expect(await orderController.getNextTokenNumber(day.id), 1);
+      const valid = PaymentTender(method: PaymentMethod.cash, amountTendered: 100);
+      final committed = await submit(valid, command: 'closed-retry');
+      await shiftController.closeShift(shiftId: shift.id, staffId: 2, countedCash: 100);
+      await expectLater(submit(valid), throwsStateError);
+      expect((await submit(valid, command: 'closed-retry')).order.id, committed.order.id);
+      expect(await orderController.getNextTokenNumber(day.id), 2);
+    });
+
     test('Daily sequential token increments (#01, #02...) and resets at new Business Day', () async {
       // 1. Open Business Day 1 & Shift
       final day1 = await shiftController.openBusinessDay(openedByStaffId: 1);
