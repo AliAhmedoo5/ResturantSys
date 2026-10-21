@@ -20,6 +20,16 @@ import 'order_void.dart';
 import 'payment_method.dart';
 import 'token_status.dart';
 
+/// Immutable daily token allocation or lifecycle audit event.
+class CheckoutTokenEvent {
+  CheckoutTokenEvent.fromMap(Map<String, Object?> row)
+      : orderId = row['order_id'] as int, tokenNumber = row['token_number'] as int,
+        action = row['action'] as String, paymentStatus = row['payment_status'] as String,
+        revision = row['revision'] as int;
+  final int orderId, tokenNumber, revision;
+  final String action, paymentStatus;
+}
+
 /// Draft definition when creating or configuring a deal item slot.
 class DealItemDraft {
   const DealItemDraft({
@@ -316,7 +326,7 @@ class OrderAndCheckoutController {
     final dbExec = executor ?? database;
     final result = await dbExec.rawQuery('''
       SELECT COALESCE(MAX(token_number), 0) + 1 AS next_token
-      FROM ${PosDatabaseConstants.tableOrders}
+      FROM checkout_tokens
       WHERE business_day_id = ?;
     ''', [businessDayId]);
 
@@ -324,6 +334,12 @@ class OrderAndCheckoutController {
       return (result.first['next_token'] as num).toInt();
     }
     return 1;
+  }
+
+  Future<List<CheckoutTokenEvent>> getTokenAudit(int businessDayId) async {
+    final rows = await database.query('checkout_token_audit', where: 'business_day_id = ?',
+      whereArgs: [businessDayId], orderBy: 'id');
+    return rows.map(CheckoutTokenEvent.fromMap).toList();
   }
 
   // ===========================================================================
@@ -385,14 +401,9 @@ class OrderAndCheckoutController {
     DiscountPreset? discount,
     required List<PaymentTender> payments,
     DeliveryDetails? delivery,
+    String? commandId,
   }) async {
-    if (items.isEmpty) {
-      throw ArgumentError('Cannot checkout an empty order.');
-    }
-    if (payments.isEmpty) {
-      throw ArgumentError('Order must have at least one payment tender.');
-    }
-
+    if (commandId != null && commandId.trim().isEmpty) throw ArgumentError('Checkout command ID must not be blank.');
     // Hard-block Manager credentials from initiating checkout or tenders (ADR-0009)
     final staffRows = await database.query(
       PosDatabaseConstants.tableStaff,
@@ -410,9 +421,37 @@ class OrderAndCheckoutController {
 
     final now = DateTime.now();
     final formattedNow = _formatTimestamp(now);
-    final totals = calculateCartTotals(items: items, discount: discount);
 
     return await database.transaction((txn) async {
+      if (commandId != null) {
+        final committed = await txn.query('orders', where: 'checkout_command_id = ?', whereArgs: [commandId]);
+        if (committed.isNotEmpty) {
+          final prior = committed.single;
+          if (prior['cashier_id'] != cashierId || prior['business_day_id'] != businessDayId || prior['shift_id'] != shiftId) {
+            throw StateError('Checkout command belongs to a different cashier session.');
+          }
+          final id = prior['id'] as int;
+          final lines = await txn.query('order_items', where: 'order_id = ?', whereArgs: [id]);
+          final tenders = await txn.query('order_payments', where: 'order_id = ?', whereArgs: [id]);
+          return CheckoutResult(order: Order.fromMap(prior,
+            items: lines.map(OrderItem.fromMap).toList(), payments: tenders.map(OrderPayment.fromMap).toList()));
+        }
+      }
+    if (items.isEmpty) {
+      throw ArgumentError('Cannot checkout an empty order.');
+    }
+    if (payments.isEmpty) {
+      throw ArgumentError('Order must have at least one payment tender.');
+    }
+
+      final activeSession = await txn.rawQuery("""
+        SELECT s.id FROM shifts s JOIN business_days d ON d.id = s.business_day_id
+        JOIN staff st ON st.id = s.staff_id
+        WHERE s.id = ? AND s.business_day_id = ? AND s.staff_id = ?
+          AND s.status = 'OPEN' AND d.status = 'OPEN' AND st.is_active = 1
+      """, [shiftId, businessDayId, cashierId]);
+      if (activeSession.isEmpty) throw StateError('Checkout requires the cashier current open shift and business day.');
+      final totals = calculateCartTotals(items: items, discount: discount);
       DeliveryArea? deliveryArea;
       if (diningType == DiningType.delivery) {
         if (delivery == null) throw const DeliveryCheckoutException('Select delivery details before payment. Your cart is unchanged.');
@@ -422,9 +461,24 @@ class OrderAndCheckoutController {
       final grandTotalPaisa = PaisaEngine.rupeesToPaisa(totals.grandTotal) + deliveryFeePaisa;
       final grandTotal = PaisaEngine.paisaToRupees(grandTotalPaisa);
       var cashRoundingPaisa = 0;
-      if (deliveryArea != null) {
+      final isCod = payments.any((p) => p.method == PaymentMethod.cod);
+      if (isCod) {
+        if (diningType != DiningType.delivery || payments.length != 1 || payments.single.amountTendered != 0 || payments.single.changeReturned != 0) {
+          throw StateError('COD requires delivery and records zero received until collection.');
+        }
+        await DeliveryController.rememberAddress(txn, delivery!);
+      } else {
         if (payments.any((p) => !p.amountTendered.isFinite || !p.changeReturned.isFinite || p.amountTendered < 0 || p.changeReturned < 0 || p.changeReturned > p.amountTendered || p.method == PaymentMethod.split)) {
           throw const DeliveryCheckoutException('Enter valid individual payment tenders. Your cart is unchanged.');
+        }
+        for (final tender in payments) {
+          final received = tender.amountTendered * 100;
+          final returned = tender.changeReturned * 100;
+          if ((received - received.round()).abs() > 0.000001 || (returned - returned.round()).abs() > 0.000001 ||
+              (tender.method == PaymentMethod.cash && (received.round() % 100 != 0 || returned.round() % 100 != 0)) ||
+              (tender.method != PaymentMethod.cash && tender.changeReturned != 0)) {
+            throw const DeliveryCheckoutException('Record exact paisa for digital tenders and whole rupees for cash received and change.');
+          }
         }
         final digitalPaid = payments.where((p) => p.method != PaymentMethod.cash).fold<int>(0,
           (sum, p) => sum + PaisaEngine.rupeesToPaisa(p.amountTendered) - PaisaEngine.rupeesToPaisa(p.changeReturned));
@@ -437,7 +491,7 @@ class OrderAndCheckoutController {
           throw const DeliveryCheckoutException('Payment must cover the food total and fixed delivery fee, with only the cash balance rounded to whole rupees. Your cart is unchanged.');
         }
         cashRoundingPaisa = hasCash ? cashDue - cashExact : 0;
-        await DeliveryController.rememberAddress(txn, delivery!);
+        if (deliveryArea != null) await DeliveryController.rememberAddress(txn, delivery!);
       }      for (final item in items) { await _validateCartItem(item, txn); }
       // 1. Daily Sequential Token
       final tokenNumber = await getNextTokenNumber(businessDayId, txn);
@@ -446,6 +500,7 @@ class OrderAndCheckoutController {
       final orderId = await txn.insert(
         PosDatabaseConstants.tableOrders,
         {
+          'checkout_command_id': commandId,
           'business_day_id': businessDayId,
           'shift_id': shiftId,
           'cashier_id': cashierId,
@@ -463,7 +518,7 @@ class OrderAndCheckoutController {
           'delivery_address_snapshot': deliveryArea == null ? null : delivery!.addressSnapshot,
           'customer_phone': deliveryArea == null ? null : DeliveryController.normalizePhone(delivery!.phone),
           'customer_name': deliveryArea == null ? null : delivery!.customerName.trim(),
-          'payment_status': 'SETTLED',
+          'payment_status': isCod ? 'COLLECTION_DUE' : 'SETTLED',
           'token_status': TokenStatus.preparing.code,
           'created_at': formattedNow,
         },
@@ -472,7 +527,7 @@ class OrderAndCheckoutController {
       if (cashRoundingPaisa != 0) {
         await txn.insert(PosDatabaseConstants.tableRoundingVarianceLedger, {
           'order_id': orderId, 'shift_id': shiftId, 'cash_rounding_paisa': cashRoundingPaisa,
-          'reason': 'Delivery checkout cash balance half-up rounding', 'created_at': formattedNow,
+          'reason': 'Checkout cash balance half-up rounding', 'created_at': formattedNow,
         });
       }
       // 3. Commit Order Items
@@ -540,6 +595,8 @@ class OrderAndCheckoutController {
             'order_id': orderId,
             'payment_method': tender.method.code,
             'amount_tendered': tender.amountTendered,
+            'amount_tendered_paisa': PaisaEngine.rupeesToPaisa(tender.amountTendered),
+            'change_returned_paisa': PaisaEngine.rupeesToPaisa(tender.changeReturned),
             'change_returned': tender.changeReturned,
             'reference_code': tender.referenceCode,
           },
@@ -562,6 +619,13 @@ class OrderAndCheckoutController {
         executor: txn,
       );
 
+      for (final warning in lowStockWarnings) {
+        await txn.insert('checkout_stock_alerts', {
+          'order_id': orderId, 'ingredient_id': warning.ingredientId,
+          'stock_at_checkout': warning.currentStock, 'created_at': formattedNow,
+        });
+      }
+
       final order = Order(
         id: orderId,
         businessDayId: businessDayId,
@@ -581,7 +645,7 @@ class OrderAndCheckoutController {
         deliveryAddress: deliveryArea == null ? null : delivery!.addressSnapshot,
         customerPhone: deliveryArea == null ? null : DeliveryController.normalizePhone(delivery!.phone),
         customerName: deliveryArea == null ? null : delivery!.customerName.trim(),
-        paymentStatus: 'SETTLED',
+        paymentStatus: isCod ? 'COLLECTION_DUE' : 'SETTLED',
         createdAt: now,
         items: createdOrderItems,
         payments: createdPayments,
@@ -592,6 +656,22 @@ class OrderAndCheckoutController {
         lowStockWarnings: lowStockWarnings,
       );
     });
+  }
+
+  /// Outstanding stock alerts survive checkout and clear naturally on replenishment.
+  Future<List<LowStockWarning>> getManagerStockAlerts() async {
+    final rows = await database.rawQuery("""
+      SELECT DISTINCT i.* FROM raw_ingredients i
+      JOIN checkout_stock_alerts a ON a.ingredient_id = i.id
+      WHERE i.current_stock <= i.low_stock_threshold
+      ORDER BY i.current_stock, i.name
+    """);
+    return rows.map((row) => LowStockWarning(
+      ingredientId: row['id'] as int, ingredientName: row['name'] as String,
+      currentStock: (row['current_stock'] as num).toDouble(),
+      threshold: (row['low_stock_threshold'] as num).toDouble(),
+      storageUnit: row['storage_unit'] as String,
+    )).toList();
   }
 
   Future<void> _validateCartItem(CartItem item, DatabaseExecutor txn) async {

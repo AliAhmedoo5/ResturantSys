@@ -149,7 +149,15 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
     super.dispose();
   }
 
+  List<LowStockWarning> _stockAlerts = [];
+
+  Future<void> _loadStockAlerts() async {
+    final alerts = await widget.orderController?.getManagerStockAlerts() ?? <LowStockWarning>[];
+    if (mounted) setState(() => _stockAlerts = alerts);
+  }
+
   Future<void> _loadAllData() async {
+    await _loadStockAlerts();
     if (widget.initialDepartments == null || widget.initialStaff == null) {
       await _loadStaffAndDepartments();
     }
@@ -695,6 +703,16 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (_stockAlerts.isNotEmpty) ...[
+            MaterialBanner(
+              key: const ValueKey('manager_stock_alert'),
+              backgroundColor: WarmCounterColors.lightDestructiveHighlight,
+              leading: const Icon(Icons.warning_amber_rounded, color: WarmCounterColors.lightDestructiveAction),
+              content: Text('Low stock  -  replenish now: ${_stockAlerts.map((a) => '${a.ingredientName}: ${a.currentStock} ${a.storageUnit}').join('; ')}', maxLines: 3, overflow: TextOverflow.ellipsis),
+              actions: [TextButton(onPressed: _loadStockAlerts, child: const Text('Refresh stock'))],
+            ),
+            const SizedBox(height: 8),
+          ],
           // Top Navigation Bar
           _buildTopTabBar(context),
           const SizedBox(height: WarmCounterSpacing.space16),

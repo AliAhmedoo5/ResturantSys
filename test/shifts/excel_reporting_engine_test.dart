@@ -337,7 +337,7 @@ void main() {
           ),
         ],
         payments: [
-          const PaymentTender(method: PaymentMethod.cash, amountTendered: 1500.0),
+          const PaymentTender(method: PaymentMethod.cash, amountTendered: 1500.0, changeReturned: 100.0),
         ],
       );
 

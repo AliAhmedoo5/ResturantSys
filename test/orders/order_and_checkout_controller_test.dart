@@ -1,3 +1,5 @@
+import 'package:resturant_sys/core/procurement/procurement_and_wastage_controller.dart';
+import 'package:resturant_sys/core/procurement/desi_unit.dart';
 import 'package:resturant_sys/core/delivery/delivery_controller.dart';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
@@ -46,6 +48,143 @@ void main() {
       if (await tempDir.exists()) {
         await tempDir.delete(recursive: true);
       }
+    });
+
+    test('Walk-in cash rounds half-up and records the rounding variance', () async {
+      final day = await shiftController.openBusinessDay(openedByStaffId: 1);
+      final shift = await shiftController.openShift(staffId: 2, openingFloat: 0);
+      final category = await catalogController.createCategory(name: 'Rounding', displayOrder: 1, colorHex: '#FFFFFF');
+      final item = await catalogController.createMenuItem(categoryId: category.id, name: 'Tea', basePrice: 100.50);
+      await publishFixtures(catalogController);
+      final result = await orderController.checkoutOrder(
+        businessDayId: day.id, shiftId: shift.id, cashierId: 2,
+        diningType: DiningType.dineIn, items: [CartItem(menuItem: item)],
+        payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 101)],
+      );
+      expect(result.order.cashRoundingPaisa, 50);
+      expect((await orderController.getOrder(result.order.id)).cashRoundingPaisa, 50);
+    });
+
+    test('Retrying a checkout command returns the same order and consumes stock once', () async {
+      final day = await shiftController.openBusinessDay(openedByStaffId: 1);
+      final shift = await shiftController.openShift(staffId: 2, openingFloat: 0);
+      final category = await catalogController.createCategory(name: 'Retry', displayOrder: 1, colorHex: '#FFFFFF');
+      final item = await catalogController.createMenuItem(categoryId: category.id, name: 'Retry tea', basePrice: 100);
+      await publishFixtures(catalogController);
+      Future<CheckoutResult> submit() => orderController.checkoutOrder(
+        commandId: 'checkout-retry-1', businessDayId: day.id, shiftId: shift.id, cashierId: 2,
+        diningType: DiningType.dineIn, items: [CartItem(menuItem: item)],
+        payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 100)],
+      );
+      final first = await submit();
+      final stocks = await catalogController.getRawIngredients();
+      final retry = await submit();
+      expect(retry.order.id, first.order.id);
+      expect(await orderController.getNextTokenNumber(day.id), 2);
+      expect((await catalogController.getRawIngredients()).map((i) => i.currentStock), stocks.map((i) => i.currentStock));
+    });
+
+    test('Digital manual tenders retain exact paisa without cash rounding', () async {
+      final day = await shiftController.openBusinessDay(openedByStaffId: 1);
+      final shift = await shiftController.openShift(staffId: 2, openingFloat: 0);
+      final category = await catalogController.createCategory(name: 'Digital', displayOrder: 1, colorHex: '#FFFFFF');
+      final item = await catalogController.createMenuItem(categoryId: category.id, name: 'Digital tea', basePrice: 100.49);
+      await publishFixtures(catalogController);
+      for (final method in [PaymentMethod.jazzCash, PaymentMethod.easypaisa, PaymentMethod.bankTransfer, PaymentMethod.card, PaymentMethod.raast]) {
+        final result = await orderController.checkoutOrder(
+          businessDayId: day.id, shiftId: shift.id, cashierId: 2,
+          diningType: DiningType.dineIn, items: [CartItem(menuItem: item)],
+          payments: [PaymentTender(method: method, amountTendered: 100.49, referenceCode: 'manual-reference')],
+        );
+        final saved = await orderController.getOrder(result.order.id);
+        expect(saved.cashRoundingPaisa, 0);
+        expect(saved.payments.single.amountTenderedPaisa, 10049);
+        expect(saved.payments.single.paymentMethod, method);
+      }
+    });
+
+    test('COD records collection due without pretending cash was received', () async {
+      final day = await shiftController.openBusinessDay(openedByStaffId: 1);
+      final shift = await shiftController.openShift(staffId: 2, openingFloat: 0);
+      final category = await catalogController.createCategory(name: 'COD', displayOrder: 1, colorHex: '#FFFFFF');
+      final item = await catalogController.createMenuItem(categoryId: category.id, name: 'COD tea', basePrice: 100.49);
+      await publishFixtures(catalogController);
+      final area = await DeliveryController(database: db).saveArea(staffId: 1, name: 'Nearby', code: 'COD', deliveryFeePaisa: 5000);
+      final result = await orderController.checkoutOrder(
+        businessDayId: day.id, shiftId: shift.id, cashierId: 2,
+        diningType: DiningType.delivery, items: [CartItem(menuItem: item)],
+        delivery: DeliveryDetails(areaId: area.id, quotedFeePaisa: 5000, phone: '03001234567', fullAddress: 'Street 1'),
+        payments: [const PaymentTender(method: PaymentMethod.cod, amountTendered: 0)],
+      );
+      final saved = await orderController.getOrder(result.order.id);
+      expect(saved.paymentStatus, 'COLLECTION_DUE');
+      expect(saved.payments.single.amountTenderedPaisa, 0);
+      expect(saved.grandTotal, 150.49);
+    });
+
+    test('Negative ingredients and packaging persist Manager alerts and purchases offset them once', () async {
+      final day = await shiftController.openBusinessDay(openedByStaffId: 1);
+      final shift = await shiftController.openShift(staffId: 2, openingFloat: 0);
+      final category = await catalogController.createCategory(name: 'Stock', displayOrder: 1, colorHex: '#FFFFFF');
+      final item = await catalogController.createMenuItem(categoryId: category.id, name: 'Stock tea', basePrice: 100);
+      final ingredient = await catalogController.createRawIngredient(name: 'Tea portion', storageUnit: StorageUnit.count, currentStock: 0);
+      final packaging = await catalogController.createRawIngredient(name: 'Takeaway packaging', storageUnit: StorageUnit.count, currentStock: -1);
+      await catalogController.setRecipeForMenuItem(menuItemId: item.id, items: [(rawIngredientId: ingredient.id, quantity: 1.0)]);
+      await catalogController.toggleMenuItemActive(item.id, true);
+      await orderController.checkoutOrder(commandId: 'negative-stock', businessDayId: day.id, shiftId: shift.id, cashierId: 2,
+        diningType: DiningType.takeaway, items: [CartItem(menuItem: item)],
+        payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 100)]);
+      expect((await orderController.getManagerStockAlerts()).map((a) => a.currentStock).toList()..sort(), [-2.0, -1.0]);
+      final procurement = ProcurementAndWastageController(database: db);
+      for (final id in [ingredient.id, packaging.id]) {
+        await procurement.recordMandiPurchase(rawIngredientId: id, unit: DesiUnit.darjan, quantity: 1, totalCost: 100);
+      }
+      expect((await catalogController.getRawIngredient(ingredient.id)).currentStock, 11);
+      expect((await catalogController.getRawIngredient(packaging.id)).currentStock, 10);
+      expect(await orderController.getManagerStockAlerts(), isEmpty);
+    });
+
+    test('Canceled tokens stay burned with an immutable allocation and cancellation history', () async {
+      final day = await shiftController.openBusinessDay(openedByStaffId: 1);
+      final shift = await shiftController.openShift(staffId: 2, openingFloat: 0);
+      final category = await catalogController.createCategory(name: 'Audit', displayOrder: 1, colorHex: '#FFFFFF');
+      final item = await catalogController.createMenuItem(categoryId: category.id, name: 'Audit tea', basePrice: 100);
+      await publishFixtures(catalogController);
+      Future<CheckoutResult> submit() => orderController.checkoutOrder(businessDayId: day.id, shiftId: shift.id, cashierId: 2,
+        diningType: DiningType.dineIn, items: [CartItem(menuItem: item)], payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 100)]);
+      final first = await submit();
+      await orderController.voidOrder(orderId: first.order.id, supervisorStaffId: 1, cashierStaffId: 2, reason: VoidReason.customerCancelled);
+      final second = await submit();
+      expect(second.order.tokenNumber, 2);
+      final audit = await orderController.getTokenAudit(day.id);
+      expect(audit.map((e) => e.action), ['ALLOCATED', 'STATUS_CHANGED', 'ALLOCATED']);
+      expect(audit.map((e) => e.tokenNumber), [1, 1, 2]);
+      expect((await orderController.getOrderVoid(first.order.id))!.reason, VoidReason.customerCancelled);
+    });
+
+    test('Invalid monetary tenders and closed sessions cannot commit or burn tokens', () async {
+      final day = await shiftController.openBusinessDay(openedByStaffId: 1);
+      final shift = await shiftController.openShift(staffId: 2, openingFloat: 0);
+      final category = await catalogController.createCategory(name: 'Validation', displayOrder: 1, colorHex: '#FFFFFF');
+      final item = await catalogController.createMenuItem(categoryId: category.id, name: 'Validation tea', basePrice: 100);
+      await publishFixtures(catalogController);
+      Future<CheckoutResult> submit(PaymentTender tender, {String? command}) => orderController.checkoutOrder(commandId: command,
+        businessDayId: day.id, shiftId: shift.id, cashierId: 2, diningType: DiningType.dineIn,
+        items: [CartItem(menuItem: item)], payments: [tender]);
+      for (final tender in [
+        const PaymentTender(method: PaymentMethod.card, amountTendered: 101, changeReturned: 1),
+        const PaymentTender(method: PaymentMethod.card, amountTendered: 100.001),
+        const PaymentTender(method: PaymentMethod.cash, amountTendered: 100.50, changeReturned: 0.50),
+      ]) {
+        await expectLater(submit(tender), throwsA(isA<Exception>()));
+      }
+      expect(await orderController.getNextTokenNumber(day.id), 1);
+      const valid = PaymentTender(method: PaymentMethod.cash, amountTendered: 100);
+      final committed = await submit(valid, command: 'closed-retry');
+      await shiftController.closeShift(shiftId: shift.id, staffId: 2, countedCash: 100);
+      await expectLater(submit(valid), throwsStateError);
+      expect((await submit(valid, command: 'closed-retry')).order.id, committed.order.id);
+      expect(await orderController.getNextTokenNumber(day.id), 2);
     });
 
     test('Daily sequential token increments (#01, #02...) and resets at new Business Day', () async {

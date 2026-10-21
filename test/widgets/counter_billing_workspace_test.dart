@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/auth/staff_role.dart';
@@ -8,6 +9,8 @@ import 'package:resturant_sys/core/catalog/menu_category.dart';
 import 'package:resturant_sys/core/catalog/menu_item.dart';
 import 'package:resturant_sys/core/catalog/modifier.dart';
 import 'package:resturant_sys/core/orders/deal.dart';
+import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
+import 'package:resturant_sys/core/orders/payment_method.dart';
 import 'package:resturant_sys/core/orders/deal_item.dart';
 import 'package:resturant_sys/core/orders/deal_item_option.dart';
 import 'package:resturant_sys/core/hardware/in_memory_hardware_adapter.dart';
@@ -185,6 +188,42 @@ void main() {
       expect(find.byKey(const ValueKey('proceed_to_tender_button')), findsOneWidget);
     });
 
+    testWidgets('walk-in checkout requires customer details before manual tender', (tester) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      await tester.pumpWidget(buildTestHarness());
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('menu_item_tile_101')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('proceed_to_tender_button')));
+      await tester.pumpAndSettle();
+      expect(find.text('Customer Details'), findsOneWidget);
+      expect(find.byType(TenderCheckoutDialog), findsNothing);
+      await tester.tap(find.text('Skip delivery details'));
+      await tester.pumpAndSettle();
+      expect(find.byType(TenderCheckoutDialog), findsOneWidget);
+    });
+    testWidgets('keyboard checkout preserves cart through customer details and manual wallet tender', (tester) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      await tester.pumpWidget(buildTestHarness());
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('menu_item_tile_101')));
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.numpadEnter);
+      await tester.pumpAndSettle();
+      expect(find.text('Customer Details'), findsOneWidget);
+      await tester.tap(find.text('Skip delivery details'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('JazzCash'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Manually confirm'), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.close_rounded).last);
+      await tester.pumpAndSettle();
+      expect(find.text('Zinger Burger'), findsNWidgets(2));
+    });
     testWidgets('tap on menu item adds to cart and updates subtotal & grand total', (tester) async {
       tester.view.physicalSize = const Size(1920, 1080);
       tester.view.devicePixelRatio = 1.0;
@@ -334,6 +373,59 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const ValueKey('apply_modifiers_button')), findsOneWidget);
+    });
+
+    testWidgets('delivery COD records collection due without cash received', (tester) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      List<PaymentTender>? submitted;
+      await tester.pumpWidget(MaterialApp(home: Scaffold(body: Builder(builder: (context) => TextButton(
+        onPressed: () => showDialog<void>(context: context, builder: (_) => TenderCheckoutDialog(
+          grandTotal: 625.50,
+          allowCod: true,
+          onCompleteCheckout: (tenders) async { submitted = tenders; },
+        )), child: const Text('Pay'),
+      )))));
+      await tester.tap(find.text('Pay'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('tender_tab_cod')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Collection Due'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('commit_checkout_button')));
+      await tester.pumpAndSettle();
+      expect(submitted!.single.method, PaymentMethod.cod);
+      expect(submitted!.single.amountTendered, 0);
+    });
+
+    testWidgets('cash tender rejects invalid precision and rounds half-up for walk-in orders', (tester) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      List<PaymentTender>? submitted;
+      await tester.pumpWidget(MaterialApp(home: Scaffold(body: Builder(builder: (context) => TextButton(
+        onPressed: () => showDialog<void>(context: context, builder: (_) => TenderCheckoutDialog(
+          grandTotal: 625.50,
+          onCompleteCheckout: (tenders) async { submitted = tenders; },
+        )), child: const Text('Pay'),
+      )))));
+      await tester.tap(find.text('Pay'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('tender_tab_cod')), findsNothing);
+      for (final invalid in ['626.001', 'NaN', 'Infinity', '626.50']) {
+        await tester.enterText(find.byKey(const ValueKey('cash_tendered_input')), invalid);
+        await tester.tap(find.byKey(const ValueKey('commit_checkout_button')));
+        await tester.pumpAndSettle();
+        expect(submitted, isNull);
+        expect(find.byType(TenderCheckoutDialog), findsOneWidget);
+      }
+      await tester.enterText(find.byKey(const ValueKey('cash_tendered_input')), '700');
+      await tester.pumpAndSettle();
+      expect(find.text('Rs 74.00'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('commit_checkout_button')));
+      await tester.pumpAndSettle();
+      expect(submitted!.single.amountTendered, 700);
+      expect(submitted!.single.changeReturned, 74);
     });
 
     testWidgets('tender dialog calculates return change in large numerals for cash payment', (tester) async {
@@ -517,3 +609,6 @@ void main() {
     });
   });
 }
+
+
+

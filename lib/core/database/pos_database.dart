@@ -120,6 +120,7 @@ class PosDatabase {
     await _createV9Tables(db);
     await _upgradeToVersion10(db);
     await _upgradeToVersion11(db);
+    await _upgradeToVersion12(db);
   }
 
   Future<void> _createOperationalAccountingTables(DatabaseExecutor executor) async {
@@ -429,6 +430,74 @@ class PosDatabase {
     }
     if (oldVersion < 10) await _upgradeToVersion10(db);
     if (oldVersion < 11) await _upgradeToVersion11(db);
+    if (oldVersion < 12) await _upgradeToVersion12(db);
+  }
+
+  Future<void> _upgradeToVersion12(DatabaseExecutor db) async {
+    await _createOperationalAccountingTables(db);
+    final orderColumns = await db.rawQuery('PRAGMA table_info(orders)');
+    if (!orderColumns.any((c) => c['name'] == 'checkout_command_id')) {
+      await db.execute("ALTER TABLE orders ADD COLUMN checkout_command_id TEXT");
+    }
+    final paymentColumns = await db.rawQuery('PRAGMA table_info(order_payments)');
+    for (final column in ['amount_tendered', 'change_returned']) {
+      if (paymentColumns.any((c) => c['name'] == '${column}_paisa')) continue;
+      await db.execute('ALTER TABLE order_payments ADD COLUMN ${column}_paisa INTEGER');
+      await db.execute('UPDATE order_payments SET ${column}_paisa = CAST(ROUND($column * 100) AS INTEGER)');
+    }
+
+    await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_checkout_command ON orders(checkout_command_id) WHERE checkout_command_id IS NOT NULL");
+    await db.execute("""
+      CREATE TABLE IF NOT EXISTS checkout_stock_alerts (
+        order_id INTEGER NOT NULL REFERENCES orders(id),
+        ingredient_id INTEGER NOT NULL REFERENCES raw_ingredients(id),
+        stock_at_checkout REAL NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY(order_id, ingredient_id)
+      )
+    """);
+
+    await db.execute("""CREATE TABLE IF NOT EXISTS checkout_tokens (
+      order_id INTEGER PRIMARY KEY REFERENCES orders(id),
+      business_day_id INTEGER NOT NULL REFERENCES business_days(id),
+      token_number INTEGER NOT NULL,
+      UNIQUE(business_day_id, token_number)
+    )""");
+    await db.execute('INSERT OR IGNORE INTO checkout_tokens SELECT id, business_day_id, token_number FROM orders');
+    await db.execute("""CREATE TABLE IF NOT EXISTS checkout_token_audit (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL REFERENCES orders(id),
+      business_day_id INTEGER NOT NULL,
+      token_number INTEGER NOT NULL,
+      action TEXT NOT NULL,
+      payment_status TEXT NOT NULL,
+      revision INTEGER NOT NULL,
+      recorded_at TEXT NOT NULL
+    )""");
+    await db.execute("""INSERT INTO checkout_token_audit(order_id,business_day_id,token_number,action,payment_status,revision,recorded_at)
+      SELECT id,business_day_id,token_number,'ALLOCATED',payment_status,current_revision,created_at FROM orders o
+      WHERE NOT EXISTS (SELECT 1 FROM checkout_token_audit a WHERE a.order_id=o.id)""");
+    await db.execute("""CREATE TRIGGER IF NOT EXISTS checkout_token_allocate AFTER INSERT ON orders BEGIN
+      INSERT INTO checkout_tokens VALUES(NEW.id,NEW.business_day_id,NEW.token_number);
+      INSERT INTO checkout_token_audit(order_id,business_day_id,token_number,action,payment_status,revision,recorded_at)
+        VALUES(NEW.id,NEW.business_day_id,NEW.token_number,'ALLOCATED',NEW.payment_status,NEW.current_revision,NEW.created_at);
+    END""");
+    await db.execute("""CREATE TRIGGER IF NOT EXISTS checkout_token_status AFTER UPDATE OF payment_status,current_revision ON orders
+      WHEN NEW.payment_status != OLD.payment_status OR NEW.current_revision != OLD.current_revision BEGIN
+      INSERT INTO checkout_token_audit(order_id,business_day_id,token_number,action,payment_status,revision,recorded_at)
+        VALUES(NEW.id,NEW.business_day_id,NEW.token_number,
+          CASE WHEN NEW.current_revision != OLD.current_revision THEN 'REVISED' ELSE 'STATUS_CHANGED' END,
+          NEW.payment_status,NEW.current_revision,strftime('%Y-%m-%d %H:%M:%f','now'));
+    END""");
+    await db.execute("""CREATE TRIGGER IF NOT EXISTS checkout_token_identity BEFORE UPDATE OF token_number,business_day_id ON orders
+      WHEN NEW.token_number != OLD.token_number OR NEW.business_day_id != OLD.business_day_id
+      BEGIN SELECT RAISE(ABORT,'Allocated tokens are immutable'); END""");
+    for (final table in ['checkout_tokens', 'checkout_token_audit']) {
+      for (final operation in ['UPDATE', 'DELETE']) {
+        await db.execute("CREATE TRIGGER IF NOT EXISTS ${table}_no_$operation BEFORE $operation ON $table BEGIN SELECT RAISE(ABORT,'Token audit is immutable'); END");
+      }
+    }
+
   }
 
   Future<void> _upgradeToVersion11(DatabaseExecutor db) async {
