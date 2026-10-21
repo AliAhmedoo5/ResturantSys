@@ -447,6 +447,16 @@ class PosDatabase {
     }
 
     await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_checkout_command ON orders(checkout_command_id) WHERE checkout_command_id IS NOT NULL");
+    await db.execute("""
+      CREATE TABLE IF NOT EXISTS checkout_stock_alerts (
+        order_id INTEGER NOT NULL REFERENCES orders(id),
+        ingredient_id INTEGER NOT NULL REFERENCES raw_ingredients(id),
+        stock_at_checkout REAL NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY(order_id, ingredient_id)
+      )
+    """);
+
   }
 
   Future<void> _upgradeToVersion11(DatabaseExecutor db) async {
