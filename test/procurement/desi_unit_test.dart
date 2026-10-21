@@ -134,16 +134,18 @@ void main() {
 
   group('WastageReason Tests', () {
     test('WastageReason contains all 4 mandatory categorized reasons', () {
-      expect(WastageReason.values.length, equals(4));
+      expect(WastageReason.values.length, equals(5));
       expect(WastageReason.burned.code, equals('BURNED'));
       expect(WastageReason.dropped.code, equals('DROPPED'));
       expect(WastageReason.expired.code, equals('EXPIRED'));
       expect(WastageReason.testing.code, equals('TESTING'));
+      expect(WastageReason.wastedCooked.code, equals('WASTED_COOKED'));
 
       expect(WastageReason.burned.displayName, equals('Burned / Prep Mistake'));
       expect(WastageReason.dropped.displayName, equals('Dropped / Contaminated'));
       expect(WastageReason.expired.displayName, equals('Expired / Spoiled'));
       expect(WastageReason.testing.displayName, equals('R&D / Testing'));
+      expect(WastageReason.wastedCooked.displayName, equals('Cooked Wastage / Order Revision'));
     });
 
     test('WastageReason.fromCode parses code safely with fallback', () {

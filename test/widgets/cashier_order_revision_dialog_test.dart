@@ -77,8 +77,12 @@ void main() {
     });
 
     testWidgets('renders dialog with order details and stage notice without requiring PIN', (tester) async {
-      await tester.binding.setSurfaceSize(const Size(1366, 768));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
+      tester.view.physicalSize = const Size(1366, 768);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
 
       await tester.pumpWidget(
         MaterialApp(
@@ -105,8 +109,12 @@ void main() {
     });
 
     testWidgets('canceling order autonomously updates order and shows refund prompt', (tester) async {
-      await tester.binding.setSurfaceSize(const Size(1366, 768));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
+      tester.view.physicalSize = const Size(1366, 768);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
 
       bool callbackCalled = false;
 

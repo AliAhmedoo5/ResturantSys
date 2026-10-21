@@ -71,7 +71,7 @@ class Order {
     String? cashierName,
   }) {
     return Order(
-      id: map['id'] as int,
+      id: (map['id'] as int?) ?? 0,
       deliveryAreaId: map['delivery_area_id'] as int?,
       deliveryAreaName: map['delivery_area_name_snapshot'] as String?,
       deliveryAddress: map['delivery_address_snapshot'] as String?,
@@ -103,6 +103,7 @@ class Order {
 
   Map<String, Object?> toMap() {
     return {
+      if (id != 0) 'id': id,
       'delivery_area_id': deliveryAreaId,
       'delivery_area_name_snapshot': deliveryAreaName,
       'delivery_address_snapshot': deliveryAddress,

@@ -495,31 +495,27 @@ class _CashierOrderRevisionDialogState
 
               // Totals row
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
                     'Original: Rs ${_currencyFormat.format(widget.order.grandTotal)}',
                     style: const TextStyle(color: Colors.grey, fontSize: 13),
                   ),
-                  Row(
-                    children: [
-                      Text(
-                        'Delta: ${_delta >= 0 ? "+" : ""}Rs ${_currencyFormat.format(_delta)}',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: _delta < 0 ? Colors.red : Colors.green,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Text(
-                        'New Total: Rs ${_currencyFormat.format(_revisedTotal)}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 16,
-                          color: WarmCounterColors.lightPrimaryText,
-                        ),
-                      ),
-                    ],
+                  const Spacer(),
+                  Text(
+                    'Delta: ${_delta >= 0 ? "+" : ""}Rs ${_currencyFormat.format(_delta)}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: _delta < 0 ? Colors.red : Colors.green,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Text(
+                    'New Total: Rs ${_currencyFormat.format(_revisedTotal)}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 16,
+                      color: WarmCounterColors.lightPrimaryText,
+                    ),
                   ),
                 ],
               ),
