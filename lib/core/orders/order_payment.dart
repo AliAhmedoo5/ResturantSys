@@ -1,3 +1,4 @@
+import 'paisa_engine.dart';
 import 'payment_method.dart';
 
 /// A payment transaction row settled against an order.
@@ -18,6 +19,9 @@ class OrderPayment {
   final double changeReturned;
   final String? referenceCode;
 
+  int get amountTenderedPaisa => PaisaEngine.rupeesToPaisa(amountTendered);
+  int get changeReturnedPaisa => PaisaEngine.rupeesToPaisa(changeReturned);
+
   double get netPaid => amountTendered - changeReturned;
 
   factory OrderPayment.fromMap(Map<String, Object?> map) {
@@ -25,8 +29,8 @@ class OrderPayment {
       id: map['id'] as int,
       orderId: map['order_id'] as int,
       paymentMethod: PaymentMethod.fromCode(map['payment_method'] as String),
-      amountTendered: (map['amount_tendered'] as num).toDouble(),
-      changeReturned: (map['change_returned'] as num?)?.toDouble() ?? 0.0,
+      amountTendered: map['amount_tendered_paisa'] == null ? (map['amount_tendered'] as num).toDouble() : PaisaEngine.paisaToRupees(map['amount_tendered_paisa'] as int),
+      changeReturned: map['change_returned_paisa'] == null ? (map['change_returned'] as num?)?.toDouble() ?? 0.0 : PaisaEngine.paisaToRupees(map['change_returned_paisa'] as int),
       referenceCode: map['reference_code'] as String?,
     );
   }

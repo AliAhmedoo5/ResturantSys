@@ -557,6 +557,8 @@ class OrderAndCheckoutController {
             'order_id': orderId,
             'payment_method': tender.method.code,
             'amount_tendered': tender.amountTendered,
+            'amount_tendered_paisa': PaisaEngine.rupeesToPaisa(tender.amountTendered),
+            'change_returned_paisa': PaisaEngine.rupeesToPaisa(tender.changeReturned),
             'change_returned': tender.changeReturned,
             'reference_code': tender.referenceCode,
           },
