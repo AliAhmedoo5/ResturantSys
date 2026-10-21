@@ -133,11 +133,16 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      // Enter mandatory cancellation reason
+      await tester.enterText(
+        find.byKey(const ValueKey('revision_reason_input')),
+        'Customer changed mind',
+      );
+      await tester.pump();
+
       // Tap Cancel Entire Order
       await tester.tap(find.byKey(const ValueKey('cancel_entire_order_button')));
-      for (int i = 0; i < 20 && !callbackCalled; i++) {
-        await tester.pump(const Duration(milliseconds: 50));
-      }
+      await tester.pumpAndSettle();
 
       expect(callbackCalled, isTrue);
 
@@ -147,12 +152,64 @@ void main() {
 
       // Tap Cash Payout
       await tester.tap(find.byKey(const ValueKey('disburse_cash_refund_button')));
-      for (int i = 0; i < 20; i++) {
-        await tester.pump(const Duration(milliseconds: 50));
-      }
+      await tester.pumpAndSettle();
 
       final updated = await orderController.getOrder(order.id);
       expect(updated.isCancelled, isTrue);
+      expect(updated.isRefundPending, isFalse);
+    });
+
+    testWidgets('modifying item quantity and applying revision updates order with revision record', (tester) async {
+      tester.view.physicalSize = const Size(1366, 768);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      bool callbackCalled = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CashierOrderRevisionDialog(
+              order: order,
+              cashierId: cashierId,
+              shiftId: shiftId,
+              orderController: orderController,
+              onRevisionCompleted: () => callbackCalled = true,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Decrement item quantity from 2 to 1
+      await tester.tap(find.byKey(const ValueKey('decrement_item_0')));
+      await tester.pump();
+
+      // Enter mandatory reason
+      await tester.enterText(
+        find.byKey(const ValueKey('revision_reason_input')),
+        'Customer changed quantity to 1',
+      );
+      await tester.pump();
+
+      // Tap Apply Revision
+      await tester.tap(find.byKey(const ValueKey('apply_revision_button')));
+      await tester.pumpAndSettle();
+
+      expect(callbackCalled, isTrue);
+
+      // Verify updated order in database
+      final updated = await orderController.getOrder(order.id);
+      expect(updated.currentRevision, 1);
+      expect(updated.items.first.quantity, 1);
+      expect(updated.isRefundPending, isTrue);
+
+      // Pending refund banner should be visible for Rs 500 delta
+      expect(find.byKey(const ValueKey('pending_refund_banner')), findsOneWidget);
+      expect(find.textContaining('Rs 500.00'), findsWidgets);
     });
   });
 }
