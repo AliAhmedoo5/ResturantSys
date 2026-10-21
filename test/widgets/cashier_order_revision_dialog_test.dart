@@ -135,7 +135,8 @@ void main() {
 
       // Tap Cancel Entire Order
       await tester.tap(find.byKey(const ValueKey('cancel_entire_order_button')));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
       expect(callbackCalled, isTrue);
 
@@ -145,7 +146,8 @@ void main() {
 
       // Tap Cash Payout
       await tester.tap(find.byKey(const ValueKey('disburse_cash_refund_button')));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
       final updated = await orderController.getOrder(order.id);
       expect(updated.isCancelled, isTrue);

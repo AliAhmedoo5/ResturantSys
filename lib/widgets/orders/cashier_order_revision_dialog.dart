@@ -151,7 +151,7 @@ class _CashierOrderRevisionDialogState
           ),
         );
         if ((_pendingRefundPaisa ?? 0) == 0) {
-          Navigator.of(context).pop();
+          Navigator.of(context, rootNavigator: true).maybePop();
         }
       }
     } catch (e) {
@@ -195,7 +195,7 @@ class _CashierOrderRevisionDialogState
           ),
         );
         if ((_pendingRefundPaisa ?? 0) == 0) {
-          Navigator.of(context).pop();
+          Navigator.of(context, rootNavigator: true).maybePop();
         }
       }
     } catch (e) {
@@ -240,7 +240,7 @@ class _CashierOrderRevisionDialogState
             backgroundColor: WarmCounterColors.lightPrimaryAction,
           ),
         );
-        Navigator.of(context).pop();
+        Navigator.of(context, rootNavigator: true).maybePop();
       }
     } catch (e) {
       if (mounted) setState(() => _errorMessage = e.toString());
@@ -495,25 +495,31 @@ class _CashierOrderRevisionDialogState
 
               // Totals row
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'Original: Rs ${_currencyFormat.format(widget.order.grandTotal)}',
-                    style: const TextStyle(color: Colors.grey, fontSize: 13),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Original: Rs ${_currencyFormat.format(widget.order.grandTotal)}',
+                        style: const TextStyle(color: Colors.grey, fontSize: 12),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Delta: ${_delta >= 0 ? "+" : ""}Rs ${_currencyFormat.format(_delta)}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: _delta < 0 ? Colors.red : Colors.green,
+                        ),
+                      ),
+                    ],
                   ),
-                  const Spacer(),
-                  Text(
-                    'Delta: ${_delta >= 0 ? "+" : ""}Rs ${_currencyFormat.format(_delta)}',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: _delta < 0 ? Colors.red : Colors.green,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
                   Text(
                     'New Total: Rs ${_currencyFormat.format(_revisedTotal)}',
                     style: const TextStyle(
                       fontWeight: FontWeight.w900,
-                      fontSize: 16,
+                      fontSize: 15,
                       color: WarmCounterColors.lightPrimaryText,
                     ),
                   ),
