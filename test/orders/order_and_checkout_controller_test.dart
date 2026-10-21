@@ -101,6 +101,25 @@ void main() {
       }
     });
 
+    test('COD records collection due without pretending cash was received', () async {
+      final day = await shiftController.openBusinessDay(openedByStaffId: 1);
+      final shift = await shiftController.openShift(staffId: 2, openingFloat: 0);
+      final category = await catalogController.createCategory(name: 'COD', displayOrder: 1, colorHex: '#FFFFFF');
+      final item = await catalogController.createMenuItem(categoryId: category.id, name: 'COD tea', basePrice: 100.49);
+      await publishFixtures(catalogController);
+      final area = await DeliveryController(database: db).saveArea(staffId: 1, name: 'Nearby', code: 'COD', deliveryFeePaisa: 5000);
+      final result = await orderController.checkoutOrder(
+        businessDayId: day.id, shiftId: shift.id, cashierId: 2,
+        diningType: DiningType.delivery, items: [CartItem(menuItem: item)],
+        delivery: DeliveryDetails(areaId: area.id, quotedFeePaisa: 5000, phone: '03001234567', fullAddress: 'Street 1'),
+        payments: [const PaymentTender(method: PaymentMethod.cod, amountTendered: 0)],
+      );
+      final saved = await orderController.getOrder(result.order.id);
+      expect(saved.paymentStatus, 'COLLECTION_DUE');
+      expect(saved.payments.single.amountTenderedPaisa, 0);
+      expect(saved.grandTotal, 150.49);
+    });
+
     test('Daily sequential token increments (#01, #02...) and resets at new Business Day', () async {
       // 1. Open Business Day 1 & Shift
       final day1 = await shiftController.openBusinessDay(openedByStaffId: 1);
