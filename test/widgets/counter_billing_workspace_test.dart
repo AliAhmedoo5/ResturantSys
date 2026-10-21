@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/auth/staff_role.dart';
@@ -200,6 +201,26 @@ void main() {
       await tester.tap(find.text('Skip delivery details'));
       await tester.pumpAndSettle();
       expect(find.byType(TenderCheckoutDialog), findsOneWidget);
+    });
+    testWidgets('keyboard checkout preserves cart through customer details and manual wallet tender', (tester) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      await tester.pumpWidget(buildTestHarness());
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('menu_item_tile_101')));
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.numpadEnter);
+      await tester.pumpAndSettle();
+      expect(find.text('Customer Details'), findsOneWidget);
+      await tester.tap(find.text('Skip delivery details'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('JazzCash'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Manually confirm'), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.close_rounded).last);
+      await tester.pumpAndSettle();
+      expect(find.text('Zinger Burger'), findsNWidgets(2));
     });
     testWidgets('tap on menu item adds to cart and updates subtotal & grand total', (tester) async {
       tester.view.physicalSize = const Size(1920, 1080);
@@ -533,5 +554,6 @@ void main() {
     });
   });
 }
+
 
 
