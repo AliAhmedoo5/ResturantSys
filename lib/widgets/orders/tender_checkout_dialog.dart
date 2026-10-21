@@ -146,16 +146,13 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
               ),
               const SizedBox(height: WarmCounterSpacing.space16),
 
-              // Tender Method Switcher
-              Row(
+              // All methods are recorded manually by the cashier.
+              Wrap(
+                spacing: WarmCounterSpacing.space8,
+                runSpacing: WarmCounterSpacing.space8,
                 children: [
-                  _buildTenderTab(PaymentMethod.cash, 'Cash', Icons.payments_rounded),
-                  const SizedBox(width: WarmCounterSpacing.space8),
-                  _buildTenderTab(PaymentMethod.card, 'Card', Icons.credit_card_rounded),
-                  const SizedBox(width: WarmCounterSpacing.space8),
-                  _buildTenderTab(PaymentMethod.raast, 'Raast QR', Icons.qr_code_2_rounded),
-                  const SizedBox(width: WarmCounterSpacing.space8),
-                  _buildTenderTab(PaymentMethod.split, 'Split Tender', Icons.call_split_rounded),
+                  for (final method in PaymentMethod.values.where((method) => method != PaymentMethod.cod))
+                    _buildTenderTab(method, method.displayName, method == PaymentMethod.cash ? Icons.payments_rounded : Icons.credit_card_rounded),
                 ],
               ),
               const Divider(height: WarmCounterSpacing.space24, color: WarmCounterColors.lightBorder),
@@ -213,7 +210,8 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
 
   Widget _buildTenderTab(PaymentMethod method, String label, IconData icon) {
     final isSelected = _selectedMethod == method;
-    return Expanded(
+    return SizedBox(
+      width: 132,
       child: InkWell(
         key: ValueKey('tender_tab_${method.name}'),
         onTap: () => setState(() => _selectedMethod = method),
@@ -261,7 +259,7 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
       case PaymentMethod.bankTransfer:
       case PaymentMethod.cod:
       case PaymentMethod.card:
-        return _buildElectronicTenderBody(PaymentMethod.card);
+        return _buildElectronicTenderBody(_selectedMethod);
       case PaymentMethod.raast:
         return _buildElectronicTenderBody(PaymentMethod.raast);
       case PaymentMethod.split:
@@ -406,11 +404,11 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      isRaast ? 'Raast Instant Payment QR' : 'Card Reader Terminal',
+                      method.displayName,
                       style: WarmCounterTypography.bodyMedium.copyWith(fontWeight: FontWeight.bold),
                     ),
                     Text(
-                      'Present QR or terminal to customer for Rs ${_currencyFormat.format(widget.grandTotal)}',
+                      'Manually confirm Rs ${_currencyFormat.format(widget.grandTotal)} received before completing checkout.',
                       style: WarmCounterTypography.caption.copyWith(color: WarmCounterColors.lightSecondaryText),
                     ),
                   ],
@@ -538,7 +536,7 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
         amountTendered: cash,
         changeReturned: _cashReturnChange,
       ));
-    } else if (_selectedMethod == PaymentMethod.card || _selectedMethod == PaymentMethod.raast) {
+    } else if (_selectedMethod != PaymentMethod.split) {
       tenders.add(PaymentTender(
         method: _selectedMethod,
         amountTendered: widget.grandTotal,
