@@ -20,6 +20,16 @@ import 'order_void.dart';
 import 'payment_method.dart';
 import 'token_status.dart';
 
+/// Immutable daily token allocation or lifecycle audit event.
+class CheckoutTokenEvent {
+  CheckoutTokenEvent.fromMap(Map<String, Object?> row)
+      : orderId = row['order_id'] as int, tokenNumber = row['token_number'] as int,
+        action = row['action'] as String, paymentStatus = row['payment_status'] as String,
+        revision = row['revision'] as int;
+  final int orderId, tokenNumber, revision;
+  final String action, paymentStatus;
+}
+
 /// Draft definition when creating or configuring a deal item slot.
 class DealItemDraft {
   const DealItemDraft({
@@ -316,7 +326,7 @@ class OrderAndCheckoutController {
     final dbExec = executor ?? database;
     final result = await dbExec.rawQuery('''
       SELECT COALESCE(MAX(token_number), 0) + 1 AS next_token
-      FROM ${PosDatabaseConstants.tableOrders}
+      FROM checkout_tokens
       WHERE business_day_id = ?;
     ''', [businessDayId]);
 
@@ -324,6 +334,12 @@ class OrderAndCheckoutController {
       return (result.first['next_token'] as num).toInt();
     }
     return 1;
+  }
+
+  Future<List<CheckoutTokenEvent>> getTokenAudit(int businessDayId) async {
+    final rows = await database.query('checkout_token_audit', where: 'business_day_id = ?',
+      whereArgs: [businessDayId], orderBy: 'id');
+    return rows.map(CheckoutTokenEvent.fromMap).toList();
   }
 
   // ===========================================================================
