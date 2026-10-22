@@ -558,7 +558,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 480),
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(WarmCounterSpacing.space24),
+                  padding: const EdgeInsets.all(WarmCounterSpacing.space16),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -672,7 +672,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: WarmCounterColors.lightPrimaryAction,
-                            foregroundColor: Colors.white,
+                            foregroundColor: WarmCounterColors.lightTextOnPrimary,
                           ),
                           child: const Text('Resolve Discrepancy'),
                         ),
@@ -699,7 +699,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
 
     return Container(
       color: WarmCounterColors.lightPageBackground,
-      padding: const EdgeInsets.all(WarmCounterSpacing.space24),
+      padding: const EdgeInsets.all(WarmCounterSpacing.space16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -794,10 +794,9 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
         borderRadius: WarmCounterSpacing.panelBorderRadius,
         border: Border.all(color: WarmCounterColors.lightBorder),
       ),
-      child: Wrap(
-        spacing: 4,
-        runSpacing: 4,
-        children: SupervisorPortalTab.values.map((tab) {
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(children: SupervisorPortalTab.values.map((tab) {
           final isSelected = _activeTab == tab;
           return SizedBox(
             width: 185,
@@ -845,7 +844,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
               ),
             ),
           );
-        }).toList(),
+        }).toList()),
       ),
     );
   }
@@ -893,7 +892,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
       children: [
         // Left Column: Departments Directory
         SizedBox(
-          width: 320,
+          width: 230,
           child: Material(
             color: WarmCounterColors.lightCardBackground,
             borderRadius: WarmCounterSpacing.panelBorderRadius,
@@ -979,7 +978,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
+                    Expanded(child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
@@ -996,7 +995,8 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                           ),
                         ),
                       ],
-                    ),
+                    )),
+                    const SizedBox(width: 12),
                     ElevatedButton.icon(
                       key: const ValueKey('register_staff_button'),
                       onPressed: _openRegisterStaffDialog,
@@ -1004,7 +1004,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                       label: const Text('Register Staff'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: WarmCounterColors.lightPrimaryAction,
-                        foregroundColor: Colors.white,
+                        foregroundColor: WarmCounterColors.lightTextOnPrimary,
                         shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
                       ),
                     ),
@@ -1015,6 +1015,8 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                 // Staff Table
                 Expanded(
                   child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: SingleChildScrollView(
                     child: DataTable(
                       headingRowColor: WidgetStateProperty.all(WarmCounterColors.lightPageBackground),
                       columns: const [
@@ -1089,7 +1091,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                           ],
                         );
                       }).toList(),
-                    ),
+                    )),
                   ),
                 ),
               ],
@@ -1279,7 +1281,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                         onPressed: _isSavingThreshold ? null : _handleSaveDiscrepancyThreshold,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: WarmCounterColors.lightPrimaryAction,
-                          foregroundColor: Colors.white,
+                          foregroundColor: WarmCounterColors.lightTextOnPrimary,
                           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                           shape: const RoundedRectangleBorder(
                             borderRadius: WarmCounterSpacing.controlBorderRadius,
@@ -1466,7 +1468,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                                       onPressed: () => _openResolveDiscrepancyDialog(shift),
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: WarmCounterColors.lightPrimaryAction,
-                                        foregroundColor: Colors.white,
+                                        foregroundColor: WarmCounterColors.lightTextOnPrimary,
                                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                       ),
                                       child: const Text('Resolve', style: TextStyle(fontSize: 12)),
@@ -1658,7 +1660,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                           label: const Text('View Full Z-Report & Summary'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: WarmCounterColors.lightPrimaryAction,
-                            foregroundColor: Colors.white,
+                            foregroundColor: WarmCounterColors.lightTextOnPrimary,
                             minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
                           ),
                           onPressed: () async {

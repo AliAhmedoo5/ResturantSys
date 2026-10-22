@@ -168,17 +168,54 @@ class _PinLockScreenState extends State<PinLockScreen> {
       focusNode: _focusNode,
       autofocus: true,
       onKeyEvent: _handleKeyEvent,
-      child: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(WarmCounterSpacing.space24),
-          child: Column(
+      child: LayoutBuilder(builder: (context, constraints) {
+        return Row(children: [
+          if (constraints.maxWidth >= 1000)
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(48),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(width: 48, height: 4, color: StreetFoodMafiaColors.cartelYellow),
+                    const SizedBox(height: 24),
+                    Text('READY FOR\nRUSH HOUR.', style: WarmCounterTypography.pageHeading.copyWith(
+                      fontSize: 48, height: 1.05, fontWeight: FontWeight.w900, letterSpacing: -1.5)),
+                    const SizedBox(height: 20),
+                    Text('Your counter. Your kitchen. One place.',
+                      style: WarmCounterTypography.body.copyWith(color: StreetFoodMafiaColors.secondaryText)),
+                    const SizedBox(height: 40),
+                    const Row(children: [
+                      Icon(Icons.offline_bolt_outlined, size: 18, color: StreetFoodMafiaColors.cartelYellow),
+                      SizedBox(width: 8),
+                      Text('Built for the everyday service.'),
+                    ]),
+                  ],
+                ),
+              ),
+            ),
+          Expanded(child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Container(
+                key: const ValueKey('login_card'),
+                constraints: const BoxConstraints(maxWidth: 400),
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: StreetFoodMafiaColors.darkNavy,
+                  borderRadius: WarmCounterSpacing.panelBorderRadius,
+                  border: Border.all(color: StreetFoodMafiaColors.border),
+                ),
+                child: Column(
+            mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               // Lock Icon & Header
               Container(
-                width: 48,
-                height: 48,
+                width: 32,
+                height: 32,
                 decoration: BoxDecoration(
                   color: WarmCounterColors.lightActiveNavHighlight,
                   shape: BoxShape.circle,
@@ -193,7 +230,7 @@ class _PinLockScreenState extends State<PinLockScreen> {
                   color: WarmCounterColors.lightPrimaryAction,
                 ),
               ),
-              const SizedBox(height: WarmCounterSpacing.space12),
+              const SizedBox(height: 8),
 
               Text(
                 widget.title,
@@ -211,15 +248,15 @@ class _PinLockScreenState extends State<PinLockScreen> {
                 ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: WarmCounterSpacing.space16),
+              const SizedBox(height: 12),
 
               // PIN Dots Indicator
               _buildPinDots(),
-              const SizedBox(height: WarmCounterSpacing.space12),
+              const SizedBox(height: 8),
 
               // Error or Status Message
               _buildStatusFeedback(),
-              const SizedBox(height: WarmCounterSpacing.space16),
+              const SizedBox(height: 8),
 
               // On-Screen Touch Numpad
               PinNumpad(
@@ -237,16 +274,19 @@ class _PinLockScreenState extends State<PinLockScreen> {
                   label: const Text('Unlock'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: WarmCounterColors.lightPrimaryAction,
-                    foregroundColor: Colors.white,
+                    foregroundColor: StreetFoodMafiaColors.textOnPrimary,
                     minimumSize: const Size(200, WarmCounterSpacing.touchTargetMin),
                     shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
                   ),
                 ),
               ],
             ],
-          ),
-        ),
-      ),
+                ),
+              ),
+            ),
+          )),
+        ]);
+      }),
     );
   }
 
@@ -273,9 +313,9 @@ class _PinLockScreenState extends State<PinLockScreen> {
         children: List.generate(dotCount, (index) {
           final isFilled = index < _enteredPin.length;
           return Container(
-            margin: const EdgeInsets.symmetric(horizontal: WarmCounterSpacing.space8),
-            width: 18,
-            height: 18,
+            margin: const EdgeInsets.symmetric(horizontal: 6),
+            width: 14,
+            height: 14,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: isFilled

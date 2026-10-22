@@ -33,4 +33,14 @@ jobs:
       - name: Run tests
         timeout-minutes: 12
         run: flutter test
+        env:
+          CAPTURE_DESKTOP: 'true'
+
+      - name: Upload desktop layout previews
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-layout-previews
+          path: build/desktop-previews/*.png
+          if-no-files-found: ignore
 
