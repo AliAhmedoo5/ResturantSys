@@ -9,6 +9,7 @@ import 'orders/reprint_tray_dialog.dart';
 /// Operational workspaces selectable in the application header.
 enum AppWorkspaceTab {
   register('Register', Icons.point_of_sale_outlined),
+  riderTrips('Riders', Icons.two_wheeler_outlined),
   catalog('Catalog', Icons.restaurant_menu_outlined),
   khata('Khata', Icons.menu_book_outlined),
   mandi('Mandi', Icons.shopping_basket_outlined),
@@ -155,6 +156,12 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
                         context,
                         tab: AppWorkspaceTab.register,
                         isSelected: selectedWorkspace == AppWorkspaceTab.register,
+                      ),
+                      const SizedBox(width: WarmCounterSpacing.space8),
+                      _buildWorkspaceTabButton(
+                        context,
+                        tab: AppWorkspaceTab.riderTrips,
+                        isSelected: selectedWorkspace == AppWorkspaceTab.riderTrips,
                       ),
                       if (activeStaff!.canAccessSupervisorPortal) ...[
                         const SizedBox(width: WarmCounterSpacing.space8),

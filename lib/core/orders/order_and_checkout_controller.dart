@@ -1303,6 +1303,17 @@ class OrderAndCheckoutController {
       throw StateError('Cannot cancel order: Business Day is closed.');
     }
 
+    final settledTripRows = await database.rawQuery('''
+      SELECT rt.id, rt.trip_name
+      FROM ${PosDatabaseConstants.tableRiderTripOrders} rto
+      JOIN ${PosDatabaseConstants.tableRiderTrips} rt ON rto.trip_id = rt.id
+      WHERE rto.order_id = ? AND rt.status = 'SETTLED'
+      LIMIT 1
+    ''', [orderId]);
+    if (settledTripRows.isNotEmpty) {
+      throw StateError('Cannot cancel order #$orderId: Associated rider trip is settled and locked.');
+    }
+
     return await database.transaction((txn) async {
       final now = DateTime.now();
       final formattedNow = _formatTimestamp(now);
@@ -1445,6 +1456,38 @@ class OrderAndCheckoutController {
         },
       );
 
+      final activeTripRows = await txn.rawQuery('''
+        SELECT rt.id, rt.trip_name, rt.cash_expected_paisa
+        FROM ${PosDatabaseConstants.tableRiderTripOrders} rto
+        JOIN ${PosDatabaseConstants.tableRiderTrips} rt ON rto.trip_id = rt.id
+        WHERE rto.order_id = ? AND rt.status IN ('DISPATCHED', 'RETURNED')
+        LIMIT 1
+      ''', [orderId]);
+
+      if (activeTripRows.isNotEmpty) {
+        final tripId = activeTripRows.first['id'] as int;
+        final alertMsg = 'Order #${order.tokenDisplay} was CANCELLED by Cashier while Out for Delivery: $trimmedReason';
+
+        await txn.insert(PosDatabaseConstants.tableRiderDispatchAlerts, {
+          'trip_id': tripId,
+          'order_id': orderId,
+          'revision_id': revisionId,
+          'alert_type': 'ORDER_CANCELLED',
+          'message': alertMsg,
+          'is_acknowledged': 0,
+          'created_at': formattedNow,
+        });
+
+        if (order.paymentStatus == 'COLLECTION_DUE') {
+          final oldPaisa = PaisaEngine.rupeesToPaisa(order.grandTotal);
+          await txn.rawUpdate('''
+            UPDATE ${PosDatabaseConstants.tableRiderTrips}
+            SET cash_expected_paisa = MAX(0, cash_expected_paisa - ?)
+            WHERE id = ?
+          ''', [oldPaisa, tripId]);
+        }
+      }
+
       final createdLines = <OrderRevisionLine>[];
       for (final line in linesToInsert) {
         final lineId = await txn.insert(
@@ -1534,6 +1577,17 @@ class OrderAndCheckoutController {
     );
     if (bdayRows.isNotEmpty && bdayRows.first['status'] != 'OPEN') {
       throw StateError('Cannot revise order: Business Day is closed.');
+    }
+
+    final settledTripRows = await database.rawQuery('''
+      SELECT rt.id, rt.trip_name
+      FROM ${PosDatabaseConstants.tableRiderTripOrders} rto
+      JOIN ${PosDatabaseConstants.tableRiderTrips} rt ON rto.trip_id = rt.id
+      WHERE rto.order_id = ? AND rt.status = 'SETTLED'
+      LIMIT 1
+    ''', [orderId]);
+    if (settledTripRows.isNotEmpty) {
+      throw StateError('Cannot revise order #$orderId: Associated rider trip is settled and locked.');
     }
 
     return await database.transaction((txn) async {
@@ -1835,6 +1889,42 @@ class OrderAndCheckoutController {
           'command_id': commandId,
         },
       );
+
+      final activeTripRows = await txn.rawQuery('''
+        SELECT rt.id, rt.trip_name, rt.cash_expected_paisa
+        FROM ${PosDatabaseConstants.tableRiderTripOrders} rto
+        JOIN ${PosDatabaseConstants.tableRiderTrips} rt ON rto.trip_id = rt.id
+        WHERE rto.order_id = ? AND rt.status IN ('DISPATCHED', 'RETURNED')
+        LIMIT 1
+      ''', [orderId]);
+
+      if (activeTripRows.isNotEmpty) {
+        final tripId = activeTripRows.first['id'] as int;
+        final alertMsg = 'Order #${order.tokenDisplay} was MODIFIED by Cashier while Out for Delivery: $trimmedReason';
+
+        await txn.insert(PosDatabaseConstants.tableRiderDispatchAlerts, {
+          'trip_id': tripId,
+          'order_id': orderId,
+          'revision_id': revisionId,
+          'alert_type': 'ORDER_MODIFIED',
+          'message': alertMsg,
+          'is_acknowledged': 0,
+          'created_at': formattedNow,
+        });
+
+        if (order.paymentStatus == 'COLLECTION_DUE') {
+          final oldPaisa = PaisaEngine.rupeesToPaisa(order.grandTotal);
+          final newPaisa = PaisaEngine.rupeesToPaisa(totals.grandTotal);
+          final delta = newPaisa - oldPaisa;
+          if (delta != 0) {
+            await txn.rawUpdate('''
+              UPDATE ${PosDatabaseConstants.tableRiderTrips}
+              SET cash_expected_paisa = MAX(0, cash_expected_paisa + ?)
+              WHERE id = ?
+            ''', [delta, tripId]);
+          }
+        }
+      }
 
       final createdLines = <OrderRevisionLine>[];
       for (final line in linesToInsert) {
