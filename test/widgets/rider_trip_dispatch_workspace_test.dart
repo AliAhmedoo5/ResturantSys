@@ -35,7 +35,6 @@ void main() {
     late RiderTripController riderTripController;
 
     late Staff activeCashier;
-    late Staff aliRider;
     late Shift activeShift;
     late MenuItem burgerItem;
     late DeliveryArea deliveryArea;
@@ -75,15 +74,6 @@ void main() {
         'created_at': DateTime.now().toIso8601String(),
       });
 
-      aliRider = const Staff(
-        id: 3,
-        name: 'Ali Rider',
-        departmentId: 1,
-        pinHash: 'rider_hash_2',
-        role: StaffRole.cashier,
-        isActive: true,
-      );
-
       final category = await catalogController.createCategory(
         name: 'Burgers',
         displayOrder: 1,
@@ -119,29 +109,45 @@ void main() {
       await posDb.close();
     });
 
-    Future<void> pumpWorkspace(WidgetTester tester, Widget widget) async {
-      await tester.runAsync(() async {
-        await tester.pumpWidget(widget);
-        for (var attempt = 0; attempt < 100; attempt++) {
-          await Future<void>.delayed(const Duration(milliseconds: 20));
-          await tester.pump();
-          if (find.byType(CircularProgressIndicator).evaluate().isEmpty) break;
+    Future<void> settleUntil(
+      WidgetTester tester,
+      bool Function() isReady,
+      String description,
+    ) async {
+      // Pump frames in FakeAsync; only the SQLite isolate wait uses real time.
+      for (var attempt = 0; attempt < 100; attempt++) {
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+        if (isReady() &&
+            find.byType(CircularProgressIndicator).evaluate().isEmpty) {
+          await tester.pumpAndSettle();
+          return;
         }
-      });
-      await tester.pump();
+      }
+      fail('Timed out waiting for $description');
     }
 
-    Future<void> tapAndSettle(WidgetTester tester, Finder finder) async {
-      await tester.runAsync(() async {
-        await tester.ensureVisible(finder);
-        await tester.tap(finder);
-        for (var attempt = 0; attempt < 100; attempt++) {
-          await Future<void>.delayed(const Duration(milliseconds: 20));
-          await tester.pump();
-          if (find.byType(CircularProgressIndicator).evaluate().isEmpty) break;
-        }
-      });
-      await tester.pump();
+    Future<void> pumpWorkspace(WidgetTester tester, Widget widget) async {
+      await tester.pumpWidget(widget);
+      await settleUntil(
+        tester,
+        () => find.text('Pending Deliveries').evaluate().isNotEmpty,
+        'rider workspace database load',
+      );
+    }
+
+    Future<void> tapAndSettle(
+      WidgetTester tester,
+      Finder finder,
+      bool Function() isReady,
+      String description,
+    ) async {
+      await tester.ensureVisible(finder);
+      await tester.tap(finder);
+      await settleUntil(tester, isReady, description);
     }
 
     Future<Order> createTestOrder() async {
@@ -166,9 +172,10 @@ void main() {
     testWidgets('renders pending orders and batches into a new trip', (tester) async {
       tester.view.physicalSize = const Size(1366, 768);
       tester.view.devicePixelRatio = 1.0;
-      addTearDown(() => tester.view.resetPhysicalSize());
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-      final order = await createTestOrder();
+      final order = (await tester.runAsync(createTestOrder))!;
 
       await pumpWorkspace(
         tester,
@@ -178,8 +185,6 @@ void main() {
               controller: riderTripController,
               currentStaff: activeCashier,
               shiftController: shiftController,
-              initialPendingOrders: [order],
-              initialAvailableRiders: [aliRider],
             ),
           ),
         ),
@@ -198,7 +203,12 @@ void main() {
       // Tap Dispatch Rider Trip button
       final dispatchBtn = find.byKey(const ValueKey('dispatch_trip_btn'));
       expect(dispatchBtn, findsOneWidget);
-      await tapAndSettle(tester, dispatchBtn);
+      await tapAndSettle(
+        tester,
+        dispatchBtn,
+        () => find.text('COD: Rs. 850').evaluate().isNotEmpty,
+        'dispatched trip to reload',
+      );
 
       // Order should now appear in Active Rider Trips
       expect(find.text('Active Rider Trips'), findsOneWidget);
@@ -209,32 +219,29 @@ void main() {
     testWidgets('displays Rider Dispatch Alert and allows acknowledgment', (tester) async {
       tester.view.physicalSize = const Size(1366, 768);
       tester.view.devicePixelRatio = 1.0;
-      addTearDown(() => tester.view.resetPhysicalSize());
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-      final order = await createTestOrder();
+      final order = (await tester.runAsync(createTestOrder))!;
 
-      // Dispatch trip
-      await riderTripController.createRiderTrip(
-        riderStaffId: 3,
-        shiftId: activeShift.id,
-        businessDayId: activeShift.businessDayId,
-        tripName: 'Trip #1 - Alert Demo',
-        orderIds: [order.id],
-      );
+      await tester.runAsync(() async {
+        // Dispatch trip
+        await riderTripController.createRiderTrip(
+          riderStaffId: 3,
+          shiftId: activeShift.id,
+          businessDayId: activeShift.businessDayId,
+          tripName: 'Trip #1 - Alert Demo',
+          orderIds: [order.id],
+        );
 
-      // Cancel order while Out for Delivery to trigger dispatch alert
-      await orderController.cancelOrder(
-        orderId: order.id,
-        cashierId: activeCashier.id,
-        reason: 'Customer cancelled at door',
-        commandId: 'cmd-alert-widget-test',
-      );
-
-      final alerts = await riderTripController.getActiveAlerts();
-      final trips = await riderTripController.getActiveTrips(
-        shiftId: activeShift.id,
-        businessDayId: activeShift.businessDayId,
-      );
+        // Cancel order while Out for Delivery to trigger dispatch alert
+        await orderController.cancelOrder(
+          orderId: order.id,
+          cashierId: activeCashier.id,
+          reason: 'Customer cancelled at door',
+          commandId: 'cmd-alert-widget-test',
+        );
+      });
 
       await pumpWorkspace(
         tester,
@@ -244,9 +251,6 @@ void main() {
               controller: riderTripController,
               currentStaff: activeCashier,
               shiftController: shiftController,
-              initialActiveTrips: trips,
-              initialActiveAlerts: alerts,
-              initialAvailableRiders: [aliRider],
             ),
           ),
         ),
@@ -258,7 +262,12 @@ void main() {
 
       // Tap Acknowledge button
       final ackBtn = find.widgetWithText(ElevatedButton, 'Acknowledge');
-      await tapAndSettle(tester, ackBtn);
+      await tapAndSettle(
+        tester,
+        ackBtn,
+        () => find.textContaining('RIDER DISPATCH ALERTS').evaluate().isEmpty,
+        'dispatch alert acknowledgment',
+      );
 
       // Alert banner should be dismissed
       expect(find.textContaining('RIDER DISPATCH ALERTS'), findsNothing);
@@ -267,25 +276,25 @@ void main() {
     testWidgets('opens settlement dialog and counts pouch cash to settle trip', (tester) async {
       tester.view.physicalSize = const Size(1366, 768);
       tester.view.devicePixelRatio = 1.0;
-      addTearDown(() => tester.view.resetPhysicalSize());
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-      final order = await createTestOrder();
+      final order = (await tester.runAsync(createTestOrder))!;
 
-      final trip = await riderTripController.createRiderTrip(
-        riderStaffId: 3,
-        shiftId: activeShift.id,
-        businessDayId: activeShift.businessDayId,
-        tripName: 'Trip #1 - Settle Demo',
-        orderIds: [order.id],
-      );
+      final trip = (await tester.runAsync(() async {
+        final trip = await riderTripController.createRiderTrip(
+          riderStaffId: 3,
+          shiftId: activeShift.id,
+          businessDayId: activeShift.businessDayId,
+          tripName: 'Trip #1 - Settle Demo',
+          orderIds: [order.id],
+        );
 
-      // Deliver order
-      await riderTripController.markOrderDelivered(tripId: trip.id, orderId: order.id);
+        // Deliver order
+        await riderTripController.markOrderDelivered(tripId: trip.id, orderId: order.id);
 
-      final trips = await riderTripController.getActiveTrips(
-        shiftId: activeShift.id,
-        businessDayId: activeShift.businessDayId,
-      );
+        return trip;
+      }))!;
 
       await pumpWorkspace(
         tester,
@@ -295,8 +304,6 @@ void main() {
               controller: riderTripController,
               currentStaff: activeCashier,
               shiftController: shiftController,
-              initialActiveTrips: trips,
-              initialAvailableRiders: [aliRider],
             ),
           ),
         ),
@@ -305,8 +312,12 @@ void main() {
       // Click Settle Trip button
       final settleBtn = find.byKey(ValueKey('settle_trip_btn_${trip.id}'));
       expect(settleBtn, findsOneWidget);
-      await tester.tap(settleBtn);
-      await tester.pumpAndSettle();
+      await tapAndSettle(
+        tester,
+        settleBtn,
+        () => find.byType(RiderTripSettlementDialog).evaluate().isNotEmpty,
+        'settlement dialog to open',
+      );
 
       // Dialog opens
       expect(find.byType(RiderTripSettlementDialog), findsOneWidget);
@@ -316,14 +327,22 @@ void main() {
       // Confirm settlement
       final confirmBtn = find.byKey(const ValueKey('confirm_settlement_btn'));
       expect(confirmBtn, findsOneWidget);
-      await tapAndSettle(tester, confirmBtn);
+      await tapAndSettle(
+        tester,
+        confirmBtn,
+        () => find.byType(RiderTripSettlementDialog).evaluate().isEmpty &&
+            find.text('No active trips currently dispatched.').evaluate().isNotEmpty,
+        'settlement to deposit cash and reload trips',
+      );
 
       // Dialog closed and trip completed
       expect(find.byType(RiderTripSettlementDialog), findsNothing);
       expect(find.text('No active trips currently dispatched.'), findsOneWidget);
 
       // Verify drawer balance increased by Rs. 850
-      final expectedCash = await shiftController.calculateExpectedCash(activeShift.id);
+      final expectedCash = await tester.runAsync(
+        () => shiftController.calculateExpectedCash(activeShift.id),
+      );
       expect(expectedCash, equals(5850.0));
     });
   });
