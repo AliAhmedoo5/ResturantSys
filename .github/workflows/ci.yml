@@ -48,7 +48,7 @@ jobs:
             grep -q 'Synthetic Burger' "$FIXTURE_DIR/synthetic-z-close.txt"
             grep -q 'Synthetic Flour' "$FIXTURE_DIR/synthetic-z-close.txt"
             grep -q 'JAZZCASH' "$FIXTURE_DIR/synthetic-z-close.txt"
-            pdftoppm -f 1 -singlefile -scale-to 1600 -png "$FIXTURE_DIR/synthetic-z-close.pdf" "$FIXTURE_DIR/synthetic-z-close"
+            pdftoppm -scale-to 1600 -png "$FIXTURE_DIR/synthetic-z-close.pdf" "$FIXTURE_DIR/synthetic-z-close"
           fi
 
       # This directory is populated ONLY by the fresh temporary SQLite fixture

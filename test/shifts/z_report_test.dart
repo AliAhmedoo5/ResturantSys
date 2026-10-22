@@ -175,6 +175,17 @@ void main() {
       }
     });
 
+    test('concurrent export recovery persists one immutable artifact pair', () async {
+      await shiftController.openBusinessDay(openedByStaffId:supervisorId);
+      await shiftController.closeBusinessDay(closedByStaffId:supervisorId);
+      final first=ReportExportService(database:db,directory:'${tempDir.path}/first-recovery');
+      final second=ReportExportService(database:db,directory:'${tempDir.path}/second-recovery');
+      await Future.wait([first.exportPending(),second.exportPending()]);
+      final files=await tempDir.list(recursive:true).where((file)=>file.path.endsWith('.pdf') || file.path.endsWith('.xlsx')).toList();
+      expect(files.length,2);
+      expect((await first.history()).single['status'],'READY');
+    });
+
     test('correctly aggregates multi-shift totals, tenders, voids, wastage, and variance', () async {
       // 1. Open Business Day
       final day = await shiftController.openBusinessDay(openedByStaffId: supervisorId);
@@ -470,6 +481,12 @@ void main() {
         closedByStaffId: supervisorId,
       );
       expect(closedDay.isClosed, isTrue);
+      await expectLater(orderController.cancelOrder(orderId:res1.order.id,cashierId:cashierId,
+        reason:'Attempt after seal',commandId:'closed-day-cancel'),throwsStateError);
+      await expectLater(orderController.checkoutOrder(businessDayId:day1.id,shiftId:shift.id,
+        cashierId:cashierId,diningType:DiningType.dineIn,items:[CartItem(menuItem:snackItem,quantity:1)],
+        payments:[const PaymentTender(method:PaymentMethod.cash,amountTendered:200)]),throwsStateError);
+      expect((await orderController.getOrder(res1.order.id)).tokenNumber,1);
 
       // Now open Day 2
       final day2 = await shiftController.openBusinessDay(openedByStaffId: supervisorId);
@@ -477,6 +494,12 @@ void main() {
 
       // Verify token resets to #01 for the fresh Business Day!
       expect(nextTokenDay2, equals(1));
+      final nextShift=await shiftController.openShift(staffId:cashierId,openingFloat:100);
+      final nextOrder=await orderController.checkoutOrder(businessDayId:day2.id,shiftId:nextShift.id,
+        cashierId:cashierId,diningType:DiningType.dineIn,items:[CartItem(menuItem:snackItem,quantity:1)],
+        payments:[const PaymentTender(method:PaymentMethod.cash,amountTendered:200)]);
+      expect(nextOrder.order.tokenNumber,1);
+      expect((await orderController.getOrder(res2.order.id)).tokenNumber,2);
     });
 
     test('finalizeBusinessDayWithZReport auto-locks open shifts and concludes day when shift is active', () async {
