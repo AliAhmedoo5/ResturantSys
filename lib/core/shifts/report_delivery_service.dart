@@ -207,11 +207,12 @@ class ReportDeliveryService {
     payload['idempotency_key']=job['idempotency_key'];
     final client=HttpClient()..connectionTimeout=const Duration(seconds:15);
     try {
+      return await (() async {
       final request=await client.postUrl(endpoint);
       request.followRedirects=false;
       request.headers.contentType=ContentType.json;
       request.headers.set(HttpHeaders.authorizationHeader,'Bearer $token');
-      request.headers.set('Idempotency-Key',job['idempotency_key']);
+      request.headers.set('Idempotency-Key',job['idempotency_key'] as String);
       request.write(jsonEncode(payload));
       final response=await request.close();
       final body=await response.transform(utf8.decoder).join();
@@ -221,12 +222,15 @@ class ReportDeliveryService {
       if (response.statusCode<200 || response.statusCode>=300) {
         throw const ReportDeliveryFailure('Report relay rejected delivery; check approved sender and recipient configuration.');
       }
-      final result=jsonDecode(body) as Map<String,dynamic>;
+      Map<String,dynamic> result;
+      try { result=jsonDecode(body) as Map<String,dynamic>; }
+      catch (_) { throw const ReportDeliveryFailure('Relay acceptance response is invalid; review before retry.',ambiguous:true); }
       final reference=result['provider_reference'];
       if (result['accepted']!=true || reference is! String || reference.trim().isEmpty) {
         throw const ReportDeliveryFailure('Relay did not confirm provider acceptance; review before retry.',ambiguous:true);
       }
       return reference;
+      })().timeout(const Duration(seconds:40));
     } finally { client.close(force:true); }
   }
 }

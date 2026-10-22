@@ -930,8 +930,12 @@ class ShiftAndCashController {
     );
 
     // Filesystem failures are recoverable from the committed snapshot on restart.
-    await ReportExportService(database: database).exportPending();
-    await ReportDeliveryService(database: database).enqueueReadyReports();
+    try {
+      await ReportExportService(database: database).exportPending();
+      await ReportDeliveryService(database: database).enqueueReadyReports();
+    } catch (_) {
+      // Committed report snapshots are retried by the startup/background worker.
+    }
 
     // Automated dual-target database backup on every Z-Report closure
     try {
