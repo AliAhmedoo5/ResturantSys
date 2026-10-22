@@ -186,6 +186,54 @@ void main() {
       expect((await first.history()).single['status'],'READY');
     });
 
+    for (final scenario in [
+      {'name':'partial reduction','refund':2000,'balance':80.0},
+      {'name':'full cancellation','refund':10000,'balance':0.0},
+    ]) {
+      test('Z drawer reconciliation counts ${scenario['name']} cash refund once', () async {
+        final day=await shiftController.openBusinessDay(openedByStaffId:supervisorId);
+        final shift=await shiftController.openShift(staffId:cashierId,openingFloat:0);
+        final now=DateTime.now().toIso8601String();
+        final category=await db.insert('categories',{'name':'Refund fixture','display_order':1,'color_hex':'#FFC400','created_at':now});
+        final ingredient=await db.insert('raw_ingredients',{'name':'Refund portion','storage_unit':'count','current_stock':10,'created_at':now});
+        final item=await db.insert('menu_items',{'category_id':category,'name':'Refund snack','base_price':20.0,'tax_rate':0.0,'is_tax_inclusive':1,'is_active':1,'created_at':now});
+        await db.insert('recipes',{'menu_item_id':item,'raw_ingredient_id':ingredient,'quantity_per_recipe_unit':1,'created_at':now});
+        final menu=MenuItem(id:item,categoryId:category,name:'Refund snack',basePrice:20);
+        final sale=await orderController.checkoutOrder(businessDayId:day.id,shiftId:shift.id,cashierId:cashierId,
+          diningType:DiningType.dineIn,items:[CartItem(menuItem:menu,quantity:5)],
+          payments:[const PaymentTender(method:PaymentMethod.cash,amountTendered:100)]);
+        if(scenario['name']=='full cancellation') {
+          await orderController.cancelOrder(orderId:sale.order.id,cashierId:cashierId,
+            reason:'Customer cancelled',commandId:'refund-full-cancel');
+        } else {
+          await orderController.reviseOrder(orderId:sale.order.id,cashierId:cashierId,
+            reason:'Remove one snack',commandId:'refund-partial-revise',newItems:[CartItem(menuItem:menu,quantity:4)]);
+        }
+        await orderController.recordCashierRefund(orderId:sale.order.id,shiftId:shift.id,cashierId:cashierId,
+          amountPaisa:scenario['refund'] as int,method:PaymentMethod.cash,reason:'Cash returned to customer',commandId:'explicit-refund');
+        final expected=scenario['balance'] as double;
+        expect(await shiftController.calculateExpectedCash(shift.id),expected);
+        final preview=await shiftController.generateZReport(day.id);
+        expect(preview.cashSales,expected,reason:'Collected tender is net of the explicit refund');
+        expect(preview.totalExpectedDrawerCash,expected,reason:'Drawer payout must not be deducted a second time');
+        expect(preview.toPrintableString(),contains(RegExp('Expected Drawer:\s+Rs ${expected.toStringAsFixed(2).replaceAll('.',r'\.')}')));
+        final frozenShift=await shiftController.closeShift(shiftId:shift.id,staffId:cashierId,countedCash:expected);
+        expect(frozenShift.expectedCash,expected);
+        expect(frozenShift.discrepancy,0);
+        await shiftController.finalizeBusinessDayWithZReport(closedByStaffId:supervisorId);
+        final closed=await shiftController.generateZReport(day.id);
+        expect(closed.totalExpectedDrawerCash,expected);
+        expect(closed.totalCountedCash,expected);
+        expect(closed.netCashVariance,0);
+        final run=(await ReportExportService(database:db).history()).single;
+        final sections=(jsonDecode(run['snapshot_json'] as String) as Map)['sections'] as List;
+        final frozenRows=sections[4]['rows'] as List;
+        expect(frozenRows.single[3],scenario['name']=='full cancellation'?0:8000);
+        expect(frozenRows.single[4],scenario['name']=='full cancellation'?0:8000);
+        expect(frozenRows.single[5],0);
+      });
+    }
+
     test('correctly aggregates multi-shift totals, tenders, voids, wastage, and variance', () async {
       // 1. Open Business Day
       final day = await shiftController.openBusinessDay(openedByStaffId: supervisorId);
