@@ -197,7 +197,7 @@ class _PinLockScreenState extends State<PinLockScreen> {
             ),
           Expanded(child: Center(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(16),
               child: Container(
                 key: const ValueKey('login_card'),
                 constraints: const BoxConstraints(maxWidth: 400),
@@ -254,20 +254,11 @@ class _PinLockScreenState extends State<PinLockScreen> {
               _buildPinDots(),
               const SizedBox(height: 8),
 
-              // Error or Status Message
-              _buildStatusFeedback(),
-              const SizedBox(height: 8),
-
-              // On-Screen Touch Numpad
-              PinNumpad(
-                isEnabled: !_isAuthenticating,
-                onDigitPressed: _handleDigit,
-                onClearPressed: _handleClear,
-                onBackspacePressed: _handleBackspace,
-              ),
-              if (widget.maxPinLength > 4 && _enteredPin.length >= 4) ...[
-                const SizedBox(height: WarmCounterSpacing.space16),
-                ElevatedButton.icon(
+              // Reserve the action slot so PIN entry never pushes the keypad away.
+              SizedBox(
+                height: widget.maxPinLength > 4 ? 48 : 24,
+                child: Center(child: widget.maxPinLength > 4 && _enteredPin.length >= 4 && !_isAuthenticating
+                  ? ElevatedButton.icon(
                   key: const ValueKey('unlock_pin_button'),
                   onPressed: _isAuthenticating ? null : _submitPin,
                   icon: const Icon(Icons.lock_open_rounded, size: 20),
@@ -278,8 +269,15 @@ class _PinLockScreenState extends State<PinLockScreen> {
                     minimumSize: const Size(200, WarmCounterSpacing.touchTargetMin),
                     shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
                   ),
-                ),
-              ],
+                  ) : _buildStatusFeedback()),
+              ),
+              const SizedBox(height: 8),
+              PinNumpad(
+                isEnabled: !_isAuthenticating,
+                onDigitPressed: _handleDigit,
+                onClearPressed: _handleClear,
+                onBackspacePressed: _handleBackspace,
+              ),
             ],
                 ),
               ),

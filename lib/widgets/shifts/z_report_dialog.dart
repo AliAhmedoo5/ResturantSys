@@ -193,7 +193,7 @@ class _ZReportDialogState extends State<ZReportDialog> {
                   label: const Text('1-Click 6-Sheet Excel'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: WarmCounterColors.lightPrimaryAction,
-                    foregroundColor: Colors.white,
+                    foregroundColor: WarmCounterColors.lightTextOnPrimary,
                     minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
                   ),
                   onPressed: _isProcessing

@@ -128,7 +128,7 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: WarmCounterColors.lightPrimaryAction,
-              foregroundColor: Colors.white,
+              foregroundColor: WarmCounterColors.lightTextOnPrimary,
             ),
           ),
         ],
@@ -433,7 +433,7 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
                   onPressed: _showOpenBusinessDayDialog,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: WarmCounterColors.lightPrimaryAction,
-                    foregroundColor: Colors.white,
+                    foregroundColor: WarmCounterColors.lightTextOnPrimary,
                     minimumSize: const Size(200, WarmCounterSpacing.touchTargetMin),
                   ),
                 )
@@ -481,7 +481,7 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
                   onPressed: _showOpenShiftDialog,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: WarmCounterColors.lightPrimaryAction,
-                    foregroundColor: Colors.white,
+                    foregroundColor: WarmCounterColors.lightTextOnPrimary,
                     minimumSize: const Size(200, WarmCounterSpacing.touchTargetMin),
                   ),
                 )
@@ -517,7 +517,7 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
                           onPressed: widget.onLock,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: WarmCounterColors.lightPrimaryAction,
-                            foregroundColor: Colors.white,
+                            foregroundColor: WarmCounterColors.lightTextOnPrimary,
                           ),
                         ),
                       ],

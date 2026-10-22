@@ -198,14 +198,16 @@ abstract final class WarmCounterTheme {
         selectedColor: StreetFoodMafiaColors.cartelYellow,
         secondarySelectedColor: StreetFoodMafiaColors.cartelYellow,
         checkmarkColor: StreetFoodMafiaColors.textOnPrimary,
-        labelStyle: WidgetStateTextStyle.resolveWith((states) => TextStyle(
+        labelStyle: const TextStyle(
           fontFamily: WarmCounterTypography.fontFamily,
+          fontFamilyFallback: WarmCounterTypography.fontFallbacks,
           fontSize: 13,
           fontWeight: FontWeight.w600,
-          color: states.contains(WidgetState.selected)
-              ? StreetFoodMafiaColors.textOnPrimary : StreetFoodMafiaColors.offWhite,
-        )),
-        secondaryLabelStyle: const TextStyle(color: StreetFoodMafiaColors.textOnPrimary, fontSize: 13),
+          color: StreetFoodMafiaColors.offWhite,
+        ),
+        secondaryLabelStyle: const TextStyle(fontFamily: WarmCounterTypography.fontFamily,
+          fontFamilyFallback: WarmCounterTypography.fontFallbacks,
+          color: StreetFoodMafiaColors.textOnPrimary, fontSize: 13),
         side: const BorderSide(color: StreetFoodMafiaColors.border),
         shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),

@@ -971,7 +971,8 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
       padding: const EdgeInsets.only(right: WarmCounterSpacing.space8),
       child: FilterChip(
         key: ValueKey('category_tab_${id ?? 'deals'}'),
-        label: Text(label),
+        label: Text(label, style: TextStyle(color: isSelected
+            ? StreetFoodMafiaColors.textOnPrimary : StreetFoodMafiaColors.offWhite)),
         selected: isSelected,
         selectedColor: StreetFoodMafiaColors.cartelYellow,
         checkmarkColor: StreetFoodMafiaColors.textOnPrimary,
@@ -992,7 +993,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
         key: const ValueKey('deals_grid'),
         gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
           maxCrossAxisExtent: 180,
-          childAspectRatio: 1.1,
+          mainAxisExtent: 176,
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
         ),
@@ -1021,7 +1022,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
       key: ValueKey('menu_grid_$_selectedCategoryId'),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 180,
-        childAspectRatio: 1.1,
+        mainAxisExtent: 176,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
       ),
@@ -1304,9 +1305,9 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               color: WarmCounterColors.lightPageBackground,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 4,
                   children: [
                     Text(
                       'Discount: ',
@@ -1318,7 +1319,8 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
                         padding: const EdgeInsets.only(right: 6),
                         child: ChoiceChip(
                           key: ValueKey('discount_chip_${d.id}'),
-                          label: Text(d.name, style: const TextStyle(fontSize: 11)),
+                          label: Text(d.name, style: TextStyle(fontSize: 11, color: isSelected
+                              ? StreetFoodMafiaColors.textOnPrimary : StreetFoodMafiaColors.offWhite)),
                           selected: isSelected,
                           onSelected: (chosen) {
                             setState(() => _selectedDiscount = chosen ? d : null);
@@ -1327,7 +1329,6 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
                       );
                     }),
                   ],
-                ),
               ),
             ),
           ],

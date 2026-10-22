@@ -68,6 +68,9 @@ void main() {
       final loader = FontLoader(WarmCounterTypography.fontFamily);
       loader.addFont(Future.value(ByteData.sublistView(await file.readAsBytes())));
       await loader.load();
+      final icons = FontLoader('MaterialIcons');
+      icons.addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'));
+      await icons.load();
     }
   });
 
@@ -81,6 +84,12 @@ void main() {
       final card = tester.getRect(find.byKey(const ValueKey('login_card')));
       expect(card.width, lessThanOrEqualTo(400));
       expect(find.text('9').hitTestable(), findsOneWidget);
+      expect(find.text('0').hitTestable(), findsOneWidget);
+      for (final digit in ['1', '2', '3', '4']) {
+        await tester.tap(find.text(digit));
+        await tester.pump();
+      }
+      expect(find.byKey(const ValueKey('unlock_pin_button')).hitTestable(), findsOneWidget);
       expect(find.text('0').hitTestable(), findsOneWidget);
       await capture(tester, 'login-${viewport.name}');
     });

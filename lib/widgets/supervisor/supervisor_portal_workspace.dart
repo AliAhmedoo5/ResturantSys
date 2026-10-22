@@ -788,7 +788,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
 
   Widget _buildTopTabBar(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(6),
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: WarmCounterColors.lightCardBackground,
         borderRadius: WarmCounterSpacing.panelBorderRadius,
@@ -798,49 +798,21 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
         scrollDirection: Axis.horizontal,
         child: Row(children: SupervisorPortalTab.values.map((tab) {
           final isSelected = _activeTab == tab;
-          return SizedBox(
-            width: 185,
-            child: InkWell(
-              key: ValueKey('portal_tab_${tab.name}'),
-              onTap: () => setState(() => _activeTab = tab),
-              borderRadius: WarmCounterSpacing.controlBorderRadius,
-              child: Container(
-                constraints: const BoxConstraints(minHeight: 46),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? WarmCounterColors.lightActiveNavHighlight
-                      : Colors.transparent,
-                  borderRadius: WarmCounterSpacing.controlBorderRadius,
-                  border: isSelected
-                      ? Border.all(color: WarmCounterColors.lightPrimaryAction)
-                      : null,
+          return Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: Semantics(
+              selected: isSelected,
+              child: TextButton(
+                key: ValueKey('portal_tab_${tab.name}'),
+                onPressed: () => setState(() => _activeTab = tab),
+                style: TextButton.styleFrom(
+                  backgroundColor: isSelected ? WarmCounterColors.lightActiveNavHighlight : null,
+                  foregroundColor: isSelected ? WarmCounterColors.lightPrimaryAction : WarmCounterColors.lightSecondaryText,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  textStyle: TextStyle(fontSize: 13, fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500),
+                  shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
                 ),
-                child: Wrap(
-        spacing: 4,
-        runSpacing: 4,
-                  alignment: WrapAlignment.center,
-                  children: [
-                    Icon(
-                      tab.icon,
-                      size: 20,
-                      color: isSelected
-                          ? WarmCounterColors.lightPrimaryAction
-                          : WarmCounterColors.lightSecondaryText,
-                    ),
-                    const SizedBox(width: WarmCounterSpacing.space8),
-                    Text(
-                      tab.label,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                        color: isSelected
-                            ? WarmCounterColors.lightPrimaryAction
-                            : WarmCounterColors.lightPrimaryText,
-                      ),
-                    ),
-                  ],
-                ),
+                child: Text(tab.label),
               ),
             ),
           );
@@ -848,7 +820,6 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
       ),
     );
   }
-
   Widget _buildTabContent(BuildContext context) {
     switch (_activeTab) {
       case SupervisorPortalTab.deliveryAreas:
@@ -908,13 +879,15 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
+                    Expanded(child: Text(
                       'Departments (${_departments.length})',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: WarmCounterTypography.pageHeading.copyWith(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
                       ),
-                    ),
+                    )),
                     IconButton(
                       key: const ValueKey('add_department_button'),
                       icon: const Icon(Icons.add_circle_outline_rounded, color: WarmCounterColors.lightPrimaryAction),

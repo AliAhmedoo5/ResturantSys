@@ -20,6 +20,7 @@ class AppSidebar extends StatelessWidget {
     final kitchen = staff.canAccessKitchen;
     final tabs = [
       AppWorkspaceTab.register,
+      AppWorkspaceTab.riderTrips,
       if (manager) ...[AppWorkspaceTab.catalog, AppWorkspaceTab.khata, AppWorkspaceTab.supervisor],
       if (manager || kitchen) ...[
         AppWorkspaceTab.mandi, AppWorkspaceTab.wastage,
@@ -78,8 +79,9 @@ class AppSidebar extends StatelessWidget {
                                 Icon(tab.icon, size: 19, color: color),
                                 if (!compact) ...[
                                   const SizedBox(width: 10),
-                                  Text(tab.label, style: TextStyle(fontSize: 13, color: color,
-                                      fontWeight: active ? FontWeight.w700 : FontWeight.w500)),
+                                  Expanded(child: Text(tab.label, maxLines: 1, overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(fontSize: 13, color: color,
+                                      fontWeight: active ? FontWeight.w700 : FontWeight.w500))),
                                 ],
                               ],
                             ),
@@ -99,7 +101,8 @@ class AppSidebar extends StatelessWidget {
               const Icon(Icons.offline_bolt_outlined, size: 16, color: StreetFoodMafiaColors.cartelYellow),
               if (!compact) ...[
                 const SizedBox(width: 8),
-                Text('OFFLINE POS', style: WarmCounterTypography.caption.copyWith(letterSpacing: 1)),
+                Flexible(child: Text('OFFLINE POS', maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: WarmCounterTypography.caption.copyWith(letterSpacing: 1))),
               ],
             ]),
           ),
