@@ -156,7 +156,7 @@ class _RiderTripSettlementDialogState extends State<RiderTripSettlementDialog> {
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: StreetFoodMafiaColors.obsidianBlack,
+                    color: StreetFoodMafiaColors.obsidian,
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: StreetFoodMafiaColors.border),
                   ),
@@ -164,8 +164,8 @@ class _RiderTripSettlementDialogState extends State<RiderTripSettlementDialog> {
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
                       _buildStatColumn('Total Orders', '${widget.trip.orders.length}', StreetFoodMafiaColors.offWhite),
-                      _buildStatColumn('Delivered', '$deliveredOrders', StreetFoodMafiaColors.successGreen),
-                      _buildStatColumn('Returned', '$returnedOrders', StreetFoodMafiaColors.crimsonRed),
+                      _buildStatColumn('Delivered', '$deliveredOrders', StreetFoodMafiaColors.statusReady),
+                      _buildStatColumn('Returned', '$returnedOrders', StreetFoodMafiaColors.statusCanceled),
                       if (inTransitOrders > 0)
                         _buildStatColumn('Pending', '$inTransitOrders', StreetFoodMafiaColors.cartelYellow),
                     ],
@@ -177,7 +177,7 @@ class _RiderTripSettlementDialogState extends State<RiderTripSettlementDialog> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: StreetFoodMafiaColors.obsidianBlack,
+                    color: StreetFoodMafiaColors.obsidian,
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: StreetFoodMafiaColors.border),
                   ),
@@ -236,13 +236,15 @@ class _RiderTripSettlementDialogState extends State<RiderTripSettlementDialog> {
                           Text(
                             _variancePaisa == 0
                                 ? 'Exact (Rs. 0)'
-                                : (_variancePaisa > 0 ? '+Rs. ${( _variancePaisa / 100).toStringAsFixed(0)} Surplus' : '-Rs. ${(-_variancePaisa / 100).toStringAsFixed(0)} Shortage'),
+                                : (_variancePaisa > 0
+                                    ? '+${PaisaEngine.formatRupees(_variancePaisa)} Surplus'
+                                    : '-${PaisaEngine.formatRupees(-_variancePaisa)} Shortage'),
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w700,
                               color: _variancePaisa == 0
-                                  ? StreetFoodMafiaColors.successGreen
-                                  : (_variancePaisa > 0 ? StreetFoodMafiaColors.cartelYellow : StreetFoodMafiaColors.crimsonRed),
+                                  ? StreetFoodMafiaColors.statusReady
+                                  : (_variancePaisa > 0 ? StreetFoodMafiaColors.cartelYellow : StreetFoodMafiaColors.statusCanceled),
                             ),
                           ),
                         ],
@@ -261,7 +263,7 @@ class _RiderTripSettlementDialogState extends State<RiderTripSettlementDialog> {
                     labelText: 'Settlement Notes (Optional)',
                     labelStyle: TextStyle(color: StreetFoodMafiaColors.secondaryText, fontSize: 13),
                     filled: true,
-                    fillColor: StreetFoodMafiaColors.obsidianBlack,
+                    fillColor: StreetFoodMafiaColors.obsidian,
                     border: OutlineInputBorder(),
                   ),
                 ),
@@ -271,13 +273,13 @@ class _RiderTripSettlementDialogState extends State<RiderTripSettlementDialog> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: StreetFoodMafiaColors.crimsonRed.withValues(alpha: 0.15),
+                      color: StreetFoodMafiaColors.statusCanceled.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: StreetFoodMafiaColors.crimsonRed),
+                      border: Border.all(color: StreetFoodMafiaColors.statusCanceled),
                     ),
                     child: Text(
                       _errorMessage!,
-                      style: const TextStyle(color: StreetFoodMafiaColors.crimsonRed, fontSize: 12),
+                      style: const TextStyle(color: StreetFoodMafiaColors.statusCanceled, fontSize: 12),
                     ),
                   ),
                 ],
@@ -296,11 +298,11 @@ class _RiderTripSettlementDialogState extends State<RiderTripSettlementDialog> {
                     ElevatedButton.icon(
                       key: const ValueKey('confirm_settlement_btn'),
                       icon: _isSubmitting
-                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: StreetFoodMafiaColors.obsidianBlack))
-                          : const Icon(Icons.check_circle_rounded, color: StreetFoodMafiaColors.obsidianBlack),
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: StreetFoodMafiaColors.textOnPrimary))
+                          : const Icon(Icons.check_circle_rounded, color: StreetFoodMafiaColors.textOnPrimary),
                       label: const Text(
                         'Confirm Settlement & Deposit Cash',
-                        style: TextStyle(fontWeight: FontWeight.w800, color: StreetFoodMafiaColors.obsidianBlack),
+                        style: TextStyle(fontWeight: FontWeight.w800, color: StreetFoodMafiaColors.textOnPrimary),
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: StreetFoodMafiaColors.cartelYellow,

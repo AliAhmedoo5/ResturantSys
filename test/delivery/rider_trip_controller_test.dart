@@ -3,11 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
 import 'package:resturant_sys/core/catalog/menu_item.dart';
-import 'package:resturant_sys/core/catalog/raw_ingredient.dart';
 import 'package:resturant_sys/core/catalog/storage_unit.dart';
 import 'package:resturant_sys/core/database/pos_database.dart';
 import 'package:resturant_sys/core/delivery/delivery_controller.dart';
-import 'package:resturant_sys/core/delivery/rider_trip.dart';
 import 'package:resturant_sys/core/delivery/rider_trip_controller.dart';
 import 'package:resturant_sys/core/orders/cart_item.dart';
 import 'package:resturant_sys/core/orders/dining_type.dart';
@@ -57,7 +55,6 @@ void main() {
       businessDayId = day.id;
 
       final shift = await shiftController.openShift(
-        businessDayId: businessDayId,
         staffId: cashierId,
         openingFloat: 5000.0,
       );
@@ -140,7 +137,7 @@ void main() {
         tenders = [PaymentTender(method: PaymentMethod.cash, amountTendered: totalDue)];
       }
 
-      return await orderController.checkout(
+      final result = await orderController.checkoutOrder(
         businessDayId: businessDayId,
         shiftId: shiftId,
         cashierId: cashierId,
@@ -149,6 +146,7 @@ void main() {
         payments: tenders,
         delivery: deliveryDetails,
       );
+      return result.order;
     }
 
     test('1. Delivery orders can be batched and assigned to named rider trips', () async {

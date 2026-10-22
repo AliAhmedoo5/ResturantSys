@@ -1,5 +1,6 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../auth/staff.dart';
+import '../auth/staff_role.dart';
 import '../database/pos_database_constants.dart';
 import '../orders/dining_type.dart';
 import '../orders/order.dart';
@@ -350,6 +351,7 @@ class RiderTripController {
     required int cashierStaffId,
     required int shiftId,
     required int cashCountedPaisa,
+    Map<int, String>? digitalWalletReferences,
     String? notes,
     DateTime? settledAt,
   }) async {
@@ -363,6 +365,29 @@ class RiderTripController {
     }
     if (trip.isCancelled) {
       throw StateError('Cannot settle Trip #$tripId: Trip is cancelled.');
+    }
+
+    // Spec Requirement: Guard against settling while orders are still in transit
+    final inTransit = trip.orders.where((o) => o.status == 'DISPATCHED').toList();
+    if (inTransit.isNotEmpty) {
+      throw StateError(
+        'Cannot settle Trip #$tripId: Order #${inTransit.first.orderId} is still in transit. Mark as Delivered or Returned first.',
+      );
+    }
+
+    // ADR-0009: Cashier credentials check
+    final staffRows = await database.query(
+      PosDatabaseConstants.tableStaff,
+      where: 'id = ?',
+      whereArgs: [cashierStaffId],
+      limit: 1,
+    );
+    if (staffRows.isEmpty) {
+      throw StateError('Staff ID #$cashierStaffId not found.');
+    }
+    final staffRole = StaffRole.fromCode(staffRows.first['role'] as String);
+    if (staffRole != StaffRole.cashier) {
+      throw StateError('Authorization error: Only cashiers can execute rider trip settlement and drawer deposits.');
     }
 
     // Verify cashier shift is open
@@ -404,22 +429,31 @@ class RiderTripController {
           whereArgs: [orderId],
         );
 
-        // Update or insert order payment row reflecting settled COD
+        final digitalRef = digitalWalletReferences?[orderId];
+        final refCode = digitalRef != null && digitalRef.trim().isNotEmpty
+            ? digitalRef.trim()
+            : 'TRIP-$tripId';
+        final paymentMethod = digitalRef != null && digitalRef.trim().isNotEmpty
+            ? 'DIGITAL_WALLET'
+            : 'COD';
+
+        // Update or insert order payment row reflecting settled payment
         final existingPayment = await txn.query(
           PosDatabaseConstants.tableOrderPayments,
-          where: 'order_id = ? AND payment_method = ?',
-          whereArgs: [orderId, 'COD'],
+          where: 'order_id = ? AND payment_method IN (\'COD\', \'DIGITAL_WALLET\')',
+          whereArgs: [orderId],
         );
 
         if (existingPayment.isNotEmpty) {
           await txn.update(
             PosDatabaseConstants.tableOrderPayments,
             {
+              'payment_method': paymentMethod,
               'amount_tendered': grandTotal,
               'amount_tendered_paisa': grandTotalPaisa,
               'change_returned': 0.0,
               'change_returned_paisa': 0,
-              'reference_code': 'TRIP-$tripId',
+              'reference_code': refCode,
             },
             where: 'id = ?',
             whereArgs: [existingPayment.first['id']],
@@ -429,12 +463,12 @@ class RiderTripController {
             PosDatabaseConstants.tableOrderPayments,
             {
               'order_id': orderId,
-              'payment_method': 'COD',
+              'payment_method': paymentMethod,
               'amount_tendered': grandTotal,
               'amount_tendered_paisa': grandTotalPaisa,
               'change_returned': 0.0,
               'change_returned_paisa': 0,
-              'reference_code': 'TRIP-$tripId',
+              'reference_code': refCode,
             },
           );
         }
@@ -652,7 +686,7 @@ class RiderTripController {
       FROM ${PosDatabaseConstants.tableStaff} s
       LEFT JOIN ${PosDatabaseConstants.tableDepartments} d ON s.department_id = d.id
       WHERE s.is_active = 1
-      ORDER BY CASE WHEN LOWER(d.name) = 'riders' THEN 0 ELSE 1 END, s.name ASC
+      ORDER BY s.name ASC
     ''');
     return rows.map((r) => Staff.fromMap(r)).toList();
   }

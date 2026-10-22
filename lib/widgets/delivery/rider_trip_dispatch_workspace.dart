@@ -4,7 +4,7 @@ import '../../core/delivery/rider_trip.dart';
 import '../../core/delivery/rider_trip_controller.dart';
 import '../../core/orders/order.dart';
 import '../../core/orders/paisa_engine.dart';
-import '../../core/shifts/shift.dart';
+import '../../core/shifts/shift_and_cash_controller.dart';
 import '../../core/theme/theme.dart';
 import 'rider_trip_settlement_dialog.dart';
 
@@ -15,14 +15,12 @@ class RiderTripDispatchWorkspace extends StatefulWidget {
     super.key,
     required this.controller,
     required this.currentStaff,
-    this.currentShift,
-    this.businessDayId,
+    this.shiftController,
   });
 
   final RiderTripController controller;
   final Staff currentStaff;
-  final Shift? currentShift;
-  final int? businessDayId;
+  final ShiftAndCashController? shiftController;
 
   @override
   State<RiderTripDispatchWorkspace> createState() => _RiderTripDispatchWorkspaceState();
@@ -55,13 +53,16 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
+      final activeDay = await widget.shiftController?.getActiveBusinessDay();
+      final activeShift = await widget.shiftController?.getActiveShift();
+
       final pending = await widget.controller.getPendingDeliveryOrders(
-        shiftId: widget.currentShift?.id,
-        businessDayId: widget.businessDayId,
+        shiftId: activeShift?.id,
+        businessDayId: activeDay?.id,
       );
       final active = await widget.controller.getActiveTrips(
-        shiftId: widget.currentShift?.id,
-        businessDayId: widget.businessDayId,
+        shiftId: activeShift?.id,
+        businessDayId: activeDay?.id,
       );
       final alerts = await widget.controller.getActiveAlerts();
       final riders = await widget.controller.getAvailableRiders();
@@ -100,14 +101,17 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
 
     setState(() => _isDispatching = true);
     try {
+      final activeDay = await widget.shiftController?.getActiveBusinessDay();
+      final activeShift = await widget.shiftController?.getActiveShift();
+
       final tripName = _tripNameController.text.trim().isNotEmpty
           ? _tripNameController.text.trim()
           : 'Trip #${_activeTrips.length + 1} - ${_selectedRider!.name}';
 
       await widget.controller.createRiderTrip(
         riderStaffId: _selectedRider!.id,
-        shiftId: widget.currentShift?.id ?? 1,
-        businessDayId: widget.businessDayId ?? 1,
+        shiftId: activeShift?.id ?? 1,
+        businessDayId: activeDay?.id ?? 1,
         tripName: tripName,
         orderIds: _selectedOrderIds.toList(),
       );
@@ -119,7 +123,7 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: StreetFoodMafiaColors.crimsonRed,
+            backgroundColor: StreetFoodMafiaColors.statusCanceled,
             content: Text(e.toString().replaceAll('StateError: ', '')),
           ),
         );
@@ -136,7 +140,7 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(backgroundColor: StreetFoodMafiaColors.crimsonRed, content: Text('$e')),
+          SnackBar(backgroundColor: StreetFoodMafiaColors.statusCanceled, content: Text('$e')),
         );
       }
     }
@@ -165,7 +169,7 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
               decoration: const InputDecoration(
                 hintText: 'Return reason...',
                 filled: true,
-                fillColor: StreetFoodMafiaColors.obsidianBlack,
+                fillColor: StreetFoodMafiaColors.obsidian,
                 border: OutlineInputBorder(),
               ),
             ),
@@ -175,7 +179,7 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
           TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
           ElevatedButton(
             key: const ValueKey('confirm_return_btn'),
-            style: ElevatedButton.styleFrom(backgroundColor: StreetFoodMafiaColors.crimsonRed),
+            style: ElevatedButton.styleFrom(backgroundColor: StreetFoodMafiaColors.statusCanceled),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Confirm Return', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
           ),
@@ -194,7 +198,7 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(backgroundColor: StreetFoodMafiaColors.crimsonRed, content: Text('$e')),
+            SnackBar(backgroundColor: StreetFoodMafiaColors.statusCanceled, content: Text('$e')),
           );
         }
       }
@@ -202,13 +206,16 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
   }
 
   Future<void> _openSettlementDialog(RiderTrip trip) async {
-    await showDialog(
+    final activeShift = await widget.shiftController?.getActiveShift();
+    if (!mounted) return;
+
+    await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => RiderTripSettlementDialog(
         trip: trip,
         cashierStaffId: widget.currentStaff.id,
-        shiftId: widget.currentShift?.id ?? 1,
+        shiftId: activeShift?.id ?? 1,
         controller: widget.controller,
         onSettled: _loadData,
       ),
@@ -231,7 +238,7 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
     }
 
     return Container(
-      color: StreetFoodMafiaColors.obsidianBlack,
+      color: StreetFoodMafiaColors.obsidian,
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -270,23 +277,23 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: StreetFoodMafiaColors.crimsonRed.withValues(alpha: 0.2),
+        color: StreetFoodMafiaColors.statusCanceled.withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: StreetFoodMafiaColors.crimsonRed, width: 1.5),
+        border: Border.all(color: StreetFoodMafiaColors.statusCanceled, width: 1.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          const Row(
             children: [
-              const Icon(Icons.warning_amber_rounded, color: StreetFoodMafiaColors.crimsonRed, size: 24),
-              const SizedBox(width: 10),
+              Icon(Icons.warning_amber_rounded, color: StreetFoodMafiaColors.statusCanceled, size: 24),
+              SizedBox(width: 10),
               Text(
-                'RIDER DISPATCH ALERTS (${_activeAlerts.length})',
-                style: const TextStyle(
+                'RIDER DISPATCH ALERTS',
+                style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w900,
-                  color: StreetFoodMafiaColors.crimsonRed,
+                  color: StreetFoodMafiaColors.statusCanceled,
                   letterSpacing: 1,
                 ),
               ),
@@ -311,7 +318,7 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
                   ElevatedButton(
                     key: ValueKey('ack_alert_${alert.id}'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: StreetFoodMafiaColors.crimsonRed,
+                      backgroundColor: StreetFoodMafiaColors.statusCanceled,
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     ),
                     onPressed: () => _handleAcknowledgeAlert(alert.id),
@@ -367,7 +374,7 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
                       final isCod = order.paymentStatus == 'COLLECTION_DUE';
 
                       return Card(
-                        color: isSelected ? StreetFoodMafiaColors.activeNavHighlight : StreetFoodMafiaColors.obsidianBlack,
+                        color: isSelected ? StreetFoodMafiaColors.activeNavHighlight : StreetFoodMafiaColors.obsidian,
                         margin: const EdgeInsets.only(bottom: 8),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
@@ -393,7 +400,7 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
                                 Checkbox(
                                   value: isSelected,
                                   activeColor: StreetFoodMafiaColors.cartelYellow,
-                                  checkColor: StreetFoodMafiaColors.obsidianBlack,
+                                  checkColor: StreetFoodMafiaColors.textOnPrimary,
                                   onChanged: (val) {
                                     setState(() {
                                       if (val == true) {
@@ -423,7 +430,7 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
                                           Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                             decoration: BoxDecoration(
-                                              color: isCod ? StreetFoodMafiaColors.cartelYellow.withValues(alpha: 0.2) : StreetFoodMafiaColors.successGreen.withValues(alpha: 0.2),
+                                              color: isCod ? StreetFoodMafiaColors.cartelYellow.withValues(alpha: 0.2) : StreetFoodMafiaColors.statusReady.withValues(alpha: 0.2),
                                               borderRadius: BorderRadius.circular(4),
                                             ),
                                             child: Text(
@@ -431,7 +438,7 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
                                               style: TextStyle(
                                                 fontSize: 11,
                                                 fontWeight: FontWeight.w800,
-                                                color: isCod ? StreetFoodMafiaColors.cartelYellow : StreetFoodMafiaColors.successGreen,
+                                                color: isCod ? StreetFoodMafiaColors.cartelYellow : StreetFoodMafiaColors.statusReady,
                                               ),
                                             ),
                                           ),
@@ -470,7 +477,7 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
               labelText: 'Assign to Rider',
               labelStyle: TextStyle(color: StreetFoodMafiaColors.secondaryText),
               filled: true,
-              fillColor: StreetFoodMafiaColors.obsidianBlack,
+              fillColor: StreetFoodMafiaColors.obsidian,
               border: OutlineInputBorder(),
             ),
             items: _availableRiders.map((r) => DropdownMenuItem(value: r, child: Text(r.name))).toList(),
@@ -492,7 +499,7 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
               labelText: 'Trip Name / Memo',
               labelStyle: TextStyle(color: StreetFoodMafiaColors.secondaryText),
               filled: true,
-              fillColor: StreetFoodMafiaColors.obsidianBlack,
+              fillColor: StreetFoodMafiaColors.obsidian,
               border: OutlineInputBorder(),
             ),
           ),
@@ -500,11 +507,11 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
           ElevatedButton.icon(
             key: const ValueKey('dispatch_trip_btn'),
             icon: _isDispatching
-                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: StreetFoodMafiaColors.obsidianBlack))
-                : const Icon(Icons.send_rounded, color: StreetFoodMafiaColors.obsidianBlack),
+                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: StreetFoodMafiaColors.textOnPrimary))
+                : const Icon(Icons.send_rounded, color: StreetFoodMafiaColors.textOnPrimary),
             label: Text(
               'Dispatch Rider Trip (${_selectedOrderIds.length})',
-              style: const TextStyle(fontWeight: FontWeight.w900, color: StreetFoodMafiaColors.obsidianBlack, fontSize: 14),
+              style: const TextStyle(fontWeight: FontWeight.w900, color: StreetFoodMafiaColors.textOnPrimary, fontSize: 14),
             ),
             style: ElevatedButton.styleFrom(
               backgroundColor: StreetFoodMafiaColors.cartelYellow,
@@ -557,12 +564,12 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
                       final expectedRupees = PaisaEngine.paisaToRupees(trip.cashExpectedPaisa);
 
                       return Card(
-                        color: StreetFoodMafiaColors.obsidianBlack,
+                        color: StreetFoodMafiaColors.obsidian,
                         margin: const EdgeInsets.only(bottom: 12),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                           side: BorderSide(
-                            color: trip.hasActiveAlerts ? StreetFoodMafiaColors.crimsonRed : StreetFoodMafiaColors.border,
+                            color: trip.hasActiveAlerts ? StreetFoodMafiaColors.statusCanceled : StreetFoodMafiaColors.border,
                             width: trip.hasActiveAlerts ? 2 : 1,
                           ),
                         ),
@@ -613,7 +620,7 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
                                   ElevatedButton(
                                     key: ValueKey('settle_trip_btn_${trip.id}'),
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor: StreetFoodMafiaColors.successGreen,
+                                      backgroundColor: StreetFoodMafiaColors.statusReady,
                                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                                     ),
                                     onPressed: () => _openSettlementDialog(trip),
@@ -625,7 +632,6 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
                               // Contained Orders List
                               ...trip.orders.map((tripOrder) {
                                 final order = tripOrder.order;
-                                final isCod = order?.paymentStatus == 'COLLECTION_DUE';
 
                                 return Container(
                                   padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
@@ -652,25 +658,25 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
                                       if (tripOrder.isDelivered)
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                          decoration: BoxDecoration(color: StreetFoodMafiaColors.successGreen.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(4)),
-                                          child: const Text('Delivered', style: TextStyle(color: StreetFoodMafiaColors.successGreen, fontSize: 11, fontWeight: FontWeight.w700)),
+                                          decoration: BoxDecoration(color: StreetFoodMafiaColors.statusReady.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(4)),
+                                          child: const Text('Delivered', style: TextStyle(color: StreetFoodMafiaColors.statusReady, fontSize: 11, fontWeight: FontWeight.w700)),
                                         )
                                       else if (tripOrder.isReturned)
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                          decoration: BoxDecoration(color: StreetFoodMafiaColors.crimsonRed.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(4)),
-                                          child: Text('Returned: ${tripOrder.notes ?? ""}', style: const TextStyle(color: StreetFoodMafiaColors.crimsonRed, fontSize: 11, fontWeight: FontWeight.w700)),
+                                          decoration: BoxDecoration(color: StreetFoodMafiaColors.statusCanceled.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(4)),
+                                          child: Text('Returned: ${tripOrder.notes ?? ""}', style: const TextStyle(color: StreetFoodMafiaColors.statusCanceled, fontSize: 11, fontWeight: FontWeight.w700)),
                                         )
                                       else ...[
                                         IconButton(
                                           key: ValueKey('mark_delivered_${tripOrder.orderId}'),
-                                          icon: const Icon(Icons.check_circle_outline, color: StreetFoodMafiaColors.successGreen, size: 20),
+                                          icon: const Icon(Icons.check_circle_outline, color: StreetFoodMafiaColors.statusReady, size: 20),
                                           tooltip: 'Mark Delivered',
                                           onPressed: () => _handleMarkDelivered(trip.id, tripOrder.orderId),
                                         ),
                                         IconButton(
                                           key: ValueKey('mark_returned_${tripOrder.orderId}'),
-                                          icon: const Icon(Icons.replay, color: StreetFoodMafiaColors.crimsonRed, size: 20),
+                                          icon: const Icon(Icons.replay, color: StreetFoodMafiaColors.statusCanceled, size: 20),
                                           tooltip: 'Mark Returned',
                                           onPressed: () => _handleMarkReturned(trip.id, tripOrder.orderId),
                                         ),

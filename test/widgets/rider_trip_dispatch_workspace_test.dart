@@ -6,7 +6,6 @@ import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/auth/staff_role.dart';
 import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
 import 'package:resturant_sys/core/catalog/menu_item.dart';
-import 'package:resturant_sys/core/catalog/raw_ingredient.dart';
 import 'package:resturant_sys/core/catalog/storage_unit.dart';
 import 'package:resturant_sys/core/database/pos_database.dart';
 import 'package:resturant_sys/core/delivery/delivery_controller.dart';
@@ -57,7 +56,6 @@ void main() {
 
       final day = await shiftController.openBusinessDay(openedByStaffId: 1);
       activeShift = await shiftController.openShift(
-        businessDayId: day.id,
         staffId: 2,
         openingFloat: 5000.0,
       );
@@ -66,6 +64,7 @@ void main() {
         id: 2,
         name: 'Counter Cashier',
         departmentId: 1,
+        pinHash: '1111',
         role: StaffRole.cashier,
         isActive: true,
       );
@@ -119,7 +118,7 @@ void main() {
     });
 
     Future<Order> createTestOrder() async {
-      return await orderController.checkout(
+      final result = await orderController.checkoutOrder(
         businessDayId: activeShift.businessDayId,
         shiftId: activeShift.id,
         cashierId: activeCashier.id,
@@ -134,6 +133,7 @@ void main() {
           fullAddress: 'Street 1, DHA Phase 5',
         ),
       );
+      return result.order;
     }
 
     testWidgets('renders pending orders and batches into a new trip', (tester) async {
@@ -149,8 +149,7 @@ void main() {
             body: RiderTripDispatchWorkspace(
               controller: riderTripController,
               currentStaff: activeCashier,
-              currentShift: activeShift,
-              businessDayId: activeShift.businessDayId,
+              shiftController: shiftController,
             ),
           ),
         ),
@@ -209,8 +208,7 @@ void main() {
             body: RiderTripDispatchWorkspace(
               controller: riderTripController,
               currentStaff: activeCashier,
-              currentShift: activeShift,
-              businessDayId: activeShift.businessDayId,
+              shiftController: shiftController,
             ),
           ),
         ),
@@ -222,9 +220,7 @@ void main() {
       expect(find.textContaining('Customer cancelled at door'), findsOneWidget);
 
       // Tap Acknowledge button
-      final ackBtn = find.byType(ElevatedButton).firstWhere(
-            (element) => element.toString().contains('ack_alert_'),
-          );
+      final ackBtn = find.widgetWithText(ElevatedButton, 'Acknowledge');
       await tester.tap(ackBtn);
       await tester.pumpAndSettle();
 
@@ -256,8 +252,7 @@ void main() {
             body: RiderTripDispatchWorkspace(
               controller: riderTripController,
               currentStaff: activeCashier,
-              currentShift: activeShift,
-              businessDayId: activeShift.businessDayId,
+              shiftController: shiftController,
             ),
           ),
         ),

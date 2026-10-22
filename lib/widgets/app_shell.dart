@@ -229,8 +229,7 @@ class _AppShellState extends State<AppShell> {
         return RiderTripDispatchWorkspace(
           controller: tripCtrl,
           currentStaff: staff,
-          currentShift: widget.shiftController?.currentShift,
-          businessDayId: widget.shiftController?.currentBusinessDay?.id,
+          shiftController: widget.shiftController,
         );
       }
     }
