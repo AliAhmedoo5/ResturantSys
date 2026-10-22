@@ -21,6 +21,8 @@ import '../core/orders/token_queue_controller.dart';
 import 'supervisor/supervisor_portal_workspace.dart';
 import 'supervisor/token_queue_tray.dart';
 import 'onboarding/onboarding_wizard.dart';
+import '../core/delivery/rider_trip_controller.dart';
+import 'delivery/rider_trip_dispatch_workspace.dart';
 
 /// Top-level desktop application shell coordinating authentication gating,
 /// active workspace presentation, and header state.
@@ -37,6 +39,7 @@ class AppShell extends StatefulWidget {
     this.vendorKhataController,
     this.authService,
     this.tokenQueueController,
+    this.riderTripController,
     this.child,
   });
 
@@ -50,6 +53,7 @@ class AppShell extends StatefulWidget {
   final VendorKhataController? vendorKhataController;
   final AuthService? authService;
   final TokenQueueController? tokenQueueController;
+  final RiderTripController? riderTripController;
   final Widget? child;
 
   @override
@@ -214,6 +218,20 @@ class _AppShellState extends State<AppShell> {
         reprintTrayController: widget.reprintTrayController,
         currentStaff: staff,
       );
+    }
+
+    if (_selectedWorkspace == AppWorkspaceTab.riderTrips) {
+      final tripCtrl = widget.riderTripController ??
+          (widget.orderController != null
+              ? RiderTripController(database: widget.orderController!.database)
+              : null);
+      if (tripCtrl != null) {
+        return RiderTripDispatchWorkspace(
+          controller: tripCtrl,
+          currentStaff: staff,
+          shiftController: widget.shiftController,
+        );
+      }
     }
 
     if (_selectedWorkspace == AppWorkspaceTab.tokenQueue && widget.tokenQueueController != null) {
