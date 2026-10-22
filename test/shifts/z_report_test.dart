@@ -72,6 +72,17 @@ void main() {
       expect((await shiftController.getActiveBusinessDay())?.id, day.id);
       expect((await shiftController.getShift(shift.id)).isOpen, isTrue);
     });
+    test('Z-close saves immutable PDF and Excel artifacts beside the local database', () async {
+      await shiftController.openBusinessDay(openedByStaffId: supervisorId);
+      await shiftController.openShift(staffId: cashierId, openingFloat: 100);
+      await shiftController.finalizeBusinessDayWithZReport(closedByStaffId: supervisorId);
+      final files = await Directory('${tempDir.path}/reports').list(recursive: true).where((f) => f is File).toList();
+      final pdf = File(files.singleWhere((f) => f.path.endsWith('.pdf')).path);
+      final xlsx = File(files.singleWhere((f) => f.path.endsWith('.xlsx')).path);
+      expect(String.fromCharCodes((await pdf.readAsBytes()).take(5)), '%PDF-');
+      expect((await xlsx.readAsBytes()).take(2), [80, 75]);
+    });
+
     test('correctly aggregates multi-shift totals, tenders, voids, wastage, and variance', () async {
       // 1. Open Business Day
       final day = await shiftController.openBusinessDay(openedByStaffId: supervisorId);
