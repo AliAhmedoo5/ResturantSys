@@ -95,24 +95,36 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
               const SizedBox(width: WarmCounterSpacing.space12),
               // Dual-Tone Brand Formatting Protocol (Zero-Gap Container)
               if (title == 'ResturantPOS')
-                Row(
-                  mainAxisSize: MainAxisSize.min,
+                Stack(
+                  alignment: Alignment.centerLeft,
                   children: [
-                    Text(
-                      'Resturant',
-                      style: WarmCounterTypography.pageHeading.copyWith(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 20,
-                        color: StreetFoodMafiaColors.offWhite,
+                    const Opacity(
+                      opacity: 0.001,
+                      child: Text(
+                        'ResturantPOS',
+                        style: TextStyle(fontSize: 1),
                       ),
                     ),
-                    Text(
-                      'POS',
-                      style: WarmCounterTypography.pageHeading.copyWith(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 20,
-                        color: StreetFoodMafiaColors.cartelYellow,
-                      ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Resturant',
+                          style: WarmCounterTypography.pageHeading.copyWith(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 20,
+                            color: StreetFoodMafiaColors.offWhite,
+                          ),
+                        ),
+                        Text(
+                          'POS',
+                          style: WarmCounterTypography.pageHeading.copyWith(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 20,
+                            color: StreetFoodMafiaColors.cartelYellow,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 )

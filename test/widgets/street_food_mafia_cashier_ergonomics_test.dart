@@ -178,12 +178,15 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('menu_item_tile_100')));
       await tester.pumpAndSettle();
 
-      // Verify prices have tabular figures in text style
-      final grandTotalWidget = tester.widget<Text>(find.text('Rs 500.00'));
-      expect(
-        grandTotalWidget.style?.fontFeatures?.any((f) => f.feature == 'tnum'),
-        isTrue,
-      );
+      // Verify all rendered prices have tabular figures in text style
+      final priceWidgets = tester.widgetList<Text>(find.text('Rs 500.00'));
+      expect(priceWidgets, isNotEmpty);
+      for (final priceWidget in priceWidgets) {
+        expect(
+          priceWidget.style?.fontFeatures?.any((f) => f.feature == 'tnum'),
+          isTrue,
+        );
+      }
     });
   });
 }
