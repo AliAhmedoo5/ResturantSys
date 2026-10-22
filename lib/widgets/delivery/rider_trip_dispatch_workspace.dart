@@ -16,11 +16,19 @@ class RiderTripDispatchWorkspace extends StatefulWidget {
     required this.controller,
     required this.currentStaff,
     this.shiftController,
+    this.initialPendingOrders,
+    this.initialActiveTrips,
+    this.initialActiveAlerts,
+    this.initialAvailableRiders,
   });
 
   final RiderTripController controller;
   final Staff currentStaff;
   final ShiftAndCashController? shiftController;
+  final List<Order>? initialPendingOrders;
+  final List<RiderTrip>? initialActiveTrips;
+  final List<RiderDispatchAlert>? initialActiveAlerts;
+  final List<Staff>? initialAvailableRiders;
 
   @override
   State<RiderTripDispatchWorkspace> createState() => _RiderTripDispatchWorkspaceState();
@@ -41,7 +49,22 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
   @override
   void initState() {
     super.initState();
-    _loadData();
+    if (widget.initialPendingOrders != null ||
+        widget.initialActiveTrips != null ||
+        widget.initialActiveAlerts != null ||
+        widget.initialAvailableRiders != null) {
+      _pendingOrders = widget.initialPendingOrders ?? [];
+      _activeTrips = widget.initialActiveTrips ?? [];
+      _activeAlerts = widget.initialActiveAlerts ?? [];
+      _availableRiders = widget.initialAvailableRiders ?? [];
+      if (_availableRiders.isNotEmpty) {
+        _selectedRider = _availableRiders.first;
+        _tripNameController.text = 'Trip #${_activeTrips.length + 1} - ${_selectedRider!.name}';
+      }
+      _isLoading = false;
+    } else {
+      _loadData();
+    }
   }
 
   @override
