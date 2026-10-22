@@ -61,6 +61,17 @@ void main() {
       }
     });
 
+    test('failed Business Day seal rolls back every shift closure', () async {
+      final day = await shiftController.openBusinessDay(openedByStaffId: supervisorId);
+      final shift = await shiftController.openShift(staffId: cashierId, openingFloat: 100);
+      await db.execute("CREATE TRIGGER reject_close BEFORE UPDATE OF status ON business_days WHEN NEW.status = 'CLOSED' BEGIN SELECT RAISE(ABORT, 'simulated disk failure'); END");
+      await expectLater(
+        shiftController.finalizeBusinessDayWithZReport(closedByStaffId: supervisorId),
+        throwsA(anything),
+      );
+      expect((await shiftController.getActiveBusinessDay())?.id, day.id);
+      expect((await shiftController.getShift(shift.id)).isOpen, isTrue);
+    });
     test('correctly aggregates multi-shift totals, tenders, voids, wastage, and variance', () async {
       // 1. Open Business Day
       final day = await shiftController.openBusinessDay(openedByStaffId: supervisorId);
@@ -388,4 +399,5 @@ void main() {
     });
   });
 }
+
 
