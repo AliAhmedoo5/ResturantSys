@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -27,8 +26,6 @@ void main() {
   });
 
   group('RiderTripDispatchWorkspace Widget Tests', () {
-    late Directory tempDir;
-    late String dbPath;
     late PosDatabase posDb;
     late Database db;
     late ShiftAndCashController shiftController;
@@ -43,9 +40,7 @@ void main() {
     late DeliveryArea deliveryArea;
 
     setUp(() async {
-      tempDir = await Directory.systemTemp.createTemp('rider_trip_widget_test_');
-      dbPath = '${tempDir.path}${Platform.pathSeparator}pos_test.db';
-      posDb = PosDatabase(factory: databaseFactoryFfi, customPath: dbPath);
+      posDb = PosDatabase(factory: databaseFactoryFfi, customPath: inMemoryDatabasePath);
       db = await posDb.initialize();
 
       shiftController = ShiftAndCashController(database: db);
@@ -112,10 +107,20 @@ void main() {
 
     tearDown(() async {
       await posDb.close();
-      if (await tempDir.exists()) {
-        await tempDir.delete(recursive: true);
-      }
     });
+
+    Future<void> settle(WidgetTester tester) async {
+      for (var attempt = 0; attempt < 50; attempt++) {
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+        await tester.pump(const Duration(milliseconds: 100));
+        if (find.byType(CircularProgressIndicator).evaluate().isEmpty) {
+          await tester.pumpAndSettle();
+          return;
+        }
+      }
+      fail('RiderTripDispatchWorkspace did not become ready');
+    }
 
     Future<Order> createTestOrder() async {
       final result = await orderController.checkoutOrder(
@@ -154,7 +159,7 @@ void main() {
           ),
         ),
       );
-      await tester.pumpAndSettle();
+      await settle(tester);
 
       // Verify pending order card
       expect(find.text('Pending Deliveries'), findsOneWidget);
@@ -170,7 +175,7 @@ void main() {
       final dispatchBtn = find.byKey(const ValueKey('dispatch_trip_btn'));
       expect(dispatchBtn, findsOneWidget);
       await tester.tap(dispatchBtn);
-      await tester.pumpAndSettle();
+      await settle(tester);
 
       // Order should now appear in Active Rider Trips
       expect(find.text('Active Rider Trips'), findsOneWidget);
@@ -213,7 +218,7 @@ void main() {
           ),
         ),
       );
-      await tester.pumpAndSettle();
+      await settle(tester);
 
       // Verify high-contrast alert banner
       expect(find.textContaining('RIDER DISPATCH ALERTS'), findsOneWidget);
@@ -222,7 +227,7 @@ void main() {
       // Tap Acknowledge button
       final ackBtn = find.widgetWithText(ElevatedButton, 'Acknowledge');
       await tester.tap(ackBtn);
-      await tester.pumpAndSettle();
+      await settle(tester);
 
       // Alert banner should be dismissed
       expect(find.textContaining('RIDER DISPATCH ALERTS'), findsNothing);
@@ -257,7 +262,7 @@ void main() {
           ),
         ),
       );
-      await tester.pumpAndSettle();
+      await settle(tester);
 
       // Click Settle Trip button
       final settleBtn = find.byKey(ValueKey('settle_trip_btn_${trip.id}'));
@@ -274,7 +279,7 @@ void main() {
       final confirmBtn = find.byKey(const ValueKey('confirm_settlement_btn'));
       expect(confirmBtn, findsOneWidget);
       await tester.tap(confirmBtn);
-      await tester.pumpAndSettle();
+      await settle(tester);
 
       // Dialog closed and trip completed
       expect(find.byType(RiderTripSettlementDialog), findsNothing);
