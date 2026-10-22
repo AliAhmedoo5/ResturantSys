@@ -121,6 +121,7 @@ class PosDatabase {
     await _upgradeToVersion10(db);
     await _upgradeToVersion11(db);
     await _upgradeToVersion12(db);
+    await _upgradeToVersion14(db);
   }
 
   Future<void> _createOperationalAccountingTables(DatabaseExecutor executor) async {
@@ -432,6 +433,54 @@ class PosDatabase {
     if (oldVersion < 11) await _upgradeToVersion11(db);
     if (oldVersion < 12) await _upgradeToVersion12(db);
     if (oldVersion < 13) await _upgradeToVersion13(db);
+    if (oldVersion < 14) await _upgradeToVersion14(db);
+  }
+
+  Future<void> _upgradeToVersion14(DatabaseExecutor db) async {
+    await db.execute("""CREATE TABLE report_runs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      business_day_id INTEGER NOT NULL UNIQUE REFERENCES business_days(id),
+      snapshot_json TEXT NOT NULL, content_hash TEXT NOT NULL,
+      created_by INTEGER NOT NULL REFERENCES staff(id), created_at TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'PENDING', artifacts_json TEXT,
+      error_message TEXT
+    )""");
+    await db.execute("""CREATE TABLE inventory_movements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ingredient_id INTEGER NOT NULL REFERENCES raw_ingredients(id),
+      business_day_id INTEGER REFERENCES business_days(id),
+      quantity_delta REAL NOT NULL, balance_after REAL NOT NULL,
+      recorded_at TEXT NOT NULL
+    )""");
+    await db.execute("""CREATE TRIGGER inventory_balance_change AFTER UPDATE OF current_stock ON raw_ingredients
+      WHEN NEW.current_stock != OLD.current_stock BEGIN
+      INSERT INTO inventory_movements(ingredient_id,business_day_id,quantity_delta,balance_after,recorded_at)
+      VALUES(NEW.id,(SELECT id FROM business_days WHERE status='OPEN' ORDER BY id DESC LIMIT 1),
+        NEW.current_stock-OLD.current_stock,NEW.current_stock,strftime('%Y-%m-%d %H:%M:%f','now','localtime'));
+    END""");
+    // A closed day is a durable boundary even for stale UI controllers.
+    for (final operation in ['UPDATE','DELETE','INSERT']) {
+      final ref = operation == 'INSERT' ? 'NEW' : 'OLD';
+      for (final table in ['orders','shifts']) {
+        await db.execute("""CREATE TRIGGER closed_${table}_$operation BEFORE $operation ON $table
+          WHEN EXISTS(SELECT 1 FROM business_days WHERE id=$ref.business_day_id AND status='CLOSED')
+          BEGIN SELECT RAISE(ABORT,'Business Day is permanently closed'); END""");
+      }
+      for (final table in ['order_items','order_payments']) {
+        await db.execute("""CREATE TRIGGER closed_${table}_$operation BEFORE $operation ON $table
+          WHEN EXISTS(SELECT 1 FROM orders o JOIN business_days b ON b.id=o.business_day_id
+            WHERE o.id=$ref.order_id AND b.status='CLOSED')
+          BEGIN SELECT RAISE(ABORT,'Business Day is permanently closed'); END""");
+      }
+      await db.execute("""CREATE TRIGGER closed_movements_$operation BEFORE $operation ON cash_movements
+        WHEN EXISTS(SELECT 1 FROM shifts s JOIN business_days b ON b.id=s.business_day_id
+          WHERE s.id=$ref.shift_id AND b.status='CLOSED')
+        BEGIN SELECT RAISE(ABORT,'Business Day is permanently closed'); END""");
+    }
+    await db.execute("""CREATE TRIGGER closed_day_immutable BEFORE UPDATE ON business_days
+      WHEN OLD.status='CLOSED' BEGIN SELECT RAISE(ABORT,'Business Day is permanently closed'); END""");
+    await db.execute("""CREATE TRIGGER report_snapshot_immutable BEFORE UPDATE OF snapshot_json,content_hash,business_day_id ON report_runs
+      BEGIN SELECT RAISE(ABORT,'Report snapshot is immutable'); END""");
   }
 
   Future<void> _upgradeToVersion13(DatabaseExecutor db) async {

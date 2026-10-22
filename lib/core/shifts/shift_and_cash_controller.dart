@@ -1,6 +1,7 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:resturant_sys/core/database/pos_database_constants.dart';
 import 'business_day.dart';
+import 'report_export_service.dart';
 import 'shift.dart';
 import 'cash_movement.dart';
 import 'x_report.dart';
@@ -155,6 +156,7 @@ class ShiftAndCashController {
       await txn.update('business_days', {
         'status': 'CLOSED', 'closed_at': timestamp, 'closed_by_staff_id': closedByStaffId,
       }, where: "id=? AND status='OPEN'", whereArgs: [day.id]);
+      await ReportExportService.capture(txn, day.id, closedByStaffId);
       return BusinessDay.fromMap({...days.first, 'status':'CLOSED', 'closed_at':timestamp, 'closed_by_staff_id':closedByStaffId});
     });
   }
@@ -925,6 +927,9 @@ class ShiftAndCashController {
       closedAt: closedAt,
       autoLockActiveShifts: true,
     );
+
+    // Filesystem failures are recoverable from the committed snapshot on restart.
+    await ReportExportService(database: database).exportPending();
 
     // Automated dual-target database backup on every Z-Report closure
     try {
