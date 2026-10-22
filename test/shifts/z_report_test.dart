@@ -216,7 +216,7 @@ void main() {
         final preview=await shiftController.generateZReport(day.id);
         expect(preview.cashSales,expected,reason:'Collected tender is net of the explicit refund');
         expect(preview.totalExpectedDrawerCash,expected,reason:'Drawer payout must not be deducted a second time');
-        expect(preview.toPrintableString(),contains(RegExp('Expected Drawer:\s+Rs ${expected.toStringAsFixed(2).replaceAll('.',r'\.')}')));
+        expect(preview.toPrintableString(),contains(RegExp(r'Expected Drawer:\s+Rs '+RegExp.escape(expected.toStringAsFixed(2)))));
         final frozenShift=await shiftController.closeShift(shiftId:shift.id,staffId:cashierId,countedCash:expected);
         expect(frozenShift.expectedCash,expected);
         expect(frozenShift.discrepancy,0);
