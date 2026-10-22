@@ -54,7 +54,7 @@ void main() {
       deliveryController = DeliveryController(database: db);
       riderTripController = RiderTripController(database: db);
 
-      final day = await shiftController.openBusinessDay(openedByStaffId: 1);
+      await shiftController.openBusinessDay(openedByStaffId: 1);
       activeShift = await shiftController.openShift(
         staffId: 2,
         openingFloat: 5000.0,
@@ -186,7 +186,7 @@ void main() {
       final order = await createTestOrder();
 
       // Dispatch trip
-      final trip = await riderTripController.createRiderTrip(
+      await riderTripController.createRiderTrip(
         riderStaffId: 3,
         shiftId: activeShift.id,
         businessDayId: activeShift.businessDayId,
