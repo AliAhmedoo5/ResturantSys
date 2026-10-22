@@ -286,15 +286,16 @@ class _RiderTripSettlementDialogState extends State<RiderTripSettlementDialog> {
 
                 const SizedBox(height: 20),
 
-                // Action Buttons
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+                // Allow the long confirmation label to wrap onto its own row.
+                Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: 12,
+                  runSpacing: 8,
                   children: [
                     TextButton(
                       onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(),
                       child: const Text('Cancel', style: TextStyle(color: StreetFoodMafiaColors.secondaryText)),
                     ),
-                    const SizedBox(width: 12),
                     ElevatedButton.icon(
                       key: const ValueKey('confirm_settlement_btn'),
                       icon: _isSubmitting

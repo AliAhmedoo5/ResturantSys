@@ -121,6 +121,7 @@ void main() {
           () => Future<void>.delayed(const Duration(milliseconds: 20)),
         );
         await tester.pump(const Duration(milliseconds: 100));
+        expect(tester.takeException(), isNull, reason: description);
         if (isReady() &&
             find.byType(CircularProgressIndicator).evaluate().isEmpty) {
           await tester.pumpAndSettle();
@@ -214,6 +215,11 @@ void main() {
       expect(find.text('Active Rider Trips'), findsOneWidget);
       expect(find.textContaining('Trip #1'), findsOneWidget);
       expect(find.text('COD: Rs. 850'), findsOneWidget);
+      // A database refresh must retain the rider by ID, not Staff identity.
+      final riderDropdown = tester.widget<DropdownButtonFormField<int>>(
+        find.byKey(const ValueKey('rider_select_dropdown')),
+      );
+      expect(riderDropdown.initialValue, 3);
     });
 
     testWidgets('displays Rider Dispatch Alert and allows acknowledgment', (tester) async {

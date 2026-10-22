@@ -96,8 +96,15 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
           _activeTrips = active;
           _activeAlerts = alerts;
           _availableRiders = riders;
-          if (_selectedRider == null && riders.isNotEmpty) {
-            _selectedRider = riders.first;
+          // Database refreshes create new Staff instances. Preserve the choice
+          // by ID and rebind it to the refreshed list, or choose a valid fallback.
+          final previousRiderId = _selectedRider?.id;
+          final matchingRiders = riders.where((rider) => rider.id == previousRiderId);
+          _selectedRider = matchingRiders.isNotEmpty
+              ? matchingRiders.first
+              : (riders.isNotEmpty ? riders.first : null);
+          if (_selectedRider != null &&
+              (previousRiderId != _selectedRider!.id || _tripNameController.text.isEmpty)) {
             _tripNameController.text = 'Trip #${active.length + 1} - ${_selectedRider!.name}';
           }
           _isLoading = false;
@@ -491,9 +498,9 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
           ),
           const Divider(height: 20),
           // Batch Controls
-          DropdownButtonFormField<Staff>(
+          DropdownButtonFormField<int>(
             key: const ValueKey('rider_select_dropdown'),
-            initialValue: _selectedRider,
+            initialValue: _selectedRider?.id,
             dropdownColor: StreetFoodMafiaColors.darkNavy,
             style: const TextStyle(color: StreetFoodMafiaColors.offWhite, fontSize: 14),
             decoration: const InputDecoration(
@@ -503,9 +510,12 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
               fillColor: StreetFoodMafiaColors.obsidian,
               border: OutlineInputBorder(),
             ),
-            items: _availableRiders.map((r) => DropdownMenuItem(value: r, child: Text(r.name))).toList(),
-            onChanged: (rider) {
+            items: _availableRiders.map((r) => DropdownMenuItem(value: r.id, child: Text(r.name))).toList(),
+            onChanged: (riderId) {
               setState(() {
+                final rider = riderId == null
+                    ? null
+                    : _availableRiders.firstWhere((rider) => rider.id == riderId);
                 _selectedRider = rider;
                 if (rider != null) {
                   _tripNameController.text = 'Trip #${_activeTrips.length + 1} - ${rider.name}';
