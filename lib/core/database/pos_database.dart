@@ -431,6 +431,45 @@ class PosDatabase {
     if (oldVersion < 10) await _upgradeToVersion10(db);
     if (oldVersion < 11) await _upgradeToVersion11(db);
     if (oldVersion < 12) await _upgradeToVersion12(db);
+    if (oldVersion < 13) await _upgradeToVersion13(db);
+  }
+
+  Future<void> _upgradeToVersion13(DatabaseExecutor db) async {
+    final tripColumns = await db.rawQuery('PRAGMA table_info(${PosDatabaseConstants.tableRiderTrips})');
+    if (!tripColumns.any((c) => c['name'] == 'trip_name')) {
+      await db.execute("ALTER TABLE ${PosDatabaseConstants.tableRiderTrips} ADD COLUMN trip_name TEXT NOT NULL DEFAULT ''");
+    }
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableRiderTripOrders} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        trip_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableRiderTrips}(id) ON DELETE CASCADE,
+        order_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableOrders}(id),
+        status TEXT NOT NULL DEFAULT 'DISPATCHED' CHECK (status IN ('DISPATCHED','DELIVERED','RETURNED')),
+        assigned_at TEXT NOT NULL,
+        delivered_at TEXT,
+        returned_at TEXT,
+        notes TEXT
+      );
+    ''');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_rider_trip_orders_trip ON ${PosDatabaseConstants.tableRiderTripOrders}(trip_id);');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_rider_trip_orders_order ON ${PosDatabaseConstants.tableRiderTripOrders}(order_id);');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableRiderDispatchAlerts} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        trip_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableRiderTrips}(id) ON DELETE CASCADE,
+        order_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableOrders}(id),
+        revision_id INTEGER REFERENCES ${PosDatabaseConstants.tableOrderRevisions}(id),
+        alert_type TEXT NOT NULL CHECK (alert_type IN ('ORDER_MODIFIED', 'ORDER_CANCELLED')),
+        message TEXT NOT NULL,
+        is_acknowledged INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        acknowledged_at TEXT,
+        acknowledged_by INTEGER REFERENCES ${PosDatabaseConstants.tableStaff}(id)
+      );
+    ''');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_rider_dispatch_alerts_trip ON ${PosDatabaseConstants.tableRiderDispatchAlerts}(trip_id, is_acknowledged);');
   }
 
   Future<void> _upgradeToVersion12(DatabaseExecutor db) async {
@@ -624,6 +663,7 @@ class PosDatabase {
     await executor.execute('''
       CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableRiderTrips} (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        trip_name TEXT NOT NULL DEFAULT '',
         rider_staff_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableStaff}(id),
         shift_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableShifts}(id),
         business_day_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableBusinessDays}(id),
@@ -638,6 +678,37 @@ class PosDatabase {
     ''');
     await executor.execute('CREATE INDEX IF NOT EXISTS idx_rider_trips_rider_status ON ${PosDatabaseConstants.tableRiderTrips}(rider_staff_id, status);');
     await executor.execute('CREATE INDEX IF NOT EXISTS idx_rider_trips_bday ON ${PosDatabaseConstants.tableRiderTrips}(business_day_id);');
+
+    await executor.execute('''
+      CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableRiderTripOrders} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        trip_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableRiderTrips}(id) ON DELETE CASCADE,
+        order_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableOrders}(id),
+        status TEXT NOT NULL DEFAULT 'DISPATCHED' CHECK (status IN ('DISPATCHED','DELIVERED','RETURNED')),
+        assigned_at TEXT NOT NULL,
+        delivered_at TEXT,
+        returned_at TEXT,
+        notes TEXT
+      );
+    ''');
+    await executor.execute('CREATE INDEX IF NOT EXISTS idx_rider_trip_orders_trip ON ${PosDatabaseConstants.tableRiderTripOrders}(trip_id);');
+    await executor.execute('CREATE INDEX IF NOT EXISTS idx_rider_trip_orders_order ON ${PosDatabaseConstants.tableRiderTripOrders}(order_id);');
+
+    await executor.execute('''
+      CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableRiderDispatchAlerts} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        trip_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableRiderTrips}(id) ON DELETE CASCADE,
+        order_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableOrders}(id),
+        revision_id INTEGER REFERENCES ${PosDatabaseConstants.tableOrderRevisions}(id),
+        alert_type TEXT NOT NULL CHECK (alert_type IN ('ORDER_MODIFIED', 'ORDER_CANCELLED')),
+        message TEXT NOT NULL,
+        is_acknowledged INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        acknowledged_at TEXT,
+        acknowledged_by INTEGER REFERENCES ${PosDatabaseConstants.tableStaff}(id)
+      );
+    ''');
+    await executor.execute('CREATE INDEX IF NOT EXISTS idx_rider_dispatch_alerts_trip ON ${PosDatabaseConstants.tableRiderDispatchAlerts}(trip_id, is_acknowledged);');
 
     await executor.execute('''
       CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableCatalogImages} (

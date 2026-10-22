@@ -1304,6 +1304,28 @@ class OrderAndCheckoutController {
     }
 
     return await database.transaction((txn) async {
+      final settledTripRows = await txn.rawQuery('''
+        SELECT rt.id, rt.trip_name
+        FROM ${PosDatabaseConstants.tableRiderTripOrders} rto
+        JOIN ${PosDatabaseConstants.tableRiderTrips} rt ON rto.trip_id = rt.id
+        WHERE rto.order_id = ? AND rt.status = 'SETTLED'
+        LIMIT 1
+      ''', [orderId]);
+      if (settledTripRows.isNotEmpty) {
+        throw StateError('Cannot cancel order #$orderId: Associated rider trip is settled and locked.');
+      }
+
+      final tripStopRows = await txn.rawQuery('''
+        SELECT rto.status
+        FROM ${PosDatabaseConstants.tableRiderTripOrders} rto
+        JOIN ${PosDatabaseConstants.tableRiderTrips} rt ON rto.trip_id = rt.id
+        WHERE rto.order_id = ? AND rt.status != 'CANCELLED'
+        LIMIT 1
+      ''', [orderId]);
+      if (tripStopRows.isNotEmpty && tripStopRows.first['status'] == 'DELIVERED') {
+        throw StateError('Cannot cancel order #$orderId: Order has already been delivered.');
+      }
+
       final now = DateTime.now();
       final formattedNow = _formatTimestamp(now);
       final utcNowIso = now.toUtc().toIso8601String();
@@ -1445,6 +1467,44 @@ class OrderAndCheckoutController {
         },
       );
 
+      final activeTripRows = await txn.rawQuery('''
+        SELECT rt.id, rt.trip_name, rt.cash_expected_paisa, rto.status as stop_status
+        FROM ${PosDatabaseConstants.tableRiderTripOrders} rto
+        JOIN ${PosDatabaseConstants.tableRiderTrips} rt ON rto.trip_id = rt.id
+        WHERE rto.order_id = ? AND rt.status IN ('DISPATCHED', 'RETURNED')
+        LIMIT 1
+      ''', [orderId]);
+
+      if (activeTripRows.isNotEmpty) {
+        final tripRow = activeTripRows.first;
+        final tripId = tripRow['id'] as int;
+        final stopStatus = tripRow['stop_status'] as String?;
+
+        if (order.tokenStatus == TokenStatus.outForDelivery) {
+          final alertMsg = 'Order #${order.tokenDisplay} was CANCELLED by Cashier while Out for Delivery: $trimmedReason';
+
+          await txn.insert(PosDatabaseConstants.tableRiderDispatchAlerts, {
+            'trip_id': tripId,
+            'order_id': orderId,
+            'revision_id': revisionId,
+            'alert_type': 'ORDER_CANCELLED',
+            'message': alertMsg,
+            'is_acknowledged': 0,
+            'created_at': formattedNow,
+          });
+        }
+
+        // Only deduct COD cash if stop is not already RETURNED (avoids double deduction)
+        if (order.paymentStatus == 'COLLECTION_DUE' && stopStatus != 'RETURNED') {
+          final oldPaisa = PaisaEngine.rupeesToPaisa(order.grandTotal);
+          await txn.rawUpdate('''
+            UPDATE ${PosDatabaseConstants.tableRiderTrips}
+            SET cash_expected_paisa = MAX(0, cash_expected_paisa - ?)
+            WHERE id = ?
+          ''', [oldPaisa, tripId]);
+        }
+      }
+
       final createdLines = <OrderRevisionLine>[];
       for (final line in linesToInsert) {
         final lineId = await txn.insert(
@@ -1537,6 +1597,28 @@ class OrderAndCheckoutController {
     }
 
     return await database.transaction((txn) async {
+      final settledTripRows = await txn.rawQuery('''
+        SELECT rt.id, rt.trip_name
+        FROM ${PosDatabaseConstants.tableRiderTripOrders} rto
+        JOIN ${PosDatabaseConstants.tableRiderTrips} rt ON rto.trip_id = rt.id
+        WHERE rto.order_id = ? AND rt.status = 'SETTLED'
+        LIMIT 1
+      ''', [orderId]);
+      if (settledTripRows.isNotEmpty) {
+        throw StateError('Cannot revise order #$orderId: Associated rider trip is settled and locked.');
+      }
+
+      final tripStopRows = await txn.rawQuery('''
+        SELECT rto.status
+        FROM ${PosDatabaseConstants.tableRiderTripOrders} rto
+        JOIN ${PosDatabaseConstants.tableRiderTrips} rt ON rto.trip_id = rt.id
+        WHERE rto.order_id = ? AND rt.status != 'CANCELLED'
+        LIMIT 1
+      ''', [orderId]);
+      if (tripStopRows.isNotEmpty && tripStopRows.first['status'] == 'DELIVERED') {
+        throw StateError('Cannot revise order #$orderId: Order has already been delivered.');
+      }
+
       final now = DateTime.now();
       final formattedNow = _formatTimestamp(now);
       final utcNowIso = now.toUtc().toIso8601String();
@@ -1835,6 +1917,48 @@ class OrderAndCheckoutController {
           'command_id': commandId,
         },
       );
+
+      final activeTripRows = await txn.rawQuery('''
+        SELECT rt.id, rt.trip_name, rt.cash_expected_paisa, rto.status as stop_status
+        FROM ${PosDatabaseConstants.tableRiderTripOrders} rto
+        JOIN ${PosDatabaseConstants.tableRiderTrips} rt ON rto.trip_id = rt.id
+        WHERE rto.order_id = ? AND rt.status IN ('DISPATCHED', 'RETURNED')
+        LIMIT 1
+      ''', [orderId]);
+
+      if (activeTripRows.isNotEmpty) {
+        final tripRow = activeTripRows.first;
+        final tripId = tripRow['id'] as int;
+        final stopStatus = tripRow['stop_status'] as String?;
+
+        if (order.tokenStatus == TokenStatus.outForDelivery) {
+          final alertMsg = 'Order #${order.tokenDisplay} was MODIFIED by Cashier while Out for Delivery: $trimmedReason';
+
+          await txn.insert(PosDatabaseConstants.tableRiderDispatchAlerts, {
+            'trip_id': tripId,
+            'order_id': orderId,
+            'revision_id': revisionId,
+            'alert_type': 'ORDER_MODIFIED',
+            'message': alertMsg,
+            'is_acknowledged': 0,
+            'created_at': formattedNow,
+          });
+        }
+
+        // Only adjust expected cash if stop is not already RETURNED
+        if (order.paymentStatus == 'COLLECTION_DUE' && stopStatus != 'RETURNED') {
+          final oldPaisa = PaisaEngine.rupeesToPaisa(order.grandTotal);
+          final newPaisa = PaisaEngine.rupeesToPaisa(totals.grandTotal);
+          final delta = newPaisa - oldPaisa;
+          if (delta != 0) {
+            await txn.rawUpdate('''
+              UPDATE ${PosDatabaseConstants.tableRiderTrips}
+              SET cash_expected_paisa = MAX(0, cash_expected_paisa + ?)
+              WHERE id = ?
+            ''', [delta, tripId]);
+          }
+        }
+      }
 
       final createdLines = <OrderRevisionLine>[];
       for (final line in linesToInsert) {
