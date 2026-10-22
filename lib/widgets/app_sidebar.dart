@@ -20,7 +20,6 @@ class AppSidebar extends StatelessWidget {
     final kitchen = staff.canAccessKitchen;
     final tabs = [
       AppWorkspaceTab.register,
-      AppWorkspaceTab.riderTrips,
       if (manager) ...[AppWorkspaceTab.catalog, AppWorkspaceTab.khata, AppWorkspaceTab.supervisor],
       if (manager || kitchen) ...[
         AppWorkspaceTab.mandi, AppWorkspaceTab.wastage,

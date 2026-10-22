@@ -132,6 +132,12 @@ void main() {
     await tester.enterText(search, 'no match');
     await tester.pumpAndSettle();
     expect(find.text('No items match your search.'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pumpAndSettle();
+    expect(find.text('Customer Details'), findsNothing);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.text('Classic Burger'), findsOneWidget);
     await tester.tap(find.byTooltip('Clear search'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('menu_item_tile_1')), findsOneWidget);

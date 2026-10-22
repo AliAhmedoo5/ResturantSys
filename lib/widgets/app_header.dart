@@ -8,7 +8,6 @@ import 'orders/reprint_tray_dialog.dart';
 
 enum AppWorkspaceTab {
   register('Register', Icons.point_of_sale_outlined),
-  riderTrips('Riders', Icons.two_wheeler_outlined),
   catalog('Catalog', Icons.restaurant_menu_outlined),
   khata('Khata', Icons.menu_book_outlined),
   mandi('Mandi', Icons.shopping_basket_outlined),

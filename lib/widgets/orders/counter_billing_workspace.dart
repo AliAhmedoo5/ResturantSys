@@ -88,9 +88,6 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
   Map<int, String> _menuItemImages = {};
   Map<int, String> _dealImages = {};
   bool _isLoading = true;
-  final TextEditingController _searchController = TextEditingController();
-  final FocusNode _searchFocus = FocusNode();
-  String _searchQuery = '';
 
   // Active View State
   int? _selectedCategoryId; // null = Deals Tab
@@ -103,19 +100,11 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
   DeliveryDetails? _deliveryDetails;
   bool _checkoutOpen = false;
 
-  @override
-  void dispose() {
-    _searchController.dispose();
-    _searchFocus.dispose();
-    super.dispose();
-  }
-
   final NumberFormat _currencyFormat = NumberFormat('#,##0.00', 'en_US');
 
   @override
   void initState() {
     super.initState();
-    _searchFocus.addListener(() { if (mounted) setState(() {}); });
     if (widget.initialMenuItemImages != null) {
       _menuItemImages = Map.from(widget.initialMenuItemImages!);
     }
@@ -467,13 +456,9 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
 
   Map<ShortcutActivator, VoidCallback> _buildKeyboardBindings() {
     final bindings = <ShortcutActivator, VoidCallback>{
-      if (!_searchFocus.hasFocus)
-        const SingleActivator(LogicalKeyboardKey.space): () => _openTenderCheckout(),
-      if (!_searchFocus.hasFocus)
-        const SingleActivator(LogicalKeyboardKey.numpadEnter): () => _openTenderCheckout(),
-      const SingleActivator(LogicalKeyboardKey.escape): () {
-        if (_searchFocus.hasFocus) { _searchFocus.unfocus(); } else { _clearCart(); }
-      },
+      const SingleActivator(LogicalKeyboardKey.space): () => _openTenderCheckout(),
+      const SingleActivator(LogicalKeyboardKey.numpadEnter): () => _openTenderCheckout(),
+      const SingleActivator(LogicalKeyboardKey.escape): () => _clearCart(),
     };
 
     // F1 to F12 for category switching
@@ -514,39 +499,17 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
       bindings: _buildKeyboardBindings(),
       child: Focus(
         autofocus: true,
-        child: LayoutBuilder(builder: (context, constraints) {
-          final cartWidth = (constraints.maxWidth * 0.32).clamp(300.0, 360.0);
-          return Row(
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Left Side: Catalog Grid & Controls (65%)
             Expanded(
+              flex: 65,
               child: Padding(
                 padding: const EdgeInsets.all(WarmCounterSpacing.space16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    TextField(
-                      key: const ValueKey('catalog_search'),
-                      controller: _searchController,
-                      focusNode: _searchFocus,
-                      onEditingComplete: _searchFocus.unfocus,
-                      onTapOutside: (_) => _searchFocus.unfocus(),
-                      onChanged: (value) => setState(() => _searchQuery = value.trim().toLowerCase()),
-                      decoration: InputDecoration(
-                        hintText: 'Search menu items…',
-                        prefixIcon: const Icon(Icons.search, size: 18),
-                        suffixIcon: _searchQuery.isEmpty ? null : IconButton(
-                          tooltip: 'Clear search',
-                          icon: const Icon(Icons.close, size: 18),
-                          onPressed: () {
-                            _searchController.clear();
-                            setState(() => _searchQuery = '');
-                          },
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
                     // Dining Type Selector & Hotkey Info Row
                     _buildTopControlBar(),
                     const SizedBox(height: WarmCounterSpacing.space12),
@@ -568,13 +531,12 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
             Container(width: 1, color: WarmCounterColors.lightBorder),
 
             // Right Side: Active Order Cart & Tender Panel (35%)
-            SizedBox(
-              width: cartWidth,
+            Expanded(
+              flex: 35,
               child: _buildCartPanel(),
             ),
           ],
-          );
-        }),
+        ),
       ),
     );
   }
@@ -601,7 +563,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
               key: ValueKey('dining_type_${type.code}'),
               label: Text(type.displayName),
               selected: isSelected,
-              selectedColor: StreetFoodMafiaColors.cartelYellow,
+              selectedColor: WarmCounterColors.lightActiveNavHighlight,
               onSelected: (selected) {
                 if (selected) setState(() => _selectedDiningType = type);
               },
@@ -932,7 +894,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
 
   Widget _buildCategoryTabsBar() {
     return SizedBox(
-      height: 48,
+      height: 44,
       child: ListView(
         scrollDirection: Axis.horizontal,
         children: [
@@ -971,11 +933,10 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
       padding: const EdgeInsets.only(right: WarmCounterSpacing.space8),
       child: FilterChip(
         key: ValueKey('category_tab_${id ?? 'deals'}'),
-        label: Text(label, style: TextStyle(color: isSelected
-            ? StreetFoodMafiaColors.textOnPrimary : StreetFoodMafiaColors.offWhite)),
+        label: Text(label),
         selected: isSelected,
-        selectedColor: StreetFoodMafiaColors.cartelYellow,
-        checkmarkColor: StreetFoodMafiaColors.textOnPrimary,
+        selectedColor: WarmCounterColors.lightActiveNavHighlight,
+        checkmarkColor: WarmCounterColors.lightPrimaryAction,
         onSelected: (_) => setState(() => _selectedCategoryId = id),
       ),
     );
@@ -988,31 +949,29 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
   Widget _buildCatalogGrid() {
     if (_selectedCategoryId == null) {
       // Show Deals Grid
-      final deals = _deals.where((deal) => deal.name.toLowerCase().contains(_searchQuery)).toList();
       return GridView.builder(
         key: const ValueKey('deals_grid'),
         gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
           maxCrossAxisExtent: 180,
-          mainAxisExtent: 176,
+          childAspectRatio: 1.1,
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
         ),
-        itemCount: deals.length,
+        itemCount: _deals.length,
         itemBuilder: (context, index) {
-          final deal = deals[index];
+          final deal = _deals[index];
           return _buildDealTile(deal);
         },
       );
     }
 
     // Show Menu Items Grid for Selected Category
-    final items = _menuItems.where((i) => i.categoryId == _selectedCategoryId &&
-        i.name.toLowerCase().contains(_searchQuery)).toList();
+    final items = _menuItems.where((i) => i.categoryId == _selectedCategoryId).toList();
 
     if (items.isEmpty) {
       return Center(
         child: Text(
-          _searchQuery.isEmpty ? 'No active items in this category.' : 'No items match your search.',
+          'No active items in this category.',
           style: WarmCounterTypography.bodyMedium.copyWith(color: WarmCounterColors.lightSecondaryText),
         ),
       );
@@ -1022,7 +981,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
       key: ValueKey('menu_grid_$_selectedCategoryId'),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 180,
-        mainAxisExtent: 176,
+        childAspectRatio: 1.1,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
       ),
@@ -1305,9 +1264,9 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               color: WarmCounterColors.lightPageBackground,
-              child: Wrap(
-                spacing: 6,
-                runSpacing: 4,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
                   children: [
                     Text(
                       'Discount: ',
@@ -1319,8 +1278,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
                         padding: const EdgeInsets.only(right: 6),
                         child: ChoiceChip(
                           key: ValueKey('discount_chip_${d.id}'),
-                          label: Text(d.name, style: TextStyle(fontSize: 11, color: isSelected
-                              ? StreetFoodMafiaColors.textOnPrimary : StreetFoodMafiaColors.offWhite)),
+                          label: Text(d.name, style: const TextStyle(fontSize: 11)),
                           selected: isSelected,
                           onSelected: (chosen) {
                             setState(() => _selectedDiscount = chosen ? d : null);
@@ -1329,6 +1287,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
                       );
                     }),
                   ],
+                ),
               ),
             ),
           ],
@@ -1369,7 +1328,6 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
                     Text(
                       'Rs ${_currencyFormat.format(totals.grandTotal)}',
                       style: WarmCounterTypography.orderTotal.copyWith(
-                        fontSize: 26,
                         color: WarmCounterColors.lightPrimaryAction,
                       ),
                     ),
