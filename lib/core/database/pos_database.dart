@@ -458,6 +458,30 @@ class PosDatabase {
       VALUES(NEW.id,(SELECT id FROM business_days WHERE status='OPEN' ORDER BY id DESC LIMIT 1),
         NEW.current_stock-OLD.current_stock,NEW.current_stock,strftime('%Y-%m-%d %H:%M:%f','now','localtime'));
     END""");
+    final outboxColumns = await db.rawQuery('PRAGMA table_info(report_outbox)');
+    if (!outboxColumns.any((column) => column['name'] == 'idempotency_key')) {
+      await db.execute('ALTER TABLE report_outbox RENAME TO report_outbox_legacy');
+      await db.execute("""CREATE TABLE report_outbox (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_day_id INTEGER NOT NULL REFERENCES business_days(id),
+        channel TEXT NOT NULL CHECK(channel IN ('EMAIL','WHATSAPP')),
+        recipient TEXT NOT NULL, payload_json TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING','PROCESSING','SENT','ACCEPTED','FAILED','AMBIGUOUS','CANCELLED')),
+        retry_count INTEGER NOT NULL DEFAULT 0, next_attempt_at TEXT NOT NULL,
+        error_message TEXT, created_at TEXT NOT NULL, processed_at TEXT,
+        idempotency_key TEXT UNIQUE, report_run_id INTEGER REFERENCES report_runs(id),
+        endpoint TEXT, max_attempts INTEGER NOT NULL DEFAULT 8,
+        lease_until TEXT, provider_reference TEXT
+      )""");
+      await db.execute("""INSERT INTO report_outbox(id,business_day_id,channel,recipient,payload_json,status,retry_count,next_attempt_at,error_message,created_at,processed_at)
+        SELECT id,business_day_id,channel,recipient,payload_json,status,retry_count,next_attempt_at,error_message,created_at,processed_at FROM report_outbox_legacy""");
+      await db.execute('DROP TABLE report_outbox_legacy');
+      await db.execute('CREATE INDEX idx_report_outbox_status_attempt ON report_outbox(status,next_attempt_at)');
+    }
+    await db.execute("""CREATE TABLE IF NOT EXISTS report_delivery_audit (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, staff_id INTEGER NOT NULL REFERENCES staff(id),
+      action TEXT NOT NULL, details_json TEXT NOT NULL, created_at TEXT NOT NULL
+    )""");
     // A closed day is a durable boundary even for stale UI controllers.
     for (final operation in ['UPDATE','DELETE','INSERT']) {
       final ref = operation == 'INSERT' ? 'NEW' : 'OLD';

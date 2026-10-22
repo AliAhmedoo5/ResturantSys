@@ -67,7 +67,9 @@ class ReportExportService {
       section('Shift Handover Audit',['Shift','Cashier','Float (paisa)','Expected (paisa)','Counted (paisa)','Variance (paisa)','Audit'],shifts.map((r)=>[r['id'],r['name'],paisa(r['opening_float']),paisa(r['expected_cash']),r['counted_cash']==null?'NOT COUNTED':paisa(r['counted_cash']),r['discrepancy']==null?'UNKNOWN':paisa(r['discrepancy']),r['discrepancy_status']]).toList()),
       section('Vendor Khata Movements',['Vendor','Type','Amount (paisa)','Recorded'],vendors.map((r)=>[r['name'],r['type'],r['paisa'],r['created_at']]).toList()),
     ];
-    final snapshot = jsonEncode({'business_day_id':dayId,'business_date':opened.substring(0,10),'revision':1,'cutoff':closed,'sections':sections});
+    final policies = await db.query('system_settings',where:"key='report_delivery_settings'");
+    final delivery = policies.isEmpty ? null : jsonDecode(policies.single['value'] as String);
+    final snapshot = jsonEncode({'delivery':delivery,'business_day_id':dayId,'business_date':opened.substring(0,10),'revision':1,'cutoff':closed,'sections':sections});
     await db.insert('report_runs', {'business_day_id':dayId,'snapshot_json':snapshot,
       'content_hash':sha256.convert(utf8.encode(snapshot)).toString(),'created_by':managerId,
       'created_at':generated.toUtc().toIso8601String()});
