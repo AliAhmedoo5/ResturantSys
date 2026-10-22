@@ -1407,126 +1407,64 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
   }
 
   Widget _buildCartItemRow(CartItem item, int index) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Quantity Controls
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            InkWell(
-              onTap: () => _decrementCartItem(index),
-              borderRadius: WarmCounterSpacing.controlBorderRadius,
-              child: const SizedBox(
-                width: WarmCounterSpacing.touchTargetMin,
-                height: WarmCounterSpacing.touchTargetMin,
-                child: Center(
-                  child: Icon(Icons.remove_circle_outline, size: 22),
-                ),
-              ),
+        Row(children: [
+          Expanded(child: Text(
+            item.name,
+            key: ValueKey('cart_item_name_$index'),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: WarmCounterTypography.bodyMedium.copyWith(fontWeight: FontWeight.w600),
+          )),
+          if (item.menuItem != null || item.deal != null)
+            IconButton(
+              key: ValueKey('customize_item_$index'),
+              tooltip: 'Customize Modifiers',
+              onPressed: () => _openModifierSelection(index),
+              icon: const Icon(Icons.tune_outlined, size: 18, color: WarmCounterColors.lightPrimaryAction),
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2.0),
-              child: Text(
-                '${item.quantity}',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-              ),
-            ),
-            InkWell(
-              onTap: () => _incrementCartItem(index),
-              borderRadius: WarmCounterSpacing.controlBorderRadius,
-              child: const SizedBox(
-                width: WarmCounterSpacing.touchTargetMin,
-                height: WarmCounterSpacing.touchTargetMin,
-                child: Center(
-                  child: Icon(Icons.add_circle_outline, size: 22),
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(width: 8),
-
-        // Item Details & Modifiers
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                item.name,
-                style: WarmCounterTypography.bodyMedium.copyWith(fontWeight: FontWeight.w600),
-              ),
-
-              // Deal choices preview
-              if (item.selectedDealChoices.isNotEmpty)
-                Wrap(
-                  spacing: 4,
-                  children: item.selectedDealChoices.map((c) {
-                    return Text(
-                      '• ${c.menuItemName}${c.upgradePrice > 0 ? " (+Rs ${c.upgradePrice.toStringAsFixed(0)})" : ""}',
-                      style: WarmCounterTypography.caption.copyWith(color: WarmCounterColors.lightSecondaryText),
-                    );
-                  }).toList(),
-                ),
-
-              // Modifiers preview
-              if (item.selectedModifiers.isNotEmpty)
-                Wrap(
-                  spacing: 4,
-                  children: item.selectedModifiers.map((m) {
-                    return Text(
-                      '• ${m.name}',
-                      style: WarmCounterTypography.caption.copyWith(color: WarmCounterColors.lightPrimaryAction),
-                    );
-                  }).toList(),
-                ),
-
-              // Both menu items and deal components support customizations.
-              if (item.menuItem != null || item.deal != null)
-                InkWell(
-                  key: ValueKey('customize_item_$index'),
-                  onTap: () => _openModifierSelection(index),
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 2.0),
-                    child: Text(
-                      'Customize Modifiers',
-                      style: WarmCounterTypography.caption.copyWith(
-                        color: WarmCounterColors.lightPrimaryAction,
-                        decoration: TextDecoration.underline,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
+          IconButton(
+            tooltip: 'Remove ${item.name}',
+            onPressed: () => _removeCartItem(index),
+            icon: const Icon(Icons.close, size: 18, color: WarmCounterColors.lightSecondaryText),
           ),
-        ),
-
-        // Price
-        Text(
-          'Rs ${_currencyFormat.format(item.totalPrice)}',
-          style: WarmCounterTypography.tabularPrice.copyWith(
-            fontWeight: FontWeight.w600,
-            fontSize: 14,
+        ]),
+        if (item.selectedDealChoices.isNotEmpty)
+          Wrap(spacing: 4, children: item.selectedDealChoices.map((choice) => Text(
+            '• ${choice.menuItemName}${choice.upgradePrice > 0 ? " (+Rs ${choice.upgradePrice.toStringAsFixed(0)})" : ""}',
+            style: WarmCounterTypography.caption.copyWith(color: WarmCounterColors.lightSecondaryText),
+          )).toList()),
+        if (item.selectedModifiers.isNotEmpty)
+          Wrap(spacing: 4, children: item.selectedModifiers.map((modifier) => Text(
+            '• ${modifier.name}',
+            style: WarmCounterTypography.caption.copyWith(color: WarmCounterColors.lightPrimaryAction),
+          )).toList()),
+        Row(children: [
+          IconButton(
+            tooltip: 'Decrease quantity',
+            onPressed: () => _decrementCartItem(index),
+            icon: const Icon(Icons.remove_circle_outline, size: 22),
           ),
-        ),
-        const SizedBox(width: 4),
-
-        // Delete button
-        InkWell(
-          onTap: () => _removeCartItem(index),
-          borderRadius: WarmCounterSpacing.controlBorderRadius,
-          child: const SizedBox(
-            width: WarmCounterSpacing.touchTargetMin,
-            height: WarmCounterSpacing.touchTargetMin,
-            child: Center(
-              child: Icon(Icons.close, size: 18, color: WarmCounterColors.lightSecondaryText),
-            ),
+          Text('${item.quantity}', style: WarmCounterTypography.bodyMedium.copyWith(fontWeight: FontWeight.w700)),
+          IconButton(
+            tooltip: 'Increase quantity',
+            onPressed: () => _incrementCartItem(index),
+            icon: const Icon(Icons.add_circle_outline, size: 22),
           ),
-        ),
+          const SizedBox(width: 8),
+          Expanded(child: Align(
+            alignment: Alignment.centerRight,
+            child: FittedBox(fit: BoxFit.scaleDown, child: Text(
+              'Rs ${_currencyFormat.format(item.totalPrice)}',
+              style: WarmCounterTypography.tabularPrice.copyWith(fontWeight: FontWeight.w600),
+            )),
+          )),
+        ]),
       ],
     );
   }
-
   Widget _buildSummaryLine(String title, String value, {bool isDiscount = false, bool isTax = false}) {
     Color color = WarmCounterColors.lightPrimaryText;
     if (isDiscount) color = WarmCounterColors.lightDestructiveAction;

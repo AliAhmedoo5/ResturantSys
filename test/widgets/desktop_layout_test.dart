@@ -103,6 +103,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('menu_item_tile_1')));
       await tester.pumpAndSettle();
       expect(tester.getRect(charge), before);
+      expect(tester.getSize(find.byKey(const ValueKey('cart_item_name_0'))).width, greaterThanOrEqualTo(140));
       expect(tester.widget<ElevatedButton>(charge).onPressed, isNotNull);
       await capture(tester, 'pos-${viewport.name}');
     });
