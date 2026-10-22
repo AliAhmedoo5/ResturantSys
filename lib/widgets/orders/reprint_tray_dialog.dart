@@ -440,7 +440,7 @@ class _ReprintTrayDialogState extends State<ReprintTrayDialog> {
                   label: const Text('Retry'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: WarmCounterColors.lightPrimaryAction,
-                    foregroundColor: Colors.white,
+                    foregroundColor: StreetFoodMafiaColors.textOnPrimary,
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     minimumSize: const Size(80, 48),
                   ),

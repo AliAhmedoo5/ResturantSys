@@ -88,9 +88,9 @@ class RestaurantPosApp extends StatelessWidget {
     return MaterialApp(
       title: 'ResturantPOS',
       debugShowCheckedModeBanner: false,
-      theme: WarmCounterTheme.lightTheme,
+      theme: WarmCounterTheme.darkTheme,
       darkTheme: WarmCounterTheme.darkTheme,
-      themeMode: ThemeMode.light,
+      themeMode: ThemeMode.dark,
       home: AppShell(
         session: authService.session,
         onAuthenticatePin: authService.authenticateWithPin,

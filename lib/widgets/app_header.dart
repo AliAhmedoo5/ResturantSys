@@ -8,13 +8,13 @@ import 'orders/reprint_tray_dialog.dart';
 
 /// Operational workspaces selectable in the application header.
 enum AppWorkspaceTab {
-  register('Register', Icons.point_of_sale_rounded),
-  catalog('Catalog', Icons.restaurant_menu_rounded),
-  khata('Khata', Icons.menu_book_rounded),
-  mandi('Mandi', Icons.shopping_basket_rounded),
+  register('Register', Icons.point_of_sale_outlined),
+  catalog('Catalog', Icons.restaurant_menu_outlined),
+  khata('Khata', Icons.menu_book_outlined),
+  mandi('Mandi', Icons.shopping_basket_outlined),
   wastage('Wastage', Icons.delete_outline_rounded),
-  supervisor('Supervisor', Icons.admin_panel_settings_rounded),
-  tokenQueue('Tokens', Icons.confirmation_number_rounded);
+  supervisor('Supervisor', Icons.admin_panel_settings_outlined),
+  tokenQueue('Tokens', Icons.confirmation_number_outlined);
 
   const AppWorkspaceTab(this.label, this.icon);
   final String label;
@@ -58,10 +58,10 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
         horizontal: WarmCounterSpacing.space24,
       ),
       decoration: const BoxDecoration(
-        color: WarmCounterColors.lightCardBackground,
+        color: StreetFoodMafiaColors.darkNavy,
         border: Border(
           bottom: BorderSide(
-            color: WarmCounterColors.lightBorder,
+            color: StreetFoodMafiaColors.border,
             width: 1.0,
           ),
         ),
@@ -69,34 +69,62 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Left: App Brand & Logo
+          // Left: App Brand & Logo (Street-Food / Mafia Branding)
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
                 width: 38,
                 height: 38,
-                decoration: const BoxDecoration(
-                  color: WarmCounterColors.lightPrimaryAction,
+                decoration: BoxDecoration(
+                  color: StreetFoodMafiaColors.darkNavy,
                   borderRadius: WarmCounterSpacing.controlBorderRadius,
+                  border: Border.all(
+                    color: StreetFoodMafiaColors.cartelYellow,
+                    width: 1.5,
+                  ),
                 ),
                 child: const Center(
                   child: Icon(
-                    Icons.storefront_rounded,
-                    color: WarmCounterColors.lightTextOnPrimary,
-                    size: 22,
+                    Icons.storefront_outlined,
+                    color: StreetFoodMafiaColors.cartelYellow,
+                    size: 20,
                   ),
                 ),
               ),
               const SizedBox(width: WarmCounterSpacing.space12),
-              Text(
-                title,
-                style: WarmCounterTypography.pageHeading.copyWith(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 20,
-                  color: WarmCounterColors.lightPrimaryText,
+              // Dual-Tone Brand Formatting Protocol (Zero-Gap Container)
+              if (title == 'ResturantPOS')
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Resturant',
+                      style: WarmCounterTypography.pageHeading.copyWith(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 20,
+                        color: StreetFoodMafiaColors.offWhite,
+                      ),
+                    ),
+                    Text(
+                      'POS',
+                      style: WarmCounterTypography.pageHeading.copyWith(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 20,
+                        color: StreetFoodMafiaColors.cartelYellow,
+                      ),
+                    ),
+                  ],
+                )
+              else
+                Text(
+                  title,
+                  style: WarmCounterTypography.pageHeading.copyWith(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 20,
+                    color: StreetFoodMafiaColors.offWhite,
+                  ),
                 ),
-              ),
             ],
           ),
 
@@ -189,10 +217,10 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
               vertical: WarmCounterSpacing.space8,
             ),
             decoration: BoxDecoration(
-              color: WarmCounterColors.lightActiveNavHighlight,
+              color: StreetFoodMafiaColors.darkNavy,
               borderRadius: WarmCounterSpacing.controlBorderRadius,
               border: Border.all(
-                color: WarmCounterColors.lightBorder,
+                color: StreetFoodMafiaColors.border,
                 width: 1.0,
               ),
             ),
@@ -200,9 +228,9 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Icon(
-                  Icons.account_circle_rounded,
+                  Icons.account_circle_outlined,
                   size: 22,
-                  color: WarmCounterColors.lightPrimaryAction,
+                  color: StreetFoodMafiaColors.cartelYellow,
                 ),
                 const SizedBox(width: WarmCounterSpacing.space8),
                 Flexible(
@@ -217,7 +245,7 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
                         overflow: TextOverflow.ellipsis,
                         style: WarmCounterTypography.bodyMedium.copyWith(
                           fontWeight: FontWeight.w700,
-                          color: WarmCounterColors.lightPrimaryText,
+                          color: StreetFoodMafiaColors.offWhite,
                           height: 1.1,
                         ),
                       ),
@@ -226,7 +254,7 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: WarmCounterTypography.secondaryLabel.copyWith(
-                          color: WarmCounterColors.lightSecondaryText,
+                          color: StreetFoodMafiaColors.secondaryText,
                           height: 1.1,
                         ),
                       ),
@@ -263,25 +291,25 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
                     );
                   },
                   icon: Icon(
-                    Icons.print_rounded,
+                    Icons.print_outlined,
                     size: 18,
                     color: hasFailures
-                        ? WarmCounterColors.lightDestructiveAction
-                        : WarmCounterColors.lightPrimaryText,
+                        ? StreetFoodMafiaColors.statusCanceled
+                        : StreetFoodMafiaColors.offWhite,
                   ),
                   label: Text(
                     hasFailures ? 'Reprint Tray ($failedCount)' : 'Reprint Tray',
                     style: TextStyle(
                       color: hasFailures
-                          ? WarmCounterColors.lightDestructiveAction
-                          : WarmCounterColors.lightPrimaryText,
+                          ? StreetFoodMafiaColors.statusCanceled
+                          : StreetFoodMafiaColors.offWhite,
                       fontWeight: hasFailures ? FontWeight.bold : FontWeight.w500,
                     ),
                   ),
                   style: OutlinedButton.styleFrom(
-                    backgroundColor: hasFailures ? WarmCounterColors.lightDestructiveHighlight : null,
+                    backgroundColor: hasFailures ? const Color(0xFF2C1518) : null,
                     side: BorderSide(
-                      color: hasFailures ? WarmCounterColors.lightDestructive : WarmCounterColors.lightBorder,
+                      color: hasFailures ? StreetFoodMafiaColors.statusCanceled : StreetFoodMafiaColors.border,
                     ),
                     minimumSize: const Size(110, WarmCounterSpacing.minTouchTargetSize),
                     shape: const RoundedRectangleBorder(
@@ -301,10 +329,10 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
           icon: const Icon(Icons.lock_outline_rounded, size: 18),
           label: const Text('Lock Register'),
           style: OutlinedButton.styleFrom(
-            foregroundColor: WarmCounterColors.lightPrimaryText,
+            foregroundColor: StreetFoodMafiaColors.offWhite,
             minimumSize: const Size(120, WarmCounterSpacing.minTouchTargetSize),
             side: const BorderSide(
-              color: WarmCounterColors.lightBorder,
+              color: StreetFoodMafiaColors.border,
               width: 1.0,
             ),
             shape: const RoundedRectangleBorder(
@@ -323,10 +351,10 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
         vertical: WarmCounterSpacing.space8,
       ),
       decoration: BoxDecoration(
-        color: WarmCounterColors.lightPageBackground,
+        color: StreetFoodMafiaColors.darkNavy,
         borderRadius: WarmCounterSpacing.controlBorderRadius,
         border: Border.all(
-          color: WarmCounterColors.lightBorder,
+          color: StreetFoodMafiaColors.border,
           width: 1.0,
         ),
       ),
@@ -334,9 +362,9 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            Icons.lock_rounded,
+            Icons.lock_outline_rounded,
             size: 18,
-            color: WarmCounterColors.lightSecondaryText,
+            color: StreetFoodMafiaColors.secondaryText,
           ),
           SizedBox(width: WarmCounterSpacing.space8),
           Text(
@@ -344,7 +372,7 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w600,
-              color: WarmCounterColors.lightSecondaryText,
+              color: StreetFoodMafiaColors.secondaryText,
             ),
           ),
         ],
@@ -367,13 +395,14 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: isSelected
-              ? WarmCounterColors.lightActiveNavHighlight
+              ? StreetFoodMafiaColors.activeNavHighlight
               : Colors.transparent,
           borderRadius: WarmCounterSpacing.controlBorderRadius,
           border: Border.all(
             color: isSelected
-                ? WarmCounterColors.lightPrimaryAction
-                : WarmCounterColors.lightBorder,
+                ? StreetFoodMafiaColors.cartelYellow
+                : StreetFoodMafiaColors.border,
+            width: isSelected ? 1.5 : 1.0,
           ),
         ),
         child: Row(
@@ -383,8 +412,8 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
               tab.icon,
               size: 18,
               color: isSelected
-                  ? WarmCounterColors.lightPrimaryAction
-                  : WarmCounterColors.lightSecondaryText,
+                  ? StreetFoodMafiaColors.cartelYellow
+                  : StreetFoodMafiaColors.secondaryText,
             ),
             const SizedBox(width: WarmCounterSpacing.space8),
             Text(
@@ -392,8 +421,8 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
               style: TextStyle(
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                 color: isSelected
-                    ? WarmCounterColors.lightPrimaryAction
-                    : WarmCounterColors.lightPrimaryText,
+                    ? StreetFoodMafiaColors.cartelYellow
+                    : StreetFoodMafiaColors.offWhite,
                 fontSize: 13,
               ),
             ),

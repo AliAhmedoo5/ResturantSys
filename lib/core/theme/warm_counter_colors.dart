@@ -1,93 +1,74 @@
 import 'package:flutter/material.dart';
 
-/// Raw color palette tokens for the Warm Counter restaurant theme.
+import 'package:flutter/material.dart';
+
+/// Authoritative color palette tokens for Chapter 34 Street-Food / Mafia Branding design system.
 ///
-/// Implements high-contrast, glare-reducing surfaces with deep forest green actions
-/// and clean neutral backdrops in both Light and Dark modes.
-abstract final class WarmCounterColors {
+/// Implements high-contrast dark surfaces tailored for counter readability,
+/// 1366x768 non-scrolling touch/keyboard ergonomics, and dense financial tables.
+abstract final class StreetFoodMafiaColors {
   // ---------------------------------------------------------------------------
-  // Light Mode Palette
+  // Chapter 34 Authoritative Color Tokens
   // ---------------------------------------------------------------------------
-  /// Page background: Warm stone neutral reducing eye fatigue under harsh lighting.
-  static const Color lightPageBackground = Color(0xFFF5F3EE);
+  /// Obsidian Black: Primary application background.
+  static const Color obsidian = Color(0xFF050708);
 
-  /// Cards and panels: Crisp flat white containers with no heavy shadows.
-  static const Color lightCardBackground = Color(0xFFFFFFFF);
+  /// Dark Navy: Compact fixed sidebar, deepest surfaces, table headers.
+  static const Color darkNavy = Color(0xFF101820);
 
-  /// Primary text: High-contrast charcoal for clear legibility during rushes.
-  static const Color lightPrimaryText = Color(0xFF202822);
+  /// Cartel Yellow: Primary CTAs, active navigation indicators, key highlights.
+  static const Color cartelYellow = Color(0xFFFFC400);
 
-  /// Secondary text: Subdued olive-gray for timestamps, metadata, and captions.
-  static const Color lightSecondaryText = Color(0xFF59635B);
+  /// Burnt Gold: Secondary accents, subtle brand styling, crown highlights.
+  static const Color burntGold = Color(0xFFF5A623);
 
-  /// Primary action: Deep forest green for primary workflows and selected states.
-  static const Color lightPrimaryAction = Color(0xFF245C40);
+  /// Off-White: Primary readable text on dark surfaces.
+  static const Color offWhite = Color(0xFFF5F7FA);
 
-  /// Text on primary: Pure white text on primary green buttons and active pills.
-  static const Color lightTextOnPrimary = Color(0xFFFFFFFF);
-
-  /// Borders: Subtle structural divider separating panels and cards.
-  static const Color lightBorder = Color(0xFFD9DED5);
-
-  /// Warning: Warm amber for discrepancies, low-stock, and paper status.
-  static const Color lightWarning = Color(0xFFD97706);
-
-  /// Destructive: Muted red for voids, cart discards, and cancellations.
-  static const Color lightDestructive = Color(0xFFDC2626);
-
-  /// Destructive action button background.
-  static const Color lightDestructiveAction = lightDestructive;
-
-  /// Destructive container / background tint: Soft pale red background for badges, chips, and error banners.
-  static const Color lightDestructiveHighlight = Color(0xFFFEE2E2);
-
-  /// Warning container / background tint: Soft pale amber background for warning chips.
-  static const Color lightWarningHighlight = Color(0xFFFEF3C7);
-
-  /// Active section highlight: Pale green background for selected navigation items.
-  static const Color lightActiveNavHighlight = Color(0xFFE3EFE7);
-
-  /// Muted container surface for secondary panels and subtle chips.
-  static const Color lightSurfaceMuted = Color(0xFFECEAE4);
+  /// Card Surface: Cards, dialogs, modals, and dense data tables.
+  static const Color cardSurface = Color(0xFF14242D);
 
   // ---------------------------------------------------------------------------
-  // Dark Mode Palette
+  // Supplemental Accessible Neutral & Focus Tokens
   // ---------------------------------------------------------------------------
-  /// Page background: Deep charcoal neutral for evening shifts and low-light counters.
-  static const Color darkPageBackground = Color(0xFF151A17);
+  /// Text on primary: Dark high-contrast text on Cartel Yellow (contrast ratio > 11:1).
+  static const Color textOnPrimary = Color(0xFF050708);
 
-  /// Cards and panels: Elevated dark stone containers.
-  static const Color darkCardBackground = Color(0xFF202722);
+  /// Secondary text: Accessible muted slate/silver text for captions, timestamps, and metadata.
+  static const Color secondaryText = Color(0xFF94A3B8);
 
-  /// Primary text: Soft off-white for high contrast on dark panels.
-  static const Color darkPrimaryText = Color(0xFFF0F3EE);
+  /// Muted border: Restrained 1px structural divider separating panels and cards.
+  static const Color border = Color(0xFF1F333E);
 
-  /// Secondary text: Muted sage gray for secondary labels.
-  static const Color darkSecondaryText = Color(0xFFB2BEB4);
+  /// Subtle border: Fainter divider for nested items and subtle chips.
+  static const Color borderSubtle = Color(0xFF16252E);
 
-  /// Primary action: Luminous mint green for high visibility on dark surfaces.
-  static const Color darkPrimaryAction = Color(0xFF9ED3AC);
+  /// Active navigation container highlight: Dark navy/slate highlight for selected navigation items.
+  static const Color activeNavHighlight = Color(0xFF1C2C36);
 
-  /// Text on primary: Deep forest charcoal text on mint action buttons.
-  static const Color darkTextOnPrimary = Color(0xFF142B1C);
+  /// Visible keyboard focus outline color: Vibrant yellow outline ensuring clear keyboard accessibility.
+  static const Color focusOutline = Color(0xFFFFC400);
 
-  /// Borders: Deep muted border separating dark panels.
-  static const Color darkBorder = Color(0xFF414D43);
+  // ---------------------------------------------------------------------------
+  // Chapter 34 Semantic Status Palette (Always icon + text)
+  // ---------------------------------------------------------------------------
+  /// Ready: High-contrast green status token.
+  static const Color statusReady = Color(0xFF58C78A);
 
-  /// Warning: Soft amber warning indicator.
-  static const Color darkWarning = Color(0xFFFBBF24);
+  /// Preparing: Amber / Burnt gold attention status token.
+  static const Color statusPreparing = Color(0xFFF5A623);
 
-  /// Destructive: Soft red for destructive warnings and voids.
-  static const Color darkDestructive = Color(0xFFF87171);
+  /// Out for Delivery: Accessible blue status token.
+  static const Color statusOutForDelivery = Color(0xFF6BAEFF);
 
-  /// Active section highlight: Muted deep green tint for active sidebar items.
-  static const Color darkActiveNavHighlight = Color(0xFF1C3324);
+  /// Canceled / Failed / Destructive: High-contrast red status token.
+  static const Color statusCanceled = Color(0xFFF47F7F);
 
   // ---------------------------------------------------------------------------
   // Hex Utility Helper
   // ---------------------------------------------------------------------------
-  /// Safely parses a hex color string (e.g. '#2E7D32' or '2E7D32') into a [Color].
-  static Color parseHex(String hex, {Color fallback = WarmCounterColors.lightPrimaryAction}) {
+  /// Safely parses a hex color string (e.g. '#FFC400' or 'FFC400') into a [Color].
+  static Color parseHex(String hex, {Color fallback = StreetFoodMafiaColors.cartelYellow}) {
     final clean = hex.replaceFirst('#', '').trim();
     if (clean.length == 6) {
       final value = int.tryParse('FF$clean', radix: 16);
@@ -97,5 +78,75 @@ abstract final class WarmCounterColors {
       if (value != null) return Color(value);
     }
     return fallback;
+  }
+}
+
+/// BrandPalette alias per Chapter 34 specification.
+typedef BrandPalette = StreetFoodMafiaColors;
+
+/// Backward-compatible wrapper aliasing legacy Warm Counter references directly
+/// to Chapter 34 Street-Food / Mafia tokens, ensuring zero regression across legacy call sites.
+abstract final class WarmCounterColors {
+  // ---------------------------------------------------------------------------
+  // Street-Food / Mafia Themed Palette (Replaces legacy warm counter tokens)
+  // ---------------------------------------------------------------------------
+  /// Page background: Obsidian Black.
+  static const Color lightPageBackground = StreetFoodMafiaColors.obsidian;
+
+  /// Cards and panels: Card Surface.
+  static const Color lightCardBackground = StreetFoodMafiaColors.cardSurface;
+
+  /// Primary text: Off-White.
+  static const Color lightPrimaryText = StreetFoodMafiaColors.offWhite;
+
+  /// Secondary text: Muted slate.
+  static const Color lightSecondaryText = StreetFoodMafiaColors.secondaryText;
+
+  /// Primary action: Cartel Yellow.
+  static const Color lightPrimaryAction = StreetFoodMafiaColors.cartelYellow;
+
+  /// Text on primary: Dark Obsidian text on Cartel Yellow.
+  static const Color lightTextOnPrimary = StreetFoodMafiaColors.textOnPrimary;
+
+  /// Borders: 1px structural divider.
+  static const Color lightBorder = StreetFoodMafiaColors.border;
+
+  /// Warning / Preparing: Amber.
+  static const Color lightWarning = StreetFoodMafiaColors.statusPreparing;
+
+  /// Destructive / Canceled: Red.
+  static const Color lightDestructive = StreetFoodMafiaColors.statusCanceled;
+
+  /// Destructive action button background.
+  static const Color lightDestructiveAction = StreetFoodMafiaColors.statusCanceled;
+
+  /// Destructive container / background tint.
+  static const Color lightDestructiveHighlight = Color(0xFF2C1518);
+
+  /// Warning container / background tint.
+  static const Color lightWarningHighlight = Color(0xFF2D2310);
+
+  /// Active section highlight: Navy/slate highlight.
+  static const Color lightActiveNavHighlight = StreetFoodMafiaColors.activeNavHighlight;
+
+  /// Muted container surface: Dark Navy.
+  static const Color lightSurfaceMuted = StreetFoodMafiaColors.darkNavy;
+
+  // ---------------------------------------------------------------------------
+  // Dark Mode Palette (Identical dark Street-Food / Mafia tokens)
+  // ---------------------------------------------------------------------------
+  static const Color darkPageBackground = StreetFoodMafiaColors.obsidian;
+  static const Color darkCardBackground = StreetFoodMafiaColors.cardSurface;
+  static const Color darkPrimaryText = StreetFoodMafiaColors.offWhite;
+  static const Color darkSecondaryText = StreetFoodMafiaColors.secondaryText;
+  static const Color darkPrimaryAction = StreetFoodMafiaColors.cartelYellow;
+  static const Color darkTextOnPrimary = StreetFoodMafiaColors.textOnPrimary;
+  static const Color darkBorder = StreetFoodMafiaColors.border;
+  static const Color darkWarning = StreetFoodMafiaColors.statusPreparing;
+  static const Color darkDestructive = StreetFoodMafiaColors.statusCanceled;
+  static const Color darkActiveNavHighlight = StreetFoodMafiaColors.activeNavHighlight;
+
+  static Color parseHex(String hex, {Color fallback = StreetFoodMafiaColors.cartelYellow}) {
+    return StreetFoodMafiaColors.parseHex(hex, fallback: fallback);
   }
 }

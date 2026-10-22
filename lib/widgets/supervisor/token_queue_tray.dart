@@ -221,10 +221,10 @@ class _TokenQueueTrayState extends State<TokenQueueTray> {
         borderRadius: WarmCounterSpacing.panelBorderRadius,
         border: Border.all(
           color: isReady
-              ? const Color(0xFF10B981)
+              ? StreetFoodMafiaColors.statusReady
               : isPreparing
-                  ? const Color(0xFFF97316)
-                  : WarmCounterColors.lightBorder,
+                  ? StreetFoodMafiaColors.statusPreparing
+                  : StreetFoodMafiaColors.border,
           width: isReady ? 2.0 : 1.0,
         ),
         boxShadow: const [
@@ -254,7 +254,7 @@ class _TokenQueueTrayState extends State<TokenQueueTray> {
                     child: Text(
                       order.tokenDisplay,
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: StreetFoodMafiaColors.textOnPrimary,
                         fontWeight: FontWeight.w800,
                         fontSize: 18,
                         letterSpacing: 0.5,
@@ -305,28 +305,12 @@ class _TokenQueueTrayState extends State<TokenQueueTray> {
               const SizedBox(height: WarmCounterSpacing.space8),
               Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: badgeColor,
-                      borderRadius: WarmCounterSpacing.controlBorderRadius,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(statusIcon, size: 14, color: badgeTextColor),
-                        const SizedBox(width: 4),
-                        Text(
-                          statusLabel,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: badgeTextColor,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  if (isPreparing)
+                    const SemanticStatusBadge.preparing(label: 'PREPARING')
+                  else if (isReady)
+                    const SemanticStatusBadge.ready(label: 'READY ON PASS')
+                  else
+                    const SemanticStatusBadge.ready(label: 'DELIVERED'),
                 ],
               ),
             ],
@@ -337,11 +321,11 @@ class _TokenQueueTrayState extends State<TokenQueueTray> {
             ElevatedButton.icon(
               key: ValueKey('advance_token_${order.id}'),
               onPressed: () => widget.controller.advanceToken(order.id),
-              icon: const Icon(Icons.check_circle_rounded, size: 18),
+              icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
               label: const Text('Mark Ready (Plated on Pass)'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF047857), // Emerald
-                foregroundColor: Colors.white,
+                backgroundColor: StreetFoodMafiaColors.statusReady,
+                foregroundColor: StreetFoodMafiaColors.textOnPrimary,
                 shape: const RoundedRectangleBorder(
                   borderRadius: WarmCounterSpacing.controlBorderRadius,
                 ),
@@ -352,11 +336,11 @@ class _TokenQueueTrayState extends State<TokenQueueTray> {
             ElevatedButton.icon(
               key: ValueKey('advance_token_${order.id}'),
               onPressed: () => widget.controller.advanceToken(order.id),
-              icon: const Icon(Icons.delivery_dining_rounded, size: 18),
+              icon: const Icon(Icons.delivery_dining_outlined, size: 18),
               label: const Text('Mark Delivered'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: WarmCounterColors.lightPrimaryAction,
-                foregroundColor: Colors.white,
+                backgroundColor: StreetFoodMafiaColors.cartelYellow,
+                foregroundColor: StreetFoodMafiaColors.textOnPrimary,
                 shape: const RoundedRectangleBorder(
                   borderRadius: WarmCounterSpacing.controlBorderRadius,
                 ),

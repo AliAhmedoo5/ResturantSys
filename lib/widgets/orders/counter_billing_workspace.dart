@@ -1022,11 +1022,11 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
 
   Widget _buildDealPlaceholder(Deal deal) {
     return Container(
-      color: const Color(0xFFE8F5E9),
+      color: StreetFoodMafiaColors.darkNavy,
       child: Center(
         child: Icon(
           Icons.local_offer_outlined,
-          color: WarmCounterColors.lightPrimaryAction.withValues(alpha: 0.5),
+          color: StreetFoodMafiaColors.burntGold.withValues(alpha: 0.7),
           size: 32,
         ),
       ),
@@ -1109,9 +1109,9 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
       borderRadius: WarmCounterSpacing.panelBorderRadius,
       child: Container(
         decoration: BoxDecoration(
-          color: const Color(0xFFF1F8E9), // Light green tint for Deals
+          color: StreetFoodMafiaColors.cardSurface,
           borderRadius: WarmCounterSpacing.panelBorderRadius,
-          border: Border.all(color: WarmCounterColors.lightPrimaryAction, width: 1.5),
+          border: Border.all(color: StreetFoodMafiaColors.burntGold, width: 1.5),
         ),
         clipBehavior: Clip.antiAlias,
         child: Column(
@@ -1135,7 +1135,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
                       ),
                       child: const Text(
                         'DEAL',
-                        style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                        style: TextStyle(color: StreetFoodMafiaColors.textOnPrimary, fontSize: 10, fontWeight: FontWeight.w800),
                       ),
                     ),
                   ),
@@ -1228,7 +1228,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
                 ),
                 if (_cartItems.isNotEmpty)
                   IconButton(
-                    icon: const Icon(Icons.delete_sweep_rounded, size: 22),
+                    icon: const Icon(Icons.delete_sweep_outlined, size: 22),
                     tooltip: 'Clear Cart [Esc]',
                     onPressed: _clearCart,
                   ),
@@ -1338,15 +1338,15 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
                 // Big Green Checkout Button
                 ElevatedButton.icon(
                   key: const ValueKey('proceed_to_tender_button'),
-                  icon: const Icon(Icons.point_of_sale_rounded, size: 24),
+                  icon: const Icon(Icons.point_of_sale_outlined, size: 24),
                   label: const Text(
                     'Charge [Space]',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   onPressed: _cartItems.isEmpty ? null : _openTenderCheckout,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: WarmCounterColors.lightPrimaryAction,
-                    foregroundColor: Colors.white,
+                    backgroundColor: StreetFoodMafiaColors.cartelYellow,
+                    foregroundColor: StreetFoodMafiaColors.textOnPrimary,
                     minimumSize: const Size(double.infinity, 54),
                     shape: const RoundedRectangleBorder(
                       borderRadius: WarmCounterSpacing.controlBorderRadius,
