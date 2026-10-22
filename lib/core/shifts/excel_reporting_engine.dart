@@ -319,6 +319,14 @@ class ExcelReportingEngine {
       for (final row in section['rows'] as List) {
         builder.addRow(List<dynamic>.from(row as List));
       }
+      if (section['detail_rows'] != null) {
+        builder.addEmptyRow();
+        builder.addSectionHeader('Recorded inventory movements');
+        builder.addTableHeaders(List<String>.from(section['detail_headers'] as List));
+        for (final row in section['detail_rows'] as List) {
+          builder.addRow(List<dynamic>.from(row as List));
+        }
+      }
       return builder.build();
     }).toList());
   }

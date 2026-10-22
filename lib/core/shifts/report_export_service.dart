@@ -42,6 +42,9 @@ class ReportExportService {
     final inventory = await db.rawQuery("""SELECT i.name,i.storage_unit,i.current_stock,
       COALESCE((SELECT SUM(m.quantity_delta) FROM inventory_movements m WHERE m.ingredient_id=i.id AND m.business_day_id=?),0) AS delta
       FROM raw_ingredients i ORDER BY i.name""", [dayId]);
+    final movementRows = await db.rawQuery("""SELECT m.id,m.recorded_at,i.name,m.quantity_delta,m.balance_after
+      FROM inventory_movements m JOIN raw_ingredients i ON i.id=m.ingredient_id
+      WHERE m.business_day_id=? ORDER BY m.id""",[dayId]);
     final wastage = await db.rawQuery("""SELECT w.created_at,i.name,w.quantity,w.reason,CAST(ROUND(w.cost_loss*100) AS INTEGER) AS loss
       FROM kitchen_wastage w JOIN raw_ingredients i ON i.id=w.raw_ingredient_id
       WHERE datetime(w.created_at)>=datetime(?) AND datetime(w.created_at)<=datetime(?) ORDER BY w.id""", [opened,closed]);
@@ -67,6 +70,8 @@ class ReportExportService {
       section('Shift Handover Audit',['Shift','Cashier','Float (paisa)','Expected (paisa)','Counted (paisa)','Variance (paisa)','Audit'],shifts.map((r)=>[r['id'],r['name'],paisa(r['opening_float']),paisa(r['expected_cash']),r['counted_cash']==null?'NOT COUNTED':paisa(r['counted_cash']),r['discrepancy']==null?'UNKNOWN':paisa(r['discrepancy']),r['discrepancy_status']]).toList()),
       section('Vendor Khata Movements',['Vendor','Type','Amount (paisa)','Recorded'],vendors.map((r)=>[r['name'],r['type'],r['paisa'],r['created_at']]).toList()),
     ];
+    sections[2]['detail_headers']=['Movement ID','Recorded','Ingredient','Quantity delta','Balance after'];
+    sections[2]['detail_rows']=movementRows.map((r)=>[r['id'],r['recorded_at'],r['name'],r['quantity_delta'],r['balance_after']]).toList();
     final policies = await db.query('system_settings',where:"key='report_delivery_settings'");
     final delivery = policies.isEmpty ? null : jsonDecode(policies.single['value'] as String);
     final snapshot = jsonEncode({'delivery':delivery,'business_day_id':dayId,'business_date':opened.substring(0,10),'revision':1,'cutoff':closed,'sections':sections});
@@ -88,17 +93,35 @@ class ReportExportService {
         final folder = Directory(directory);
         await folder.create(recursive:true);
         final document = pw.Document(title:'Business Day ${snapshot['business_date']} Z-Report',author:'Restaurant POS');
+        String money(int value) => '${value<0?'-':''}Rs. ${value.abs()~/100}.${(value.abs()%100).toString().padLeft(2,'0')}';
         for (final section in sections) {
+          final headers=List<String>.from(section['headers'] as List);
+          final monetarySummaryLabels={'Gross sales','Discounts','Tax carve-out','Net sales incl. Collection Due','Cash rounding','Collection Due'};
+          final rows=(section['rows'] as List).map((raw){
+            final row=List<dynamic>.from(raw as List);
+            return row.asMap().entries.map((entry){
+              final isMoney=headers[entry.key].contains('(paisa)') ||
+                (section==sections.first && entry.key==1 && (monetarySummaryLabels.contains(row.first) || '${row.first}'.startsWith('Tender ')));
+              return isMoney && entry.value is num ? money((entry.value as num).toInt()) : '${entry.value}';
+            }).toList();
+          }).toList();
           document.addPage(pw.MultiPage(pageFormat:PdfPageFormat.a4.landscape,
             margin:const pw.EdgeInsets.all(28),
             header:(context)=>pw.Text('Business Day ${snapshot['business_date']} | Revision 1 | ${section['title']}',style:pw.TextStyle(fontSize:15,fontWeight:pw.FontWeight.bold)),
             footer:(context)=>pw.Text('Snapshot ${run['content_hash']} | Page ${context.pageNumber}',style:const pw.TextStyle(fontSize:7)),
             build:(context)=>[pw.SizedBox(height:12),pw.TableHelper.fromTextArray(
-              headers:List<String>.from(section['headers'] as List),
-              data:(section['rows'] as List).map((row)=>(row as List).map((cell)=>'$cell').toList()).toList(),
+              headers:headers.map((header)=>header.replaceAll('(paisa)','(PKR)').replaceAll('Value (money in integer paisa)','Value')).toList(),
+              data:rows,
               headerDecoration:const pw.BoxDecoration(color:PdfColors.grey200),
               cellStyle:const pw.TextStyle(fontSize:8),headerStyle:pw.TextStyle(fontSize:9,fontWeight:pw.FontWeight.bold),
-            )]));
+            ),
+              if(section['detail_rows']!=null) ...[
+                pw.SizedBox(height:16),pw.Text('Recorded inventory movements'),
+                pw.TableHelper.fromTextArray(headers:List<String>.from(section['detail_headers'] as List),
+                  data:(section['detail_rows'] as List).map((row)=>(row as List).map((cell)=>'$cell').toList()).toList(),
+                  cellStyle:const pw.TextStyle(fontSize:8),headerStyle:pw.TextStyle(fontSize:9,fontWeight:pw.FontWeight.bold)),
+              ],
+            ]));
         }
         final outputs = {'pdf':await document.save(),'xlsx':ExcelReportingEngine(database:database).generateSnapshotWorkbook(sections)};
         final artifacts = <Map<String,dynamic>>[];

@@ -458,6 +458,12 @@ class PosDatabase {
       VALUES(NEW.id,(SELECT id FROM business_days WHERE status='OPEN' ORDER BY id DESC LIMIT 1),
         NEW.current_stock-OLD.current_stock,NEW.current_stock,strftime('%Y-%m-%d %H:%M:%f','now','localtime'));
     END""");
+    await db.execute("""CREATE TRIGGER IF NOT EXISTS inventory_initial_balance AFTER INSERT ON raw_ingredients
+      WHEN NEW.current_stock != 0 BEGIN
+      INSERT INTO inventory_movements(ingredient_id,business_day_id,quantity_delta,balance_after,recorded_at)
+      VALUES(NEW.id,(SELECT id FROM business_days WHERE status='OPEN' ORDER BY id DESC LIMIT 1),
+        NEW.current_stock,NEW.current_stock,strftime('%Y-%m-%d %H:%M:%f','now','localtime'));
+    END""");
     final outboxColumns = await db.rawQuery('PRAGMA table_info(report_outbox)');
     if (!outboxColumns.any((column) => column['name'] == 'idempotency_key')) {
       await db.execute('ALTER TABLE report_outbox RENAME TO report_outbox_legacy');

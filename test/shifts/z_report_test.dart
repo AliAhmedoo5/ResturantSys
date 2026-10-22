@@ -159,6 +159,8 @@ void main() {
       expect(inventoryXml,contains('Synthetic Flour'));
       expect(inventoryXml,isNot(contains('Changed after close')));
       expect(inventoryXml,contains('<v>9.5</v>'));
+      expect(inventoryXml,contains('Recorded inventory movements'));
+      expect(inventoryXml,contains('<v>10.0</v>')); 
       await recovered.exportPending();
       await delivery.enqueueReadyReports();
       await delivery.enqueueReadyReports();
