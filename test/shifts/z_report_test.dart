@@ -1,4 +1,8 @@
 import 'dart:io';
+import 'dart:convert';
+import 'package:archive/archive.dart';
+import 'package:resturant_sys/core/shifts/report_export_service.dart';
+import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
 import 'package:resturant_sys/core/shifts/report_delivery_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -105,6 +109,68 @@ void main() {
       expect((await restarted.history(managerStaffId:supervisorId)).single['retry_count'],1);
       await restarted.processPending(now:DateTime.parse(failed['next_attempt_at'] as String).add(const Duration(seconds:1)));
       expect((await restarted.history(managerStaffId:supervisorId)).single['status'],'ACCEPTED');
+    });
+
+    test('recovers synthetic report snapshot after disk failure and later catalog edits', () async {
+      final delivery=ReportDeliveryService(database:db,transport:(_) async=>'synthetic-provider');
+      await delivery.configure(managerStaffId:supervisorId,endpoint:'https://reports.example.test/send',
+        recipients:[const ReportRecipient(channel:'EMAIL',address:'fixture@example.invalid',approved:true)]);
+      final day=await shiftController.openBusinessDay(openedByStaffId:supervisorId);
+      final shift=await shiftController.openShift(staffId:cashierId,openingFloat:100);
+      final now=DateTime.now().toIso8601String();
+      final category=await db.insert('categories',{'name':'Synthetic category','display_order':1,'color_hex':'#FFC400','created_at':now});
+      final ingredient=await db.insert('raw_ingredients',{'name':'Synthetic Flour','storage_unit':'kg','current_stock':10.0,'low_stock_threshold':0.0,'cost_per_recipe_unit':1.0,'created_at':now});
+      final item=await db.insert('menu_items',{'category_id':category,'name':'Synthetic Burger','base_price':123.45,'tax_rate':0.0,'is_tax_inclusive':1,'is_active':1,'created_at':now});
+      await db.insert('recipes',{'menu_item_id':item,'raw_ingredient_id':ingredient,'quantity_per_recipe_unit':0.25,'created_at':now});
+      final menu=MenuItem(id:item,categoryId:category,name:'Synthetic Burger',basePrice:123.45);
+      for(final tender in [const PaymentTender(method:PaymentMethod.cash,amountTendered:123),const PaymentTender(method:PaymentMethod.jazzCash,amountTendered:123.45)]) {
+        await orderController.checkoutOrder(businessDayId:day.id,shiftId:shift.id,cashierId:cashierId,
+          diningType:DiningType.dineIn,items:[CartItem(menuItem:menu,quantity:1)],payments:[tender]);
+      }
+      await shiftController.closeBusinessDay(closedByStaffId:supervisorId,autoLockActiveShifts:true);
+      final blocked=File('${tempDir.path}/blocked');
+      await blocked.writeAsString('synthetic file occupying report directory');
+      final exporter=ReportExportService(database:db,directory:blocked.path);
+      await exporter.exportPending();
+      expect(await shiftController.getActiveBusinessDay(),isNull);
+      expect((await shiftController.getShift(shift.id)).countedCash,isNull);
+      expect((await exporter.history()).single['status'],'PENDING');
+      final catalog=CatalogAndRecipeController(database:db);
+      final raw=await catalog.getRawIngredient(ingredient);
+      await catalog.updateRawIngredient(raw.copyWith(name:'Changed after close',currentStock:500));
+      final recovered=ReportExportService(database:db,directory:'${tempDir.path}/recovered');
+      await recovered.exportPending();
+      final run=(await recovered.history()).single;
+      final snapshot=jsonDecode(run['snapshot_json'] as String) as Map<String,dynamic>;
+      final sections=snapshot['sections'] as List;
+      final summary=Map<String,dynamic>.fromEntries((sections[0]['rows'] as List).map((r)=>MapEntry(r[0] as String,r[1])));
+      expect(summary['Net sales incl. Collection Due'],24690);
+      expect(summary['Tender CASH (collected)'],12300);
+      expect(summary['Tender JAZZCASH (collected)'],12345);
+      expect(summary['Cash rounding'],-45);
+      expect((sections[2]['rows'] as List).single,['Synthetic Flour','kg',0,9.5,9.5]);
+      final artifacts=jsonDecode(run['artifacts_json'] as String) as List;
+      final workbook=File(artifacts.singleWhere((a)=>a['kind']=='xlsx')['path'] as String);
+      final archive=ZipDecoder().decodeBytes(await workbook.readAsBytes());
+      final salesXml=utf8.decode(archive.findFile('xl/worksheets/sheet2.xml')!.content as List<int>);
+      final inventoryXml=utf8.decode(archive.findFile('xl/worksheets/sheet3.xml')!.content as List<int>);
+      expect(salesXml,contains('Synthetic Burger'));
+      expect(salesXml,contains('<v>12345</v>'));
+      expect(inventoryXml,contains('Synthetic Flour'));
+      expect(inventoryXml,isNot(contains('Changed after close')));
+      expect(inventoryXml,contains('<v>9.5</v>'));
+      await recovered.exportPending();
+      await delivery.enqueueReadyReports();
+      await delivery.enqueueReadyReports();
+      expect((await delivery.history(managerStaffId:supervisorId)).length,1);
+      expect(await Directory('${tempDir.path}/recovered').list().length,2);
+      final sample=Platform.environment['SYNTHETIC_Z_CLOSE_FIXTURE'];
+      if(sample!=null) {
+        await Directory(sample).create(recursive:true);
+        for(final artifact in artifacts) {
+          await File(artifact['path'] as String).copy('$sample/synthetic-z-close.${artifact['kind']}');
+        }
+      }
     });
 
     test('correctly aggregates multi-shift totals, tenders, voids, wastage, and variance', () async {
