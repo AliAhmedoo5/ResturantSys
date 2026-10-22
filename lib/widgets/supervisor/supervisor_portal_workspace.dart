@@ -809,7 +809,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                   backgroundColor: isSelected ? WarmCounterColors.lightActiveNavHighlight : null,
                   foregroundColor: isSelected ? WarmCounterColors.lightPrimaryAction : WarmCounterColors.lightSecondaryText,
                   padding: const EdgeInsets.symmetric(horizontal: 12),
-                  textStyle: TextStyle(fontSize: 13, fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500),
+                  textStyle: TextStyle(fontFamily: WarmCounterTypography.fontFamily, fontFamilyFallback: WarmCounterTypography.fontFallbacks, fontSize: 13, fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500),
                   shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
                 ),
                 child: Text(tab.label),

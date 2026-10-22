@@ -41,9 +41,9 @@ class AppSidebar extends StatelessWidget {
               const Icon(Icons.storefront_outlined, color: StreetFoodMafiaColors.cartelYellow, size: 28),
               if (!compact) ...[
                 const SizedBox(width: 10),
-                const Text('RESTAURANT\nPOS', style: TextStyle(fontSize: 13,
+                const Flexible(child: Text('RESTAURANT\nPOS', maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13,
                     height: 1.2, fontWeight: FontWeight.w800, letterSpacing: 1,
-                    color: StreetFoodMafiaColors.offWhite)),
+                    color: StreetFoodMafiaColors.offWhite))),
               ],
             ]),
           ),
