@@ -20,6 +20,8 @@ class ZReport {
     this.cashSales = 0.0,
     this.cardSales = 0.0,
     this.raastSales = 0.0,
+    this.tenderSalesPaisa = const {},
+    this.collectionDuePaisa = 0,
     this.totalOpeningFloat = 0.0,
     this.totalPayIn = 0.0,
     this.totalPayOut = 0.0,
@@ -54,6 +56,9 @@ class ZReport {
   final double cashSales;
   final double cardSales;
   final double raastSales;
+  final Map<String,int> tenderSalesPaisa;
+  final int collectionDuePaisa;
+  bool get hasUncountedShifts => shifts.any((shift)=>shift.countedCash==null);
 
   final double totalOpeningFloat;
   final double totalPayIn;
@@ -73,7 +78,7 @@ class ZReport {
   final int totalVendorDeliveriesCount;
   final double totalVendorSettlementsAmount;
 
-  double get totalTenderSales => cashSales + cardSales + raastSales;
+  double get totalTenderSales => tenderSalesPaisa.isEmpty ? cashSales + cardSales + raastSales : tenderSalesPaisa.values.fold<int>(0,(sum,value)=>sum+value)/100;
 
   static final NumberFormat _currencyFormat = NumberFormat('#,##0.00', 'en_US');
   static final DateFormat _dateFormat = DateFormat('yyyy-MM-dd HH:mm:ss');
@@ -131,6 +136,10 @@ class ZReport {
     line('Cash Sales:', 'Rs ${_currencyFormat.format(cashSales)}');
     line('Card Sales:', 'Rs ${_currencyFormat.format(cardSales)}');
     line('Raast Sales:', 'Rs ${_currencyFormat.format(raastSales)}');
+    for(final tender in tenderSalesPaisa.entries.where((entry)=>!['CASH','CARD','RAAST'].contains(entry.key))) {
+      line('${tender.key}:','Rs ${_currencyFormat.format(tender.value/100)}');
+    }
+    line('Collection Due:','Rs ${_currencyFormat.format(collectionDuePaisa/100)}');
     line('Total Tenders:', 'Rs ${_currencyFormat.format(totalTenderSales)}');
     buffer.writeln(subDivider);
 
@@ -141,7 +150,7 @@ class ZReport {
     line('(-) Total Pay-Outs:', 'Rs ${_currencyFormat.format(totalPayOut)}');
     line('Expected Drawer:', 'Rs ${_currencyFormat.format(totalExpectedDrawerCash)}');
     line('Counted Drawer:', 'Rs ${_currencyFormat.format(totalCountedCash)}');
-    line('Net Discrepancy:', 'Rs ${_currencyFormat.format(netCashVariance)}');
+    line('Net Discrepancy:', hasUncountedShifts?'UNKNOWN - missing count':'Rs ${_currencyFormat.format(netCashVariance)}');
     buffer.writeln(subDivider);
 
     center('-- AUDIT & OPERATIONS LOG --');

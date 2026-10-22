@@ -1636,7 +1636,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                                     const Text('Net Drawer Discrepancy', style: TextStyle(color: WarmCounterColors.lightSecondaryText, fontSize: 12)),
                                     const SizedBox(height: 2),
                                     Text(
-                                      'PKR ${_currencyFormat.format(_activeZReport!.netCashVariance)}',
+                                      _activeZReport!.hasUncountedShifts?'Missing blind count':'PKR ${_currencyFormat.format(_activeZReport!.netCashVariance)}',
                                       style: TextStyle(
                                         fontWeight: FontWeight.w700,
                                         fontSize: 14,

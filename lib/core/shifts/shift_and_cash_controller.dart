@@ -750,7 +750,7 @@ class ShiftAndCashController {
         COALESCE(SUM(tax_amount), 0.0) as total_tax,
         COALESCE(SUM(grand_total), 0.0) as net_sales
       FROM ${PosDatabaseConstants.tableOrders}
-      WHERE business_day_id = ? AND payment_status = 'SETTLED';
+      WHERE business_day_id = ? AND payment_status NOT IN ('VOIDED','CANCELLED','REFUNDED');
     ''', [businessDayId]);
 
     if (salesRows.isNotEmpty) {
@@ -762,33 +762,21 @@ class ShiftAndCashController {
       netSales = (r['net_sales'] as num?)?.toDouble() ?? 0.0;
     }
 
-    // 3. Payment Tenders breakdown
-    double cashSales = 0.0;
-    double cardSales = 0.0;
-    double raastSales = 0.0;
-
-    final tenderRows = await database.rawQuery('''
-      SELECT op.payment_method, 
-             COALESCE(SUM(op.amount_tendered), 0.0) as total_tendered,
-             COALESCE(SUM(op.change_returned), 0.0) as total_change
-      FROM ${PosDatabaseConstants.tableOrderPayments} op
-      JOIN ${PosDatabaseConstants.tableOrders} o ON op.order_id = o.id
-      WHERE o.business_day_id = ? AND o.payment_status = 'SETTLED'
-      GROUP BY op.payment_method;
-    ''', [businessDayId]);
-
-    for (final row in tenderRows) {
-      final method = row['payment_method'] as String;
-      final tendered = (row['total_tendered'] as num).toDouble();
-      final change = (row['total_change'] as num).toDouble();
-      if (method == 'CASH') {
-        cashSales += (tendered - change);
-      } else if (method == 'CARD') {
-        cardSales += tendered;
-      } else if (method == 'RAAST') {
-        raastSales += tendered;
-      }
-    }
+    // Collected tender balances include funds retained pending explicit refund.
+    final tenderRows = await database.rawQuery("""
+      SELECT op.payment_method,
+        SUM(COALESCE(op.amount_tendered_paisa,CAST(ROUND(op.amount_tendered*100) AS INTEGER))
+        -COALESCE(op.change_returned_paisa,CAST(ROUND(op.change_returned*100) AS INTEGER))) AS paisa
+      FROM order_payments op JOIN orders o ON o.id=op.order_id
+      WHERE o.business_day_id=? AND o.payment_status IN ('SETTLED','REFUND_PENDING','CANCELLED','REFUNDED')
+      GROUP BY op.payment_method
+    """,[businessDayId]);
+    final tenderSalesPaisa = {for(final row in tenderRows) row['payment_method'] as String:(row['paisa'] as num).toInt()};
+    final cashSales=(tenderSalesPaisa['CASH']??0)/100;
+    final cardSales=(tenderSalesPaisa['CARD']??0)/100;
+    final raastSales=(tenderSalesPaisa['RAAST']??0)/100;
+    final dueRows=await database.rawQuery("SELECT COALESCE(SUM(CAST(ROUND(grand_total*100) AS INTEGER)),0) AS paisa FROM orders WHERE business_day_id=? AND payment_status='COLLECTION_DUE'",[businessDayId]);
+    final collectionDuePaisa=(dueRows.single['paisa'] as num).toInt();
 
     // 4. Voids
     int totalVoidCount = 0;
@@ -896,6 +884,8 @@ class ShiftAndCashController {
       cashSales: cashSales,
       cardSales: cardSales,
       raastSales: raastSales,
+      tenderSalesPaisa:tenderSalesPaisa,
+      collectionDuePaisa:collectionDuePaisa,
       totalOpeningFloat: totalOpeningFloat,
       totalPayIn: totalPayIn,
       totalPayOut: totalPayOut,
