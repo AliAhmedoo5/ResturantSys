@@ -163,7 +163,7 @@ class _DealSelectionDialogState extends State<DealSelectionDialog> {
                     onPressed: _handleConfirm,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: WarmCounterColors.lightPrimaryAction,
-                      foregroundColor: Colors.white,
+                      foregroundColor: StreetFoodMafiaColors.textOnPrimary,
                       minimumSize: const Size(160, WarmCounterSpacing.touchTargetMin),
                       shape: const RoundedRectangleBorder(
                         borderRadius: WarmCounterSpacing.controlBorderRadius,

@@ -4,278 +4,72 @@ import 'warm_counter_color_tokens.dart';
 import 'warm_counter_spacing.dart';
 import 'warm_counter_typography.dart';
 
-/// Configures and builds the ThemeData instances for the Warm Counter restaurant interface.
+/// Configures and builds the ThemeData instances for the Chapter 34 Street-Food / Mafia restaurant interface.
 ///
-/// Produces a clean, calm, and glare-free desktop experience with strict adherence to:
+/// Produces a high-contrast, dark-first desktop experience with strict adherence to:
 /// - 48px minimum touch targets.
-/// - Tabular figures on prices and numerical data.
+/// - Tabular figures on prices, financial numbers, quantities, and data tables.
 /// - Flat surfaces with 1px border outlines (zero heavy shadows or gradients).
-/// - Deep green affirmative actions and pale green active states.
+/// - Cartel Yellow primary CTAs with dark readable text and visible focus indicator.
+/// - Compact data tables with clear contrast across Windows scaling factors (100%, 125%, 150%).
 abstract final class WarmCounterTheme {
   // ---------------------------------------------------------------------------
-  // Light Mode Theme Builder
-  // ---------------------------------------------------------------------------
-  static ThemeData get lightTheme {
-    const colorScheme = ColorScheme(
-      brightness: Brightness.light,
-      primary: WarmCounterColors.lightPrimaryAction,
-      onPrimary: WarmCounterColors.lightTextOnPrimary,
-      secondary: WarmCounterColors.lightSecondaryText,
-      onSecondary: Colors.white,
-      error: WarmCounterColors.lightDestructive,
-      onError: Colors.white,
-      surface: WarmCounterColors.lightCardBackground,
-      onSurface: WarmCounterColors.lightPrimaryText,
-      outline: WarmCounterColors.lightBorder,
-      outlineVariant: WarmCounterColors.lightBorder,
-    );
-
-    return ThemeData(
-      useMaterial3: true,
-      brightness: Brightness.light,
-      colorScheme: colorScheme,
-      scaffoldBackgroundColor: WarmCounterColors.lightPageBackground,
-      fontFamily: WarmCounterTypography.fontFamily,
-      fontFamilyFallback: WarmCounterTypography.fontFallbacks,
-      textTheme: WarmCounterTypography.createTextTheme(
-        WarmCounterColors.lightPrimaryText,
-        WarmCounterColors.lightSecondaryText,
-      ),
-      cardTheme: const CardThemeData(
-        color: WarmCounterColors.lightCardBackground,
-        elevation: 0.0,
-        margin: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(
-          borderRadius: WarmCounterSpacing.panelBorderRadius,
-          side: BorderSide(
-            color: WarmCounterColors.lightBorder,
-            width: 1.0,
-          ),
-        ),
-      ),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: WarmCounterColors.lightCardBackground,
-        foregroundColor: WarmCounterColors.lightPrimaryText,
-        elevation: 0.0,
-        scrolledUnderElevation: 0.0,
-        surfaceTintColor: Colors.transparent,
-        titleTextStyle: WarmCounterTypography.pageHeading,
-        iconTheme: IconThemeData(
-          color: WarmCounterColors.lightPrimaryText,
-          size: 24.0,
-        ),
-      ),
-      elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: WarmCounterColors.lightPrimaryAction,
-          foregroundColor: WarmCounterColors.lightTextOnPrimary,
-          minimumSize: const Size(
-            WarmCounterSpacing.minTouchTargetSize,
-            WarmCounterSpacing.minTouchTargetSize,
-          ),
-          padding: const EdgeInsets.symmetric(
-            horizontal: WarmCounterSpacing.space16,
-            vertical: WarmCounterSpacing.space12,
-          ),
-          elevation: 0.0,
-          shadowColor: Colors.transparent,
-          shape: const RoundedRectangleBorder(
-            borderRadius: WarmCounterSpacing.controlBorderRadius,
-          ),
-          textStyle: WarmCounterTypography.bodyMedium.copyWith(
-            color: WarmCounterColors.lightTextOnPrimary,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-      outlinedButtonTheme: OutlinedButtonThemeData(
-        style: OutlinedButton.styleFrom(
-          foregroundColor: WarmCounterColors.lightPrimaryText,
-          minimumSize: const Size(
-            WarmCounterSpacing.minTouchTargetSize,
-            WarmCounterSpacing.minTouchTargetSize,
-          ),
-          padding: const EdgeInsets.symmetric(
-            horizontal: WarmCounterSpacing.space16,
-            vertical: WarmCounterSpacing.space12,
-          ),
-          side: const BorderSide(
-            color: WarmCounterColors.lightBorder,
-            width: 1.0,
-          ),
-          shape: const RoundedRectangleBorder(
-            borderRadius: WarmCounterSpacing.controlBorderRadius,
-          ),
-          textStyle: WarmCounterTypography.bodyMedium,
-        ),
-      ),
-      textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(
-          foregroundColor: WarmCounterColors.lightPrimaryAction,
-          minimumSize: const Size(
-            WarmCounterSpacing.minTouchTargetSize,
-            WarmCounterSpacing.minTouchTargetSize,
-          ),
-          shape: const RoundedRectangleBorder(
-            borderRadius: WarmCounterSpacing.controlBorderRadius,
-          ),
-          textStyle: WarmCounterTypography.bodyMedium,
-        ),
-      ),
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: WarmCounterColors.lightCardBackground,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: WarmCounterSpacing.space16,
-          vertical: 14.0,
-        ),
-        border: const OutlineInputBorder(
-          borderRadius: WarmCounterSpacing.controlBorderRadius,
-          borderSide: BorderSide(
-            color: WarmCounterColors.lightBorder,
-            width: 1.0,
-          ),
-        ),
-        enabledBorder: const OutlineInputBorder(
-          borderRadius: WarmCounterSpacing.controlBorderRadius,
-          borderSide: BorderSide(
-            color: WarmCounterColors.lightBorder,
-            width: 1.0,
-          ),
-        ),
-        focusedBorder: const OutlineInputBorder(
-          borderRadius: WarmCounterSpacing.controlBorderRadius,
-          borderSide: BorderSide(
-            color: WarmCounterColors.lightPrimaryAction,
-            width: 2.0,
-          ),
-        ),
-        errorBorder: const OutlineInputBorder(
-          borderRadius: WarmCounterSpacing.controlBorderRadius,
-          borderSide: BorderSide(
-            color: WarmCounterColors.lightDestructive,
-            width: 1.0,
-          ),
-        ),
-        focusedErrorBorder: const OutlineInputBorder(
-          borderRadius: WarmCounterSpacing.controlBorderRadius,
-          borderSide: BorderSide(
-            color: WarmCounterColors.lightDestructive,
-            width: 2.0,
-          ),
-        ),
-        labelStyle: WarmCounterTypography.secondaryLabel.copyWith(
-          color: WarmCounterColors.lightSecondaryText,
-        ),
-        hintStyle: WarmCounterTypography.body.copyWith(
-          color: WarmCounterColors.lightSecondaryText.withValues(alpha: 0.7),
-        ),
-      ),
-      dividerTheme: const DividerThemeData(
-        color: WarmCounterColors.lightBorder,
-        thickness: 1.0,
-        space: 1.0,
-      ),
-      navigationRailTheme: const NavigationRailThemeData(
-        backgroundColor: WarmCounterColors.lightCardBackground,
-        indicatorColor: WarmCounterColors.lightActiveNavHighlight,
-        selectedIconTheme: IconThemeData(
-          color: WarmCounterColors.lightPrimaryAction,
-          size: 24.0,
-        ),
-        unselectedIconTheme: IconThemeData(
-          color: WarmCounterColors.lightSecondaryText,
-          size: 24.0,
-        ),
-        selectedLabelTextStyle: TextStyle(
-          fontFamily: WarmCounterTypography.fontFamily,
-          fontSize: 14.0,
-          fontWeight: FontWeight.w600,
-          color: WarmCounterColors.lightPrimaryText,
-        ),
-        unselectedLabelTextStyle: TextStyle(
-          fontFamily: WarmCounterTypography.fontFamily,
-          fontSize: 14.0,
-          fontWeight: FontWeight.w400,
-          color: WarmCounterColors.lightSecondaryText,
-        ),
-      ),
-      dialogTheme: const DialogThemeData(
-        backgroundColor: WarmCounterColors.lightCardBackground,
-        elevation: 0.0,
-        shape: RoundedRectangleBorder(
-          borderRadius: WarmCounterSpacing.panelBorderRadius,
-          side: BorderSide(
-            color: WarmCounterColors.lightBorder,
-            width: 1.0,
-          ),
-        ),
-        titleTextStyle: WarmCounterTypography.pageHeading,
-        contentTextStyle: WarmCounterTypography.body,
-      ),
-      extensions: const <ThemeExtension<dynamic>>[
-        WarmCounterColorTokens.light,
-      ],
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // Dark Mode Theme Builder
+  // Street-Food / Mafia Theme Builder (Authoritative Dark Aesthetic)
   // ---------------------------------------------------------------------------
   static ThemeData get darkTheme {
     const colorScheme = ColorScheme(
       brightness: Brightness.dark,
-      primary: WarmCounterColors.darkPrimaryAction,
-      onPrimary: WarmCounterColors.darkTextOnPrimary,
-      secondary: WarmCounterColors.darkSecondaryText,
-      onSecondary: Colors.black,
-      error: WarmCounterColors.darkDestructive,
-      onError: Colors.black,
-      surface: WarmCounterColors.darkCardBackground,
-      onSurface: WarmCounterColors.darkPrimaryText,
-      outline: WarmCounterColors.darkBorder,
-      outlineVariant: WarmCounterColors.darkBorder,
+      primary: StreetFoodMafiaColors.cartelYellow,
+      onPrimary: StreetFoodMafiaColors.textOnPrimary,
+      secondary: StreetFoodMafiaColors.burntGold,
+      onSecondary: StreetFoodMafiaColors.textOnPrimary,
+      error: StreetFoodMafiaColors.statusCanceled,
+      onError: StreetFoodMafiaColors.textOnPrimary,
+      surface: StreetFoodMafiaColors.cardSurface,
+      onSurface: StreetFoodMafiaColors.offWhite,
+      outline: StreetFoodMafiaColors.border,
+      outlineVariant: StreetFoodMafiaColors.borderSubtle,
     );
 
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
       colorScheme: colorScheme,
-      scaffoldBackgroundColor: WarmCounterColors.darkPageBackground,
+      scaffoldBackgroundColor: StreetFoodMafiaColors.obsidian,
       fontFamily: WarmCounterTypography.fontFamily,
       fontFamilyFallback: WarmCounterTypography.fontFallbacks,
       textTheme: WarmCounterTypography.createTextTheme(
-        WarmCounterColors.darkPrimaryText,
-        WarmCounterColors.darkSecondaryText,
+        StreetFoodMafiaColors.offWhite,
+        StreetFoodMafiaColors.secondaryText,
       ),
       cardTheme: const CardThemeData(
-        color: WarmCounterColors.darkCardBackground,
+        color: StreetFoodMafiaColors.cardSurface,
         elevation: 0.0,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
           borderRadius: WarmCounterSpacing.panelBorderRadius,
           side: BorderSide(
-            color: WarmCounterColors.darkBorder,
+            color: StreetFoodMafiaColors.border,
             width: 1.0,
           ),
         ),
       ),
       appBarTheme: const AppBarTheme(
-        backgroundColor: WarmCounterColors.darkCardBackground,
-        foregroundColor: WarmCounterColors.darkPrimaryText,
+        backgroundColor: StreetFoodMafiaColors.darkNavy,
+        foregroundColor: StreetFoodMafiaColors.offWhite,
         elevation: 0.0,
         scrolledUnderElevation: 0.0,
         surfaceTintColor: Colors.transparent,
         titleTextStyle: WarmCounterTypography.pageHeading,
         iconTheme: IconThemeData(
-          color: WarmCounterColors.darkPrimaryText,
+          color: StreetFoodMafiaColors.offWhite,
           size: 24.0,
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: WarmCounterColors.darkPrimaryAction,
-          foregroundColor: WarmCounterColors.darkTextOnPrimary,
+          backgroundColor: StreetFoodMafiaColors.cartelYellow,
+          foregroundColor: StreetFoodMafiaColors.textOnPrimary,
           minimumSize: const Size(
             WarmCounterSpacing.minTouchTargetSize,
             WarmCounterSpacing.minTouchTargetSize,
@@ -290,14 +84,21 @@ abstract final class WarmCounterTheme {
             borderRadius: WarmCounterSpacing.controlBorderRadius,
           ),
           textStyle: WarmCounterTypography.bodyMedium.copyWith(
-            color: WarmCounterColors.darkTextOnPrimary,
-            fontWeight: FontWeight.w600,
+            color: StreetFoodMafiaColors.textOnPrimary,
+            fontWeight: FontWeight.w700,
           ),
+        ).copyWith(
+          side: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.focused)) {
+              return const BorderSide(color: Colors.white, width: 2.0);
+            }
+            return BorderSide.none;
+          }),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: WarmCounterColors.darkPrimaryText,
+          foregroundColor: StreetFoodMafiaColors.offWhite,
           minimumSize: const Size(
             WarmCounterSpacing.minTouchTargetSize,
             WarmCounterSpacing.minTouchTargetSize,
@@ -307,18 +108,25 @@ abstract final class WarmCounterTheme {
             vertical: WarmCounterSpacing.space12,
           ),
           side: const BorderSide(
-            color: WarmCounterColors.darkBorder,
+            color: StreetFoodMafiaColors.border,
             width: 1.0,
           ),
           shape: const RoundedRectangleBorder(
             borderRadius: WarmCounterSpacing.controlBorderRadius,
           ),
           textStyle: WarmCounterTypography.bodyMedium,
+        ).copyWith(
+          side: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.focused)) {
+              return const BorderSide(color: StreetFoodMafiaColors.cartelYellow, width: 2.0);
+            }
+            return const BorderSide(color: StreetFoodMafiaColors.border, width: 1.0);
+          }),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: WarmCounterColors.darkPrimaryAction,
+          foregroundColor: StreetFoodMafiaColors.cartelYellow,
           minimumSize: const Size(
             WarmCounterSpacing.minTouchTargetSize,
             WarmCounterSpacing.minTouchTargetSize,
@@ -326,12 +134,14 @@ abstract final class WarmCounterTheme {
           shape: const RoundedRectangleBorder(
             borderRadius: WarmCounterSpacing.controlBorderRadius,
           ),
-          textStyle: WarmCounterTypography.bodyMedium,
+          textStyle: WarmCounterTypography.bodyMedium.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: WarmCounterColors.darkCardBackground,
+        fillColor: StreetFoodMafiaColors.darkNavy,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: WarmCounterSpacing.space16,
           vertical: 14.0,
@@ -339,81 +149,103 @@ abstract final class WarmCounterTheme {
         border: const OutlineInputBorder(
           borderRadius: WarmCounterSpacing.controlBorderRadius,
           borderSide: BorderSide(
-            color: WarmCounterColors.darkBorder,
+            color: StreetFoodMafiaColors.border,
             width: 1.0,
           ),
         ),
         enabledBorder: const OutlineInputBorder(
           borderRadius: WarmCounterSpacing.controlBorderRadius,
           borderSide: BorderSide(
-            color: WarmCounterColors.darkBorder,
+            color: StreetFoodMafiaColors.border,
             width: 1.0,
           ),
         ),
         focusedBorder: const OutlineInputBorder(
           borderRadius: WarmCounterSpacing.controlBorderRadius,
           borderSide: BorderSide(
-            color: WarmCounterColors.darkPrimaryAction,
+            color: StreetFoodMafiaColors.cartelYellow,
             width: 2.0,
           ),
         ),
         errorBorder: const OutlineInputBorder(
           borderRadius: WarmCounterSpacing.controlBorderRadius,
           borderSide: BorderSide(
-            color: WarmCounterColors.darkDestructive,
+            color: StreetFoodMafiaColors.statusCanceled,
             width: 1.0,
           ),
         ),
         focusedErrorBorder: const OutlineInputBorder(
           borderRadius: WarmCounterSpacing.controlBorderRadius,
           borderSide: BorderSide(
-            color: WarmCounterColors.darkDestructive,
+            color: StreetFoodMafiaColors.statusCanceled,
             width: 2.0,
           ),
         ),
         labelStyle: WarmCounterTypography.secondaryLabel.copyWith(
-          color: WarmCounterColors.darkSecondaryText,
+          color: StreetFoodMafiaColors.secondaryText,
         ),
         hintStyle: WarmCounterTypography.body.copyWith(
-          color: WarmCounterColors.darkSecondaryText.withValues(alpha: 0.7),
+          color: StreetFoodMafiaColors.secondaryText.withValues(alpha: 0.7),
         ),
       ),
       dividerTheme: const DividerThemeData(
-        color: WarmCounterColors.darkBorder,
+        color: StreetFoodMafiaColors.border,
         thickness: 1.0,
         space: 1.0,
       ),
+      dataTableTheme: DataTableThemeData(
+        headingRowColor: WidgetStateProperty.all(StreetFoodMafiaColors.darkNavy),
+        dataRowColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.hovered)) {
+            return StreetFoodMafiaColors.darkNavy;
+          }
+          return StreetFoodMafiaColors.cardSurface;
+        }),
+        headingTextStyle: WarmCounterTypography.secondaryLabelMedium.copyWith(
+          color: StreetFoodMafiaColors.offWhite,
+          fontWeight: FontWeight.w700,
+        ),
+        dataTextStyle: WarmCounterTypography.tableAmount.copyWith(
+          color: StreetFoodMafiaColors.offWhite,
+        ),
+        dividerThickness: 1.0,
+        dataRowMinHeight: 38.0,
+        dataRowMaxHeight: 46.0,
+        headingRowHeight: 44.0,
+        horizontalMargin: WarmCounterSpacing.space16,
+        columnSpacing: WarmCounterSpacing.space16,
+      ),
       navigationRailTheme: const NavigationRailThemeData(
-        backgroundColor: WarmCounterColors.darkCardBackground,
-        indicatorColor: WarmCounterColors.darkActiveNavHighlight,
+        backgroundColor: StreetFoodMafiaColors.darkNavy,
+        indicatorColor: StreetFoodMafiaColors.activeNavHighlight,
         selectedIconTheme: IconThemeData(
-          color: WarmCounterColors.darkPrimaryAction,
+          color: StreetFoodMafiaColors.cartelYellow,
           size: 24.0,
         ),
         unselectedIconTheme: IconThemeData(
-          color: WarmCounterColors.darkSecondaryText,
+          color: StreetFoodMafiaColors.secondaryText,
           size: 24.0,
         ),
         selectedLabelTextStyle: TextStyle(
           fontFamily: WarmCounterTypography.fontFamily,
           fontSize: 14.0,
-          fontWeight: FontWeight.w600,
-          color: WarmCounterColors.darkPrimaryText,
+          fontWeight: FontWeight.w700,
+          color: StreetFoodMafiaColors.offWhite,
         ),
         unselectedLabelTextStyle: TextStyle(
           fontFamily: WarmCounterTypography.fontFamily,
           fontSize: 14.0,
           fontWeight: FontWeight.w400,
-          color: WarmCounterColors.darkSecondaryText,
+          color: StreetFoodMafiaColors.secondaryText,
         ),
       ),
       dialogTheme: const DialogThemeData(
-        backgroundColor: WarmCounterColors.darkCardBackground,
+        backgroundColor: StreetFoodMafiaColors.cardSurface,
         elevation: 0.0,
         shape: RoundedRectangleBorder(
           borderRadius: WarmCounterSpacing.panelBorderRadius,
           side: BorderSide(
-            color: WarmCounterColors.darkBorder,
+            color: StreetFoodMafiaColors.border,
             width: 1.0,
           ),
         ),
@@ -421,8 +253,16 @@ abstract final class WarmCounterTheme {
         contentTextStyle: WarmCounterTypography.body,
       ),
       extensions: const <ThemeExtension<dynamic>>[
-        WarmCounterColorTokens.dark,
+        StreetFoodMafiaColorTokens.dark,
       ],
     );
   }
+
+  /// Default theme builder aliased to darkTheme for authoritative Chapter 34 aesthetic.
+  static ThemeData get lightTheme => darkTheme;
+}
+
+/// Official Chapter 34 theme alias.
+abstract final class StreetFoodMafiaTheme {
+  static ThemeData get theme => WarmCounterTheme.darkTheme;
 }

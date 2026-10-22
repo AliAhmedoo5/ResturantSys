@@ -644,7 +644,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
               label: const Text('Next: Create Manager Account'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: WarmCounterColors.lightPrimaryAction,
-                foregroundColor: Colors.white,
+                foregroundColor: StreetFoodMafiaColors.textOnPrimary,
                 minimumSize: const Size(220, WarmCounterSpacing.touchTargetMin),
               ),
               onPressed: _handleStep1Submit,
@@ -742,7 +742,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
               label: const Text('Next: Create Primary Cashier'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: WarmCounterColors.lightPrimaryAction,
-                foregroundColor: Colors.white,
+                foregroundColor: StreetFoodMafiaColors.textOnPrimary,
                 minimumSize: const Size(220, WarmCounterSpacing.touchTargetMin),
               ),
               onPressed: _handleStep2Submit,
@@ -863,7 +863,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
               label: const Text('Next: Create First Recipe'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: WarmCounterColors.lightPrimaryAction,
-                foregroundColor: Colors.white,
+                foregroundColor: StreetFoodMafiaColors.textOnPrimary,
                 minimumSize: const Size(220, WarmCounterSpacing.touchTargetMin),
               ),
               onPressed: _handleStep3Submit,
@@ -1029,7 +1029,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
               label: const Text('Next: Open Business Day'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: WarmCounterColors.lightPrimaryAction,
-                foregroundColor: Colors.white,
+                foregroundColor: StreetFoodMafiaColors.textOnPrimary,
                 minimumSize: const Size(220, WarmCounterSpacing.touchTargetMin),
               ),
               onPressed: _handleStep4Submit,
@@ -1096,7 +1096,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
               label: const Text('Manager Authorize & Open Business Day #1'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: WarmCounterColors.lightPrimaryAction,
-                foregroundColor: Colors.white,
+                foregroundColor: StreetFoodMafiaColors.textOnPrimary,
                 minimumSize: const Size(300, 52),
                 shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
               ),
@@ -1147,7 +1147,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
                   label: const Text('Switch to Cashier & Open Register Shift'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: WarmCounterColors.lightPrimaryAction,
-                    foregroundColor: Colors.white,
+                    foregroundColor: StreetFoodMafiaColors.textOnPrimary,
                     minimumSize: const Size(320, WarmCounterSpacing.touchTargetMin),
                     shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
                   ),

@@ -260,14 +260,14 @@ class _KitchenTokenStationState extends State<KitchenTokenStation> {
           ElevatedButton.icon(
             key: ValueKey('kitchen_mark_ready_${order.id}'),
             onPressed: () => widget.controller.markTokenReady(order.id),
-            icon: const Icon(Icons.check_circle_rounded, size: 24),
+            icon: const Icon(Icons.check_circle_outline_rounded, size: 24),
             label: const Text(
               'PLATED ON PASS (MARK READY)',
               style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
             ),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF047857), // Emerald Green
-              foregroundColor: Colors.white,
+              backgroundColor: StreetFoodMafiaColors.statusReady,
+              foregroundColor: StreetFoodMafiaColors.textOnPrimary,
               shape: const RoundedRectangleBorder(
                 borderRadius: WarmCounterSpacing.controlBorderRadius,
               ),

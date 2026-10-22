@@ -400,7 +400,7 @@ class _CashierOrderRevisionDialogState
                           backgroundColor: Colors.brown,
                           foregroundColor: Colors.white,
                         ),
-                        icon: const Icon(Icons.point_of_sale, size: 16),
+                        icon: const Icon(Icons.point_of_sale_outlined, size: 16),
                         label: const Text('Cash Payout'),
                         onPressed: _isSubmitting
                             ? null

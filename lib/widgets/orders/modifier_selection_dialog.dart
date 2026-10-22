@@ -146,12 +146,12 @@ class _ModifierSelectionDialogState extends State<ModifierSelectionDialog> {
                   Flexible(
                     child: ElevatedButton.icon(
                       key: const ValueKey('apply_modifiers_button'),
-                      icon: const Icon(Icons.check_rounded),
+                      icon: const Icon(Icons.check_circle_outline_rounded),
                       label: const Text('Apply Customizations'),
                       onPressed: _handleApply,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: WarmCounterColors.lightPrimaryAction,
-                        foregroundColor: Colors.white,
+                        foregroundColor: StreetFoodMafiaColors.textOnPrimary,
                         minimumSize: const Size(140, WarmCounterSpacing.touchTargetMin),
                       ),
                     ),

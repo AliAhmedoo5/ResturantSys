@@ -180,17 +180,17 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
                     ? const SizedBox(
                         width: 20,
                         height: 20,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        child: CircularProgressIndicator(color: StreetFoodMafiaColors.textOnPrimary, strokeWidth: 2),
                       )
-                    : const Icon(Icons.check_circle_rounded, size: 22),
+                    : const Icon(Icons.check_circle_outline_rounded, size: 22),
                 label: Text(
                   _isCommitting ? 'Committing Order...' : 'Complete Checkout',
                   style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 onPressed: _isCommitting ? null : _handleCheckoutSubmit,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: WarmCounterColors.lightPrimaryAction,
-                  foregroundColor: Colors.white,
+                  backgroundColor: StreetFoodMafiaColors.cartelYellow,
+                  foregroundColor: StreetFoodMafiaColors.textOnPrimary,
                   minimumSize: const Size(double.infinity, 52),
                   shape: const RoundedRectangleBorder(
                     borderRadius: WarmCounterSpacing.controlBorderRadius,
