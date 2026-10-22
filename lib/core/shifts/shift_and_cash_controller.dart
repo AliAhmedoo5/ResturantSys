@@ -121,95 +121,42 @@ class ShiftAndCashController {
     DateTime? closedAt,
     bool autoLockActiveShifts = false,
   }) async {
-    // Only Managers can close Business Days (ADR-0009)
-    final staffRows = await database.query(
-      PosDatabaseConstants.tableStaff,
-      where: 'id = ?',
-      whereArgs: [closedByStaffId],
-      limit: 1,
-    );
-    if (staffRows.isNotEmpty) {
-      final role = StaffRole.fromCode(staffRows.first['role'] as String);
-      if (role == StaffRole.cashier) {
-        throw StateError('Authorization error: Business Day must be closed by a Manager.');
+    return database.transaction((txn) async {
+      final staff = await txn.query('staff', where: 'id = ? AND is_active = 1', whereArgs: [closedByStaffId]);
+      if (staff.isEmpty || StaffRole.fromCode(staff.first['role'] as String) != StaffRole.manager) {
+        throw StateError('Authorization error: Business Day must be closed by an active Manager.');
       }
-    }
-
-    final active = await getActiveBusinessDay();
-    if (active == null) {
-      throw StateError('No active Business Day to close.');
-    }
-
-    final activeShift = await getActiveShift();
-    if (activeShift != null) {
-      if (!autoLockActiveShifts) {
-        throw StateError(
-          'Cannot close Business Day while shift #${activeShift.id} is still open. Complete shift handover first.',
-        );
+      final days = await txn.query('business_days', where: "status = 'OPEN'", orderBy: 'id DESC', limit: 1);
+      if (days.isEmpty) throw StateError('No active Business Day to close.');
+      final day = BusinessDay.fromMap(days.first);
+      final shifts = await txn.query('shifts', where: "business_day_id = ? AND status = 'OPEN'", whereArgs: [day.id]);
+      if (shifts.isNotEmpty && !autoLockActiveShifts) {
+        throw StateError('Cannot close Business Day while a shift is still open. Complete shift handover first.');
       }
-
-      // Auto-lock all open shifts under this business day
-      final openShifts = await database.query(
-        PosDatabaseConstants.tableShifts,
-        where: 'business_day_id = ? AND status = ?',
-        whereArgs: [active.id, ShiftStatus.open.dbValue],
-      );
-      final effectiveClosedAt = closedAt ?? DateTime.now();
-      final formattedClosedAt = _formatTimestamp(effectiveClosedAt);
-
-      for (final row in openShifts) {
-        final shift = Shift.fromMap(row);
-        final movements = await getCashMovements(shift.id);
-        double totalPayIn = 0.0;
-        double totalPayOut = 0.0;
-        for (final m in movements) {
-          if (m.isPayIn) {
-            totalPayIn += m.amount;
-          } else {
-            totalPayOut += m.amount;
-          }
-        }
-        final cashSales = await calculateCashSales(shift.id);
-        final expectedCash = shift.openingFloat + cashSales + totalPayIn - totalPayOut;
-
-        await database.update(
-          PosDatabaseConstants.tableShifts,
-          {
-            'closed_at': formattedClosedAt,
-            'counted_cash': shift.countedCash ?? expectedCash,
-            'expected_cash': expectedCash,
-            'discrepancy': (shift.countedCash ?? expectedCash) - expectedCash,
-            'discrepancy_status': DiscrepancyStatus.clean.dbValue,
-            'status': ShiftStatus.closed.dbValue,
-          },
-          where: 'id = ?',
-          whereArgs: [shift.id],
-        );
+      final timestamp = _formatTimestamp(closedAt ?? DateTime.now());
+      for (final shift in shifts) {
+        final id = shift['id'] as int;
+        final cash = await txn.rawQuery("""
+          SELECT COALESCE(SUM(COALESCE(op.amount_tendered_paisa,CAST(ROUND(op.amount_tendered*100) AS INTEGER))
+            - COALESCE(op.change_returned_paisa,CAST(ROUND(op.change_returned*100) AS INTEGER))),0) AS paisa
+          FROM order_payments op JOIN orders o ON o.id=op.order_id
+          WHERE o.shift_id=? AND op.payment_method='CASH' AND op.amount_tendered>0
+            AND o.payment_status IN ('SETTLED','REFUND_PENDING','CANCELLED','REFUNDED')
+        """, [id]);
+        final movements = await txn.rawQuery("SELECT COALESCE(SUM(CASE WHEN type='PAY_IN' THEN amount ELSE -amount END),0) AS net FROM cash_movements WHERE shift_id=?", [id]);
+        final expected = (shift['opening_float'] as num).toDouble() + (cash.first['paisa'] as num).toInt()/100 + (movements.first['net'] as num).toDouble();
+        final counted = (shift['counted_cash'] as num?)?.toDouble();
+        await txn.update('shifts', {
+          'status': 'CLOSED', 'closed_at': timestamp, 'expected_cash': expected,
+          'counted_cash': counted, 'discrepancy': counted == null ? null : counted-expected,
+          'discrepancy_status': counted == null ? 'FLAGGED' : shift['discrepancy_status'],
+        }, where: 'id=?', whereArgs: [id]);
       }
-    }
-
-    final effectiveClosedAt = closedAt ?? DateTime.now();
-    final formattedClosedAt = _formatTimestamp(effectiveClosedAt);
-
-    await database.update(
-      PosDatabaseConstants.tableBusinessDays,
-      {
-        'closed_at': formattedClosedAt,
-        'closed_by_staff_id': closedByStaffId,
-        'status': BusinessDayStatus.closed.dbValue,
-      },
-      where: 'id = ?',
-      whereArgs: [active.id],
-    );
-
-    return BusinessDay(
-      id: active.id,
-      openedAt: active.openedAt,
-      closedAt: effectiveClosedAt,
-      openedByStaffId: active.openedByStaffId,
-      closedByStaffId: closedByStaffId,
-      status: BusinessDayStatus.closed,
-    );
+      await txn.update('business_days', {
+        'status': 'CLOSED', 'closed_at': timestamp, 'closed_by_staff_id': closedByStaffId,
+      }, where: "id=? AND status='OPEN'", whereArgs: [day.id]);
+      return BusinessDay.fromMap({...days.first, 'status':'CLOSED', 'closed_at':timestamp, 'closed_by_staff_id':closedByStaffId});
+    });
   }
 
   // ===========================================================================
