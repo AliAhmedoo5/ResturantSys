@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:resturant_sys/core/shifts/report_delivery_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:resturant_sys/core/catalog/menu_item.dart';
@@ -81,6 +82,29 @@ void main() {
       final xlsx = File(files.singleWhere((f) => f.path.endsWith('.xlsx')).path);
       expect(String.fromCharCodes((await pdf.readAsBytes()).take(5)), '%PDF-');
       expect((await xlsx.readAsBytes()).take(2), [80, 75]);
+    });
+
+    test('offline delivery retries persist independently of a sealed Business Day', () async {
+      final delivery = ReportDeliveryService(database: db, transport: (_) async => throw const SocketException('offline'));
+      await delivery.configure(managerStaffId: supervisorId, endpoint: 'https://reports.example.test/send',
+        recipients: [const ReportRecipient(channel:'EMAIL',address:'owner@example.test',approved:true)]);
+      await shiftController.openBusinessDay(openedByStaffId: supervisorId);
+      await shiftController.openShift(staffId: cashierId, openingFloat: 100);
+      await shiftController.finalizeBusinessDayWithZReport(closedByStaffId: supervisorId);
+      final queued = await delivery.history(managerStaffId:supervisorId);
+      expect(queued.single['status'],'PENDING');
+      await delivery.processPending(now: DateTime.now().toUtc().add(const Duration(minutes:1)));
+      final failed = (await delivery.history(managerStaffId:supervisorId)).single;
+      expect(failed['status'],'PENDING');
+      expect(failed['retry_count'],1);
+      expect(failed['error_message'],'Connection unavailable; retry scheduled.');
+      expect(await shiftController.getActiveBusinessDay(),isNull);
+      await posDb.close();
+      db = await posDb.initialize();
+      final restarted = ReportDeliveryService(database:db,transport: (_) async => 'provider-message-42');
+      expect((await restarted.history(managerStaffId:supervisorId)).single['retry_count'],1);
+      await restarted.processPending(now:DateTime.parse(failed['next_attempt_at'] as String).add(const Duration(seconds:1)));
+      expect((await restarted.history(managerStaffId:supervisorId)).single['status'],'ACCEPTED');
     });
 
     test('correctly aggregates multi-shift totals, tenders, voids, wastage, and variance', () async {

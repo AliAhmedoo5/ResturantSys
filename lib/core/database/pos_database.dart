@@ -462,25 +462,34 @@ class PosDatabase {
     for (final operation in ['UPDATE','DELETE','INSERT']) {
       final ref = operation == 'INSERT' ? 'NEW' : 'OLD';
       for (final table in ['orders','shifts']) {
-        await db.execute("""CREATE TRIGGER IF NOT EXISTS closed_${table}_$operation BEFORE $operation ON $table
-          WHEN EXISTS(SELECT 1 FROM business_days WHERE id=$ref.business_day_id AND status='CLOSED')
+        final event = table == 'shifts' && operation == 'UPDATE'
+            ? 'UPDATE OF business_day_id,staff_id,opened_at,closed_at,opening_float,counted_cash,expected_cash,discrepancy,status' : operation;
+        final changedDay = operation == 'UPDATE' ? " OR EXISTS(SELECT 1 FROM business_days WHERE id=NEW.business_day_id AND status='CLOSED')" : '';
+        await db.execute("""CREATE TRIGGER IF NOT EXISTS closed_${table}_$operation BEFORE $event ON $table
+          WHEN EXISTS(SELECT 1 FROM business_days WHERE id=$ref.business_day_id AND status='CLOSED')$changedDay
           BEGIN SELECT RAISE(ABORT,'Business Day is permanently closed'); END""");
       }
       for (final table in ['order_items','order_payments']) {
+        final changedOrder = operation == 'UPDATE' ? " OR EXISTS(SELECT 1 FROM orders o JOIN business_days b ON b.id=o.business_day_id WHERE o.id=NEW.order_id AND b.status='CLOSED')" : '';
         await db.execute("""CREATE TRIGGER IF NOT EXISTS closed_${table}_$operation BEFORE $operation ON $table
           WHEN EXISTS(SELECT 1 FROM orders o JOIN business_days b ON b.id=o.business_day_id
-            WHERE o.id=$ref.order_id AND b.status='CLOSED')
+            WHERE o.id=$ref.order_id AND b.status='CLOSED')$changedOrder
           BEGIN SELECT RAISE(ABORT,'Business Day is permanently closed'); END""");
       }
+      final changedShift = operation == 'UPDATE' ? " OR EXISTS(SELECT 1 FROM shifts s JOIN business_days b ON b.id=s.business_day_id WHERE s.id=NEW.shift_id AND b.status='CLOSED')" : '';
       await db.execute("""CREATE TRIGGER IF NOT EXISTS closed_movements_$operation BEFORE $operation ON cash_movements
         WHEN EXISTS(SELECT 1 FROM shifts s JOIN business_days b ON b.id=s.business_day_id
-          WHERE s.id=$ref.shift_id AND b.status='CLOSED')
+          WHERE s.id=$ref.shift_id AND b.status='CLOSED')$changedShift
         BEGIN SELECT RAISE(ABORT,'Business Day is permanently closed'); END""");
     }
     await db.execute("""CREATE TRIGGER IF NOT EXISTS closed_day_immutable BEFORE UPDATE ON business_days
       WHEN OLD.status='CLOSED' BEGIN SELECT RAISE(ABORT,'Business Day is permanently closed'); END""");
-    await db.execute("""CREATE TRIGGER IF NOT EXISTS report_snapshot_immutable BEFORE UPDATE OF snapshot_json,content_hash,business_day_id ON report_runs
+    await db.execute("""CREATE TRIGGER IF NOT EXISTS report_snapshot_immutable BEFORE UPDATE OF id,snapshot_json,content_hash,business_day_id,created_by,created_at ON report_runs
       BEGIN SELECT RAISE(ABORT,'Report snapshot is immutable'); END""");
+    for (final table in ['report_runs','inventory_movements']) {
+      await db.execute("CREATE TRIGGER IF NOT EXISTS ${table}_no_delete BEFORE DELETE ON $table BEGIN SELECT RAISE(ABORT,'Report audit is immutable'); END");
+    }
+    await db.execute("CREATE TRIGGER IF NOT EXISTS inventory_movements_no_update BEFORE UPDATE ON inventory_movements BEGIN SELECT RAISE(ABORT,'Inventory audit is immutable'); END");
   }
 
   Future<void> _upgradeToVersion13(DatabaseExecutor db) async {
