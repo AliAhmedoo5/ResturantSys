@@ -310,6 +310,27 @@ class ExcelReportingEngine {
     );
   }
 
+  /// Renders the committed close snapshot without re-reading mutable catalog data.
+  List<int> generateSnapshotWorkbook(List<Map<String, dynamic>> sections) {
+    return _packageOoxmlZip(sections.map((section) {
+      final builder = _SheetXmlBuilder();
+      builder.addHeaderRow([section['title']]);
+      builder.addTableHeaders(List<String>.from(section['headers'] as List));
+      for (final row in section['rows'] as List) {
+        builder.addRow(List<dynamic>.from(row as List));
+      }
+      if (section['detail_rows'] != null) {
+        builder.addEmptyRow();
+        builder.addSectionHeader('Recorded inventory movements');
+        builder.addTableHeaders(List<String>.from(section['detail_headers'] as List));
+        for (final row in section['detail_rows'] as List) {
+          builder.addRow(List<dynamic>.from(row as List));
+        }
+      }
+      return builder.build();
+    }).toList());
+  }
+
   // ===========================================================================
   // SHEET BUILDERS
   // ===========================================================================

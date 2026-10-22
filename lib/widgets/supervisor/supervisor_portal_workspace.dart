@@ -20,6 +20,8 @@ import 'token_queue_tray.dart';
 import '../shifts/z_report_dialog.dart';
 import '../../core/shifts/z_report.dart';
 import '../../core/shifts/excel_reporting_engine.dart';
+import '../../core/shifts/report_delivery_service.dart';
+import '../shifts/report_delivery_dialog.dart';
 import '../../core/database/database_backup_service.dart';
 import '../../core/database/pos_database_constants.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -1515,6 +1517,12 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  if (widget.shiftController != null && widget.currentStaff != null)
+                    Align(alignment:Alignment.centerRight,child:TextButton.icon(
+                      icon:const Icon(Icons.outgoing_mail),label:const Text('Report delivery & archive'),
+                      onPressed:()=>showDialog<void>(context:context,builder:(_)=>ReportDeliveryDialog(
+                        service:ReportDeliveryService(database:widget.shiftController!.database),managerStaffId:widget.currentStaff!.id)),
+                    )),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -1628,7 +1636,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                                     const Text('Net Drawer Discrepancy', style: TextStyle(color: WarmCounterColors.lightSecondaryText, fontSize: 12)),
                                     const SizedBox(height: 2),
                                     Text(
-                                      'PKR ${_currencyFormat.format(_activeZReport!.netCashVariance)}',
+                                      _activeZReport!.hasUncountedShifts?'Missing blind count':'PKR ${_currencyFormat.format(_activeZReport!.netCashVariance)}',
                                       style: TextStyle(
                                         fontWeight: FontWeight.w700,
                                         fontSize: 14,
@@ -1700,7 +1708,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                                       messenger.showSnackBar(
                                         SnackBar(
                                           content: Text(
-                                            'Business Day #${dayId ?? ""} finalized with Z-Report. Backup archived and tokens reset to #01.',
+                                            'Business Day #${dayId ?? ""} closed. PDF/Excel export and delivery status are available in Report delivery & archive. Next day tokens start at #01.',
                                           ),
                                         ),
                                       );

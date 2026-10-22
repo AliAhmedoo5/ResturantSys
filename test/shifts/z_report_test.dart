@@ -1,4 +1,9 @@
 import 'dart:io';
+import 'dart:convert';
+import 'package:archive/archive.dart';
+import 'package:resturant_sys/core/shifts/report_export_service.dart';
+import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
+import 'package:resturant_sys/core/shifts/report_delivery_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:resturant_sys/core/catalog/menu_item.dart';
@@ -72,6 +77,115 @@ void main() {
       expect((await shiftController.getActiveBusinessDay())?.id, day.id);
       expect((await shiftController.getShift(shift.id)).isOpen, isTrue);
     });
+    test('Z-close saves immutable PDF and Excel artifacts beside the local database', () async {
+      await shiftController.openBusinessDay(openedByStaffId: supervisorId);
+      await shiftController.openShift(staffId: cashierId, openingFloat: 100);
+      await shiftController.finalizeBusinessDayWithZReport(closedByStaffId: supervisorId);
+      final files = await Directory('${tempDir.path}/reports').list(recursive: true).where((f) => f is File).toList();
+      final pdf = File(files.singleWhere((f) => f.path.endsWith('.pdf')).path);
+      final xlsx = File(files.singleWhere((f) => f.path.endsWith('.xlsx')).path);
+      expect(String.fromCharCodes((await pdf.readAsBytes()).take(5)), '%PDF-');
+      expect((await xlsx.readAsBytes()).take(2), [80, 75]);
+    });
+
+    test('offline delivery retries persist independently of a sealed Business Day', () async {
+      final delivery = ReportDeliveryService(database: db, transport: (_) async => throw const SocketException('offline'));
+      await delivery.configure(managerStaffId: supervisorId, endpoint: 'https://reports.example.test/send',
+        recipients: [const ReportRecipient(channel:'EMAIL',address:'owner@example.test',approved:true)]);
+      await shiftController.openBusinessDay(openedByStaffId: supervisorId);
+      await shiftController.openShift(staffId: cashierId, openingFloat: 100);
+      await shiftController.finalizeBusinessDayWithZReport(closedByStaffId: supervisorId);
+      final queued = await delivery.history(managerStaffId:supervisorId);
+      expect(queued.single['status'],'PENDING');
+      await delivery.processPending(now: DateTime.now().toUtc().add(const Duration(minutes:1)));
+      final failed = (await delivery.history(managerStaffId:supervisorId)).single;
+      expect(failed['status'],'PENDING');
+      expect(failed['retry_count'],1);
+      expect(failed['error_message'],'Connection unavailable; retry scheduled.');
+      expect(await shiftController.getActiveBusinessDay(),isNull);
+      await posDb.close();
+      db = await posDb.initialize();
+      final restarted = ReportDeliveryService(database:db,transport: (_) async => 'provider-message-42');
+      expect((await restarted.history(managerStaffId:supervisorId)).single['retry_count'],1);
+      await restarted.processPending(now:DateTime.parse(failed['next_attempt_at'] as String).add(const Duration(seconds:1)));
+      expect((await restarted.history(managerStaffId:supervisorId)).single['status'],'ACCEPTED');
+    });
+
+    test('recovers synthetic report snapshot after disk failure and later catalog edits', () async {
+      final delivery=ReportDeliveryService(database:db,transport:(_) async=>'synthetic-provider');
+      await delivery.configure(managerStaffId:supervisorId,endpoint:'https://reports.example.test/send',
+        recipients:[const ReportRecipient(channel:'EMAIL',address:'fixture@example.invalid',approved:true)]);
+      final day=await shiftController.openBusinessDay(openedByStaffId:supervisorId);
+      final shift=await shiftController.openShift(staffId:cashierId,openingFloat:100);
+      final now=DateTime.now().toIso8601String();
+      final category=await db.insert('categories',{'name':'Synthetic category','display_order':1,'color_hex':'#FFC400','created_at':now});
+      final ingredient=await db.insert('raw_ingredients',{'name':'Synthetic Flour','storage_unit':'kg','current_stock':10.0,'low_stock_threshold':0.0,'cost_per_recipe_unit':1.0,'created_at':now});
+      final item=await db.insert('menu_items',{'category_id':category,'name':'Synthetic Burger','base_price':123.45,'tax_rate':0.0,'is_tax_inclusive':1,'is_active':1,'created_at':now});
+      await db.insert('recipes',{'menu_item_id':item,'raw_ingredient_id':ingredient,'quantity_per_recipe_unit':0.25,'created_at':now});
+      final menu=MenuItem(id:item,categoryId:category,name:'Synthetic Burger',basePrice:123.45);
+      for(final tender in [const PaymentTender(method:PaymentMethod.cash,amountTendered:123),const PaymentTender(method:PaymentMethod.jazzCash,amountTendered:123.45)]) {
+        await orderController.checkoutOrder(businessDayId:day.id,shiftId:shift.id,cashierId:cashierId,
+          diningType:DiningType.dineIn,items:[CartItem(menuItem:menu,quantity:1)],payments:[tender]);
+      }
+      await shiftController.closeBusinessDay(closedByStaffId:supervisorId,autoLockActiveShifts:true);
+      final blocked=File('${tempDir.path}/blocked');
+      await blocked.writeAsString('synthetic file occupying report directory');
+      final exporter=ReportExportService(database:db,directory:blocked.path);
+      await exporter.exportPending();
+      expect(await shiftController.getActiveBusinessDay(),isNull);
+      expect((await shiftController.getShift(shift.id)).countedCash,isNull);
+      expect((await exporter.history()).single['status'],'PENDING');
+      final catalog=CatalogAndRecipeController(database:db);
+      final raw=await catalog.getRawIngredient(ingredient);
+      await catalog.updateRawIngredient(raw.copyWith(name:'Changed after close',currentStock:500));
+      final recovered=ReportExportService(database:db,directory:'${tempDir.path}/recovered');
+      await recovered.exportPending();
+      final run=(await recovered.history()).single;
+      final snapshot=jsonDecode(run['snapshot_json'] as String) as Map<String,dynamic>;
+      final sections=snapshot['sections'] as List;
+      final summary=Map<String,dynamic>.fromEntries((sections[0]['rows'] as List).map((r)=>MapEntry(r[0] as String,r[1])));
+      expect(summary['Net sales incl. Collection Due'],24690);
+      expect(summary['Tender CASH (collected)'],12300);
+      expect(summary['Tender JAZZCASH (collected)'],12345);
+      expect(summary['Cash rounding'],-45);
+      expect((sections[2]['rows'] as List).single,['Synthetic Flour','kg',0,9.5,9.5]);
+      final artifacts=jsonDecode(run['artifacts_json'] as String) as List;
+      final workbook=File(artifacts.singleWhere((a)=>a['kind']=='xlsx')['path'] as String);
+      final archive=ZipDecoder().decodeBytes(await workbook.readAsBytes());
+      final salesXml=utf8.decode(archive.findFile('xl/worksheets/sheet2.xml')!.content as List<int>);
+      final inventoryXml=utf8.decode(archive.findFile('xl/worksheets/sheet3.xml')!.content as List<int>);
+      expect(salesXml,contains('Synthetic Burger'));
+      expect(salesXml,contains('<v>12345</v>'));
+      expect(inventoryXml,contains('Synthetic Flour'));
+      expect(inventoryXml,isNot(contains('Changed after close')));
+      expect(inventoryXml,contains('<v>9.5</v>'));
+      expect(inventoryXml,contains('Recorded inventory movements'));
+      expect(inventoryXml,contains('<v>10.0</v>')); 
+      await recovered.exportPending();
+      await delivery.enqueueReadyReports();
+      await delivery.enqueueReadyReports();
+      expect((await delivery.history(managerStaffId:supervisorId)).length,1);
+      expect(await Directory('${tempDir.path}/recovered').list().length,2);
+      final sample=Platform.environment['SYNTHETIC_Z_CLOSE_FIXTURE'];
+      if(sample!=null) {
+        await Directory(sample).create(recursive:true);
+        for(final artifact in artifacts) {
+          await File(artifact['path'] as String).copy('$sample/synthetic-z-close.${artifact['kind']}');
+        }
+      }
+    });
+
+    test('concurrent export recovery persists one immutable artifact pair', () async {
+      await shiftController.openBusinessDay(openedByStaffId:supervisorId);
+      await shiftController.closeBusinessDay(closedByStaffId:supervisorId);
+      final first=ReportExportService(database:db,directory:'${tempDir.path}/first-recovery');
+      final second=ReportExportService(database:db,directory:'${tempDir.path}/second-recovery');
+      await Future.wait([first.exportPending(),second.exportPending()]);
+      final files=await tempDir.list(recursive:true).where((file)=>file.path.endsWith('.pdf') || file.path.endsWith('.xlsx')).toList();
+      expect(files.length,2);
+      expect((await first.history()).single['status'],'READY');
+    });
+
     test('correctly aggregates multi-shift totals, tenders, voids, wastage, and variance', () async {
       // 1. Open Business Day
       final day = await shiftController.openBusinessDay(openedByStaffId: supervisorId);
@@ -367,6 +481,12 @@ void main() {
         closedByStaffId: supervisorId,
       );
       expect(closedDay.isClosed, isTrue);
+      await expectLater(orderController.cancelOrder(orderId:res1.order.id,cashierId:cashierId,
+        reason:'Attempt after seal',commandId:'closed-day-cancel'),throwsStateError);
+      await expectLater(orderController.checkoutOrder(businessDayId:day1.id,shiftId:shift.id,
+        cashierId:cashierId,diningType:DiningType.dineIn,items:[CartItem(menuItem:snackItem,quantity:1)],
+        payments:[const PaymentTender(method:PaymentMethod.cash,amountTendered:200)]),throwsStateError);
+      expect((await orderController.getOrder(res1.order.id)).tokenNumber,1);
 
       // Now open Day 2
       final day2 = await shiftController.openBusinessDay(openedByStaffId: supervisorId);
@@ -374,6 +494,12 @@ void main() {
 
       // Verify token resets to #01 for the fresh Business Day!
       expect(nextTokenDay2, equals(1));
+      final nextShift=await shiftController.openShift(staffId:cashierId,openingFloat:100);
+      final nextOrder=await orderController.checkoutOrder(businessDayId:day2.id,shiftId:nextShift.id,
+        cashierId:cashierId,diningType:DiningType.dineIn,items:[CartItem(menuItem:snackItem,quantity:1)],
+        payments:[const PaymentTender(method:PaymentMethod.cash,amountTendered:200)]);
+      expect(nextOrder.order.tokenNumber,1);
+      expect((await orderController.getOrder(res2.order.id)).tokenNumber,2);
     });
 
     test('finalizeBusinessDayWithZReport auto-locks open shifts and concludes day when shift is active', () async {

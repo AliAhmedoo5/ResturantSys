@@ -121,6 +121,7 @@ class PosDatabase {
     await _upgradeToVersion10(db);
     await _upgradeToVersion11(db);
     await _upgradeToVersion12(db);
+    await _upgradeToVersion14(db);
   }
 
   Future<void> _createOperationalAccountingTables(DatabaseExecutor executor) async {
@@ -432,6 +433,97 @@ class PosDatabase {
     if (oldVersion < 11) await _upgradeToVersion11(db);
     if (oldVersion < 12) await _upgradeToVersion12(db);
     if (oldVersion < 13) await _upgradeToVersion13(db);
+    if (oldVersion < 14) await _upgradeToVersion14(db);
+  }
+
+  Future<void> _upgradeToVersion14(DatabaseExecutor db) async {
+    await db.execute("""CREATE TABLE IF NOT EXISTS report_runs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      business_day_id INTEGER NOT NULL UNIQUE REFERENCES business_days(id),
+      snapshot_json TEXT NOT NULL, content_hash TEXT NOT NULL,
+      created_by INTEGER NOT NULL REFERENCES staff(id), created_at TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'PENDING', artifacts_json TEXT,
+      error_message TEXT
+    )""");
+    final reportColumns=await db.rawQuery('PRAGMA table_info(report_runs)');
+    if(!reportColumns.any((column)=>column['name']=='export_lease_until')) {
+      await db.execute('ALTER TABLE report_runs ADD COLUMN export_lease_until TEXT');
+    }
+    await db.execute("""CREATE TABLE IF NOT EXISTS inventory_movements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ingredient_id INTEGER NOT NULL REFERENCES raw_ingredients(id),
+      business_day_id INTEGER REFERENCES business_days(id),
+      quantity_delta REAL NOT NULL, balance_after REAL NOT NULL,
+      recorded_at TEXT NOT NULL
+    )""");
+    await db.execute("""CREATE TRIGGER IF NOT EXISTS inventory_balance_change AFTER UPDATE OF current_stock ON raw_ingredients
+      WHEN NEW.current_stock != OLD.current_stock BEGIN
+      INSERT INTO inventory_movements(ingredient_id,business_day_id,quantity_delta,balance_after,recorded_at)
+      VALUES(NEW.id,(SELECT id FROM business_days WHERE status='OPEN' ORDER BY id DESC LIMIT 1),
+        NEW.current_stock-OLD.current_stock,NEW.current_stock,strftime('%Y-%m-%d %H:%M:%f','now','localtime'));
+    END""");
+    await db.execute("""CREATE TRIGGER IF NOT EXISTS inventory_initial_balance AFTER INSERT ON raw_ingredients
+      WHEN NEW.current_stock != 0 BEGIN
+      INSERT INTO inventory_movements(ingredient_id,business_day_id,quantity_delta,balance_after,recorded_at)
+      VALUES(NEW.id,(SELECT id FROM business_days WHERE status='OPEN' ORDER BY id DESC LIMIT 1),
+        NEW.current_stock,NEW.current_stock,strftime('%Y-%m-%d %H:%M:%f','now','localtime'));
+    END""");
+    final outboxColumns = await db.rawQuery('PRAGMA table_info(report_outbox)');
+    if (!outboxColumns.any((column) => column['name'] == 'idempotency_key')) {
+      await db.execute('ALTER TABLE report_outbox RENAME TO report_outbox_legacy');
+      await db.execute("""CREATE TABLE report_outbox (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_day_id INTEGER NOT NULL REFERENCES business_days(id),
+        channel TEXT NOT NULL CHECK(channel IN ('EMAIL','WHATSAPP')),
+        recipient TEXT NOT NULL, payload_json TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING','PROCESSING','SENT','ACCEPTED','FAILED','AMBIGUOUS','CANCELLED')),
+        retry_count INTEGER NOT NULL DEFAULT 0, next_attempt_at TEXT NOT NULL,
+        error_message TEXT, created_at TEXT NOT NULL, processed_at TEXT,
+        idempotency_key TEXT UNIQUE, report_run_id INTEGER REFERENCES report_runs(id),
+        endpoint TEXT, max_attempts INTEGER NOT NULL DEFAULT 8,
+        lease_until TEXT, provider_reference TEXT
+      )""");
+      await db.execute("""INSERT INTO report_outbox(id,business_day_id,channel,recipient,payload_json,status,retry_count,next_attempt_at,error_message,created_at,processed_at)
+        SELECT id,business_day_id,channel,recipient,payload_json,status,retry_count,next_attempt_at,error_message,created_at,processed_at FROM report_outbox_legacy""");
+      await db.execute('DROP TABLE report_outbox_legacy');
+      await db.execute('CREATE INDEX idx_report_outbox_status_attempt ON report_outbox(status,next_attempt_at)');
+    }
+    await db.execute("""CREATE TABLE IF NOT EXISTS report_delivery_audit (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, staff_id INTEGER NOT NULL REFERENCES staff(id),
+      action TEXT NOT NULL, details_json TEXT NOT NULL, created_at TEXT NOT NULL
+    )""");
+    // A closed day is a durable boundary even for stale UI controllers.
+    for (final operation in ['UPDATE','DELETE','INSERT']) {
+      final ref = operation == 'INSERT' ? 'NEW' : 'OLD';
+      for (final table in ['orders','shifts']) {
+        final event = table == 'shifts' && operation == 'UPDATE'
+            ? 'UPDATE OF business_day_id,staff_id,opened_at,closed_at,opening_float,counted_cash,expected_cash,discrepancy,status' : operation;
+        final changedDay = operation == 'UPDATE' ? " OR EXISTS(SELECT 1 FROM business_days WHERE id=NEW.business_day_id AND status='CLOSED')" : '';
+        await db.execute("""CREATE TRIGGER IF NOT EXISTS closed_${table}_$operation BEFORE $event ON $table
+          WHEN EXISTS(SELECT 1 FROM business_days WHERE id=$ref.business_day_id AND status='CLOSED')$changedDay
+          BEGIN SELECT RAISE(ABORT,'Business Day is permanently closed'); END""");
+      }
+      for (final table in ['order_items','order_payments']) {
+        final changedOrder = operation == 'UPDATE' ? " OR EXISTS(SELECT 1 FROM orders o JOIN business_days b ON b.id=o.business_day_id WHERE o.id=NEW.order_id AND b.status='CLOSED')" : '';
+        await db.execute("""CREATE TRIGGER IF NOT EXISTS closed_${table}_$operation BEFORE $operation ON $table
+          WHEN EXISTS(SELECT 1 FROM orders o JOIN business_days b ON b.id=o.business_day_id
+            WHERE o.id=$ref.order_id AND b.status='CLOSED')$changedOrder
+          BEGIN SELECT RAISE(ABORT,'Business Day is permanently closed'); END""");
+      }
+      final changedShift = operation == 'UPDATE' ? " OR EXISTS(SELECT 1 FROM shifts s JOIN business_days b ON b.id=s.business_day_id WHERE s.id=NEW.shift_id AND b.status='CLOSED')" : '';
+      await db.execute("""CREATE TRIGGER IF NOT EXISTS closed_movements_$operation BEFORE $operation ON cash_movements
+        WHEN EXISTS(SELECT 1 FROM shifts s JOIN business_days b ON b.id=s.business_day_id
+          WHERE s.id=$ref.shift_id AND b.status='CLOSED')$changedShift
+        BEGIN SELECT RAISE(ABORT,'Business Day is permanently closed'); END""");
+    }
+    await db.execute("""CREATE TRIGGER IF NOT EXISTS closed_day_immutable BEFORE UPDATE ON business_days
+      WHEN OLD.status='CLOSED' BEGIN SELECT RAISE(ABORT,'Business Day is permanently closed'); END""");
+    await db.execute("""CREATE TRIGGER IF NOT EXISTS report_snapshot_immutable BEFORE UPDATE OF id,snapshot_json,content_hash,business_day_id,created_by,created_at ON report_runs
+      BEGIN SELECT RAISE(ABORT,'Report snapshot is immutable'); END""");
+    for (final table in ['report_runs','inventory_movements']) {
+      await db.execute("CREATE TRIGGER IF NOT EXISTS ${table}_no_delete BEFORE DELETE ON $table BEGIN SELECT RAISE(ABORT,'Report audit is immutable'); END");
+    }
+    await db.execute("CREATE TRIGGER IF NOT EXISTS inventory_movements_no_update BEFORE UPDATE ON inventory_movements BEGIN SELECT RAISE(ABORT,'Inventory audit is immutable'); END");
   }
 
   Future<void> _upgradeToVersion13(DatabaseExecutor db) async {

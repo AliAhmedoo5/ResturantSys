@@ -339,6 +339,8 @@ class _ZReportDialogState extends State<ZReportDialog> {
                     _MetricItem('Cash Tenders', 'PKR ${_currencyFormat.format(z.cashSales)}'),
                     _MetricItem('Card Tenders', 'PKR ${_currencyFormat.format(z.cardSales)}'),
                     _MetricItem('Raast QR Tenders', 'PKR ${_currencyFormat.format(z.raastSales)}'),
+                    ...z.tenderSalesPaisa.entries.where((entry)=>!['CASH','CARD','RAAST'].contains(entry.key)).map((entry)=>_MetricItem('${entry.key} Tenders','PKR ${_currencyFormat.format(entry.value/100)}')),
+                    _MetricItem('Collection Due','PKR ${_currencyFormat.format(z.collectionDuePaisa/100)}'),
                     _MetricItem('Total Tendered', 'PKR ${_currencyFormat.format(z.totalTenderSales)}', isBold: true),
                   ],
                 ),
@@ -364,7 +366,7 @@ class _ZReportDialogState extends State<ZReportDialog> {
                     _MetricItem('Counted Drawer Cash', 'PKR ${_currencyFormat.format(z.totalCountedCash)}'),
                     _MetricItem(
                       'Net Cash Variance',
-                      'PKR ${_currencyFormat.format(z.netCashVariance)}',
+                      z.hasUncountedShifts?'Unknown - missing blind count':'PKR ${_currencyFormat.format(z.netCashVariance)}',
                       isBold: true,
                       isWarning: hasDiscrepancy,
                     ),
