@@ -445,6 +445,10 @@ class PosDatabase {
       status TEXT NOT NULL DEFAULT 'PENDING', artifacts_json TEXT,
       error_message TEXT
     )""");
+    final reportColumns=await db.rawQuery('PRAGMA table_info(report_runs)');
+    if(!reportColumns.any((column)=>column['name']=='export_lease_until')) {
+      await db.execute('ALTER TABLE report_runs ADD COLUMN export_lease_until TEXT');
+    }
     await db.execute("""CREATE TABLE IF NOT EXISTS inventory_movements (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       ingredient_id INTEGER NOT NULL REFERENCES raw_ingredients(id),

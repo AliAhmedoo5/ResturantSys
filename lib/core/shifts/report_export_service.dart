@@ -86,6 +86,12 @@ class ReportExportService {
   Future<void> exportPending() async {
     final runs = await database.query('report_runs',where:"status != 'READY'",orderBy:'id');
     for (final run in runs) {
+      final now=DateTime.now().toUtc();
+      final claimed=await database.update('report_runs',{
+        'status':'GENERATING','export_lease_until':now.add(const Duration(minutes:10)).toIso8601String(),
+      },where:"id=? AND status!='READY' AND (status!='GENERATING' OR export_lease_until IS NULL OR export_lease_until<=?)",
+        whereArgs:[run['id'],now.toIso8601String()]);
+      if(claimed!=1)continue;
       try {
         final snapshot = jsonDecode(run['snapshot_json'] as String) as Map<String,dynamic>;
         final sections = (snapshot['sections'] as List).map((s)=>Map<String,dynamic>.from(s as Map)).toList();
@@ -105,7 +111,7 @@ class ReportExportService {
               return isMoney && entry.value is num ? money((entry.value as num).toInt()) : '${entry.value}';
             }).toList();
           }).toList();
-          document.addPage(pw.MultiPage(pageFormat:PdfPageFormat.a4.landscape,
+          document.addPage(pw.MultiPage(pageFormat:PdfPageFormat.a4.landscape,maxPages:1000,
             margin:const pw.EdgeInsets.all(28),
             header:(context)=>pw.Text('Business Day ${snapshot['business_date']} | Revision 1 | ${section['title']}',style:pw.TextStyle(fontSize:15,fontWeight:pw.FontWeight.bold)),
             footer:(context)=>pw.Text('Snapshot ${run['content_hash']} | Page ${context.pageNumber}',style:const pw.TextStyle(fontSize:7)),
@@ -124,26 +130,36 @@ class ReportExportService {
             ]));
         }
         final outputs = {'pdf':await document.save(),'xlsx':ExcelReportingEngine(database:database).generateSnapshotWorkbook(sections)};
-        final artifacts = <Map<String,dynamic>>[];
-        for (final output in outputs.entries) {
-          final file = File(p.join(directory,'$base.${output.key}'));
-          if (await file.exists()) {
-            if (sha256.convert(await file.readAsBytes()).toString()!=sha256.convert(output.value).toString()) {
-              // PDF creation metadata can vary between recoveries. Existing committed
-              // files are preserved; their actual digest is recorded below.
-              if (output.key!='pdf') throw StateError('Existing workbook differs from immutable snapshot');
-            }
-          } else {
-            final temporary = File('${file.path}.tmp');
-            await temporary.writeAsBytes(output.value,flush:true);
+        final previous=run['artifacts_json']==null?<dynamic>[]:jsonDecode(run['artifacts_json'] as String) as List;
+        final artifacts=<Map<String,dynamic>>[];
+        for(final output in outputs.entries) {
+          final earlier=previous.where((artifact)=>artifact['kind']==output.key).toList();
+          final path=earlier.isEmpty?p.join(directory,'$base.${output.key}'):earlier.single['path'] as String;
+          final file=File(path);
+          final expected=await file.exists() && earlier.isNotEmpty?earlier.single['sha256'] as String:sha256.convert(output.value).toString();
+          artifacts.add({'kind':output.key,'path':path,'sha256':expected,'size_bytes':output.value.length});
+        }
+        // Persist expected checksums BEFORE writing any final artifact. A crash
+        // can then validate an existing PDF without trusting altered bytes or
+        // requiring PDF creation metadata to be identical on regeneration.
+        await database.update('report_runs',{'artifacts_json':jsonEncode(artifacts)},where:'id=?',whereArgs:[run['id']]);
+        for(final artifact in artifacts) {
+          final file=File(artifact['path'] as String);
+          if(!await file.exists()) {
+            await file.parent.create(recursive:true);
+            final temporary=File('${file.path}.tmp');
+            await temporary.writeAsBytes(outputs[artifact['kind']]!,flush:true);
             await temporary.rename(file.path);
           }
-          final bytes = await file.readAsBytes();
-          artifacts.add({'kind':output.key,'path':file.path,'sha256':sha256.convert(bytes).toString(),'size_bytes':bytes.length});
+          final bytes=await file.readAsBytes();
+          if(sha256.convert(bytes).toString()!=artifact['sha256']) {
+            throw StateError('Existing report file failed its immutable checksum');
+          }
+          artifact['size_bytes']=bytes.length;
         }
-        await database.update('report_runs',{'status':'READY','artifacts_json':jsonEncode(artifacts),'error_message':null},where:'id=?',whereArgs:[run['id']]);
+        await database.update('report_runs',{'status':'READY','artifacts_json':jsonEncode(artifacts),'error_message':null,'export_lease_until':null},where:'id=?',whereArgs:[run['id']]);
       } catch (_) {
-        await database.update('report_runs',{'status':'PENDING','error_message':'Local report export failed; check storage and retry.'},where:'id=?',whereArgs:[run['id']]);
+        await database.update('report_runs',{'status':'PENDING','error_message':'Local report export failed; check storage and retry.','export_lease_until':null},where:'id=?',whereArgs:[run['id']]);
       }
     }
   }
