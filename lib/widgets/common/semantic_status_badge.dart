@@ -58,11 +58,12 @@ class SemanticStatusBadge extends StatelessWidget {
   final EdgeInsetsGeometry padding;
 
   const SemanticStatusBadge.ready({
-    super.key,
+    Key? key,
     String? label,
     double fontSize = 12.0,
     double iconSize = 14.0,
   }) : this(
+          key: key,
           kind: SemanticStatusKind.ready,
           customLabel: label,
           fontSize: fontSize,
@@ -70,11 +71,12 @@ class SemanticStatusBadge extends StatelessWidget {
         );
 
   const SemanticStatusBadge.preparing({
-    super.key,
+    Key? key,
     String? label,
     double fontSize = 12.0,
     double iconSize = 14.0,
   }) : this(
+          key: key,
           kind: SemanticStatusKind.preparing,
           customLabel: label,
           fontSize: fontSize,
@@ -82,11 +84,12 @@ class SemanticStatusBadge extends StatelessWidget {
         );
 
   const SemanticStatusBadge.outForDelivery({
-    super.key,
+    Key? key,
     String? label,
     double fontSize = 12.0,
     double iconSize = 14.0,
   }) : this(
+          key: key,
           kind: SemanticStatusKind.outForDelivery,
           customLabel: label,
           fontSize: fontSize,
@@ -94,11 +97,12 @@ class SemanticStatusBadge extends StatelessWidget {
         );
 
   const SemanticStatusBadge.canceled({
-    super.key,
+    Key? key,
     String? label,
     double fontSize = 12.0,
     double iconSize = 14.0,
   }) : this(
+          key: key,
           kind: SemanticStatusKind.canceled,
           customLabel: label,
           fontSize: fontSize,

@@ -1,10 +1,8 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:resturant_sys/core/orders/token_status.dart';
 import 'package:resturant_sys/core/theme/theme.dart';
 import 'package:resturant_sys/widgets/app_header.dart';
-import 'package:resturant_sys/widgets/common/semantic_status_badge.dart';
 
 void main() {
   group('Chapter 34 Street-Food / Mafia Branding Theme Tokens', () {

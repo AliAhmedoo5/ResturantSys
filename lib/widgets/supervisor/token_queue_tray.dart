@@ -188,28 +188,6 @@ class _TokenQueueTrayState extends State<TokenQueueTray> {
     final isPreparing = order.tokenStatus == TokenStatus.preparing;
     final isReady = order.tokenStatus == TokenStatus.ready;
 
-    Color badgeColor;
-    Color badgeTextColor;
-    String statusLabel;
-    IconData statusIcon;
-
-    if (isPreparing) {
-      badgeColor = const Color(0xFFFFF7ED); // Warm Amber
-      badgeTextColor = const Color(0xFFC2410C);
-      statusLabel = 'PREPARING';
-      statusIcon = Icons.soup_kitchen_rounded;
-    } else if (isReady) {
-      badgeColor = const Color(0xFFECFDF5); // Emerald Green
-      badgeTextColor = const Color(0xFF047857);
-      statusLabel = 'READY ON PASS';
-      statusIcon = Icons.check_circle_rounded;
-    } else {
-      badgeColor = WarmCounterColors.lightPageBackground;
-      badgeTextColor = WarmCounterColors.lightSecondaryText;
-      statusLabel = 'DELIVERED';
-      statusIcon = Icons.done_all_rounded;
-    }
-
     final itemsSummary = order.items.isNotEmpty
         ? order.items.map((it) => '${it.quantity}x ${it.name}').join(', ')
         : 'Order Items';

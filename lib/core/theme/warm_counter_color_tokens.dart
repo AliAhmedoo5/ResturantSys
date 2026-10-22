@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
 import 'warm_counter_colors.dart';
 
-import 'package:flutter/material.dart';
-import 'warm_counter_colors.dart';
-
 /// Semantic color tokens for the Chapter 34 Street-Food / Mafia theme exposed as a [ThemeExtension].
 ///
 /// Allows type-safe access to domain-specific colors via `context.streetFoodMafiaColors`,

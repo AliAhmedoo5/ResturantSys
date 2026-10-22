@@ -43,6 +43,7 @@ void main() {
         id: 1,
         name: 'Mafia Boss Deal',
         basePrice: 1200.0,
+        createdAt: DateTime(2026, 1, 1),
       ),
     ];
 
@@ -64,7 +65,13 @@ void main() {
               initialMenuItems: testMenuItems,
               initialDeals: testDeals,
               initialDiscounts: const [
-                DiscountPreset(id: 1, name: 'Staff 10%', percentage: 10.0),
+                DiscountPreset(
+                  id: 1,
+                  name: 'Staff 10%',
+                  type: DiscountType.percentage,
+                  value: 10.0,
+                  isActive: true,
+                ),
               ],
             ),
           ),

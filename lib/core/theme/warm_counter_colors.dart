@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'package:flutter/material.dart';
-
 /// Authoritative color palette tokens for Chapter 34 Street-Food / Mafia Branding design system.
 ///
 /// Implements high-contrast dark surfaces tailored for counter readability,
