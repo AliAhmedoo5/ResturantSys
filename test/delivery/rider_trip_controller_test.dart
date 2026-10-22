@@ -63,8 +63,8 @@ void main() {
       // Create Rider staff
       riderStaffId = await db.insert('staff', {
         'name': 'Kamran Rider',
-        'pin_hash': 'dummy_hash',
-        'salt': 'dummy_salt',
+        'department_id': 1,
+        'pin_hash': 'rider_hash_1',
         'role': 'CASHIER',
         'is_active': 1,
         'created_at': DateTime.now().toIso8601String(),
