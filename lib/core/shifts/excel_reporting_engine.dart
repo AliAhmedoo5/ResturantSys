@@ -354,7 +354,7 @@ class ExcelReportingEngine {
     b.addEmptyRow();
 
     b.addSectionHeader('PAYMENT TENDERS BREAKDOWN');
-    b.addRow(['Cash Tender Sales', z.cashSales]);
+    b.addRow(['Cash Sales (Net Tender Collection)', z.cashSales]);
     b.addRow(['Card Tender Sales', z.cardSales]);
     b.addRow(['Raast QR Tender Sales', z.raastSales]);
     b.addRow(['Total Tender Sales', z.totalTenderSales]);
