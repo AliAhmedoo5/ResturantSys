@@ -1,10 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../auth/staff_role.dart';
 import 'report_export_service.dart';
+import 'gmail_report_sender.dart';
+import 'report_credential_store.dart';
+import 'report_delivery_failure.dart';
+export 'report_delivery_failure.dart';
 
 typedef ReportTransport = Future<String> Function(Map<String,dynamic> job);
 
@@ -17,19 +22,17 @@ class ReportRecipient {
   Map<String,dynamic> toJson() => {'channel':channel,'address':address.trim(),'approved':approved,'consent':consent.trim()};
 }
 
-class ReportDeliveryFailure implements Exception {
-  const ReportDeliveryFailure(this.message,{this.retryable=false,this.ambiguous=false});
-  final String message;
-  final bool retryable;
-  final bool ambiguous;
-}
-
 /// Offline outbox worker. It never mutates financial or inventory records.
 class ReportDeliveryService {
-  ReportDeliveryService({required this.database,ReportTransport? transport})
-      : transport = transport ?? sendToRelay;
+  ReportDeliveryService({required this.database, ReportTransport? transport,
+    ReportCredentialStore? credentialStore, GmailSubmission? gmailSubmission})
+      : _transport = transport,
+        _credentials = credentialStore ?? SecureReportCredentialStore(database.path),
+        _gmail = GmailReportSender(submit: gmailSubmission);
   final Database database;
-  final ReportTransport transport;
+  final ReportTransport? _transport;
+  final ReportCredentialStore _credentials;
+  final GmailReportSender _gmail;
   Timer? _timer;
   bool _running = false;
 
@@ -42,7 +45,10 @@ class ReportDeliveryService {
 
   Future<Map<String,dynamic>> settings({required int managerStaffId}) async {
     await _manager(managerStaffId);
-    return _settings();
+    final policy = await _settings();
+    final reference = policy['gmail_credential_id'] as String?;
+    return {...policy, 'gmail_password_saved': reference != null &&
+      await _credentials.read(reference) != null};
   }
 
   Future<Map<String,dynamic>> _settings() async {
@@ -50,12 +56,26 @@ class ReportDeliveryService {
     return rows.isEmpty ? <String,dynamic>{} : Map<String,dynamic>.from(jsonDecode(rows.single['value'] as String) as Map);
   }
 
-  Future<void> configure({required int managerStaffId,required String endpoint,
-    required List<ReportRecipient> recipients,bool autoSend=true,int maxAttempts=8}) async {
+  Future<void> configure({required int managerStaffId, String endpoint = '',
+    required List<ReportRecipient> recipients, bool autoSend=true, int maxAttempts=8,
+    String emailProvider = 'RELAY', String gmailSender = '', String? gmailAppPassword}) async {
     await _manager(managerStaffId);
-    final uri = Uri.tryParse(endpoint.trim());
-    if (uri==null || uri.scheme!='https' || uri.host.isEmpty || uri.userInfo.isNotEmpty || uri.hasQuery || uri.hasFragment) {
-      throw ArgumentError('Enter an HTTPS report relay URL without credentials or query parameters.');
+    final previous = await _settings();
+    final sender = gmailSender.trim().toLowerCase();
+    String destination;
+    if (emailProvider == 'GMAIL') {
+      if (!RegExp(r'^[a-z0-9.]+@(gmail|googlemail)\.com$').hasMatch(sender)) {
+        throw ArgumentError('Enter the dedicated Gmail address used to send reports.');
+      }
+      destination = 'gmail:$sender';
+    } else if (emailProvider == 'RELAY') {
+      final uri = Uri.tryParse(endpoint.trim());
+      if (uri==null || uri.scheme!='https' || uri.host.isEmpty || uri.userInfo.isNotEmpty || uri.hasQuery || uri.hasFragment) {
+        throw ArgumentError('Enter an HTTPS report relay URL without credentials or query parameters.');
+      }
+      destination = uri.toString();
+    } else {
+      throw ArgumentError('Choose Gmail or the existing relay.');
     }
     if (maxAttempts<1 || maxAttempts>20) throw ArgumentError('Maximum attempts must be 1–20.');
     final seen = <String>{};
@@ -65,6 +85,7 @@ class ReportDeliveryService {
       if (recipient.channel=='EMAIL') {
         if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(address)) throw ArgumentError('Invalid approved email address.');
       } else if (recipient.channel=='WHATSAPP') {
+        if (emailProvider == 'GMAIL') throw ArgumentError('Gmail sends email only. WhatsApp requires the relay option.');
         if (!RegExp(r'^\+[1-9][0-9]{7,14}$').hasMatch(address) || recipient.consent.trim().isEmpty) {
           throw ArgumentError('WhatsApp needs an international number and recorded recipient consent.');
         }
@@ -73,13 +94,75 @@ class ReportDeliveryService {
       }
       if (!seen.add('${recipient.channel}:$address')) throw ArgumentError('Duplicate report recipient.');
     }
-    final value = jsonEncode({'endpoint':uri.toString(),'auto_send':autoSend,'max_attempts':maxAttempts,
-      'recipients':recipients.map((r)=>r.toJson()).toList()});
-    await database.transaction((txn) async {
+    String? credentialId;
+    var newCredential = false;
+    if (emailProvider == 'GMAIL') {
+      final password = (gmailAppPassword ?? '').replaceAll(RegExp(r'\s'), '');
+      if (password.isNotEmpty) {
+        if (!RegExp(r'^[a-zA-Z0-9]{16}$').hasMatch(password)) {
+          throw ArgumentError('Use the 16-character Google app password, not your Google account password.');
+        }
+        final random = Random.secure();
+        credentialId = List.generate(24, (_) => random.nextInt(256))
+            .map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
+        await _credentials.write(credentialId, password);
+        newCredential = true;
+      } else {
+        credentialId = previous['gmail_sender'] == sender
+            ? previous['gmail_credential_id'] as String? : null;
+        if (credentialId == null || await _credentials.read(credentialId) == null) {
+          throw ArgumentError('Enter a Google app password for this Gmail address.');
+        }
+      }
+    }
+    final value = jsonEncode({'endpoint':destination,'auto_send':autoSend,'max_attempts':maxAttempts,
+      'email_provider':emailProvider, if (emailProvider == 'GMAIL') ...{
+        'gmail_sender':sender, 'gmail_credential_id':credentialId,
+      }, 'recipients':recipients.map((r)=>r.toJson()).toList()});
+    try {
+      await database.transaction((txn) async {
       final now = DateTime.now().toUtc().toIso8601String();
       await txn.insert('system_settings',{'key':'report_delivery_settings','value':value,'updated_at':now},conflictAlgorithm:ConflictAlgorithm.replace);
       await txn.insert('report_delivery_audit',{'staff_id':managerStaffId,'action':'CONFIGURE','details_json':value,'created_at':now});
+      });
+    } catch (_) {
+      if (newCredential) {
+        try { await _credentials.delete(credentialId!); } catch (_) {}
+      }
+      rethrow;
+    }
+    final oldReference = previous['gmail_credential_id'] as String?;
+    if (oldReference != null && oldReference != credentialId) {
+      try { await _credentials.delete(oldReference); } catch (_) {}
+    }
+  }
+
+  Future<void> forgetGmailPassword({required int managerStaffId}) async {
+    await _manager(managerStaffId);
+    final policy = await _settings();
+    final reference = policy['gmail_credential_id'] as String?;
+    if (reference != null) await _credentials.delete(reference);
+    await database.insert('report_delivery_audit', {
+      'staff_id':managerStaffId, 'action':'REMOVE_GMAIL_PASSWORD',
+      'details_json':'{}', 'created_at':DateTime.now().toUtc().toIso8601String(),
     });
+  }
+
+  Future<String> _deliver(Map<String, dynamic> job) async {
+    if (_transport != null) return _transport(job);
+    final payload = Map<String, dynamic>.from(jsonDecode(job['payload_json'] as String) as Map);
+    if (payload['email_provider'] != 'GMAIL') return sendToRelay(job);
+    final policy = await _settings();
+    final sender = payload['gmail_sender'] as String?;
+    final reference = policy['gmail_credential_id'] as String?;
+    if (sender == null || sender != policy['gmail_sender'] || reference == null) {
+      throw const ReportDeliveryFailure('Gmail settings changed; check the sender before retrying.');
+    }
+    String? password;
+    try { password = await _credentials.read(reference); }
+    catch (_) { throw const ReportDeliveryFailure('Unable to unlock the saved Gmail app password on this device.'); }
+    if (password == null) throw const ReportDeliveryFailure('Save the Gmail app password on this device before retrying.');
+    return _gmail.send(job, sender: sender, password: password);
   }
 
   Future<List<Map<String,dynamic>>> history({required int managerStaffId}) async {
@@ -101,6 +184,7 @@ class ReportDeliveryService {
         final payload = jsonEncode({'report_run_id':run['id'],'revision':1,'business_date':snapshot['business_date'],
           'snapshot_sha256':run['content_hash'],'channel':recipient['channel'],'recipient':recipient['address'],
           'consent':recipient['consent'],'subject':'Business Day ${snapshot['business_date']} — Z Report',
+          'email_provider':policy['email_provider'] ?? 'RELAY', 'gmail_sender':policy['gmail_sender'],
           'artifacts':jsonDecode(run['artifacts_json'] as String)});
         await database.insert('report_outbox',{'business_day_id':run['business_day_id'],'channel':recipient['channel'],
           'recipient':recipient['address'],'payload_json':payload,'status':'PENDING','retry_count':0,
@@ -169,14 +253,14 @@ class ReportDeliveryService {
           continue;
         }
         if ((job['retry_count'] as int)>(job['max_attempts'] as int)) throw const ReportDeliveryFailure('Maximum delivery attempts reached.');
-        final reference = await transport(job).timeout(const Duration(seconds:45));
+        final reference = await _deliver(job).timeout(const Duration(seconds:45));
         if (reference.trim().isEmpty) throw const ReportDeliveryFailure('No provider acceptance evidence; review before retry.',ambiguous:true);
         await database.update('report_outbox',{'status':'ACCEPTED','provider_reference':reference,'processed_at':timestamp,'error_message':null,'lease_until':null},where:'id=?',whereArgs:[job['id']]);
       } catch (error) {
         final failure = error is ReportDeliveryFailure ? error
           : error is SocketException ? const ReportDeliveryFailure('Connection unavailable; retry scheduled.',retryable:true)
           : error is TimeoutException ? const ReportDeliveryFailure('Delivery timed out; review provider history before retry.',ambiguous:true)
-          : const ReportDeliveryFailure('Delivery failed; check relay configuration.');
+          : const ReportDeliveryFailure('Delivery failed; check the saved delivery settings.');
         final attempts=job['retry_count'] as int;
         final retryable=failure.retryable && attempts<(job['max_attempts'] as int);
         final delay = Duration(seconds:(60*(1<<attempts.clamp(0,10)))+(job['id'] as int)%31);

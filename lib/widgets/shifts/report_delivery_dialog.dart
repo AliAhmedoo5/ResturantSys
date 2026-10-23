@@ -14,6 +14,8 @@ class ReportDeliveryDialog extends StatefulWidget {
 }
 class _ReportDeliveryDialogState extends State<ReportDeliveryDialog> {
   final _endpoint=TextEditingController();
+  final _gmailSender=TextEditingController();
+  final _gmailPassword=TextEditingController();
   final _emails=TextEditingController();
   final _whatsapp=TextEditingController();
   final _consent=TextEditingController();
@@ -21,13 +23,15 @@ class _ReportDeliveryDialogState extends State<ReportDeliveryDialog> {
   bool _automatic=true;
   bool _approved=false;
   bool _busy=true;
+  String _provider='GMAIL';
+  bool _passwordSaved=false;
   String? _message;
   List<Map<String,dynamic>> _jobs=[];
   List<Map<String,dynamic>> _reports=[];
   @override
   void initState(){super.initState();_load();}
   @override
-  void dispose(){for(final controller in [_endpoint,_emails,_whatsapp,_consent,_attempts]){controller.dispose();}super.dispose();}
+  void dispose(){for(final controller in [_endpoint,_gmailSender,_gmailPassword,_emails,_whatsapp,_consent,_attempts]){controller.dispose();}super.dispose();}
   Future<void> _load() async {
     try {
       final policy=await widget.service.settings(managerStaffId:widget.managerStaffId);
@@ -35,6 +39,9 @@ class _ReportDeliveryDialogState extends State<ReportDeliveryDialog> {
       final reports=await ReportExportService(database:widget.service.database).history();
       if(!mounted)return;
       final targets=policy['recipients'] as List? ?? [];
+      _provider=policy['email_provider'] as String? ?? (policy.isEmpty?'GMAIL':'RELAY');
+      _gmailSender.text=policy['gmail_sender'] as String? ?? '';
+      _passwordSaved=policy['gmail_password_saved']==true;
       _endpoint.text=policy['endpoint'] as String? ?? '';
       _emails.text=targets.where((r)=>r['channel']=='EMAIL').map((r)=>r['address']).join('\n');
       _whatsapp.text=targets.where((r)=>r['channel']=='WHATSAPP').map((r)=>r['address']).join('\n');
@@ -50,14 +57,28 @@ class _ReportDeliveryDialogState extends State<ReportDeliveryDialog> {
     setState(()=>_busy=true);
     try{
       await widget.service.configure(managerStaffId:widget.managerStaffId,endpoint:_endpoint.text,
+        emailProvider:_provider,gmailSender:_gmailSender.text,gmailAppPassword:_gmailPassword.text,
         autoSend:_automatic,maxAttempts:int.tryParse(_attempts.text)??0,
         recipients:[
           ..._addresses(_emails.text).map((address)=>ReportRecipient(channel:'EMAIL',address:address,approved:_approved)),
-          ..._addresses(_whatsapp.text).map((address)=>ReportRecipient(channel:'WHATSAPP',address:address,approved:_approved,consent:_consent.text)),
+          if(_provider=='RELAY') ..._addresses(_whatsapp.text).map((address)=>ReportRecipient(channel:'WHATSAPP',address:address,approved:_approved,consent:_consent.text)),
         ]);
+      _gmailPassword.clear();
+      await _load();
       if(mounted)setState(()=>_message='Saved. Automatic delivery uses approved targets at the next Business Day close.');
     }catch(error){if(mounted)setState(()=>_message=error is ArgumentError?'${error.message}':'Unable to save report settings.');}
     finally{if(mounted)setState(()=>_busy=false);}
+  }
+  Future<void> _forgetPassword() async {
+    setState(()=>_busy=true);
+    try {
+      await widget.service.forgetGmailPassword(managerStaffId:widget.managerStaffId);
+      _gmailPassword.clear();
+      await _load();
+      if(mounted)setState(()=>_message='Gmail password removed. Save a new app password to resume sending.');
+    } catch (_) {
+      if(mounted)setState((){_busy=false;_message='Unable to remove the saved Gmail password.';});
+    }
   }
   Future<void> _retry(Map<String,dynamic> job) async {
     final reason=TextEditingController();
@@ -95,12 +116,32 @@ class _ReportDeliveryDialogState extends State<ReportDeliveryDialog> {
       const TabBar(tabs:[Tab(text:'Delivery settings'),Tab(text:'Local PDF & Excel'),Tab(text:'Delivery history')]),
       Expanded(child:TabBarView(children:[
         ListView(padding:const EdgeInsets.symmetric(vertical:16),children:[
-          const Text('Use an approved HTTPS relay for Email or official WhatsApp delivery. Provider acceptance does not confirm receipt. Retries run while this app is open.'),
+          const Text('Email the saved PDF and Excel reports after closing the Business Day. Sending resumes when internet returns while this app is open.'),
           const SizedBox(height:12),
+          DropdownButtonFormField<String>(value:_provider,
+            decoration:const InputDecoration(labelText:'Send reports using'),
+            items:const [DropdownMenuItem(value:'GMAIL',child:Text('Gmail — no domain or server needed')),
+              DropdownMenuItem(value:'RELAY',child:Text('Existing Email / WhatsApp relay'))],
+            onChanged:(value){if(value!=null)setState(()=>_provider=value);}),
+          if(_provider=='GMAIL') ...[
+            TextField(controller:_gmailSender,keyboardType:TextInputType.emailAddress,
+              decoration:const InputDecoration(labelText:'Restaurant Gmail address',hintText:'restaurant@gmail.com')),
+            TextField(controller:_gmailPassword,obscureText:true,autocorrect:false,enableSuggestions:false,
+              decoration:InputDecoration(labelText:'Google app password',
+                helperText:_passwordSaved?'Password saved securely on this device. Leave blank to keep it.'
+                    :'Enable Google 2-Step Verification, then create a 16-character app password.')),
+            const Padding(padding:EdgeInsets.symmetric(vertical:8),child:Text(
+              'Use an app password from myaccount.google.com/apppasswords. Your normal Google password will not work. The password stays in protected storage on this device.')),
+            if(_passwordSaved) Align(alignment:Alignment.centerLeft,
+              child:TextButton(onPressed:_forgetPassword,child:const Text('Remove saved Gmail password'))),
+          ],
+          if(_provider=='RELAY')
           TextField(controller:_endpoint,decoration:const InputDecoration(labelText:'HTTPS relay endpoint',helperText:'Authentication: RESTAURANT_REPORT_RELAY_TOKEN environment variable. No key is saved here.')),
           TextField(controller:_emails,minLines:1,maxLines:3,decoration:const InputDecoration(labelText:'Approved email recipients',helperText:'One address per line')),
+          if(_provider=='RELAY') ...[
           TextField(controller:_whatsapp,minLines:1,maxLines:3,decoration:const InputDecoration(labelText:'Approved WhatsApp recipients (optional)',helperText:'International numbers, e.g. +923001234567. Requires official provider setup.')),
           TextField(controller:_consent,decoration:const InputDecoration(labelText:'WhatsApp recipient consent record')),
+          ],
           CheckboxListTile(contentPadding:EdgeInsets.zero,value:_approved,onChanged:(value)=>setState(()=>_approved=value??false),title:const Text('I verified and approved these recipients to receive financial reports')),
           SwitchListTile(contentPadding:EdgeInsets.zero,value:_automatic,onChanged:(value)=>setState(()=>_automatic=value),title:const Text('Automatically queue reports after Business Day close')),
           TextField(controller:_attempts,keyboardType:TextInputType.number,decoration:const InputDecoration(labelText:'Maximum attempts (1–20)',helperText:'Exponential backoff. Failed attempts never reopen the Business Day.')),
@@ -120,7 +161,7 @@ class _ReportDeliveryDialogState extends State<ReportDeliveryDialog> {
           }),
         ]),
         ListView(padding:const EdgeInsets.symmetric(vertical:12),children:[
-          const Text('ACCEPTED means the provider accepted submission. Confirmed delivery requires provider evidence. Queued jobs resume when this PC and app are running.'),
+          const Text('ACCEPTED means Gmail or the relay accepted submission. For an ambiguous Gmail attempt, check the sender’s Sent mail before retrying. Queued jobs resume when this PC and app are running.'),
           if(_jobs.isEmpty)const Padding(padding:EdgeInsets.all(16),child:Text('No report deliveries queued.')),
           ..._jobs.map((job)=>Card(child:ListTile(
             title:Text('Day #${job['business_day_id']} · ${job['channel']} · ${_masked(job['recipient'] as String)}'),

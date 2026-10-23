@@ -8,6 +8,47 @@ Filesystem failure leaves a committed pending snapshot. The startup worker, its 
 
 ## Configure delivery
 
+### Direct Gmail (default for new setups)
+
+In **Delivery settings**, choose **Gmail**, enter the restaurant's Gmail address,
+and enter a Google **app password**. Enable 2-Step Verification in that Google
+account first, then create an app password at
+<https://myaccount.google.com/apppasswords>. Use a dedicated restaurant account.
+Some managed or Advanced Protection accounts cannot create app passwords.
+A normal Google account password is not supported. No domain, hosted relay,
+paid mailbox, or Google Cloud project is needed for this app-password setup.
+
+Enter the approved email recipients and enable automatic delivery. The sender
+uses `smtp.gmail.com:465` with TLS and sends the saved PDF/XLSX bytes after
+checking their hashes. It never uses a payment gateway or changes day-close
+accounting. The Google app password is stored using platform secure storage
+(protected by Windows credentials on Windows), scoped to this installation and
+Windows user. SQLite, reports, audit events and outbox payloads contain no app
+password. A blank password field keeps the existing saved credential. **Remove
+saved Gmail password** disconnects it. Changing your Google password revokes
+app passwords; generate and save a replacement to resume sending.
+
+Restoring a database on a different PC or Windows account requires entering the
+app password again. Never include it in support logs, source code, or database
+backups. Updating the saved password for the same sender can resume existing
+jobs; changing the Gmail sender or delivery provider cancels old queued jobs
+instead of silently submitting them through another identity.
+
+Personal Gmail sending limits apply (Google documents a 500-email/day limit).
+The app caps combined report attachment bytes at 18 MiB to allow for MIME/base64
+expansion. Successful SMTP submission means **ACCEPTED**, not confirmed inbox
+delivery. Known connection failures get durable automatic retries. A connection
+interruption or timeout that might have happened after submission is
+**AMBIGUOUS**: check the sender's Gmail Sent mail before requesting a retry.
+A stable Message-ID helps identify the report, but Gmail SMTP does not provide
+an idempotent send API or a guarantee against duplicate delivery after a manual
+retry. The PC and POS must be running to send queued reports.
+
+Setup references: [Google app passwords](https://support.google.com/mail/answer/185833),
+[Gmail sending limits](https://support.google.com/mail/answer/22839).
+
+### Existing HTTPS relay
+
 Configure an HTTPS relay URL and Manager-approved email recipients. Optional WhatsApp recipients need an international number and a recorded consent basis. The relay must use a real transactional email service or the official WhatsApp Business Platform with its required business/account/template approvals. Installing this application does not provision those services.
 
 Provide a scoped relay bearer credential using the `RESTAURANT_REPORT_RELAY_TOKEN` process environment variable. Do not put provider master keys, tokens, or credentials in the URL, SQLite settings, source code, or report attachments. The relay endpoint may not contain user credentials, query parameters, or fragments. Its TLS certificate must validate normally.
