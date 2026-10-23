@@ -1702,11 +1702,6 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                               context: context,
                               builder: (ctx) => ZReportDialog(
                                 report: _activeZReport!,
-                                onPrint: () async {
-                                  if (widget.reprintTrayController != null) {
-                                    await widget.reprintTrayController!.dispatchZReportPrinting(report: _activeZReport!);
-                                  }
-                                },
                                 onExportExcel: () async {
                                   if (widget.shiftController != null) {
                                     final messenger = ScaffoldMessenger.of(context);

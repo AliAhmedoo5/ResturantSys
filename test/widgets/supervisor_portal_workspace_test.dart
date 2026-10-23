@@ -3,8 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:resturant_sys/core/auth/department.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/auth/staff_role.dart';
-import 'package:resturant_sys/core/hardware/in_memory_hardware_adapter.dart';
-import 'package:resturant_sys/core/hardware/print_job.dart';
 import 'package:resturant_sys/core/hardware/reprint_tray_controller.dart';
 import 'package:resturant_sys/core/orders/dining_type.dart';
 import 'package:resturant_sys/core/orders/order.dart';
@@ -403,13 +401,10 @@ void main() {
         totalVendorSettlementsAmount: 0.0,
       );
 
-      final fakeHardware = InMemoryHardwareAdapter();
-      final reprintTray = ReprintTrayController(hardwareAdapter: fakeHardware);
       bool finalizedCalled = false;
 
       await tester.pumpWidget(createTestApp(
         initialZReport: testZReport,
-        reprintTrayController: reprintTray,
         onFinalizeBusinessDay: () async {
           finalizedCalled = true;
         },
@@ -447,15 +442,7 @@ void main() {
 
       expect(find.text('Master End-of-Day Z-Report'), findsOneWidget);
 
-      // Test Print button inside ZReportDialog dispatches to hardware adapter
-      final printBtn = find.byKey(const ValueKey('print_z_report_button'));
-      expect(printBtn, findsOneWidget);
-      await tester.tap(printBtn);
-      await tester.pumpAndSettle();
-
-      expect(fakeHardware.counterPrintedBytes, isNotEmpty);
-      expect(reprintTray.recentJobs, isNotEmpty);
-      expect(reprintTray.recentJobs.first.type, equals(PrintJobType.zReport));
+      // Native print dispatch is covered by z_report_native_print_test.dart.
 
       final finalizeBtn = find.byKey(const ValueKey('finalize_day_button'));
       expect(finalizeBtn, findsOneWidget);
