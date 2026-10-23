@@ -43,6 +43,30 @@ void main() {
       }
     });
 
+    test('restores catalog photos and empty media directories beside the snapshot', () async {
+      final media = Directory('${tempRootDir.path}/media');
+      await Directory('${media.path}/menu_items/7').create(recursive: true);
+      await Directory('${media.path}/empty-gallery').create();
+      await File('${media.path}/menu_items/7/burger.jpg').writeAsBytes([1, 7, 9, 23]);
+      final service = DatabaseBackupService(
+        database: db, catalogMediaDirectoryPath: media.path,
+      );
+      final result = await service.executeBackup(
+        sourceDbPath: sourceDbPath, localBackupDir: localBackupDir.path,
+      );
+      expect(result.success, isTrue, reason: result.warningMessage);
+      final restored = Directory('${tempRootDir.path}/media-restored');
+      await extractFileToDisk(result.localBackupPath!, restored.path);
+      expect(await File('${restored.path}/catalog_media/menu_items/7/burger.jpg').readAsBytes(), [1, 7, 9, 23]);
+      expect(await Directory('${restored.path}/catalog_media/empty-gallery').exists(), isTrue);
+      final restoredDb = await databaseFactoryFfi.openDatabase('${restored.path}/pos.db');
+      try {
+        expect(await restoredDb.query('sample'), [{'id': 1, 'note': 'Active POS Record'}]);
+        expect((await restoredDb.rawQuery('PRAGMA integrity_check')).single.values.single, 'ok');
+      } finally {
+        await restoredDb.close();
+      }
+    });
     test('creates timestamped backup in local folder', () async {
       final now = DateTime(2026, 10, 15, 23, 30, 45);
       final result = await backupService.executeBackup(
@@ -178,6 +202,7 @@ void main() {
     });
   });
 }
+
 
 
 

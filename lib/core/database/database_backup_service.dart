@@ -27,9 +27,10 @@ class BackupResult {
 
 /// Creates independent SQLite snapshots without queuing compression on billing.
 class DatabaseBackupService {
-  DatabaseBackupService({this.database});
+  DatabaseBackupService({this.database, this.catalogMediaDirectoryPath});
 
   final Database? database;
+  final String? catalogMediaDirectoryPath;
 
   static String resolveDefaultLocalBackupDir({
     Map<String, String>? environment,
@@ -153,5 +154,6 @@ Future<BackupResult> _createBackup(String sourcePath, String localDirectory,
     }
   }
 }
+
 
 
