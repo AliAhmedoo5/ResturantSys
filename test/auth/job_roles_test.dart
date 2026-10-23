@@ -7,7 +7,7 @@ import 'package:resturant_sys/core/database/pos_database.dart';
 void main() {
   setUpAll(sqfliteFfiInit);
   test('job roles support CRUD without granting login or losing staff assignments', () async {
-    final pos = PosDatabase(factory: databaseFactoryFfi, customPath: inMemoryDatabasePath);
+    final pos = PosDatabase(factory: databaseFactoryFfi, customPath: inMemoryDatabasePath, seedDefaultStaff: false);
     final db = await pos.initialize();
     addTearDown(pos.close);
     final auth = AuthService(database: db);
