@@ -54,17 +54,16 @@ class DatabaseBackupService {
   }) {
     final effectiveTime = timestamp ?? DateTime.now();
     // Only send values to the worker, never the live sqflite connection.
-    final defaultLocal = resolveDefaultLocalBackupDir();
     final mediaPath = catalogMediaDirectoryPath ?? CatalogMediaService.defaultBaseDirectoryPath();
     final requireMedia = catalogMediaDirectoryPath != null;
     return Isolate.run(() => _createBackup(
-          sourceDbPath, localBackupDir ?? defaultLocal,
+          sourceDbPath, localBackupDir,
           secondaryBackupDir, effectiveTime, mediaPath, requireMedia,
         ));
   }
 }
 
-Future<BackupResult> _createBackup(String sourcePath, String localDirectory,
+Future<BackupResult> _createBackup(String sourcePath, String? localDirectory,
     String? secondaryDirectory, DateTime timestamp, String mediaPath, bool requireMedia) async {
   Directory? staging;
   sqlite.Database? source;
@@ -78,13 +77,21 @@ Future<BackupResult> _createBackup(String sourcePath, String localDirectory,
     source.execute('PRAGMA busy_timeout = 0');
     source.select('PRAGMA wal_checkpoint(PASSIVE)');
 
-    if (secondaryDirectory == null && source.select(
+    if (source.select(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'system_settings'").isNotEmpty) {
-      final rows = source.select('SELECT value FROM system_settings WHERE key = ?',
-          [PosDatabaseConstants.settingSecondaryBackupPath]);
-      if (rows.isNotEmpty) secondaryDirectory = rows.first['value'] as String?;
+      final settings = source.select('SELECT key, value FROM system_settings WHERE key IN (?, ?)',
+          [PosDatabaseConstants.settingLocalBackupPath, PosDatabaseConstants.settingSecondaryBackupPath]);
+      for (final row in settings) {
+        if (row['key'] == PosDatabaseConstants.settingLocalBackupPath) {
+          localDirectory ??= row['value'] as String?;
+        } else {
+          secondaryDirectory ??= row['value'] as String?;
+        }
+      }
     }
-    final local = Directory(localDirectory);
+    final cleanLocal = localDirectory?.trim();
+    final local = Directory(cleanLocal == null || cleanLocal.isEmpty
+        ? DatabaseBackupService.resolveDefaultLocalBackupDir() : cleanLocal);
     await local.create(recursive: true);
     staging = await local.createTemp('.backup-');
     final snapshotPath = p.join(staging.path, 'pos.db');
@@ -175,7 +182,3 @@ Future<BackupResult> _createBackup(String sourcePath, String localDirectory,
     }
   }
 }
-
-
-
-
