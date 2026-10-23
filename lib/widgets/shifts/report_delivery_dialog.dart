@@ -25,6 +25,7 @@ class _ReportDeliveryDialogState extends State<ReportDeliveryDialog> {
   bool _busy=true;
   String _provider='GMAIL';
   bool _passwordSaved=false;
+  bool _savedGmail=false;
   String? _message;
   List<Map<String,dynamic>> _jobs=[];
   List<Map<String,dynamic>> _reports=[];
@@ -42,6 +43,7 @@ class _ReportDeliveryDialogState extends State<ReportDeliveryDialog> {
       _provider=policy['email_provider'] as String? ?? 'GMAIL';
       _gmailSender.text=policy['gmail_sender'] as String? ?? '';
       _passwordSaved=policy['gmail_password_saved']==true;
+      _savedGmail=policy['email_provider']=='GMAIL' && _passwordSaved;
       _endpoint.text=policy['endpoint'] as String? ?? '';
       _emails.text=targets.where((r)=>r['channel']=='EMAIL').map((r)=>r['address']).join('\n');
       _whatsapp.text=targets.where((r)=>r['channel']=='WHATSAPP').map((r)=>r['address']).join('\n');
@@ -90,6 +92,75 @@ class _ReportDeliveryDialogState extends State<ReportDeliveryDialog> {
           ? error.message : 'Unable to verify Gmail sign-in.');
     } finally { if(mounted)setState(()=>_busy=false); }
   }
+  String _deliveryError(Object error) => error is ReportDeliveryFailure ? error.message
+      : error is StateError ? '${error.message}'
+      : error is ArgumentError ? '${error.message}' : 'Delivery action failed. Check settings and try again.';
+
+  Future<void> _sendTest() async {
+    if(_busy)return;
+    setState(()=>_busy=true);
+    try {
+      final saved=await widget.service.settings(managerStaffId:widget.managerStaffId);
+      final targets=(saved['recipients'] as List? ?? []).where((target)=>
+        target['channel']=='EMAIL' && target['approved']==true).map((target)=>target['address'] as String).toList();
+      if(targets.isEmpty)throw StateError('Save at least one approved email recipient first.');
+      if(!mounted)return;
+      var selected=targets.first;
+      final recipient=await showDialog<String>(context:context,builder:(context)=>StatefulBuilder(
+        builder:(context,setDialogState)=>AlertDialog(
+          title:const Text('Send Gmail setup test'),
+          content:SizedBox(width:460,child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,children:[
+            Text('Send from ${saved['gmail_sender']}. This sends a real email with sample PDF and Excel attachments, containing no financial data.'),
+            const SizedBox(height:16),
+            DropdownButtonFormField<String>(value:selected,isExpanded:true,
+              decoration:const InputDecoration(labelText:'Approved test recipient'),
+              items:targets.map((address)=>DropdownMenuItem(value:address,child:Text(address))).toList(),
+              onChanged:(value){if(value!=null)setDialogState(()=>selected=value);}),
+          ])),
+          actions:[TextButton(onPressed:()=>Navigator.pop(context),child:const Text('Cancel')),
+            FilledButton(onPressed:()=>Navigator.pop(context,selected),child:const Text('Send test email'))],
+        )));
+      if(recipient==null || !mounted)return;
+      setState(()=>_busy=true);
+      await widget.service.sendGmailTest(managerStaffId:widget.managerStaffId,recipient:recipient,
+        expectedSender:saved['gmail_sender'] as String);
+      if(mounted)setState(()=>_message='Gmail accepted the test email. Check $recipient for both sample attachments, including Spam.');
+    } catch(error) { if(mounted)setState(()=>_message=_deliveryError(error)); }
+    finally { if(mounted)setState(()=>_busy=false); }
+  }
+
+  Future<void> _sendSavedReport(Map<String,dynamic> report) async {
+    if(_busy)return;
+    setState(()=>_busy=true);
+    try {
+      final saved=await widget.service.settings(managerStaffId:widget.managerStaffId);
+      final recipients=(saved['recipients'] as List? ?? []).where((target)=>
+        target['channel']=='EMAIL' && target['approved']==true).map((target)=>'${target['address']}').join(', ');
+      if(recipients.isEmpty)throw StateError('Save approved email recipients first.');
+      if(!mounted)return;
+      var reason='';
+      final explanation=await showDialog<String>(context:context,builder:(context)=>StatefulBuilder(
+        builder:(context,setDialogState)=>AlertDialog(
+          title:Text('Send saved Business Day #${report['business_day_id']} report'),
+          content:SizedBox(width:500,child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,children:[
+            Text('From: ${saved['gmail_sender']}\nTo: $recipients\n\nThis sends the original PDF and Excel files. If a previous attempt is uncertain, check Gmail Sent mail before sending another copy.'),
+            const SizedBox(height:12),
+            TextField(autofocus:true,decoration:const InputDecoration(labelText:'Required send / resend reason'),
+              onChanged:(value)=>setDialogState(()=>reason=value)),
+          ])),
+          actions:[TextButton(onPressed:()=>Navigator.pop(context),child:const Text('Cancel')),
+            FilledButton(onPressed:reason.trim().isEmpty?null:()=>Navigator.pop(context,reason),child:const Text('Queue report email'))],
+        )));
+      if(explanation==null || !mounted)return;
+      setState(()=>_busy=true);
+      final count=await widget.service.queueSavedReport(managerStaffId:widget.managerStaffId,
+        reportRunId:report['id'] as int,requestId:'manual_${DateTime.now().microsecondsSinceEpoch}',
+        reason:explanation,expectedSender:saved['gmail_sender'] as String);
+      await _load();
+      if(mounted)setState(()=>_message=count==0?'This send request was already queued.':'Queued $count report email(s). Delivery runs in the background while the app is open.');
+    } catch(error) { if(mounted)setState(()=>_message=_deliveryError(error)); }
+    finally { if(mounted)setState(()=>_busy=false); }
+  }
   Future<void> _retry(Map<String,dynamic> job) async {
     final reason=TextEditingController();
     final confirmed=await showDialog<bool>(context:context,builder:(context)=>AlertDialog(
@@ -109,9 +180,12 @@ class _ReportDeliveryDialogState extends State<ReportDeliveryDialog> {
   }
   Future<void> _recover() async {
     setState(()=>_busy=true);
+    try {
     await ReportExportService(database:widget.service.database).exportPending();
     await widget.service.enqueueReadyReports();
     await _load();
+    } catch(error) { if(mounted)setState(()=>_message=_deliveryError(error)); }
+    finally { if(mounted)setState(()=>_busy=false); }
   }
   Future<void> _open(String path) async {
     try{await Process.run(Platform.isWindows?'explorer.exe':Platform.isMacOS?'open':'xdg-open',[path]);}
@@ -121,8 +195,9 @@ class _ReportDeliveryDialogState extends State<ReportDeliveryDialog> {
   @override
   Widget build(BuildContext context)=>AlertDialog(
     title:const Text('Report delivery & local archive'),
-    content:SizedBox(width:950,height:550,child:_busy?const Center(child:CircularProgressIndicator()):DefaultTabController(length:3,child:Column(children:[
-      if(_message!=null)Padding(padding:const EdgeInsets.only(bottom:12),child:Text(_message!,semanticsLabel:_message)),
+    content:SizedBox(width:950,height:550,child:DefaultTabController(length:3,child:Stack(children:[
+      ExcludeFocus(excluding:_busy,child:AbsorbPointer(absorbing:_busy,child:Column(children:[
+      if(_message!=null)Padding(padding:const EdgeInsets.only(bottom:12),child:Semantics(liveRegion:true,child:Text(_message!))),
       const TabBar(tabs:[Tab(text:'Delivery settings'),Tab(text:'Local PDF & Excel'),Tab(text:'Delivery history')]),
       Expanded(child:TabBarView(children:[
         ListView(padding:const EdgeInsets.symmetric(vertical:16),children:[
@@ -144,6 +219,8 @@ class _ReportDeliveryDialogState extends State<ReportDeliveryDialog> {
               'Use an app password from myaccount.google.com/apppasswords. Your normal Google password will not work. The password stays in protected storage on this device.')),
             if(_passwordSaved) Align(alignment:Alignment.centerLeft,
               child:OutlinedButton(onPressed:_verifyGmail,child:const Text('Check saved Gmail sign-in (no email sent)'))),
+            if(_savedGmail) Align(alignment:Alignment.centerLeft,
+              child:FilledButton.icon(onPressed:_sendTest,icon:const Icon(Icons.send_outlined),label:const Text('Send test email with sample PDF & Excel'))),
             if(_passwordSaved) Align(alignment:Alignment.centerLeft,
               child:TextButton(onPressed:_forgetPassword,child:const Text('Remove saved Gmail password'))),
           ],
@@ -167,6 +244,9 @@ class _ReportDeliveryDialogState extends State<ReportDeliveryDialog> {
             return Card(child:Padding(padding:const EdgeInsets.all(12),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
               Text('Business Day #${report['business_day_id']} · ${report['status']}',style:Theme.of(context).textTheme.titleMedium),
               if(report['error_message']!=null)Text('${report['error_message']}'),
+              if(_savedGmail && report['status']=='READY') Align(alignment:Alignment.centerLeft,
+                child:OutlinedButton.icon(onPressed:()=>_sendSavedReport(report),icon:const Icon(Icons.email_outlined),
+                  label:const Text('Send / resend saved report'))),
               ...artifacts.map((artifact)=>ListTile(contentPadding:EdgeInsets.zero,title:Text('${artifact['kind']}'.toUpperCase()),
                 subtitle:SelectableText('${artifact['path']}'),trailing:IconButton(tooltip:'Open saved report',onPressed:()=>_open(artifact['path'] as String),icon:const Icon(Icons.open_in_new)))),
             ])));
@@ -181,6 +261,9 @@ class _ReportDeliveryDialogState extends State<ReportDeliveryDialog> {
             isThreeLine:true,trailing:['PENDING','FAILED','AMBIGUOUS'].contains(job['status'])?TextButton(onPressed:()=>_retry(job),child:const Text('Retry')):null))),
         ]),
       ])),
+    ]))),
+      if(_busy)const Positioned.fill(child:ColoredBox(color:Color(0xCC101820),
+        child:Center(child:CircularProgressIndicator(semanticsLabel:'Processing delivery action')))),
     ]))),
     actions:[TextButton(onPressed:()=>Navigator.pop(context),child:const Text('Close'))],
   );

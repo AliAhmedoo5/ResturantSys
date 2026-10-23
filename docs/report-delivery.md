@@ -32,6 +32,21 @@ After saving, **Check saved Gmail sign-in** verifies authentication without
 sending an email or closing a Business Day. This checks the saved configuration;
 save any edited address/password first.
 
+Next, choose **Send test email with sample PDF & Excel**, select an approved
+recipient, and confirm. This sends a real email with synthetic attachments;
+it does not read sales or create/close a Business Day. Confirm that both
+attachments arrive and open from the recipient's Inbox or Spam folder before
+relying on automatic reports. Test attempts are recorded in the local audit.
+
+In the archive, **Send / resend saved report** queues the original PDF and Excel
+for the currently saved, approved email recipients. Review the sender and
+recipients and enter a reason. This works with automatic delivery disabled and
+for reports closed before Gmail was configured. It preserves the sealed report
+snapshot. A second pending copy for the same recipient is blocked; after an
+accepted delivery, a new confirmed request deliberately sends another copy.
+Revoking a recipient or changing the sender still cancels pending manual jobs.
+Check Gmail Sent mail before resending an ambiguous attempt.
+
 Restoring a database on a different PC or Windows account requires entering the
 app password again. Never include it in support logs, source code, or database
 backups. Updating the saved password for the same sender can resume existing
@@ -41,7 +56,8 @@ instead of silently submitting them through another identity.
 Personal Gmail sending limits apply (Google documents a 500-email/day limit).
 The app caps combined report attachment bytes at 18 MiB to allow for MIME/base64
 expansion. Successful SMTP submission means **ACCEPTED**, not confirmed inbox
-delivery. Known connection failures get durable automatic retries. A connection
+delivery. Known connection failures and explicit SMTP 4xx rejections get durable
+automatic retries; explicit SMTP 5xx rejections stop for Manager review. A connection
 interruption or timeout that might have happened after submission is
 **AMBIGUOUS**: check the sender's Gmail Sent mail before requesting a retry.
 A stable Message-ID helps identify the report, but Gmail SMTP does not provide
@@ -95,4 +111,4 @@ The worker runs once at app startup and every minute while the app remains open.
 
 ## Validation
 
-Framework analysis, tests, and generated artifact checks run in GitHub Actions only. The tests use temporary SQLite databases and synthetic fixture data, not the installed restaurant database. Approved seams cover atomic close/checkout, real local report files, and outbox retry with a failing transport adapter; live provider delivery is outside these tests.
+Framework analysis, tests, and generated artifact checks run in GitHub Actions only. The tests use temporary SQLite databases and synthetic fixture data, not the installed restaurant database. Approved seams cover atomic close/checkout, real local report files, and outbox retries. A disposable loopback TLS SMTP server checks the real mailer authentication, MIME attachments, stable Message-ID, and temporary/permanent rejection handling. It never forwards email. Live Gmail acceptance and inbox delivery are verified using the in-app setup test after the restaurant account is configured.

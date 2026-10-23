@@ -3,11 +3,13 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mailer/mailer.dart' as mail;
+import 'package:mailer/smtp_server.dart';
 import 'package:resturant_sys/core/database/pos_database.dart';
 import 'package:resturant_sys/core/shifts/report_credential_store.dart';
 import 'package:resturant_sys/core/shifts/report_delivery_service.dart';
 import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import '../support/tls_smtp_fixture.dart';
 
 class _DeviceCredentials implements ReportCredentialStore {
   final values = <String, String>{};
@@ -205,4 +207,118 @@ void main() {
     expect(await service.history(managerStaffId: manager), isEmpty);
     expect(await db.query('business_days'), isEmpty);
   });
+
+  test('Manager can send a synthetic PDF and Excel setup email without financial side effects', () async {
+    var submissions = 0;
+    final service = ReportDeliveryService(database: db, credentialStore: credentials,
+      gmailSubmission: (message, _) async {
+        submissions++;
+        expect(message.subject, contains('setup test'));
+        expect(message.attachments.length, 2);
+        final pdf = await message.attachments.first.asStream().expand((bytes) => bytes).toList();
+        expect(ascii.decode(pdf.take(5).toList()), '%PDF-');
+        final xlsx = await message.attachments.last.asStream().expand((bytes) => bytes).toList();
+        expect(xlsx.take(2), [80, 75]);
+      });
+    await configure(service);
+    await expectLater(service.sendGmailTest(managerStaffId: cashier,
+      recipient: 'owner@example.invalid', expectedSender: 'synthetic.restaurant@gmail.com'), throwsStateError);
+    await expectLater(service.sendGmailTest(managerStaffId: manager,
+      recipient: 'unapproved@example.invalid', expectedSender: 'synthetic.restaurant@gmail.com'), throwsStateError);
+    await service.sendGmailTest(managerStaffId: manager, recipient: 'owner@example.invalid',
+      expectedSender: 'synthetic.restaurant@gmail.com');
+    expect(submissions, 1);
+    expect(await db.query('business_days'), isEmpty);
+    expect(await db.query('orders'), isEmpty);
+    expect(await db.query('report_outbox'), isEmpty);
+    expect((await db.query('report_delivery_audit', where: "action='TEST_EMAIL_ACCEPTED'")).length, 1);
+    expect(jsonEncode(await db.query('report_delivery_audit')), isNot(contains(secret)));
+  });
+
+  test('Saved reports can be sent and deliberately resent with automatic delivery disabled', () async {
+    await closeDay(); // No delivery settings existed at close.
+    var sent = 0;
+    final service = ReportDeliveryService(database: db, credentialStore: credentials,
+      gmailSubmission: (_, __) async { sent++; });
+    await service.configure(managerStaffId: manager, emailProvider: 'GMAIL',
+      gmailSender: 'synthetic.restaurant@gmail.com', gmailAppPassword: secret, autoSend: false,
+      recipients: [const ReportRecipient(channel: 'EMAIL', address: 'owner@example.invalid', approved: true)]);
+    final run = (await db.query('report_runs')).single;
+    Future<int> queue(String request) => service.queueSavedReport(managerStaffId: manager,
+      reportRunId: run['id'] as int, requestId: request, reason: 'Owner requested this saved report',
+      expectedSender: 'synthetic.restaurant@gmail.com');
+    expect(await queue('manual_request_000001'), 1);
+    expect(await queue('manual_request_000001'), 0);
+    await expectLater(queue('manual_request_000002'), throwsStateError,
+      reason: 'A second pending copy must not be created');
+    await service.processPending(now: DateTime.now().add(const Duration(minutes: 1)));
+    expect(sent, 1);
+    expect((await service.history(managerStaffId: manager)).single['status'], 'ACCEPTED');
+    expect(await queue('manual_request_000002'), 1);
+    await service.processPending(now: DateTime.now().add(const Duration(minutes: 1)));
+    expect(sent, 2);
+    expect((await db.query('report_runs')).single['snapshot_json'], run['snapshot_json']);
+    expect((await db.query('business_days')).single['status'], 'CLOSED');
+  });
+
+  test('Revoking a recipient cancels a manually queued report too', () async {
+    await closeDay();
+    final service = ReportDeliveryService(database: db, credentialStore: credentials,
+      gmailSubmission: (_, __) async => fail('Revoked recipient must not receive mail'));
+    await configure(service);
+    await service.queueSavedReport(managerStaffId: manager, reportRunId: (await db.query('report_runs')).single['id'] as int,
+      requestId: 'manual_request_000001', reason: 'Requested by owner', expectedSender: 'synthetic.restaurant@gmail.com');
+    await service.configure(managerStaffId: manager, emailProvider: 'GMAIL',
+      gmailSender: 'synthetic.restaurant@gmail.com', autoSend: false, recipients: []);
+    await service.processPending(now: DateTime.now().add(const Duration(minutes: 1)));
+    expect((await service.history(managerStaffId: manager)).single['status'], 'CANCELLED');
+  });
+
+  test('Report checksum failure prevents SMTP submission', () async {
+    final service = ReportDeliveryService(database: db, credentialStore: credentials,
+      gmailSubmission: (_, __) async => fail('Changed report bytes must never be emailed'));
+    await configure(service);
+    await closeDay();
+    final run = (await db.query('report_runs')).single;
+    final artifacts = jsonDecode(run['artifacts_json'] as String) as List;
+    await File(artifacts.first['path'] as String).writeAsString('tampered');
+    await service.processPending(now: DateTime.now().add(const Duration(minutes: 1)));
+    final job = (await service.history(managerStaffId: manager)).single;
+    expect(job['status'], 'FAILED');
+    expect(job['error_message'], contains('checksum'));
+  });
+
+  for (final rejection in [null, 450, 550]) {
+    test('Real TLS SMTP authentication and MIME delivery: ${rejection ?? 'accepted'}', () async {
+      final fixture = await TlsSmtpFixture.start(rejectionCode: rejection);
+      try {
+        final service = ReportDeliveryService(database: db, credentialStore: credentials,
+          gmailSubmission: (message, productionServer) async {
+            expect(productionServer.host, 'smtp.gmail.com');
+            expect(productionServer.ssl, isTrue);
+            expect(productionServer.ignoreBadCertificate, isFalse);
+            // Trust only this disposable local test endpoint. The production
+            // Gmail server always retains certificate verification above.
+            await mail.send(message, SmtpServer('127.0.0.1', port: fixture.port,
+              ssl: true, ignoreBadCertificate: true,
+              username: productionServer.username, password: productionServer.password),
+              timeout: const Duration(seconds: 5));
+          });
+        await configure(service);
+        await closeDay();
+        await service.processPending(now: DateTime.now().add(const Duration(minutes: 1)));
+        final job = (await service.history(managerStaffId: manager)).single;
+        expect(job['status'], rejection == null ? 'ACCEPTED' : rejection == 450 ? 'PENDING' : 'FAILED');
+        expect(fixture.authenticated, contains('synthetic.restaurant@gmail.com'));
+        expect(fixture.authenticated, contains(secret));
+        final mime = await fixture.received.future.timeout(const Duration(seconds: 5));
+        expect(mime, contains('application/pdf'));
+        expect(mime, contains('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'));
+        expect(RegExp('Message-ID:', caseSensitive: false).allMatches(mime).length, 1);
+        expect(mime, contains('<${job['idempotency_key']}@gmail.com>'));
+        expect(jsonEncode(job), isNot(contains(secret)));
+      } finally { await fixture.close(); }
+    }, skip: Platform.environment['SMTP_FIXTURE_DIRECTORY'] == null
+        ? 'TLS fixture is generated by GitHub Actions only' : false);
+  }
 }

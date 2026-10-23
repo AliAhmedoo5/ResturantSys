@@ -30,10 +30,17 @@ jobs:
       - name: Analyze code
         run: flutter analyze --no-fatal-infos
 
+      - name: Create disposable local SMTP TLS fixture
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/smtp-fixture"
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=localhost' -keyout "$RUNNER_TEMP/smtp-fixture/key.pem" -out "$RUNNER_TEMP/smtp-fixture/cert.pem" >/dev/null 2>&1
+
       - name: Run tests
         timeout-minutes: 12
         env:
           SYNTHETIC_Z_CLOSE_FIXTURE: ${{ runner.temp }}/synthetic-z-close-fixture
+          SMTP_FIXTURE_DIRECTORY: ${{ runner.temp }}/smtp-fixture
         run: flutter test
 
       - name: Validate synthetic report example

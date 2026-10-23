@@ -50,7 +50,8 @@ class GmailReportSender {
       ..from = mail.Address(sender, 'Restaurant Reports')
       ..recipients.add(job['recipient'] as String)
       ..subject = payload['subject'] as String
-      ..text = 'Business Day ${payload['business_date']} reports are attached as PDF and Excel.';
+      ..text = payload['text'] as String? ??
+          'Business Day ${payload['business_date']} reports are attached as PDF and Excel.';
     final messageId = '<${job['idempotency_key']}@gmail.com>';
     message.headers['Message-ID'] = messageId;
     var totalBytes = 0;
@@ -99,6 +100,18 @@ class GmailReportSender {
       );
     } on TimeoutException {
       throw const ReportDeliveryFailure('Gmail submission timed out; check Sent mail before retrying.', ambiguous: true);
+    } on mail.SmtpClientCommunicationException catch (error) {
+      // Only an explicit negative SMTP acknowledgement proves that submission
+      // was rejected. Missing/invalid replies remain ambiguous.
+      final reply = RegExp(r'Response from server:\s*<?\s*([45]\d\d)(?:[ -])')
+          .firstMatch(error.message)?.group(1);
+      if (reply != null) {
+        throw ReportDeliveryFailure(reply.startsWith('4')
+            ? 'Gmail temporarily rejected submission; retry scheduled.'
+            : 'Gmail rejected submission. Check the recipient, account limits, and attachment size.',
+          retryable: reply.startsWith('4'));
+      }
+      throw const ReportDeliveryFailure('Gmail did not confirm submission; check Sent mail before retrying.', ambiguous: true);
     } on mail.MailerException {
       // SMTP errors can contain addresses, server diagnostics or auth details.
       // Preserve no raw exception text in the outbox or UI.
