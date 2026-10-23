@@ -134,8 +134,9 @@ class _ReportDeliveryDialogState extends State<ReportDeliveryDialog> {
     setState(()=>_busy=true);
     try {
       final saved=await widget.service.settings(managerStaffId:widget.managerStaffId);
-      final recipients=(saved['recipients'] as List? ?? []).where((target)=>
-        target['channel']=='EMAIL' && target['approved']==true).map((target)=>'${target['address']}').join(', ');
+      final confirmedRecipients=(saved['recipients'] as List? ?? []).where((target)=>
+        target['channel']=='EMAIL' && target['approved']==true).map((target)=>target['address'] as String).toList();
+      final recipients=confirmedRecipients.join(', ');
       if(recipients.isEmpty)throw StateError('Save approved email recipients first.');
       if(!mounted)return;
       var reason='';
@@ -155,7 +156,8 @@ class _ReportDeliveryDialogState extends State<ReportDeliveryDialog> {
       setState(()=>_busy=true);
       final count=await widget.service.queueSavedReport(managerStaffId:widget.managerStaffId,
         reportRunId:report['id'] as int,requestId:'manual_${DateTime.now().microsecondsSinceEpoch}',
-        reason:explanation,expectedSender:saved['gmail_sender'] as String);
+        reason:explanation,expectedSender:saved['gmail_sender'] as String,
+        expectedRecipients:confirmedRecipients);
       await _load();
       if(mounted)setState(()=>_message=count==0?'This send request was already queued.':'Queued $count report email(s). Delivery runs in the background while the app is open.');
     } catch(error) { if(mounted)setState(()=>_message=_deliveryError(error)); }

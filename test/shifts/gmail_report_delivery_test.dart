@@ -246,7 +246,7 @@ void main() {
     final run = (await db.query('report_runs')).single;
     Future<int> queue(String request) => service.queueSavedReport(managerStaffId: manager,
       reportRunId: run['id'] as int, requestId: request, reason: 'Owner requested this saved report',
-      expectedSender: 'synthetic.restaurant@gmail.com');
+      expectedSender: 'synthetic.restaurant@gmail.com', expectedRecipients: ['owner@example.invalid']);
     expect(await queue('manual_request_000001'), 1);
     expect(await queue('manual_request_000001'), 0);
     await expectLater(queue('manual_request_000002'), throwsStateError,
@@ -283,7 +283,8 @@ void main() {
       gmailSubmission: (_, __) async => fail('Revoked recipient must not receive mail'));
     await configure(service);
     await service.queueSavedReport(managerStaffId: manager, reportRunId: (await db.query('report_runs')).single['id'] as int,
-      requestId: 'manual_request_000001', reason: 'Requested by owner', expectedSender: 'synthetic.restaurant@gmail.com');
+      requestId: 'manual_request_000001', reason: 'Requested by owner', expectedSender: 'synthetic.restaurant@gmail.com',
+      expectedRecipients: ['owner@example.invalid']);
     await service.configure(managerStaffId: manager, emailProvider: 'GMAIL',
       gmailSender: 'synthetic.restaurant@gmail.com', autoSend: false, recipients: []);
     await service.processPending(now: DateTime.now().add(const Duration(minutes: 1)));

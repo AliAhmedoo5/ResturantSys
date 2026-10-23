@@ -28,6 +28,9 @@ class TlsSmtpFixture {
 
   void _accept(SecureSocket socket) {
     _clients.add(socket);
+    // The mailer closes immediately after QUIT. A late fixture reply can fail
+    // on the output sink even when the SMTP exchange completed successfully.
+    unawaited(socket.done.then<void>((_) {}, onError: (Object _, StackTrace __) {}));
     var data = false;
     var authStep = 0;
     final lines = <String>[];

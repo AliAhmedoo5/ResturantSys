@@ -254,7 +254,8 @@ class ReportDeliveryService {
   /// automatic-on-close delivery was disabled or not configured at the time.
   /// Repeating the same request ID is idempotent; deliberate resends use a new ID.
   Future<int> queueSavedReport({required int managerStaffId, required int reportRunId,
-    required String requestId, required String reason, required String expectedSender}) async {
+    required String requestId, required String reason, required String expectedSender,
+    required List<String> expectedRecipients}) async {
     await _manager(managerStaffId);
     if (reason.trim().isEmpty || !RegExp(r'^[A-Za-z0-9_-]{12,96}$').hasMatch(requestId)) {
       throw ArgumentError('A reason and a valid send request are required.');
@@ -270,6 +271,11 @@ class ReportDeliveryService {
       final recipients = (policy['recipients'] as List).where((target) =>
           target['channel'] == 'EMAIL' && target['approved'] == true).toList();
       if (recipients.isEmpty) throw StateError('Save at least one approved email recipient first.');
+      final currentAddresses = recipients.map((target) => target['address'] as String).toList()..sort();
+      final confirmedAddresses = expectedRecipients.toList()..sort();
+      if (jsonEncode(currentAddresses) != jsonEncode(confirmedAddresses)) {
+        throw StateError('Approved recipients changed. Review them before sending.');
+      }
       final runs = await txn.rawQuery("SELECT r.* FROM report_runs r JOIN business_days b ON b.id=r.business_day_id WHERE r.id=? AND r.status='READY' AND b.status='CLOSED'", [reportRunId]);
       if (runs.isEmpty) throw StateError('Export the closed Business Day report before sending it.');
       final run = runs.single;
