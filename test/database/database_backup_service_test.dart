@@ -67,6 +67,24 @@ void main() {
         await restoredDb.close();
       }
     });
+    test('uses the Manager saved primary backup directory without an override', () async {
+      final configured = Directory('${tempRootDir.path}/manager-primary');
+      await db.execute('CREATE TABLE system_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL)');
+      await db.insert('system_settings', {
+        'key': PosDatabaseConstants.settingLocalBackupPath,
+        'value': configured.path,
+        'updated_at': '2026-10-23 18:00:00',
+      });
+      final result = await backupService.executeBackup(sourceDbPath: sourceDbPath);
+      try {
+        expect(result.success, isTrue, reason: result.warningMessage);
+        expect(result.localBackupPath, startsWith('${configured.path}${Platform.pathSeparator}'));
+        expect(await File(result.localBackupPath!).exists(), isTrue);
+      } finally {
+        // The pre-implementation default is outside this test's temporary root.
+        if (result.localBackupPath != null) await File(result.localBackupPath!).delete();
+      }
+    });
     test('creates timestamped backup in local folder', () async {
       final now = DateTime(2026, 10, 15, 23, 30, 45);
       final result = await backupService.executeBackup(
@@ -202,6 +220,7 @@ void main() {
     });
   });
 }
+
 
 
 
