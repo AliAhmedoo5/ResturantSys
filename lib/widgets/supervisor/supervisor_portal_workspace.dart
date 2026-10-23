@@ -1411,7 +1411,6 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                         DataColumn(label: Text('Shift / Cashier', style: TextStyle(fontWeight: FontWeight.bold))),
                         DataColumn(label: Text('Opened & Closed', style: TextStyle(fontWeight: FontWeight.bold))),
                         DataColumn(label: Text('Variance Amount', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text('System access', style: TextStyle(fontWeight: FontWeight.bold))),
                         DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
                         DataColumn(label: Text('Resolution Notes', style: TextStyle(fontWeight: FontWeight.bold))),
                         DataColumn(label: Text('Action', style: TextStyle(fontWeight: FontWeight.bold))),

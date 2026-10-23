@@ -1042,6 +1042,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
 
   // Tab 2: Menu Items & BOM
   Widget _buildMenuItemsTab() {
+    final menuItems = _menuItems;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(WarmCounterSpacing.space16),
       child: Column(
@@ -1106,16 +1107,16 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
           ),
           const SizedBox(height: WarmCounterSpacing.space16),
 
-          if (_menuItems.isEmpty)
+          if (menuItems.isEmpty)
             _buildEmptyState('No menu items found. Tap "Add Menu Item" to create dishes.')
           else
             ListView.separated(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              itemCount: _menuItems.length,
+              itemCount: menuItems.length,
               separatorBuilder: (_, __) => const SizedBox(height: 8),
               itemBuilder: (context, index) {
-                final item = _menuItems[index];
+                final item = menuItems[index];
 
                 return Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
