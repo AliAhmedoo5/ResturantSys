@@ -39,7 +39,7 @@ class _ReportDeliveryDialogState extends State<ReportDeliveryDialog> {
       final reports=await ReportExportService(database:widget.service.database).history();
       if(!mounted)return;
       final targets=policy['recipients'] as List? ?? [];
-      _provider=policy['email_provider'] as String? ?? (policy.isEmpty?'GMAIL':'RELAY');
+      _provider=policy['email_provider'] as String? ?? 'GMAIL';
       _gmailSender.text=policy['gmail_sender'] as String? ?? '';
       _passwordSaved=policy['gmail_password_saved']==true;
       _endpoint.text=policy['endpoint'] as String? ?? '';

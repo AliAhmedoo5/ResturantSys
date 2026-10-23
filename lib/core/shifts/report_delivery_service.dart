@@ -55,7 +55,10 @@ class ReportDeliveryService {
         // or prevent the Manager from disabling/reconfiguring delivery.
       }
     }
-    return {...policy, 'gmail_password_saved': saved};
+    return {...policy,
+      'email_provider': policy['email_provider'] ?? (policy.containsKey('endpoint') ? 'RELAY' : 'GMAIL'),
+      'gmail_password_saved': saved,
+    };
   }
 
   Future<Map<String,dynamic>> _settings() async {

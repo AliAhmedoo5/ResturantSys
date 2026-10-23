@@ -91,6 +91,17 @@ void main() {
     expect(credentials.values.values.single, secret, reason: 'A blank field keeps the saved credential');
   });
 
+  test('New setups select Gmail while existing relay setups retain their provider', () async {
+    final service = ReportDeliveryService(database: db, credentialStore: credentials);
+    expect((await service.settings(managerStaffId: manager))['email_provider'], 'GMAIL');
+    await db.insert('system_settings', {
+      'key': 'report_delivery_settings',
+      'value': jsonEncode({'endpoint': 'https://relay.example.invalid/send', 'recipients': []}),
+      'updated_at': DateTime.now().toIso8601String(),
+    });
+    expect((await service.settings(managerStaffId: manager))['email_provider'], 'RELAY');
+  });
+
   test('Gmail connection failure retries after reopening SQLite without reversing day closure', () async {
     final service = ReportDeliveryService(database: db, credentialStore: credentials,
       gmailSubmission: (_, __) async => throw const SocketException('Failed host lookup'));
