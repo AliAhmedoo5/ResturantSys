@@ -85,6 +85,35 @@ void main() {
         if (result.localBackupPath != null) await File(result.localBackupPath!).delete();
       }
     });
+    test('publishes only media archives matching the database photo references', () async {
+      final media = Directory('${tempRootDir.path}/checked-media');
+      await media.create();
+      await db.execute('CREATE TABLE catalog_images (id INTEGER PRIMARY KEY, relative_file_path TEXT, thumbnail_path TEXT, byte_count INTEGER, sha256_checksum TEXT)');
+      await db.insert('catalog_images', {
+        'relative_file_path': 'burger.jpg',
+        'byte_count': 4,
+        'sha256_checksum': '81e817df8a9c046e994d4f881f8b98812e49af97b24bc6bd4e2aededf2c40518',
+      });
+      final service = DatabaseBackupService(database: db, catalogMediaDirectoryPath: media.path);
+      Future<BackupResult> backup() => service.executeBackup(
+        sourceDbPath: sourceDbPath, localBackupDir: localBackupDir.path,
+      );
+      final missing = await backup();
+      expect(missing.success, isFalse, reason: 'A database reference must not survive without its photo.');
+      expect(await localBackupDir.list().toList(), isEmpty);
+
+      await File('${media.path}/burger.jpg').writeAsBytes([9, 9, 9, 9]);
+      final changed = await backup();
+      expect(changed.success, isFalse, reason: 'Changed photo bytes cannot satisfy the snapshot checksum.');
+      expect(await localBackupDir.list().toList(), isEmpty);
+
+      await File('${media.path}/burger.jpg').writeAsBytes([1, 7, 9, 23]);
+      final repaired = await backup();
+      expect(repaired.success, isTrue, reason: repaired.warningMessage);
+      final restored = Directory('${tempRootDir.path}/verified-media');
+      await extractFileToDisk(repaired.localBackupPath!, restored.path);
+      expect(await File('${restored.path}/catalog_media/burger.jpg').readAsBytes(), [1, 7, 9, 23]);
+    });
     test('creates timestamped backup in local folder', () async {
       final now = DateTime(2026, 10, 15, 23, 30, 45);
       final result = await backupService.executeBackup(
@@ -220,8 +249,3 @@ void main() {
     });
   });
 }
-
-
-
-
-
