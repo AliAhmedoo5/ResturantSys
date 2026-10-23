@@ -200,7 +200,7 @@ void main() {
       final targetAlias = Link('${tempRootDir.path}/backup-media-alias');
       try {
         await sourceAlias.create(media.path);
-        await targetAlias.create(media.path);
+        await targetAlias.create(tempRootDir.path);
       } on FileSystemException catch (error) {
         if (Platform.isWindows && error.osError?.errorCode == 1314) {
           markTestSkipped('Windows runner lacks the symbolic-link creation privilege.');
@@ -210,7 +210,7 @@ void main() {
       }
       final directSource = DatabaseBackupService(database: db, catalogMediaDirectoryPath: media.path);
       final aliasedTarget = await directSource.executeBackup(
-        sourceDbPath: sourceDbPath, localBackupDir: '${targetAlias.path}/new-primary',
+        sourceDbPath: sourceDbPath, localBackupDir: '${targetAlias.path}/physical-media/new-primary',
       );
       expect(aliasedTarget.success, isFalse);
       expect(aliasedTarget.warningMessage, contains('outside catalog media'));
@@ -226,7 +226,7 @@ void main() {
 
       final secondary = await aliasedSource.executeBackup(
         sourceDbPath: sourceDbPath, localBackupDir: localBackupDir.path,
-        secondaryBackupDir: '${targetAlias.path}/new-secondary',
+        secondaryBackupDir: '${targetAlias.path}/physical-media/new-secondary',
       );
       expect(secondary.success, isTrue, reason: secondary.warningMessage);
       expect(await File(secondary.localBackupPath!).exists(), isTrue);

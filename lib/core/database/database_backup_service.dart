@@ -1,5 +1,5 @@
-import 'dart:isolate';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:archive/archive_io.dart';
 import 'package:crypto/crypto.dart';
@@ -27,6 +27,12 @@ class BackupResult {
   final DateTime timestamp;
 }
 
+typedef _CatalogMediaReference = ({
+  String path,
+  String? thumbnail,
+  int? byteCount,
+  String? checksum,
+});
 /// Creates independent SQLite snapshots without queuing compression on billing.
 class DatabaseBackupService {
   DatabaseBackupService({this.database, this.catalogMediaDirectoryPath});
@@ -91,10 +97,11 @@ Future<BackupResult> _createBackup(String sourcePath, String? localDirectory,
       }
     }
     final cleanLocal = localDirectory?.trim();
-    final local = Directory(cleanLocal == null || cleanLocal.isEmpty
-        ? DatabaseBackupService.resolveDefaultLocalBackupDir() : cleanLocal);
-    final mediaRoot = p.normalize(p.absolute(mediaPath));
-    final primaryRoot = p.normalize(p.absolute(local.path));
+    final requestedLocal = cleanLocal == null || cleanLocal.isEmpty
+        ? DatabaseBackupService.resolveDefaultLocalBackupDir() : cleanLocal;
+    final mediaRoot = await _resolveDirectoryPath(mediaPath);
+    final primaryRoot = await _resolveDirectoryPath(requestedLocal);
+    final local = Directory(primaryRoot);
     if (p.equals(mediaRoot, primaryRoot) || p.isWithin(mediaRoot, primaryRoot)) {
       throw FileSystemException('Backup directory must be outside catalog media', local.path);
     }
@@ -102,18 +109,18 @@ Future<BackupResult> _createBackup(String sourcePath, String? localDirectory,
     staging = await local.createTemp('.backup-');
     final snapshotPath = p.join(staging.path, 'pos.db');
     final snapshot = sqlite.sqlite3.open(snapshotPath);
-    final references = <Map<String, Object?>>[];
+    final references = <_CatalogMediaReference>[];
     try {
       await source.backup(snapshot, nPage: 64).drain<void>();
       if (snapshot.select(
           "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'catalog_images'").isNotEmpty) {
         for (final row in snapshot.select('SELECT relative_file_path, thumbnail_path, byte_count, sha256_checksum FROM catalog_images')) {
-          references.add({
-            'path': row['relative_file_path'],
-            'thumbnail': row['thumbnail_path'],
-            'bytes': row['byte_count'],
-            'checksum': row['sha256_checksum'],
-          });
+          references.add((
+            path: row['relative_file_path'] as String,
+            thumbnail: row['thumbnail_path'] as String?,
+            byteCount: row['byte_count'] as int?,
+            checksum: row['sha256_checksum'] as String?,
+          ));
         }
       }
     } finally {
@@ -123,7 +130,7 @@ Future<BackupResult> _createBackup(String sourcePath, String? localDirectory,
     source = null;
 
     final stagedMedia = await _stageCatalogMedia(
-        mediaPath, staging.path, requireMedia, references);
+        mediaRoot, staging.path, requireMedia, references);
 
     String two(int value) => value.toString().padLeft(2, '0');
     final stamp = '${timestamp.year}${two(timestamp.month)}${two(timestamp.day)}_'
@@ -157,7 +164,7 @@ Future<BackupResult> _createBackup(String sourcePath, String? localDirectory,
       final secondary = Directory(secondaryDirectory.trim());
       String? secondaryPending;
       try {
-        final secondaryRoot = p.normalize(p.absolute(secondary.path));
+        final secondaryRoot = await _resolveDirectoryPath(secondary.path);
         if (p.equals(mediaRoot, secondaryRoot) || p.isWithin(mediaRoot, secondaryRoot)) {
           throw FileSystemException('Secondary backup directory must be outside catalog media', secondary.path);
         }
@@ -166,7 +173,7 @@ Future<BackupResult> _createBackup(String sourcePath, String? localDirectory,
         }
         await secondary.create(recursive: true);
         secondaryPath = p.join(secondary.path, name);
-        if (p.equals(p.absolute(primaryPath), p.absolute(secondaryPath))) {
+        if (p.equals(primaryRoot, secondaryRoot)) {
           secondaryPath = primaryPath;
         } else {
           secondaryPending = '$secondaryPath.partial';
@@ -204,9 +211,32 @@ Future<BackupResult> _createBackup(String sourcePath, String? localDirectory,
   }
 }
 
+/// Resolves existing ancestors before appending new leaves. Follow links before
+/// interpreting '..', since lexical normalization can hide a media ancestor.
+Future<String> _resolveDirectoryPath(String path) async {
+  final absolute = p.isAbsolute(path)
+      ? path : '${Directory.current.path}${p.separator}$path';
+  final segments = p.split(absolute);
+  var resolved = await Directory(segments.first).resolveSymbolicLinks();
+  for (final segment in segments.skip(1)) {
+    if (segment == '.') continue;
+    if (segment == '..') {
+      resolved = p.dirname(resolved);
+      continue;
+    }
+    final candidate = p.join(resolved, segment);
+    if (await FileSystemEntity.type(candidate, followLinks: false) ==
+        FileSystemEntityType.notFound) {
+      resolved = candidate;
+    } else {
+      resolved = await Directory(candidate).resolveSymbolicLinks();
+    }
+  }
+  return p.normalize(resolved);
+}
 /// Copies media once, then validates and archives those same staged bytes.
 Future<Directory> _stageCatalogMedia(String mediaPath, String stagingPath,
-    bool requireMedia, List<Map<String, Object?>> references) async {
+    bool requireMedia, List<_CatalogMediaReference> references) async {
   final media = Directory(mediaPath);
   final staged = Directory(p.join(stagingPath, 'catalog_media'));
   await staged.create();
@@ -237,20 +267,20 @@ Future<Directory> _stageCatalogMedia(String mediaPath, String stagingPath,
   }
 
   for (final reference in references) {
-    final file = referencedFile(reference['path'] as String);
+    final file = referencedFile(reference.path);
     if (!await file.exists()) {
-      throw FileSystemException('Referenced catalog photo is missing', reference['path'] as String);
+      throw FileSystemException('Referenced catalog photo is missing', reference.path);
     }
-    final expectedBytes = reference['bytes'] as int?;
+    final expectedBytes = reference.byteCount;
     if (expectedBytes != null && await file.length() != expectedBytes) {
       throw FileSystemException('Catalog photo size does not match the database', file.path);
     }
-    final checksum = reference['checksum'] as String?;
+    final checksum = reference.checksum;
     if (checksum != null && checksum.isNotEmpty &&
         (await sha256.bind(file.openRead()).first).toString() != checksum) {
       throw FileSystemException('Catalog photo checksum does not match the database', file.path);
     }
-    final thumbnail = reference['thumbnail'] as String?;
+    final thumbnail = reference.thumbnail;
     if (thumbnail != null && thumbnail.isNotEmpty && !await referencedFile(thumbnail).exists()) {
       throw FileSystemException('Referenced catalog thumbnail is missing', thumbnail);
     }

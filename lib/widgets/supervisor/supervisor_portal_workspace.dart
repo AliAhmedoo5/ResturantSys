@@ -280,41 +280,38 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
     }
   }
 
-  Future<void> _saveLocalBackupPath() async {
-    if (widget.shiftController == null) return;
+  Future<void> _saveBackupPath(String key, String value) async {
     await widget.shiftController!.database.insert(
       PosDatabaseConstants.tableSystemSettings,
       {
-        'key': PosDatabaseConstants.settingLocalBackupPath,
-        'value': _localPathController.text.trim(),
+        'key': key,
+        'value': value,
         'updated_at': DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now()),
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> _saveLocalBackupPath() async {
+    if (widget.shiftController == null) return;
+    await _saveBackupPath(
+      PosDatabaseConstants.settingLocalBackupPath, _localPathController.text.trim(),
     );
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Primary local backup directory updated.')),
     );
   }
+
   Future<void> _saveSecondaryBackupPath() async {
     if (widget.shiftController == null) return;
     final path = _usbPathController.text.trim();
-    final now = DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
-    await widget.shiftController!.database.insert(
-      PosDatabaseConstants.tableSystemSettings,
-      {
-        'key': PosDatabaseConstants.settingSecondaryBackupPath,
-        'value': path,
-        'updated_at': now,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await _saveBackupPath(PosDatabaseConstants.settingSecondaryBackupPath, path);
+    if (!mounted) return;
     setState(() => _secondaryBackupPath = path);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Secondary / USB backup drive path updated.')),
-      );
-    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Secondary / USB backup drive path updated.')),
+    );
   }
 
   Future<void> _triggerInstantBackup() async {
