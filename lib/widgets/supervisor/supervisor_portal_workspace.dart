@@ -108,6 +108,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
   bool _isLoadingZReport = true;
   String _secondaryBackupPath = '';
   final TextEditingController _usbPathController = TextEditingController();
+  final TextEditingController _localPathController = TextEditingController();
 
   @override
   void initState() {
@@ -147,6 +148,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
   @override
   void dispose() {
     _usbPathController.dispose();
+    _localPathController.dispose();
     _thresholdController.dispose();
     super.dispose();
   }
@@ -261,12 +263,16 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
 
       final settingRows = await widget.shiftController!.database.query(
         PosDatabaseConstants.tableSystemSettings,
-        where: 'key = ?',
-        whereArgs: [PosDatabaseConstants.settingSecondaryBackupPath],
+        where: 'key IN (?, ?)',
+        whereArgs: [PosDatabaseConstants.settingLocalBackupPath, PosDatabaseConstants.settingSecondaryBackupPath],
       );
-      if (settingRows.isNotEmpty) {
-        _secondaryBackupPath = settingRows.first['value'] as String? ?? '';
-        _usbPathController.text = _secondaryBackupPath;
+      for (final row in settingRows) {
+        if (row['key'] == PosDatabaseConstants.settingLocalBackupPath) {
+          _localPathController.text = row['value'] as String? ?? '';
+        } else {
+          _secondaryBackupPath = row['value'] as String? ?? '';
+          _usbPathController.text = _secondaryBackupPath;
+        }
       }
       if (mounted) setState(() => _isLoadingZReport = false);
     } catch (_) {
@@ -274,25 +280,38 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
     }
   }
 
-  Future<void> _saveSecondaryBackupPath() async {
-    if (widget.shiftController == null) return;
-    final path = _usbPathController.text.trim();
-    final now = DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
+  Future<void> _saveBackupPath(String key, String value) async {
     await widget.shiftController!.database.insert(
       PosDatabaseConstants.tableSystemSettings,
       {
-        'key': PosDatabaseConstants.settingSecondaryBackupPath,
-        'value': path,
-        'updated_at': now,
+        'key': key,
+        'value': value,
+        'updated_at': DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now()),
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+  Future<void> _saveLocalBackupPath() async {
+    if (widget.shiftController == null) return;
+    await _saveBackupPath(
+      PosDatabaseConstants.settingLocalBackupPath, _localPathController.text.trim(),
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Primary local backup directory updated.')),
+    );
+  }
+
+  Future<void> _saveSecondaryBackupPath() async {
+    if (widget.shiftController == null) return;
+    final path = _usbPathController.text.trim();
+    await _saveBackupPath(PosDatabaseConstants.settingSecondaryBackupPath, path);
+    if (!mounted) return;
     setState(() => _secondaryBackupPath = path);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Secondary / USB backup drive path updated.')),
-      );
-    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Secondary / USB backup drive path updated.')),
+    );
   }
 
   Future<void> _triggerInstantBackup() async {
@@ -308,7 +327,9 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
         if (result.success) {
           final msg = result.warningMessage != null
               ? 'Local backup created: ${result.localBackupPath}.\nWarning: ${result.warningMessage}'
-              : 'Backup created successfully in local archive and secondary target!';
+              : result.secondaryBackupPath == null
+                  ? 'Backup archive created: ${result.localBackupPath}'
+                  : 'Backup archive created in primary and secondary destinations.';
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(msg),
@@ -1765,7 +1786,8 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                 borderRadius: WarmCounterSpacing.panelBorderRadius,
                 border: Border.all(color: WarmCounterColors.lightBorder),
               ),
-              child: Column(
+              child: SingleChildScrollView(
+                child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
@@ -1776,28 +1798,41 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                     ),
                   ),
                   Text(
-                    'Automatic timestamped copies of pos.db are archived upon every Z-Report closure.',
+                    'Timestamped ZIP archives protect the database and catalog photos after every Z-Report closure.',
                     style: WarmCounterTypography.secondaryLabel.copyWith(
                       color: WarmCounterColors.lightSecondaryText,
                     ),
                   ),
                   const SizedBox(height: WarmCounterSpacing.space16),
 
-                  // Local Archive Path
-                  const Text('Local Backup Directory:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  const Text('Primary Local Backup Directory:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                   const SizedBox(height: 4),
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: WarmCounterColors.lightPageBackground,
-                      borderRadius: WarmCounterSpacing.controlBorderRadius,
-                      border: Border.all(color: WarmCounterColors.lightBorder),
-                    ),
-                    child: SelectableText(
-                      localDir,
-                      style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          key: const ValueKey('local_backup_path_input'),
+                          controller: _localPathController,
+                          decoration: InputDecoration(
+                            hintText: localDir,
+                            border: const OutlineInputBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        key: const ValueKey('save_local_backup_path_btn'),
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
+                        ),
+                        onPressed: _saveLocalBackupPath,
+                        child: const Text('Save'),
+                      ),
+                    ],
                   ),
+                  const SizedBox(height: 4),
+                  const Text('Leave blank to use the default directory.', style: TextStyle(fontSize: 12)),
                   const SizedBox(height: WarmCounterSpacing.space16),
 
                   // Secondary / External USB Drive Path
@@ -1842,6 +1877,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                     onPressed: _triggerInstantBackup,
                   ),
                 ],
+                ),
               ),
             ),
           ),
@@ -1850,6 +1886,3 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
     );
   }
 }
-
-
-
