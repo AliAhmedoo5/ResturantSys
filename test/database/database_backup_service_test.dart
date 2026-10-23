@@ -193,6 +193,47 @@ void main() {
         reader.dispose();
       }
     });
+    test('rejects backup destinations aliased into catalog media before creating files', () async {
+      final media = Directory('${tempRootDir.path}/physical-media');
+      await media.create();
+      final sourceAlias = Link('${tempRootDir.path}/source-media-alias');
+      final targetAlias = Link('${tempRootDir.path}/backup-media-alias');
+      try {
+        await sourceAlias.create(media.path);
+        await targetAlias.create(media.path);
+      } on FileSystemException catch (error) {
+        if (Platform.isWindows && error.osError?.errorCode == 1314) {
+          markTestSkipped('Windows runner lacks the symbolic-link creation privilege.');
+          return;
+        }
+        rethrow;
+      }
+      final directSource = DatabaseBackupService(database: db, catalogMediaDirectoryPath: media.path);
+      final aliasedTarget = await directSource.executeBackup(
+        sourceDbPath: sourceDbPath, localBackupDir: '${targetAlias.path}/new-primary',
+      );
+      expect(aliasedTarget.success, isFalse);
+      expect(aliasedTarget.warningMessage, contains('outside catalog media'));
+      expect(await media.list(followLinks: false).toList(), isEmpty);
+
+      final aliasedSource = DatabaseBackupService(database: db, catalogMediaDirectoryPath: sourceAlias.path);
+      final directTarget = await aliasedSource.executeBackup(
+        sourceDbPath: sourceDbPath, localBackupDir: '${media.path}/another-primary',
+      );
+      expect(directTarget.success, isFalse);
+      expect(directTarget.warningMessage, contains('outside catalog media'));
+      expect(await media.list(followLinks: false).toList(), isEmpty);
+
+      final secondary = await aliasedSource.executeBackup(
+        sourceDbPath: sourceDbPath, localBackupDir: localBackupDir.path,
+        secondaryBackupDir: '${targetAlias.path}/new-secondary',
+      );
+      expect(secondary.success, isTrue, reason: secondary.warningMessage);
+      expect(await File(secondary.localBackupPath!).exists(), isTrue);
+      expect(secondary.secondaryBackupPath, isNull);
+      expect(secondary.warningMessage, contains('outside catalog media'));
+      expect(await media.list(followLinks: false).toList(), isEmpty);
+    });
     test('creates timestamped backup in local folder', () async {
       final now = DateTime(2026, 10, 15, 23, 30, 45);
       final result = await backupService.executeBackup(
