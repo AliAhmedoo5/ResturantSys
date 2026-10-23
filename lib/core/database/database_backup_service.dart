@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:sqlite3/sqlite3.dart' as sqlite;
 
+import '../catalog/catalog_media_service.dart';
 import 'pos_database_constants.dart';
 
 /// Result record of an automated or manual database backup execution.
@@ -54,15 +55,17 @@ class DatabaseBackupService {
     final effectiveTime = timestamp ?? DateTime.now();
     // Only send values to the worker, never the live sqflite connection.
     final defaultLocal = resolveDefaultLocalBackupDir();
+    final mediaPath = catalogMediaDirectoryPath ?? CatalogMediaService.defaultBaseDirectoryPath();
+    final requireMedia = catalogMediaDirectoryPath != null;
     return Isolate.run(() => _createBackup(
           sourceDbPath, localBackupDir ?? defaultLocal,
-          secondaryBackupDir, effectiveTime,
+          secondaryBackupDir, effectiveTime, mediaPath, requireMedia,
         ));
   }
 }
 
 Future<BackupResult> _createBackup(String sourcePath, String localDirectory,
-    String? secondaryDirectory, DateTime timestamp) async {
+    String? secondaryDirectory, DateTime timestamp, String mediaPath, bool requireMedia) async {
   Directory? staging;
   sqlite.Database? source;
   try {
@@ -104,6 +107,24 @@ Future<BackupResult> _createBackup(String sourcePath, String localDirectory,
     encoder.create(pending);
     try {
       await encoder.addFile(File(snapshotPath), 'pos.db');
+      final media = Directory(mediaPath);
+      if (requireMedia && !await media.exists()) {
+        throw FileSystemException('Catalog media directory not found', mediaPath);
+      }
+      encoder.addArchiveFile(ArchiveFile('catalog_media/', 0, <int>[])..isFile = false);
+      if (await media.exists()) {
+        await for (final entity in media.list(recursive: true, followLinks: false)) {
+          final relative = p.relative(entity.path, from: media.path).split(p.separator).join('/');
+          final name = 'catalog_media/$relative';
+          if (entity is File) {
+            await encoder.addFile(entity, name);
+          } else if (entity is Directory) {
+            encoder.addArchiveFile(ArchiveFile('$name/', 0, <int>[])..isFile = false);
+          } else {
+            throw FileSystemException('Catalog media contains an unsupported link', entity.path);
+          }
+        }
+      }
     } finally {
       await encoder.close();
     }
@@ -154,6 +175,7 @@ Future<BackupResult> _createBackup(String sourcePath, String localDirectory,
     }
   }
 }
+
 
 
 
