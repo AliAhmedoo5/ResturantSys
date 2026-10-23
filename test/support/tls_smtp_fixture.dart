@@ -6,7 +6,10 @@ import 'dart:io';
 /// never forwards messages and is not included in the application build.
 class TlsSmtpFixture {
   TlsSmtpFixture._(this._server, this.rejectionCode) {
-    _subscription = _server.listen(_accept);
+    _subscription = _server.listen(_accept, onError: (Object _) {
+      // A disconnected TLS probe is not a completed SMTP session. Tests still
+      // require authentication, received MIME, and the expected outbox state.
+    });
   }
 
   final SecureServerSocket _server;
