@@ -52,7 +52,7 @@ void main() {
 
       expect(result.success, isTrue);
       expect(result.localBackupPath, isNotNull);
-      expect(result.localBackupPath, contains('pos_backup_20261015_233045.db'));
+      expect(result.localBackupPath, contains('pos_backup_20261015_233045.zip'));
 
       final localFile = File(result.localBackupPath!);
       expect(await localFile.exists(), isTrue);
@@ -175,4 +175,5 @@ void main() {
     });
   });
 }
+
 
