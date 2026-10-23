@@ -9,14 +9,30 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
+import 'package:resturant_sys/core/catalog/catalog_media_service.dart';
+import 'package:resturant_sys/core/database/pos_database.dart';
 import 'package:resturant_sys/core/catalog/catalog_photo_change.dart';
 import 'package:resturant_sys/core/theme/theme.dart';
 import 'package:resturant_sys/widgets/catalog/catalog_photo_field.dart';
+import 'package:resturant_sys/widgets/catalog/dialogs/menu_item_form_dialog.dart';
 
 // Native XFile derives its name from path, including for in-memory files.
 final png = base64Decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=');
 
 void main() {
+  setUpAll(() async {
+    final font = File('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf');
+    if (Platform.environment['CAPTURE_DESKTOP'] == 'true' && await font.exists()) {
+      final loader = FontLoader(WarmCounterTypography.fontFamily);
+      loader.addFont(Future.value(ByteData.sublistView(await font.readAsBytes())));
+      await loader.load();
+      final icons = FontLoader('MaterialIcons');
+      icons.addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'));
+      await icons.load();
+    }
+  });
   testWidgets('browse stages one picture; cancel preserves it; remove stages removal', (tester) async {
     CatalogPhotoChange? change;
     bool busy = false;
@@ -125,5 +141,98 @@ void main() {
         image.dispose();
       });
     }
+  });
+
+  testWidgets('new Menu Item stages its picture until Save and fits 1366x768', (tester) async {
+    tester.view.physicalSize = const Size(1366, 768);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    sqfliteFfiInit();
+    final posDb = PosDatabase(factory: databaseFactoryFfi, customPath: inMemoryDatabasePath);
+    final directory = Directory.systemTemp.createTempSync('photo_form_test_');
+    addTearDown(() async {
+      await posDb.close();
+      await directory.delete(recursive: true);
+    });
+    final db = await tester.runAsync(posDb.initialize);
+    final service = CatalogMediaService(database: db!, baseDirectoryPath: directory.path);
+    final catalog = CatalogAndRecipeController(database: db, mediaService: service);
+    final category = (await tester.runAsync(() => catalog.createCategory(
+      name: 'Burgers', displayOrder: 0, colorHex: '#FFC400',
+    )))!;
+    var saved = false;
+    await tester.pumpWidget(RepaintBoundary(key: const ValueKey('form_preview'),
+      child: MaterialApp(theme: WarmCounterTheme.darkTheme, home: Scaffold(
+        body: Builder(builder: (context) => TextButton(
+          child: const Text('Open form'),
+          onPressed: () => showDialog<void>(context: context, builder: (_) => MenuItemFormDialog(
+            categories: [category], mediaService: service,
+            onSave: ({required categoryId, required name, required basePrice, required taxRate,
+              required isTaxInclusive, required isActive, required photoChange}) async {
+              await catalog.createMenuItem(categoryId: categoryId, name: name, basePrice: basePrice,
+                taxRate: taxRate, isTaxInclusive: isTaxInclusive, isActive: isActive, photoChange: photoChange);
+              saved = true;
+            },
+          )),
+        )),
+      )),
+    ));
+
+    Future<void> openAndSelect() async {
+      await tester.tap(find.text('Open form'));
+      await tester.pumpAndSettle();
+      await tester.runAsync(() async {
+        tester.widget<DropTarget>(find.byType(DropTarget)).onDragDone!(DropDoneDetails(
+          files: [DropItemFile.fromData(png, path: 'burger.png')],
+          localPosition: Offset.zero, globalPosition: Offset.zero,
+        ));
+        for (var i = 0; i < 200; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+          await tester.pump();
+          if (find.text('Change picture').evaluate().isNotEmpty) break;
+        }
+      });
+      await tester.pumpAndSettle();
+      expect(find.text('Change picture'), findsOneWidget);
+    }
+
+    await openAndSelect();
+    expect(saved, isFalse);
+    expect(await tester.runAsync(catalog.getMenuItems), isEmpty);
+    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    await tester.pumpAndSettle();
+    expect(await tester.runAsync(catalog.getMenuItems), isEmpty);
+
+    await openAndSelect();
+    await tester.enterText(find.byKey(const ValueKey('menu_item_name_field')), 'Classic Burger');
+    await tester.enterText(find.byKey(const ValueKey('menu_item_price_field')), '350');
+    await tester.pumpAndSettle();
+    final saveButton = find.byKey(const ValueKey('save_menu_item_button'));
+    expect(saveButton.hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    if (Platform.environment['CAPTURE_DESKTOP'] == 'true') {
+      // Capture the overlay as well as the page behind the dialog.
+      final boundary = tester.renderObject<RenderRepaintBoundary>(find.byKey(const ValueKey('form_preview')));
+      await tester.runAsync(() async {
+        final image = await boundary.toImage();
+        final data = await image.toByteData(format: ui.ImageByteFormat.png);
+        await Directory('build/desktop-previews').create(recursive: true);
+        await File('build/desktop-previews/menu-item-picture-form.png').writeAsBytes(data!.buffer.asUint8List());
+        image.dispose();
+      });
+    }
+    await tester.runAsync(() async {
+      await tester.tap(saveButton);
+      for (var i = 0; !saved && i < 200; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    });
+    await tester.pumpAndSettle();
+    expect(saved, isTrue);
+    final items = (await tester.runAsync(catalog.getMenuItems))!;
+    expect(items, hasLength(1));
+    final images = await tester.runAsync(() => service.getImagesForEntity('menu_item', items.single.id));
+    expect(images, hasLength(1));
   });
 }
