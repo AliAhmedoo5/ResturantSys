@@ -13,13 +13,14 @@ import 'package:resturant_sys/core/catalog/catalog_photo_change.dart';
 import 'package:resturant_sys/core/theme/theme.dart';
 import 'package:resturant_sys/widgets/catalog/catalog_photo_field.dart';
 
+// Native XFile derives its name from path, including for in-memory files.
 final png = base64Decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=');
 
 void main() {
   testWidgets('browse stages one picture; cancel preserves it; remove stages removal', (tester) async {
     CatalogPhotoChange? change;
     bool busy = false;
-    XFile? next = XFile.fromData(png, name: 'burger.png');
+    XFile? next = XFile.fromData(png, path: 'burger.png');
     await tester.pumpWidget(MaterialApp(theme: WarmCounterTheme.darkTheme,
       home: Scaffold(body: Center(child: SizedBox(width: 440, child: CatalogPhotoField(
         entityType: 'menu_item',
@@ -71,22 +72,22 @@ void main() {
       expect(busy, isFalse);
     }
 
-    await drop([DropItemFile.fromData(png, name: 'deal.png')]);
+    await drop([DropItemFile.fromData(png, path: 'deal.png')]);
     expect(change?.bytes, png);
     final previous = change;
-    await drop([DropItemFile.fromData(png, name: 'a.png'), DropItemFile.fromData(png, name: 'b.png')]);
+    await drop([DropItemFile.fromData(png, path: 'a.png'), DropItemFile.fromData(png, path: 'b.png')]);
     expect(find.text('Choose one picture at a time.'), findsOneWidget);
     expect(change, same(previous));
-    await drop([DropItemFile.fromData(Uint8List(5 * 1024 * 1024 + 1), name: 'big.png')]);
+    await drop([DropItemFile.fromData(Uint8List(5 * 1024 * 1024 + 1), path: 'big.png')]);
     expect(find.text('Choose a non-empty picture up to 5 MB.'), findsOneWidget);
     expect(change, same(previous));
-    await drop([DropItemFile.fromData(Uint8List.fromList([1, 2, 3]), name: 'bad.png')]);
+    await drop([DropItemFile.fromData(Uint8List.fromList([1, 2, 3]), path: 'bad.png')]);
     expect(change, same(previous));
     // A valid PNG header alone still fails decoding.
-    await drop([DropItemFile.fromData(Uint8List.sublistView(png, 0, 8), name: 'truncated.png')]);
+    await drop([DropItemFile.fromData(Uint8List.sublistView(png, 0, 8), path: 'truncated.png')]);
     expect(change, same(previous));
     expect(find.textContaining('could not be read'), findsOneWidget);
-    await drop([DropItemFile.fromData(png, name: 'photo.gif')]);
+    await drop([DropItemFile.fromData(png, path: 'photo.gif')]);
     expect(find.text('Choose a JPEG, PNG or WebP picture.'), findsOneWidget);
     expect(change, same(previous));
   });
