@@ -12,6 +12,7 @@ import 'package:resturant_sys/core/catalog/menu_item.dart';
 import 'package:resturant_sys/core/database/pos_database.dart';
 import 'package:resturant_sys/core/theme/warm_counter_theme.dart';
 import 'package:resturant_sys/widgets/catalog/dialogs/catalog_photo_gallery_dialog.dart';
+import 'package:resturant_sys/widgets/catalog/dialogs/catalog_photo_dialog.dart';
 import 'package:resturant_sys/widgets/catalog/supervisor_catalog_workspace.dart';
 
 Future<void> tapDialogActionAndWait(WidgetTester tester, Finder button) async {
@@ -243,23 +244,21 @@ void main() {
         for (var attempt = 0; attempt < 200; attempt++) {
           await Future<void>.delayed(const Duration(milliseconds: 10));
           await tester.pump();
-          if (find.byType(CatalogPhotoGalleryDialog).evaluate().isNotEmpty) {
-            final state = tester.state<CatalogPhotoGalleryDialogState>(find.byType(CatalogPhotoGalleryDialog));
-            if (!state.isLoading) break;
-          }
+          if (find.byType(CatalogPhotoDialog).evaluate().isNotEmpty &&
+              tester.widget<FilledButton>(find.byKey(const ValueKey('save_catalog_picture'))).onPressed != null) break;
         }
       });
       await tester.pumpAndSettle();
 
       // Dialog opens
-      expect(find.text('Photos: Gourmet Beef Burger'), findsOneWidget);
-      expect(find.byKey(const ValueKey('close_photo_gallery_button')), findsOneWidget);
+      expect(find.text('Picture: Gourmet Beef Burger'), findsOneWidget);
+      expect(find.widgetWithText(TextButton, 'Cancel'), findsOneWidget);
 
       // Close dialog
-      await tester.tap(find.byKey(const ValueKey('close_photo_gallery_button')));
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Photos: Gourmet Beef Burger'), findsNothing);
+      expect(find.text('Picture: Gourmet Beef Burger'), findsNothing);
     });
   });
 }

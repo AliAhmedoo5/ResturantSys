@@ -1,6 +1,7 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../database/pos_database_constants.dart';
 import 'catalog_media_service.dart';
+import 'catalog_photo_change.dart';
 import 'discount_preset.dart';
 import 'menu_category.dart';
 import 'menu_item.dart';
@@ -152,42 +153,52 @@ class CatalogAndRecipeController {
     double taxRate = 0.0,
     bool isTaxInclusive = true,
     bool isActive = false,
+    CatalogPhotoChange? photoChange,
   }) async {
     if (isActive) throw StateError("Save a draft and configure its recipe before activation.");
     final now = _formatTimestamp(DateTime.now());
-    final id = await database.insert(
-      PosDatabaseConstants.tableMenuItems,
-      {
-        'category_id': categoryId,
-        'name': name.trim(),
-        'base_price': basePrice,
-        'tax_rate': taxRate,
-        'is_tax_inclusive': isTaxInclusive ? 1 : 0,
-        'is_active': isActive ? 1 : 0,
-        'created_at': now,
-      },
+    final id = await mediaService.saveEntityWithPhoto(
+      entityType: 'menu_item',
+      photoChange: photoChange,
+      saveEntity: (executor) => executor.insert(
+        PosDatabaseConstants.tableMenuItems,
+        {
+          'category_id': categoryId,
+          'name': name.trim(),
+          'base_price': basePrice,
+          'tax_rate': taxRate,
+          'is_tax_inclusive': isTaxInclusive ? 1 : 0,
+          'is_active': isActive ? 1 : 0,
+          'created_at': now,
+        },
+      ),
     );
 
     return getMenuItem(id);
   }
 
-  Future<MenuItem> updateMenuItem(MenuItem item) async {
-    await database.transaction((txn) async {
-    if (item.isActive) await validateRecipe(item.id, executor: txn);
-    await txn.update(
-      PosDatabaseConstants.tableMenuItems,
-      {
-        'category_id': item.categoryId,
-        'name': item.name.trim(),
-        'base_price': item.basePrice,
-        'tax_rate': item.taxRate,
-        'is_tax_inclusive': item.isTaxInclusive ? 1 : 0,
-        'is_active': item.isActive ? 1 : 0,
+  Future<MenuItem> updateMenuItem(MenuItem item, {CatalogPhotoChange? photoChange}) async {
+    await mediaService.saveEntityWithPhoto(
+      entityType: 'menu_item',
+      photoChange: photoChange,
+      saveEntity: (txn) async {
+        if (item.isActive) await validateRecipe(item.id, executor: txn);
+        await txn.update(
+          PosDatabaseConstants.tableMenuItems,
+          {
+            'category_id': item.categoryId,
+            'name': item.name.trim(),
+            'base_price': item.basePrice,
+            'tax_rate': item.taxRate,
+            'is_tax_inclusive': item.isTaxInclusive ? 1 : 0,
+            'is_active': item.isActive ? 1 : 0,
+          },
+          where: 'id = ?',
+          whereArgs: [item.id],
+        );
+        return item.id;
       },
-      where: 'id = ?',
-      whereArgs: [item.id],
     );
-    });
     return getMenuItem(item.id);
   }
 
