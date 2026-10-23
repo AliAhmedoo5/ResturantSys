@@ -96,7 +96,7 @@ void main() {
     expect((await service.settings(managerStaffId: manager))['email_provider'], 'GMAIL');
     await db.insert('system_settings', {
       'key': 'report_delivery_settings',
-      'value': jsonEncode({'endpoint': 'https://relay.example.invalid/send', 'recipients': []}),
+      'value': jsonEncode({'endpoint': 'https://relay.example.invalid/send', 'recipients': <Map<String, dynamic>>[]}),
       'updated_at': DateTime.now().toIso8601String(),
     });
     expect((await service.settings(managerStaffId: manager))['email_provider'], 'RELAY');
