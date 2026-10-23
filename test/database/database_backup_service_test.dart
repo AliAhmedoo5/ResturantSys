@@ -1,3 +1,4 @@
+import 'package:archive/archive_io.dart';
 import 'package:resturant_sys/core/database/pos_database_constants.dart';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
@@ -52,7 +53,7 @@ void main() {
 
       expect(result.success, isTrue);
       expect(result.localBackupPath, isNotNull);
-      expect(result.localBackupPath, contains('pos_backup_20261015_233045.zip'));
+      expect(result.localBackupPath, matches(r'pos_backup_20261015_233045_.*\.zip' r'$'));
 
       final localFile = File(result.localBackupPath!);
       expect(await localFile.exists(), isTrue);
@@ -158,7 +159,9 @@ void main() {
       await posDb.close();
 
       // Open the restored backup file directly and verify schema version & tables
-      final restoredDb = await databaseFactoryFfi.openDatabase(backupResult.localBackupPath!);
+      final restoredDirectory = Directory('${tempRootDir.path}/restored');
+      await extractFileToDisk(backupResult.localBackupPath!, restoredDirectory.path);
+      final restoredDb = await databaseFactoryFfi.openDatabase('${restoredDirectory.path}/pos.db');
       
       final versionResult = await restoredDb.rawQuery('PRAGMA user_version;');
       expect(versionResult.first.values.first, equals(PosDatabaseConstants.schemaVersion));
@@ -175,5 +178,6 @@ void main() {
     });
   });
 }
+
 
 
