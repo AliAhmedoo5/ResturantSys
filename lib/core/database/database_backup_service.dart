@@ -2,6 +2,7 @@ import 'dart:isolate';
 import 'dart:io';
 
 import 'package:archive/archive_io.dart';
+import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:sqlite3/sqlite3.dart' as sqlite;
@@ -92,17 +93,37 @@ Future<BackupResult> _createBackup(String sourcePath, String? localDirectory,
     final cleanLocal = localDirectory?.trim();
     final local = Directory(cleanLocal == null || cleanLocal.isEmpty
         ? DatabaseBackupService.resolveDefaultLocalBackupDir() : cleanLocal);
+    final mediaRoot = p.normalize(p.absolute(mediaPath));
+    final primaryRoot = p.normalize(p.absolute(local.path));
+    if (p.equals(mediaRoot, primaryRoot) || p.isWithin(mediaRoot, primaryRoot)) {
+      throw FileSystemException('Backup directory must be outside catalog media', local.path);
+    }
     await local.create(recursive: true);
     staging = await local.createTemp('.backup-');
     final snapshotPath = p.join(staging.path, 'pos.db');
     final snapshot = sqlite.sqlite3.open(snapshotPath);
+    final references = <Map<String, Object?>>[];
     try {
       await source.backup(snapshot, nPage: 64).drain<void>();
+      if (snapshot.select(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'catalog_images'").isNotEmpty) {
+        for (final row in snapshot.select('SELECT relative_file_path, thumbnail_path, byte_count, sha256_checksum FROM catalog_images')) {
+          references.add({
+            'path': row['relative_file_path'],
+            'thumbnail': row['thumbnail_path'],
+            'bytes': row['byte_count'],
+            'checksum': row['sha256_checksum'],
+          });
+        }
+      }
     } finally {
       snapshot.dispose();
     }
     source.dispose();
     source = null;
+
+    final stagedMedia = await _stageCatalogMedia(
+        mediaPath, staging.path, requireMedia, references);
 
     String two(int value) => value.toString().padLeft(2, '0');
     final stamp = '${timestamp.year}${two(timestamp.month)}${two(timestamp.day)}_'
@@ -114,22 +135,14 @@ Future<BackupResult> _createBackup(String sourcePath, String? localDirectory,
     encoder.create(pending);
     try {
       await encoder.addFile(File(snapshotPath), 'pos.db');
-      final media = Directory(mediaPath);
-      if (requireMedia && !await media.exists()) {
-        throw FileSystemException('Catalog media directory not found', mediaPath);
-      }
       encoder.addArchiveFile(ArchiveFile('catalog_media/', 0, <int>[])..isFile = false);
-      if (await media.exists()) {
-        await for (final entity in media.list(recursive: true, followLinks: false)) {
-          final relative = p.relative(entity.path, from: media.path).split(p.separator).join('/');
-          final name = 'catalog_media/$relative';
-          if (entity is File) {
-            await encoder.addFile(entity, name);
-          } else if (entity is Directory) {
-            encoder.addArchiveFile(ArchiveFile('$name/', 0, <int>[])..isFile = false);
-          } else {
-            throw FileSystemException('Catalog media contains an unsupported link', entity.path);
-          }
+      await for (final entity in stagedMedia.list(recursive: true, followLinks: false)) {
+        final relative = p.relative(entity.path, from: stagedMedia.path).split(p.separator).join('/');
+        final name = 'catalog_media/$relative';
+        if (entity is File) {
+          await encoder.addFile(entity, name);
+        } else if (entity is Directory) {
+          encoder.addArchiveFile(ArchiveFile('$name/', 0, <int>[])..isFile = false);
         }
       }
     } finally {
@@ -144,6 +157,10 @@ Future<BackupResult> _createBackup(String sourcePath, String? localDirectory,
       final secondary = Directory(secondaryDirectory.trim());
       String? secondaryPending;
       try {
+        final secondaryRoot = p.normalize(p.absolute(secondary.path));
+        if (p.equals(mediaRoot, secondaryRoot) || p.isWithin(mediaRoot, secondaryRoot)) {
+          throw FileSystemException('Secondary backup directory must be outside catalog media', secondary.path);
+        }
         if (!await secondary.exists() && !await secondary.parent.exists()) {
           throw FileSystemException('USB drive or share is disconnected', secondary.path);
         }
@@ -178,7 +195,65 @@ Future<BackupResult> _createBackup(String sourcePath, String? localDirectory,
   } finally {
     source?.dispose();
     if (staging != null && await staging.exists()) {
-      await staging.delete(recursive: true);
+      try {
+        await staging.delete(recursive: true);
+      } on FileSystemException {
+        // Completed primary archives remain valid even if staging cleanup fails.
+      }
     }
   }
+}
+
+/// Copies media once, then validates and archives those same staged bytes.
+Future<Directory> _stageCatalogMedia(String mediaPath, String stagingPath,
+    bool requireMedia, List<Map<String, Object?>> references) async {
+  final media = Directory(mediaPath);
+  final staged = Directory(p.join(stagingPath, 'catalog_media'));
+  await staged.create();
+  if (await media.exists()) {
+    await for (final entity in media.list(recursive: true, followLinks: false)) {
+      final relative = p.relative(entity.path, from: media.path);
+      final target = p.join(staged.path, relative);
+      if (entity is Directory) {
+        await Directory(target).create(recursive: true);
+      } else if (entity is File) {
+        await Directory(p.dirname(target)).create(recursive: true);
+        await entity.copy(target);
+      } else {
+        throw FileSystemException('Catalog media contains an unsupported link', entity.path);
+      }
+    }
+  } else if (requireMedia) {
+    throw FileSystemException('Catalog media directory not found', mediaPath);
+  }
+
+  File referencedFile(String relativePath) {
+    final normalized = p.posix.normalize(relativePath.replaceAll('\\', '/'));
+    if (p.posix.isAbsolute(normalized) || RegExp(r'^[A-Za-z]:').hasMatch(normalized) ||
+        normalized == '..' || normalized.startsWith('../')) {
+      throw FileSystemException('Invalid catalog media reference', relativePath);
+    }
+    return File(p.joinAll([staged.path, ...normalized.split('/')]));
+  }
+
+  for (final reference in references) {
+    final file = referencedFile(reference['path'] as String);
+    if (!await file.exists()) {
+      throw FileSystemException('Referenced catalog photo is missing', reference['path'] as String);
+    }
+    final expectedBytes = reference['bytes'] as int?;
+    if (expectedBytes != null && await file.length() != expectedBytes) {
+      throw FileSystemException('Catalog photo size does not match the database', file.path);
+    }
+    final checksum = reference['checksum'] as String?;
+    if (checksum != null && checksum.isNotEmpty &&
+        (await sha256.bind(file.openRead()).first).toString() != checksum) {
+      throw FileSystemException('Catalog photo checksum does not match the database', file.path);
+    }
+    final thumbnail = reference['thumbnail'] as String?;
+    if (thumbnail != null && thumbnail.isNotEmpty && !await referencedFile(thumbnail).exists()) {
+      throw FileSystemException('Referenced catalog thumbnail is missing', thumbnail);
+    }
+  }
+  return staged;
 }
