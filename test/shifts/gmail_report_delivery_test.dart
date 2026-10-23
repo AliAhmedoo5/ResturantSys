@@ -261,6 +261,22 @@ void main() {
     expect((await db.query('business_days')).single['status'], 'CLOSED');
   });
 
+  test('A saved report send rejects recipients changed after Manager confirmation', () async {
+    await closeDay();
+    final service = ReportDeliveryService(database: db, credentialStore: credentials);
+    await configure(service);
+    final confirmed = await service.settings(managerStaffId: manager);
+    await service.configure(managerStaffId: manager, emailProvider: 'GMAIL',
+      gmailSender: 'synthetic.restaurant@gmail.com', autoSend: false,
+      recipients: [const ReportRecipient(channel: 'EMAIL', address: 'new-owner@example.invalid', approved: true)]);
+    await expectLater(service.queueSavedReport(managerStaffId: manager,
+      reportRunId: (await db.query('report_runs')).single['id'] as int,
+      requestId: 'manual_request_000001', reason: 'Manager confirmed the displayed recipients',
+      expectedSender: confirmed['gmail_sender'] as String,
+      expectedRecipients: ['owner@example.invalid']), throwsStateError);
+    expect(await service.history(managerStaffId: manager), isEmpty);
+  });
+
   test('Revoking a recipient cancels a manually queued report too', () async {
     await closeDay();
     final service = ReportDeliveryService(database: db, credentialStore: credentials,
