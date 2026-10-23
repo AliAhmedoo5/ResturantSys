@@ -80,7 +80,10 @@ void main() {
       final result = await backupService.executeBackup(sourceDbPath: sourceDbPath);
       try {
         expect(result.success, isTrue, reason: result.warningMessage);
-        expect(result.localBackupPath, startsWith('${configured.path}${Platform.pathSeparator}'));
+        expect(
+          await File(result.localBackupPath!).parent.resolveSymbolicLinks(),
+          await configured.resolveSymbolicLinks(),
+        );
         expect(await File(result.localBackupPath!).exists(), isTrue);
       } finally {
         // The pre-implementation default is outside this test's temporary root.
