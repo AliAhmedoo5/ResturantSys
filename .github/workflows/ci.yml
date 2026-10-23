@@ -8,6 +8,26 @@ on:
   workflow_dispatch:
 
 jobs:
+  backup-windows:
+    name: Backup recovery on Windows
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Verify database and media recovery
+        run: flutter test test/database/database_backup_service_test.dart
+
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
