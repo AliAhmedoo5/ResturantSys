@@ -538,7 +538,7 @@ class AuthService {
     if (!await isOnboardingRequired()) {
       throw StateError('Onboarding is already complete.');
     }
-    final existing = (await getAllStaff()).where((s) => s.role == role);
+    final existing = (await getAllStaff()).where((s) => s.loginEnabled && s.role == role);
     if (existing.isNotEmpty) {
       final authenticated = await authenticateWithPin(pin);
       if (authenticated == null || authenticated.role != role) {
