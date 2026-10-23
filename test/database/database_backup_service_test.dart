@@ -1,3 +1,5 @@
+import 'dart:math';
+import 'package:sqlite3/sqlite3.dart' as sqlite;
 import 'package:archive/archive_io.dart';
 import 'package:resturant_sys/core/database/pos_database_constants.dart';
 import 'dart:io';
@@ -114,6 +116,83 @@ void main() {
       await extractFileToDisk(repaired.localBackupPath!, restored.path);
       expect(await File('${restored.path}/catalog_media/burger.jpg').readAsBytes(), [1, 7, 9, 23]);
     });
+    test('keeps distinct recoverable snapshots while billing writes to a pinned WAL', () async {
+      await db.execute('PRAGMA journal_mode = WAL');
+      await db.execute('PRAGMA wal_autocheckpoint = 0');
+      await db.execute('CREATE TABLE billing_ledger (sale INTEGER, amount INTEGER)');
+      Future<void> bill(int sale) => db.transaction((txn) async {
+        await txn.insert('billing_ledger', {'sale': sale, 'amount': 12500});
+        await txn.insert('billing_ledger', {'sale': sale, 'amount': -12500});
+      });
+      await bill(1);
+      final reader = sqlite.sqlite3.open(sourceDbPath, mode: sqlite.OpenMode.readOnly);
+      reader.execute('BEGIN');
+      reader.select('SELECT * FROM sample');
+      try {
+        await bill(2);
+        await db.insert('sample', {'note': 'Committed only in WAL'});
+        expect(reader.select("SELECT * FROM sample WHERE note = 'Committed only in WAL'"), isEmpty);
+        final media = Directory('${tempRootDir.path}/billing-media');
+        await media.create();
+        final random = Random(24);
+        await File('${media.path}/photo.jpg').writeAsBytes(
+          List<int>.generate(4 * 1024 * 1024, (_) => random.nextInt(256)),
+        );
+        final service = DatabaseBackupService(database: db, catalogMediaDirectoryPath: media.path);
+        final stamp = DateTime(2026, 10, 23, 20);
+        var completedBackups = 0;
+        Future<BackupResult> start() => service.executeBackup(
+          sourceDbPath: sourceDbPath, localBackupDir: localBackupDir.path, timestamp: stamp,
+        ).then((result) {
+          completedBackups++;
+          return result;
+        });
+        final first = start();
+        final second = start();
+        var concurrentCommits = 0;
+        Future<void> keepBilling() async {
+          for (var sale = 3; sale <= 42; sale++) {
+            await bill(sale);
+            if (completedBackups < 2) concurrentCommits++;
+          }
+        }
+        await keepBilling().timeout(const Duration(seconds: 5));
+        final results = await Future.wait([first, second]).timeout(const Duration(seconds: 30));
+        expect(concurrentCommits, greaterThan(0));
+        expect(results.every((result) => result.success), isTrue,
+          reason: results.map((result) => result.warningMessage).join('; '));
+        expect(results[0].localBackupPath, isNot(results[1].localBackupPath));
+        for (var index = 0; index < results.length; index++) {
+          final restored = Directory('${tempRootDir.path}/wal-restored-$index');
+          await extractFileToDisk(results[index].localBackupPath!, restored.path);
+          final recovered = await databaseFactoryFfi.openDatabase('${restored.path}/pos.db');
+          try {
+            expect((await recovered.rawQuery('PRAGMA integrity_check')).single.values.single, 'ok');
+            expect(await recovered.rawQuery('PRAGMA foreign_key_check'), isEmpty);
+            expect(await recovered.query('sample', where: 'note = ?', whereArgs: ['Committed only in WAL']), hasLength(1));
+            final ledger = await recovered.rawQuery('SELECT sale, COUNT(*) AS entries, SUM(amount) AS balance FROM billing_ledger GROUP BY sale');
+            expect(ledger.length, greaterThanOrEqualTo(2));
+            for (final sale in ledger) {
+              expect(sale['entries'], 2);
+              expect(sale['balance'], 0);
+            }
+          } finally {
+            await recovered.close();
+          }
+        }
+        final retained = File(results.first.localBackupPath!);
+        final retainedBytes = await retained.readAsBytes();
+        final blocked = File('${tempRootDir.path}/blocked-primary');
+        await blocked.writeAsString('This is a file, not a backup directory.');
+        final failed = await service.executeBackup(sourceDbPath: sourceDbPath, localBackupDir: blocked.path);
+        expect(failed.success, isFalse);
+        expect(failed.localBackupPath, isNull);
+        expect(await retained.readAsBytes(), retainedBytes);
+      } finally {
+        reader.execute('ROLLBACK');
+        reader.dispose();
+      }
+    });
     test('creates timestamped backup in local folder', () async {
       final now = DateTime(2026, 10, 15, 23, 30, 45);
       final result = await backupService.executeBackup(
@@ -129,6 +208,8 @@ void main() {
       final localFile = File(result.localBackupPath!);
       expect(await localFile.exists(), isTrue);
       expect(await localFile.length(), greaterThan(0));
+      final archive = ZipDecoder().decodeBytes(await localFile.readAsBytes());
+      expect(archive.findFile('catalog_media/'), isNotNull);
     });
 
     test('copies backup to both local and secondary USB drive targets when configured', () async {
@@ -149,7 +230,7 @@ void main() {
 
       expect(await localFile.exists(), isTrue);
       expect(await secondaryFile.exists(), isTrue);
-      expect(await localFile.length(), equals(await secondaryFile.length()));
+      expect(await secondaryFile.readAsBytes(), await localFile.readAsBytes());
     });
 
     test('gracefully completes local backup with warning if secondary drive is disconnected', () async {
@@ -239,6 +320,7 @@ void main() {
 
       final integrityResult = await restoredDb.rawQuery('PRAGMA integrity_check;');
       expect(integrityResult.first.values.first, equals('ok'));
+      expect(await restoredDb.rawQuery('PRAGMA foreign_key_check'), isEmpty);
 
       final areas = await restoredDb.query('delivery_areas');
       expect(areas.length, equals(1));
