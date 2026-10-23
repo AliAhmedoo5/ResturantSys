@@ -104,7 +104,7 @@ Future<BackupResult> _createBackup(String sourcePath, String localDirectory,
     try {
       await encoder.addFile(File(snapshotPath), 'pos.db');
     } finally {
-      encoder.close();
+      await encoder.close();
     }
     final primaryPath = p.join(local.path, name);
     await File(pending).rename(primaryPath);
@@ -132,7 +132,11 @@ Future<BackupResult> _createBackup(String sourcePath, String localDirectory,
         warning = 'Secondary backup target unreachable (${secondary.path}): $error';
       } finally {
         if (secondaryPending != null && await File(secondaryPending).exists()) {
-          await File(secondaryPending).delete();
+          try {
+            await File(secondaryPending).delete();
+          } on FileSystemException {
+            // A disconnected secondary must not invalidate the primary copy.
+          }
         }
       }
     }
@@ -149,4 +153,5 @@ Future<BackupResult> _createBackup(String sourcePath, String localDirectory,
     }
   }
 }
+
 
