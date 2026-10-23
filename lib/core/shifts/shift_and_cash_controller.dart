@@ -138,15 +138,9 @@ class ShiftAndCashController {
       final timestamp = _formatTimestamp(closedAt ?? DateTime.now());
       for (final shift in shifts) {
         final id = shift['id'] as int;
-        final cash = await txn.rawQuery("""
-          SELECT COALESCE(SUM(COALESCE(op.amount_tendered_paisa,CAST(ROUND(op.amount_tendered*100) AS INTEGER))
-            - COALESCE(op.change_returned_paisa,CAST(ROUND(op.change_returned*100) AS INTEGER))),0) AS paisa
-          FROM order_payments op JOIN orders o ON o.id=op.order_id
-          WHERE o.shift_id=? AND op.payment_method='CASH' AND op.amount_tendered>0
-            AND o.payment_status IN ('SETTLED','REFUND_PENDING','CANCELLED','REFUNDED')
-        """, [id]);
+        final cashReceiptsPaisa = await _drawerCashReceiptsPaisa(txn, shiftId: id);
         final movements = await txn.rawQuery("SELECT COALESCE(SUM(CASE WHEN type='PAY_IN' THEN amount ELSE -amount END),0) AS net FROM cash_movements WHERE shift_id=?", [id]);
-        final expected = (shift['opening_float'] as num).toDouble() + (cash.first['paisa'] as num).toInt()/100 + (movements.first['net'] as num).toDouble();
+        final expected = (shift['opening_float'] as num).toDouble() + cashReceiptsPaisa / 100 + (movements.first['net'] as num).toDouble();
         final counted = (shift['counted_cash'] as num?)?.toDouble();
         await txn.update('shifts', {
           'status': 'CLOSED', 'closed_at': timestamp, 'expected_cash': expected,
@@ -393,26 +387,31 @@ class ShiftAndCashController {
     );
   }
 
-  /// Computes settled cash order totals for a shift.
-  Future<double> calculateCashSales(int shiftId) async {
-    try {
-      final rows = await database.rawQuery('''
-        SELECT COALESCE(SUM(op.amount_tendered - op.change_returned), 0.0) as cash_sales
-        FROM ${PosDatabaseConstants.tableOrderPayments} op
-        JOIN ${PosDatabaseConstants.tableOrders} o ON op.order_id = o.id
-        WHERE o.shift_id = ? 
-          AND o.payment_status IN ('SETTLED', 'REFUND_PENDING', 'CANCELLED', 'REFUNDED') 
-          AND op.payment_method = 'CASH'
-          AND op.amount_tendered > 0;
-      ''', [shiftId]);
+  /// Physical cash receipts before refunds, which are posted separately as
+  /// drawer PAY_OUT movements. Net tender collection must not be used here.
+  Future<int> _drawerCashReceiptsPaisa(
+    DatabaseExecutor executor, {
+    int? shiftId,
+    int? businessDayId,
+  }) async {
+    final scope = shiftId != null ? 'o.shift_id' : 'o.business_day_id';
+    final rows = await executor.rawQuery("""
+      SELECT COALESCE(SUM(
+        COALESCE(op.amount_tendered_paisa, CAST(ROUND(op.amount_tendered * 100) AS INTEGER))
+        - COALESCE(op.change_returned_paisa, CAST(ROUND(op.change_returned * 100) AS INTEGER))
+      ), 0) AS receipt_paisa
+      FROM order_payments op JOIN orders o ON o.id = op.order_id
+      WHERE $scope = ? AND op.payment_method = 'CASH'
+        AND COALESCE(op.amount_tendered_paisa, CAST(ROUND(op.amount_tendered * 100) AS INTEGER)) > 0
+        AND o.payment_status IN ('SETTLED', 'REFUND_PENDING', 'CANCELLED', 'REFUNDED')
+    """, [shiftId ?? businessDayId]);
+    return (rows.single['receipt_paisa'] as num).toInt();
+  }
 
-      if (rows.isNotEmpty) {
-        return (rows.first['cash_sales'] as num?)?.toDouble() ?? 0.0;
-      }
-    } catch (_) {
-      // Graceful fallback if orders table is empty or being initialized
-    }
-    return 0.0;
+  /// Returns physical cash receipts for drawer reconciliation. Cash refund
+  /// payment lines are excluded because their PAY_OUT already reduces the till.
+  Future<double> calculateCashSales(int shiftId) async {
+    return await _drawerCashReceiptsPaisa(database, shiftId: shiftId) / 100;
   }
 
   /// Retrieves a shift by [id].
@@ -813,7 +812,10 @@ class ShiftAndCashController {
       }
     }
 
-    final totalExpectedDrawerCash = totalOpeningFloat + cashSales + totalPayIn - totalPayOut;
+    final drawerCashReceiptsPaisa = await _drawerCashReceiptsPaisa(
+      database, businessDayId: businessDayId,
+    );
+    final totalExpectedDrawerCash = totalOpeningFloat + drawerCashReceiptsPaisa / 100 + totalPayIn - totalPayOut;
     final netCashVariance = totalCountedCash - totalExpectedDrawerCash;
 
     // 6. Kitchen Wastage, Mandi Procurements, and Vendor Khata in day timeframe
@@ -884,6 +886,7 @@ class ShiftAndCashController {
       cashSales: cashSales,
       cardSales: cardSales,
       raastSales: raastSales,
+      drawerCashReceiptsPaisa: drawerCashReceiptsPaisa,
       tenderSalesPaisa:tenderSalesPaisa,
       collectionDuePaisa:collectionDuePaisa,
       totalOpeningFloat: totalOpeningFloat,

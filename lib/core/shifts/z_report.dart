@@ -18,6 +18,7 @@ class ZReport {
     this.totalTax = 0.0,
     this.totalDiscounts = 0.0,
     this.cashSales = 0.0,
+    this.drawerCashReceiptsPaisa,
     this.cardSales = 0.0,
     this.raastSales = 0.0,
     this.tenderSalesPaisa = const {},
@@ -53,7 +54,12 @@ class ZReport {
   final double totalTax;
   final double totalDiscounts;
 
+  /// Cash tender collection after explicit cash refunds.
   final double cashSales;
+  /// Positive cash receipts; refunds reduce the drawer through PAY_OUT only.
+  final int? drawerCashReceiptsPaisa;
+  double get drawerCashReceipts => drawerCashReceiptsPaisa == null
+      ? cashSales : drawerCashReceiptsPaisa! / 100;
   final double cardSales;
   final double raastSales;
   final Map<String,int> tenderSalesPaisa;
@@ -145,7 +151,7 @@ class ZReport {
 
     center('-- CASH DRAWER AUDIT & DISCREPANCY --');
     line('Opening Floats:', 'Rs ${_currencyFormat.format(totalOpeningFloat)}');
-    line('(+) Cash Sales:', 'Rs ${_currencyFormat.format(cashSales)}');
+    line('(+) Cash Receipts:', 'Rs ${_currencyFormat.format(drawerCashReceipts)}');
     line('(+) Total Pay-Ins:', 'Rs ${_currencyFormat.format(totalPayIn)}');
     line('(-) Total Pay-Outs:', 'Rs ${_currencyFormat.format(totalPayOut)}');
     line('Expected Drawer:', 'Rs ${_currencyFormat.format(totalExpectedDrawerCash)}');

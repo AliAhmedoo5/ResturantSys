@@ -359,7 +359,7 @@ class _ZReportDialogState extends State<ZReportDialog> {
                   icon: Icons.point_of_sale_rounded,
                   items: [
                     _MetricItem('Total Opening Floats', 'PKR ${_currencyFormat.format(z.totalOpeningFloat)}'),
-                    _MetricItem('(+) Cash Sales', 'PKR ${_currencyFormat.format(z.cashSales)}'),
+                    _MetricItem('(+) Cash Receipts', 'PKR ${_currencyFormat.format(z.drawerCashReceipts)}'),
                     _MetricItem('(+) Mid-Shift Pay-Ins', 'PKR ${_currencyFormat.format(z.totalPayIn)}'),
                     _MetricItem('(-) Mid-Shift Pay-Outs', 'PKR ${_currencyFormat.format(z.totalPayOut)}'),
                     _MetricItem('Expected Drawer Cash', 'PKR ${_currencyFormat.format(z.totalExpectedDrawerCash)}'),

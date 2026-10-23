@@ -362,7 +362,7 @@ class ExcelReportingEngine {
 
     b.addSectionHeader('CASH DRAWER RECONCILIATION & VARIANCE');
     b.addRow(['Total Shift Opening Floats', z.totalOpeningFloat]);
-    b.addRow(['(+) Cash Sales Tendered', z.cashSales]);
+    b.addRow(['(+) Cash Receipts', z.drawerCashReceipts]);
     b.addRow(['(+) Total Mid-Shift Pay-Ins', z.totalPayIn]);
     b.addRow(['(-) Total Mid-Shift Pay-Outs', z.totalPayOut]);
     b.addRow(['Expected Total Drawer Cash', z.totalExpectedDrawerCash]);
