@@ -125,11 +125,11 @@ The designated financial origin (active shift drawer cash vs external management
 _Avoid_: Cash bucket, money origin, fund type
 
 **Menu Item**:
-A single sellable catalog item backed by a mandatory Bill of Materials recipe and optional photograph gallery.
+A single sellable catalog item backed by a mandatory Bill of Materials recipe and one optional photograph.
 _Avoid_: Product, dish, catalog item
 
 **Deal**:
-A bundled promotion containing multiple menu items and customer-selected options, where every selectable option has a verified recipe.
+A bundled promotion containing multiple menu items and customer-selected options, where every selectable option has a verified recipe, with one optional photograph for the promotion.
 _Avoid_: Combo, set meal, bundle
 
 **Kitchen Wastage**:

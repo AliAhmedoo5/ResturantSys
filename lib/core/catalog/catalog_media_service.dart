@@ -6,6 +6,7 @@ import '../auth/staff.dart';
 import '../auth/staff_role.dart';
 import '../database/pos_database_constants.dart';
 import 'catalog_image.dart';
+import 'catalog_photo_change.dart';
 
 /// Service managing catalog image persistence, checksum verification,
 /// relative filesystem storage, and primary thumbnail designations.
@@ -50,7 +51,7 @@ class CatalogMediaService {
     }
   }
 
-  String _detectContentType(List<int> bytes, String originalFileName) {
+  static String _detectContentType(List<int> bytes, String originalFileName) {
     if (bytes.length >= 3 &&
         bytes[0] == 0xFF &&
         bytes[1] == 0xD8 &&
@@ -96,6 +97,14 @@ class CatalogMediaService {
     );
   }
 
+  static String validatePhotoBytes(List<int> bytes) {
+    if (bytes.isEmpty || bytes.length > defaultMaxFileSizeBytes) {
+      throw const FormatException('Choose a non-empty picture up to 5 MB.');
+    }
+    // No filename fallback for the single-picture input.
+    return _detectContentType(bytes, '');
+  }
+
   String _extensionForContentType(String contentType) {
     switch (contentType) {
       case 'image/png':
@@ -105,6 +114,74 @@ class CatalogMediaService {
       case 'image/jpeg':
       default:
         return 'jpg';
+    }
+  }
+
+  /// Saves an entity and its staged photo in one SQLite transaction. Existing
+  /// files remain recoverable; a failed commit removes only the new file.
+  Future<int> saveEntityWithPhoto({
+    required String entityType,
+    required Future<int> Function(DatabaseExecutor executor) saveEntity,
+    CatalogPhotoChange? photoChange,
+    Staff? staff,
+  }) async {
+    _verifyManagerRole(staff);
+    if (entityType != 'menu_item' && entityType != 'deal') {
+      throw ArgumentError('Unsupported photo owner.');
+    }
+    final bytes = photoChange?.bytes;
+    String? contentType;
+    String? relativePath;
+    String? checksum;
+    File? newFile;
+    try {
+      if (bytes != null) {
+        contentType = validatePhotoBytes(bytes);
+        checksum = sha256.convert(bytes).toString();
+        final folder = entityType == 'menu_item' ? 'menu_items' : 'deals';
+        // Exclusive temporary creation prevents concurrent saves sharing a path.
+        final directory = await Directory(p.join(baseDirectoryPath, folder))
+            .create(recursive: true);
+        final staging = await directory.createTemp('photo_');
+        newFile = File(p.join(staging.path, 'image.${_extensionForContentType(contentType)}'));
+        relativePath = p.relative(newFile.path, from: baseDirectoryPath).replaceAll('\\', '/');
+        await newFile.writeAsBytes(bytes, flush: true);
+      }
+      return await database.transaction((txn) async {
+        final entityId = await saveEntity(txn);
+        if (photoChange == null) return entityId;
+        final now = DateTime.now().toIso8601String();
+        await txn.update(
+          PosDatabaseConstants.tableCatalogImages,
+          {'deleted_at': now, 'is_primary': 0},
+          where: 'entity_type = ? AND entity_id = ? AND deleted_at IS NULL',
+          whereArgs: [entityType, entityId],
+        );
+        if (bytes != null) {
+          await txn.insert(PosDatabaseConstants.tableCatalogImages, {
+            'entity_type': entityType,
+            'entity_id': entityId,
+            'relative_file_path': relativePath,
+            'thumbnail_path': relativePath,
+            'content_type': contentType,
+            'byte_count': bytes.length,
+            'sha256_checksum': checksum,
+            'is_primary': 1,
+            'created_at': now,
+          });
+        }
+        return entityId;
+      });
+    } catch (_) {
+      if (newFile != null) {
+        try {
+          if (await newFile.exists()) await newFile.delete();
+          await newFile.parent.delete();
+        } on FileSystemException {
+          // Preserve the original save error if cleanup also fails.
+        }
+      }
+      rethrow;
     }
   }
 

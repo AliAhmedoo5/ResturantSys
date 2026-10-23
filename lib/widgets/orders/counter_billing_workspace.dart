@@ -184,8 +184,8 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
         _deals = deals;
         _discounts = discounts;
         _allModifiers = modifiers;
-        if (itemImages.isNotEmpty) _menuItemImages = itemImages;
-        if (dealImages.isNotEmpty) _dealImages = dealImages;
+        _menuItemImages = itemImages;
+        _dealImages = dealImages;
         _nextTokenNumber = token;
         _selectedCategoryId = categories.isNotEmpty ? categories.first.id : null;
         _isLoading = false;

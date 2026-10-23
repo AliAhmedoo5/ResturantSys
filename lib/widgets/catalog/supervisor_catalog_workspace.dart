@@ -11,7 +11,8 @@ import 'package:resturant_sys/core/catalog/raw_ingredient.dart';
 import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
 import 'package:resturant_sys/core/theme/theme.dart';
 import 'dialogs/category_form_dialog.dart';
-import 'dialogs/catalog_photo_gallery_dialog.dart';
+import 'dialogs/catalog_photo_dialog.dart';
+import '../../core/orders/deal.dart';
 import 'dialogs/discount_preset_form_dialog.dart';
 import 'dialogs/menu_item_form_dialog.dart';
 import 'dialogs/modifier_form_dialog.dart';
@@ -61,6 +62,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
   bool _isLoading = true;
   List<MenuCategory> _categories = [];
   List<MenuItem> _menuItems = [];
+  List<Deal> _deals = [];
   List<MenuItem> _allMenuItems = [];
   List<RawIngredient> _rawIngredients = [];
   List<Modifier> _modifiers = [];
@@ -108,6 +110,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
     }
 
     setState(() => _isLoading = true);
+    final deals = await (widget.orderController ?? OrderAndCheckoutController(database: widget.controller!.database)).getDeals();
     final categories = await widget.controller!.getCategories();
     final allItems = await widget.controller!.getMenuItems();
     final items = allItems.where((item) => _menuItemCategoryFilter == null || item.categoryId == _menuItemCategoryFilter).toList();
@@ -119,6 +122,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
     if (mounted) {
       setState(() {
         _categories = categories;
+        _deals = deals;
         _menuItems = items;
         _allMenuItems = allItems;
         _rawIngredients = ingredients;
@@ -238,7 +242,8 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
       context: context,
       builder: (ctx) => MenuItemFormDialog(
         categories: _categories,
-        onSave: ({required categoryId, required name, required basePrice, required taxRate, required isTaxInclusive, required isActive}) async {
+        mediaService: widget.controller?.mediaService,
+        onSave: ({required categoryId, required name, required basePrice, required taxRate, required isTaxInclusive, required isActive, required photoChange}) async {
           if (widget.controller != null) {
             await widget.controller!.createMenuItem(
               categoryId: categoryId,
@@ -247,6 +252,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
               taxRate: taxRate,
               isTaxInclusive: isTaxInclusive,
               isActive: isActive,
+              photoChange: photoChange,
             );
             await _loadAllCatalogData();
           } else {
@@ -276,7 +282,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
         item: item,
         categories: _categories,
         mediaService: widget.controller?.mediaService,
-        onSave: ({required categoryId, required name, required basePrice, required taxRate, required isTaxInclusive, required isActive}) async {
+        onSave: ({required categoryId, required name, required basePrice, required taxRate, required isTaxInclusive, required isActive, required photoChange}) async {
           if (widget.controller != null) {
             await widget.controller!.updateMenuItem(
               item.copyWith(
@@ -287,6 +293,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                 isTaxInclusive: isTaxInclusive,
                 isActive: isActive,
               ),
+              photoChange: photoChange,
             );
             await _loadAllCatalogData();
           } else {
@@ -317,7 +324,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
     if (widget.controller == null) return;
     showDialog<void>(
       context: context,
-      builder: (ctx) => CatalogPhotoGalleryDialog(
+      builder: (ctx) => CatalogPhotoDialog(
         mediaService: widget.controller!.mediaService,
         entityType: entityType,
         entityId: entityId,
@@ -786,7 +793,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
     }
 
     return DefaultTabController(
-      length: 6,
+      length: 7,
       child: Column(
         children: [
           // Sub-navigation TabBar
@@ -806,6 +813,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                 Tab(key: ValueKey('tab_modifiers'), text: 'Modifiers'),
                 Tab(key: ValueKey('tab_discounts'), text: 'Pre-Approved Discounts'),
                 Tab(key: ValueKey('tab_settings'), text: 'Settings & Toggles'),
+                Tab(key: ValueKey('tab_deal_photos'), text: 'Deal Photos'),
               ],
             ),
           ),
@@ -818,11 +826,35 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                 _buildModifiersTab(),
                 _buildDiscountsTab(),
                 _buildSettingsTab(),
+                _buildDealPhotosTab(),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildDealPhotosTab() {
+    if (_deals.isEmpty) return const Center(child: Text('No deals available.'));
+    return ListView.builder(
+      padding: const EdgeInsets.all(WarmCounterSpacing.space16),
+      itemCount: _deals.length,
+      itemBuilder: (context, index) {
+        final deal = _deals[index];
+        return ListTile(
+          title: Text(deal.name),
+          subtitle: const Text('One optional picture'),
+          trailing: IconButton(
+            key: ValueKey('deal_photo_${deal.id}'),
+            tooltip: 'Change picture',
+            icon: const Icon(Icons.image_outlined),
+            onPressed: () => _showPhotoGalleryDialog(
+              entityType: 'deal', entityId: deal.id, entityName: deal.name,
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -1175,8 +1207,8 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                       const SizedBox(width: 8),
                       IconButton(
                         key: ValueKey('manage_photos_button_${item.id}'),
-                        icon: const Icon(Icons.photo_library_outlined, size: 20),
-                        tooltip: 'Manage Photos',
+                        icon: const Icon(Icons.image_outlined, size: 20),
+                        tooltip: 'Change picture',
                         onPressed: () => _showPhotoGalleryDialog(
                           entityType: 'menu_item',
                           entityId: item.id,
