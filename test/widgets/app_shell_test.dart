@@ -225,7 +225,7 @@ void main() {
       expect(find.byKey(const ValueKey('workspace_tab_supervisor')), findsOneWidget);
       expect(find.byKey(const ValueKey('workspace_tab_mandi')), findsOneWidget);
       expect(find.byKey(const ValueKey('workspace_tab_wastage')), findsOneWidget);
-      expect(find.byKey(const ValueKey('workspace_tab_tokenQueue')), findsOneWidget);
+      expect(find.byKey(const ValueKey('workspace_tab_tokenQueue')), findsNothing);
 
       // Tap Catalog & BOM tab
       await tester.ensureVisible(find.byKey(const ValueKey('workspace_tab_catalog')));
@@ -243,8 +243,6 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tap Token Queue tab
-      await tester.ensureVisible(find.byKey(const ValueKey('workspace_tab_tokenQueue')));
-      await tester.tap(find.byKey(const ValueKey('workspace_tab_tokenQueue')));
       await tester.pumpAndSettle();
 
       // Tap Mandi Purchase tab

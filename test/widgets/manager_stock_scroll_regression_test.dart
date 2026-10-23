@@ -43,7 +43,7 @@ Future<_StockController> _pumpManager(WidgetTester tester) async {
     session: session, onAuthenticatePin: (_) async => null,
     child: SupervisorPortalWorkspace(orderController: orders,
       initialDepartments: const [], initialStaff: const [],
-      initialTokenTrayEnabled: true, initialCashierVoidEnabled: true,
+      initialCashierVoidEnabled: true,
       initialDiscrepancies: const [],
       initialZReport: ZReport(businessDayId: 1, openedAt: DateTime(2026),
           generatedAt: DateTime(2026), openedByStaffName: 'Manager', totalShiftsCount: 0),
@@ -61,7 +61,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('portal_tab_toggles')));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull, reason: 'Settings must scroll instead of overflowing the viewport.');
-    await tester.drag(find.text('Interactive Token Queue Tray'), const Offset(0, -500));
+    await tester.drag(find.text('Operational Feature Toggles'), const Offset(0, -500));
     await tester.pumpAndSettle();
     final save = find.byKey(const ValueKey('save_discrepancy_threshold_button'));
     expect(save.hitTestable(), findsOneWidget);

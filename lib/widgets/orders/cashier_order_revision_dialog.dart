@@ -252,6 +252,7 @@ class _CashierOrderRevisionDialogState
   @override
   Widget build(BuildContext context) {
     final isUnstarted = widget.order.tokenStatus == TokenStatus.confirmed;
+    final colors = Theme.of(context).colorScheme;
 
     return Dialog(
       key: const ValueKey('cashier_order_revision_dialog'),
@@ -428,15 +429,15 @@ class _CashierOrderRevisionDialogState
               Expanded(
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade50,
+                    color: colors.surfaceContainerLow,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.grey.shade300),
+                    border: Border.all(color: colors.outlineVariant),
                   ),
                   child: _revisedItems.isEmpty
                       ? const Center(
                           child: Text(
                             'All items removed. Click "Cancel Entire Order" below.',
-                            style: TextStyle(color: Colors.grey),
+                            style: TextStyle(color: WarmCounterColors.lightSecondaryText),
                           ),
                         )
                       : ListView.separated(
@@ -447,12 +448,15 @@ class _CashierOrderRevisionDialogState
                             final item = _revisedItems[index];
                             return ListTile(
                               dense: true,
+                              textColor: colors.onSurface,
+                              iconColor: colors.onSurface,
                               title: Text(
                                 item.name,
-                                style: const TextStyle(fontWeight: FontWeight.w600),
+                                style: TextStyle(fontWeight: FontWeight.w600, color: colors.onSurface),
                               ),
                               subtitle: Text(
                                 'Rs ${_currencyFormat.format(item.unitPrice)} each',
+                                style: TextStyle(color: colors.onSurfaceVariant),
                               ),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
@@ -464,7 +468,8 @@ class _CashierOrderRevisionDialogState
                                   ),
                                   Text(
                                     '${item.quantity}',
-                                    style: const TextStyle(
+                                    style: TextStyle(
+                                      color: colors.onSurface,
                                       fontWeight: FontWeight.bold,
                                       fontSize: 14,
                                     ),
@@ -477,7 +482,7 @@ class _CashierOrderRevisionDialogState
                                   const SizedBox(width: 8),
                                   Text(
                                     'Rs ${_currencyFormat.format(item.totalPrice)}',
-                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                    style: TextStyle(fontWeight: FontWeight.bold, color: colors.onSurface),
                                   ),
                                   IconButton(
                                     key: ValueKey('remove_item_$index'),

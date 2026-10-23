@@ -13,8 +13,7 @@ enum AppWorkspaceTab {
   khata('Khata', Icons.menu_book_outlined),
   mandi('Mandi', Icons.shopping_basket_outlined),
   wastage('Wastage', Icons.delete_outline_rounded),
-  supervisor('Supervisor', Icons.admin_panel_settings_outlined),
-  tokenQueue('Tokens', Icons.confirmation_number_outlined);
+  supervisor('Supervisor', Icons.admin_panel_settings_outlined);
 
   const AppWorkspaceTab(this.label, this.icon);
   final String label;
@@ -32,7 +31,6 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
     this.reprintTrayController,
     this.orderController,
     this.authService,
-    this.isTokenTrayEnabled = true,
     this.title = 'ResturantPOS',
     this.showBrand = true,
   });
@@ -44,7 +42,6 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
   final ReprintTrayController? reprintTrayController;
   final OrderAndCheckoutController? orderController;
   final AuthService? authService;
-  final bool isTokenTrayEnabled;
   final String title;
   final bool showBrand;
 

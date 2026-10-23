@@ -52,7 +52,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: Scaffold(body: SupervisorPortalWorkspace(
       reprintTrayController: tray,
       initialDepartments: const [], initialStaff: const [],
-      initialTokenTrayEnabled: true, initialCashierVoidEnabled: true,
+      initialCashierVoidEnabled: true,
       initialDiscrepancies: const [],
       initialZReport: ZReport(businessDayId: 2, openedAt: DateTime(2026, 10, 24),
         generatedAt: DateTime(2026, 10, 24), openedByStaffName: 'Manager', totalShiftsCount: 0),

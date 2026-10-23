@@ -10,15 +10,12 @@ import '../../core/auth/staff.dart';
 import '../../core/auth/staff_role.dart';
 import '../../core/hardware/reprint_tray_controller.dart';
 import '../../core/orders/order_and_checkout_controller.dart';
-import '../../core/orders/token_queue_controller.dart';
 import '../../core/shifts/shift.dart';
 import '../../core/shifts/shift_and_cash_controller.dart';
 import '../../core/theme/theme.dart';
 import 'department_form_dialog.dart';
-import 'kitchen_token_station.dart';
 import 'staff_form_dialog.dart';
 import 'staff_pin_dialog.dart';
-import 'token_queue_tray.dart';
 import '../shifts/z_report_dialog.dart';
 import '../../core/shifts/z_report.dart';
 import '../../core/shifts/excel_reporting_engine.dart';
@@ -33,9 +30,7 @@ enum SupervisorPortalTab {
   staff('Staff & Departments', Icons.badge_rounded),
   toggles('Feature Toggles', Icons.toggle_on_rounded),
   discrepancies('Discrepancy Review', Icons.assignment_late_rounded),
-  reports('Z-Reports & Backups', Icons.assessment_rounded),
-  tokenQueue('Token Queue Tray', Icons.confirmation_number_rounded),
-  kitchenStation('Kitchen Station', Icons.soup_kitchen_rounded);
+  reports('Z-Reports & Backups', Icons.assessment_rounded);
 
   const SupervisorPortalTab(this.label, this.icon);
   final String label;
@@ -44,19 +39,17 @@ enum SupervisorPortalTab {
 
 /// The back-office administrative hub protected by Supervisor/Owner PIN.
 /// Features custom Department management, universal Staff PIN configuration,
-/// operational Feature Toggles, discrepancy audit review table, and Token Queue tray.
+/// operational settings, discrepancy review, and business-day reports.
 class SupervisorPortalWorkspace extends StatefulWidget {
   const SupervisorPortalWorkspace({
     super.key,
     this.authService,
     this.shiftController,
     this.orderController,
-    this.tokenQueueController,
     this.reprintTrayController,
     this.currentStaff,
     this.initialDepartments,
     this.initialStaff,
-    this.initialTokenTrayEnabled,
     this.initialCashierVoidEnabled,
     this.initialDiscrepancies,
     this.initialZReport,
@@ -67,12 +60,10 @@ class SupervisorPortalWorkspace extends StatefulWidget {
   final AuthService? authService;
   final ShiftAndCashController? shiftController;
   final OrderAndCheckoutController? orderController;
-  final TokenQueueController? tokenQueueController;
   final ReprintTrayController? reprintTrayController;
   final Staff? currentStaff;
   final List<Department>? initialDepartments;
   final List<Staff>? initialStaff;
-  final bool? initialTokenTrayEnabled;
   final bool? initialCashierVoidEnabled;
   final List<Shift>? initialDiscrepancies;
   final ZReport? initialZReport;
@@ -95,7 +86,6 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
   bool _isLoadingStaff = true;
 
   // Feature Toggles State
-  bool _tokenTrayEnabled = true;
   bool _cashierVoidEnabled = true;
   bool _isLoadingToggles = true;
   double _discrepancyThreshold = 100.0;
@@ -123,10 +113,6 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
     if (widget.initialStaff != null) {
       _staffMembers = List.of(widget.initialStaff!);
       _isLoadingStaff = false;
-    }
-    if (widget.initialTokenTrayEnabled != null) {
-      _tokenTrayEnabled = widget.initialTokenTrayEnabled!;
-      _isLoadingToggles = false;
     }
     if (widget.initialCashierVoidEnabled != null) {
       _cashierVoidEnabled = widget.initialCashierVoidEnabled!;
@@ -194,7 +180,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
     if (widget.initialDepartments == null || widget.initialStaff == null) {
       await _loadStaffAndDepartments();
     }
-    if (widget.initialTokenTrayEnabled == null || widget.initialCashierVoidEnabled == null) {
+    if (widget.initialCashierVoidEnabled == null) {
       await _loadFeatureToggles();
     }
     if (widget.initialDiscrepancies == null) {
@@ -237,7 +223,6 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
     }
     setState(() => _isLoadingToggles = true);
     try {
-      final tokenTray = await widget.orderController!.isTokenTrayEnabled();
       final cashierVoid = await widget.orderController!.isCashierVoidEnabled();
       if (widget.shiftController != null) {
         try {
@@ -248,7 +233,6 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
       }
       if (mounted) {
         setState(() {
-          _tokenTrayEnabled = tokenTray;
           _cashierVoidEnabled = cashierVoid;
           _isLoadingToggles = false;
         });
@@ -558,13 +542,6 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
           _staffMembers[index] = staff.copyWith(isActive: active);
         }
       });
-    }
-  }
-
-  Future<void> _handleToggleTokenTray(bool enabled) async {
-    setState(() => _tokenTrayEnabled = enabled);
-    if (widget.orderController != null) {
-      await widget.orderController!.setTokenTrayEnabled(enabled);
     }
   }
 
@@ -907,19 +884,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
         return _buildDiscrepanciesView(context);
       case SupervisorPortalTab.reports:
         return _buildReportsAndBackupsView(context);
-      case SupervisorPortalTab.tokenQueue:
-        if (widget.tokenQueueController != null) {
-          return TokenQueueTray(controller: widget.tokenQueueController!);
-        }
-        return const Center(child: Text('Token Queue Controller not provided.'));
-      case SupervisorPortalTab.kitchenStation:
-        if (widget.tokenQueueController != null) {
-          return KitchenTokenStation(
-            controller: widget.tokenQueueController!,
-            currentStaff: widget.currentStaff,
-          );
-        }
-        return const Center(child: Text('Kitchen Token Station unavailable.'));
+
     }
   }
 
@@ -1229,30 +1194,6 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
               ],
             ),
             const Divider(height: WarmCounterSpacing.space32, color: WarmCounterColors.lightBorder),
-
-            // Toggle 1: Token Tray
-            SwitchListTile(
-              key: const ValueKey('toggle_token_tray_switch'),
-              value: _tokenTrayEnabled,
-              onChanged: _handleToggleTokenTray,
-              activeTrackColor: WarmCounterColors.lightPrimaryAction,
-              title: const Text(
-                'Interactive Token Queue Tray',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-              ),
-              subtitle: const Text(
-                'Displays active tokens on-screen with 1-tap fulfillment progression (Preparing -> Ready -> Delivered). When disabled, token tray navigation is hidden.',
-              ),
-              secondary: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: const BoxDecoration(
-                  color: WarmCounterColors.lightPageBackground,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.confirmation_number_rounded, color: WarmCounterColors.lightPrimaryAction),
-              ),
-            ),
-            const Divider(height: WarmCounterSpacing.space24, color: WarmCounterColors.lightBorder),
 
             // Toggle 2: Cashier Void Requests
             SwitchListTile(

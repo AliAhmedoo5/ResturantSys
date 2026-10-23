@@ -37,9 +37,6 @@ class Staff {
   /// Strictly restricted to Cashiers; Manager credentials cannot operate the counter.
   bool get canAccessRegister => loginEnabled && role == StaffRole.cashier;
 
-  /// Can view kitchen display/tokens and log ingredient prep/wastage chits.
-  bool get canAccessKitchen => loginEnabled && role == StaffRole.manager;
-
   /// Can access back-office settings, Khata, staff management, and reports.
   bool get canAccessSupervisorPortal => loginEnabled && role == StaffRole.manager;
 

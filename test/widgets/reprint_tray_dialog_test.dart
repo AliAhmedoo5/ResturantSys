@@ -49,7 +49,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Hardware & Reprint Tray'), findsOneWidget);
-      expect(find.text('No receipts or KOTs printed in this session.'), findsOneWidget);
+      expect(find.text('No receipts printed in this session.'), findsOneWidget);
       expect(find.byKey(const ValueKey('kick_drawer_button')), findsOneWidget);
     });
 
@@ -116,7 +116,7 @@ void main() {
 
       adapter.shouldFailCounterPrint = true;
       await controller.dispatchOrderPrinting(order: fakeOrder, isCashPaid: false);
-      expect(controller.failedCount, equals(2));
+      expect(controller.failedCount, equals(1));
 
       await tester.pumpWidget(createTestApp(
         ReprintTrayDialog(
@@ -126,11 +126,10 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      expect(find.text('Failed Print Jobs (2)'), findsOneWidget);
+      expect(find.text('Failed Print Jobs (1)'), findsOneWidget);
       expect(find.byKey(const ValueKey('retry_all_failed_button')), findsOneWidget);
       expect(find.text('#05'), findsWidgets);
       expect(find.text(PrintJobType.customerReceipt.label), findsOneWidget);
-      expect(find.text(PrintJobType.kitchenOrderTicket.label), findsOneWidget);
     });
 
     testWidgets('1-tap Retry on failed job re-emits bytes and moves job out of failed list', (tester) async {
@@ -151,7 +150,7 @@ void main() {
       // Simulate failure
       adapter.shouldFailCounterPrint = true;
       await controller.dispatchOrderPrinting(order: fakeOrder, isCashPaid: false);
-      expect(controller.failedCount, equals(2));
+      expect(controller.failedCount, equals(1));
 
       await tester.pumpWidget(createTestApp(
         ReprintTrayDialog(
@@ -172,8 +171,8 @@ void main() {
       await tester.tap(retryBtn);
       await tester.pumpAndSettle();
 
-      // Failed count decremented from 2 to 1
-      expect(controller.failedCount, equals(1));
+      // The failed receipt has been recovered.
+      expect(controller.failedCount, equals(0));
     });
   });
 }

@@ -181,7 +181,6 @@ void main() {
       expect(AppWorkspaceTab.mandi.icon, equals(Icons.shopping_basket_outlined));
       expect(AppWorkspaceTab.wastage.icon, equals(Icons.delete_outline_rounded));
       expect(AppWorkspaceTab.supervisor.icon, equals(Icons.admin_panel_settings_outlined));
-      expect(AppWorkspaceTab.tokenQueue.icon, equals(Icons.confirmation_number_outlined));
     });
   });
 

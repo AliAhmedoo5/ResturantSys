@@ -1005,7 +1005,6 @@ class PosDatabase {
       'paper_width': '80mm',
       PosDatabaseConstants.settingDiscrepancyThreshold: PosDatabaseConstants.defaultDiscrepancyThreshold,
       PosDatabaseConstants.settingCashierVoidRequestsEnabled: PosDatabaseConstants.defaultCashierVoidRequestsEnabled,
-      PosDatabaseConstants.settingTokenTrayEnabled: PosDatabaseConstants.defaultTokenTrayEnabled,
       PosDatabaseConstants.settingRestaurantName: PosDatabaseConstants.defaultRestaurantName,
       PosDatabaseConstants.settingCurrencyCode: PosDatabaseConstants.defaultCurrencyCode,
       PosDatabaseConstants.settingDefaultTaxRate: PosDatabaseConstants.defaultDefaultTaxRate,
