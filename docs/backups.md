@@ -25,7 +25,13 @@ snapshot. Snapshot creation and ZIP compression run on a worker isolate. The liv
 database stays open for counter billing. A checkpoint alone followed by copying
 the live database file would not provide the same consistency guarantee.
 
-The primary archive is published only after it has been completed. The secondary
+Photos are staged and checked against the snapshot's recorded paths, sizes, and
+checksums before publishing the archive. Missing or changed referenced photos
+fail the backup rather than producing an incomplete recovery copy. Backup
+destinations must be outside the source media directory.
+
+The primary archive is published only after it has been completed. Repeated
+backups with the same timestamp receive distinct filenames. The secondary
 destination receives the same archive. If that destination is unavailable, the
 primary copy is retained and the result reports a warning. Check the reported
 paths rather than assuming a disconnected USB drive has received a copy.
