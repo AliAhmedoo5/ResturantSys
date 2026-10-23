@@ -153,14 +153,40 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
     _usbPathController.dispose();
     _localPathController.dispose();
     _thresholdController.dispose();
+    _featureSettingsScroll.dispose();
     super.dispose();
   }
 
   List<LowStockWarning> _stockAlerts = [];
+  bool _isRefreshingStock = false;
+  String? _stockRefreshError;
+  final ScrollController _featureSettingsScroll = ScrollController();
 
-  Future<void> _loadStockAlerts() async {
-    final alerts = await widget.orderController?.getManagerStockAlerts() ?? <LowStockWarning>[];
-    if (mounted) setState(() => _stockAlerts = alerts);
+  Future<void> _loadStockAlerts({bool showFeedback = false}) async {
+    if (_isRefreshingStock) return;
+    setState(() => _isRefreshingStock = true);
+    try {
+      final alerts = await widget.orderController?.getManagerStockAlerts() ?? <LowStockWarning>[];
+      if (!mounted) return;
+      setState(() {
+        _stockAlerts = alerts;
+        _stockRefreshError = null;
+      });
+      if (showFeedback) {
+        final message = alerts.isEmpty
+            ? 'Stock refreshed. No low-stock alerts remain.'
+            : 'Stock refreshed. ${alerts.length} ingredient(s) still low. Record a purchase to replenish stock.';
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(message)));
+      }
+    } catch (_) {
+      if (mounted) setState(() {
+        _stockRefreshError = 'Could not refresh stock alerts. Try again.';
+      });
+    } finally {
+      if (mounted) setState(() => _isRefreshingStock = false);
+    }
   }
 
   Future<void> _loadAllData() async {
@@ -747,13 +773,17 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (_stockAlerts.isNotEmpty) ...[
+          if (_stockAlerts.isNotEmpty || _stockRefreshError != null) ...[
             MaterialBanner(
               key: const ValueKey('manager_stock_alert'),
               backgroundColor: WarmCounterColors.lightDestructiveHighlight,
               leading: const Icon(Icons.warning_amber_rounded, color: WarmCounterColors.lightDestructiveAction),
-              content: Text('Low stock  -  replenish now: ${_stockAlerts.map((a) => '${a.ingredientName}: ${a.currentStock} ${a.storageUnit}').join('; ')}', maxLines: 3, overflow: TextOverflow.ellipsis),
-              actions: [TextButton(onPressed: _loadStockAlerts, child: const Text('Refresh stock'))],
+              content: Text(_stockRefreshError ?? 'Low stock  -  replenish now: ${_stockAlerts.map((a) => '${a.ingredientName}: ${a.currentStock} ${a.storageUnit}').join('; ')}', maxLines: 3, overflow: TextOverflow.ellipsis),
+              actions: [TextButton(
+                key: const ValueKey('refresh_manager_stock'),
+                onPressed: _isRefreshingStock ? null : () => _loadStockAlerts(showFeedback: true),
+                child: Text(_isRefreshingStock ? 'Refreshing...' : 'Refresh stock'),
+              )],
             ),
             const SizedBox(height: 8),
           ],
@@ -1140,7 +1170,13 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    return Center(
+    return Scrollbar(
+      controller: _featureSettingsScroll,
+      thumbVisibility: true,
+      child: SingleChildScrollView(
+        key: const ValueKey('feature_settings_scroll'),
+        controller: _featureSettingsScroll,
+        child: Center(
       child: Material(
         color: WarmCounterColors.lightCardBackground,
         borderRadius: WarmCounterSpacing.panelBorderRadius,
@@ -1326,6 +1362,8 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
         ),
       ),
     ),
+        ),
+      ),
   );
   }
 

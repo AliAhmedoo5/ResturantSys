@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -13,12 +14,16 @@ import 'package:resturant_sys/widgets/supervisor/supervisor_portal_workspace.dar
 class _StockController extends OrderAndCheckoutController {
   _StockController(Database database) : super(database: database);
   int requests = 0;
+  bool fail = false;
+  Completer<List<LowStockWarning>>? pending;
   List<LowStockWarning> alerts = const [LowStockWarning(ingredientId: 1,
       ingredientName: 'burger bun', currentStock: -5, threshold: 0, storageUnit: 'count')];
 
   @override
   Future<List<LowStockWarning>> getManagerStockAlerts() async {
     requests++;
+    if (fail) throw StateError('Storage unavailable');
+    if (pending != null) return pending!.future;
     return alerts;
   }
 }
@@ -79,5 +84,34 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('manager_stock_alert')), findsNothing);
     expect(find.textContaining('No low-stock alerts remain'), findsOneWidget);
+  });
+
+  testWidgets('stock refresh disables repeated clicks and recovers from a read failure', (tester) async {
+    final orders = await _pumpManager(tester);
+    orders.pending = Completer<List<LowStockWarning>>();
+    final refresh = find.byKey(const ValueKey('refresh_manager_stock'));
+    await tester.tap(refresh);
+    await tester.pump();
+    expect(find.text('Refreshing...'), findsOneWidget);
+    expect(tester.widget<TextButton>(refresh).onPressed, isNull);
+    await tester.tap(refresh);
+    expect(orders.requests, 2);
+    orders.pending!.complete(orders.alerts);
+    orders.pending = null;
+    await tester.pumpAndSettle();
+    orders.fail = true;
+    await tester.tap(refresh);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Could not refresh stock alerts'), findsOneWidget);
+    expect(tester.widget<TextButton>(refresh).onPressed, isNotNull);
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.byKey(const ValueKey('portal_tab_toggles')));
+    await tester.pumpAndSettle();
+    expect(find.text('Operational Feature Toggles'), findsOneWidget);
+    orders.fail = false;
+    orders.alerts = [];
+    await tester.tap(refresh);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('manager_stock_alert')), findsNothing);
   });
 }
