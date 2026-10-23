@@ -219,6 +219,7 @@ void main() {
 
       // Verify workspace tab buttons are present
       expect(find.byKey(const ValueKey('workspace_tab_register')), findsOneWidget);
+      expect(find.byKey(const ValueKey('workspace_tab_riderTrips')), findsOneWidget);
       expect(find.byKey(const ValueKey('workspace_tab_catalog')), findsOneWidget);
       expect(find.byKey(const ValueKey('workspace_tab_khata')), findsOneWidget);
       expect(find.byKey(const ValueKey('workspace_tab_supervisor')), findsOneWidget);

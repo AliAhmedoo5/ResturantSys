@@ -316,7 +316,7 @@ class _MenuItemFormDialogState extends State<MenuItemFormDialog> {
           onPressed: _isSaving ? null : _handleSubmit,
           style: ElevatedButton.styleFrom(
             backgroundColor: WarmCounterColors.lightPrimaryAction,
-            foregroundColor: Colors.white,
+            foregroundColor: WarmCounterColors.lightTextOnPrimary,
           ),
           child: _isSaving
               ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))

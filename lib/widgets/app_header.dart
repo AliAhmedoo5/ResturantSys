@@ -6,7 +6,6 @@ import '../core/orders/order_and_checkout_controller.dart';
 import '../core/theme/theme.dart';
 import 'orders/reprint_tray_dialog.dart';
 
-/// Operational workspaces selectable in the application header.
 enum AppWorkspaceTab {
   register('Register', Icons.point_of_sale_outlined),
   riderTrips('Riders', Icons.two_wheeler_outlined),
@@ -22,8 +21,7 @@ enum AppWorkspaceTab {
   final IconData icon;
 }
 
-/// Top application navigation bar displaying system branding, active staff session details,
-/// workspace switching tabs for supervisors, and a 1-tap Lock Register button.
+/// Compact workspace heading; navigation is provided by the desktop sidebar.
 class AppHeader extends StatelessWidget implements PreferredSizeWidget {
   const AppHeader({
     super.key,
@@ -36,6 +34,7 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
     this.authService,
     this.isTokenTrayEnabled = true,
     this.title = 'ResturantPOS',
+    this.showBrand = true,
   });
 
   final Staff? activeStaff;
@@ -47,407 +46,99 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
   final AuthService? authService;
   final bool isTokenTrayEnabled;
   final String title;
+  final bool showBrand;
 
   @override
-  Size get preferredSize => const Size.fromHeight(64.0);
+  Size get preferredSize => const Size.fromHeight(56);
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: preferredSize.height,
-      padding: const EdgeInsets.symmetric(
-        horizontal: WarmCounterSpacing.space24,
-      ),
-      decoration: const BoxDecoration(
-        color: StreetFoodMafiaColors.darkNavy,
-        border: Border(
-          bottom: BorderSide(
-            color: StreetFoodMafiaColors.border,
-            width: 1.0,
-          ),
+    return Material(
+      color: StreetFoodMafiaColors.darkNavy,
+      child: Container(
+        height: preferredSize.height,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: const BoxDecoration(
+          border: Border(bottom: BorderSide(color: StreetFoodMafiaColors.border)),
         ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          // Left: App Brand & Logo (Street-Food / Mafia Branding)
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: StreetFoodMafiaColors.darkNavy,
-                  borderRadius: WarmCounterSpacing.controlBorderRadius,
-                  border: Border.all(
-                    color: StreetFoodMafiaColors.cartelYellow,
-                    width: 1.5,
-                  ),
-                ),
-                child: const Center(
-                  child: Icon(
-                    Icons.storefront_outlined,
-                    color: StreetFoodMafiaColors.cartelYellow,
-                    size: 20,
-                  ),
-                ),
-              ),
-              const SizedBox(width: WarmCounterSpacing.space12),
-              // Dual-Tone Brand Formatting Protocol (Zero-Gap Container)
-              if (title == 'ResturantPOS')
-                Stack(
-                  alignment: Alignment.centerLeft,
-                  children: [
-                    const Opacity(
-                      opacity: 0.001,
-                      child: Text(
-                        'ResturantPOS',
-                        style: TextStyle(fontSize: 1),
-                      ),
-                    ),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'Resturant',
-                          style: WarmCounterTypography.pageHeading.copyWith(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 20,
-                            color: StreetFoodMafiaColors.offWhite,
-                          ),
-                        ),
-                        Text(
-                          'POS',
-                          style: WarmCounterTypography.pageHeading.copyWith(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 20,
-                            color: StreetFoodMafiaColors.cartelYellow,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                )
-              else
-                Text(
-                  title,
-                  style: WarmCounterTypography.pageHeading.copyWith(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 20,
-                    color: StreetFoodMafiaColors.offWhite,
-                  ),
-                ),
+        child: LayoutBuilder(builder: (context, constraints) {
+          final compact = constraints.maxWidth < 700;
+          final staff = activeStaff;
+          return Row(children: [
+            if (showBrand) ...[
+              const Icon(Icons.storefront_outlined, color: StreetFoodMafiaColors.cartelYellow, size: 24),
+              const SizedBox(width: 10),
             ],
-          ),
-
-          // Middle: Workspace Switcher for Supervisors/Owners/Kitchen
-          if (activeStaff != null &&
-              (activeStaff!.canAccessSupervisorPortal || activeStaff!.canAccessKitchen) &&
-              onWorkspaceSelected != null)
             Expanded(
-              child: Center(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _buildWorkspaceTabButton(
-                        context,
-                        tab: AppWorkspaceTab.register,
-                        isSelected: selectedWorkspace == AppWorkspaceTab.register,
-                      ),
-                      const SizedBox(width: WarmCounterSpacing.space8),
-                      _buildWorkspaceTabButton(
-                        context,
-                        tab: AppWorkspaceTab.riderTrips,
-                        isSelected: selectedWorkspace == AppWorkspaceTab.riderTrips,
-                      ),
-                      if (activeStaff!.canAccessSupervisorPortal) ...[
-                        const SizedBox(width: WarmCounterSpacing.space8),
-                        _buildWorkspaceTabButton(
-                          context,
-                          tab: AppWorkspaceTab.catalog,
-                          isSelected: selectedWorkspace == AppWorkspaceTab.catalog,
-                        ),
-                        const SizedBox(width: WarmCounterSpacing.space8),
-                        _buildWorkspaceTabButton(
-                          context,
-                          tab: AppWorkspaceTab.khata,
-                          isSelected: selectedWorkspace == AppWorkspaceTab.khata,
-                        ),
-                        const SizedBox(width: WarmCounterSpacing.space8),
-                        _buildWorkspaceTabButton(
-                          context,
-                          tab: AppWorkspaceTab.supervisor,
-                          isSelected: selectedWorkspace == AppWorkspaceTab.supervisor,
-                        ),
-                      ],
-                      const SizedBox(width: WarmCounterSpacing.space8),
-                      _buildWorkspaceTabButton(
-                        context,
-                        tab: AppWorkspaceTab.mandi,
-                        isSelected: selectedWorkspace == AppWorkspaceTab.mandi,
-                      ),
-                      const SizedBox(width: WarmCounterSpacing.space8),
-                      _buildWorkspaceTabButton(
-                        context,
-                        tab: AppWorkspaceTab.wastage,
-                        isSelected: selectedWorkspace == AppWorkspaceTab.wastage,
-                      ),
-                      if (isTokenTrayEnabled) ...[
-                        const SizedBox(width: WarmCounterSpacing.space8),
-                        _buildWorkspaceTabButton(
-                          context,
-                          tab: AppWorkspaceTab.tokenQueue,
-                          isSelected: selectedWorkspace == AppWorkspaceTab.tokenQueue,
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
+              child: Text(
+                showBrand ? title : selectedWorkspace?.label ?? 'Register',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: WarmCounterTypography.pageHeading.copyWith(fontSize: 18),
               ),
             ),
-
-          // Right: Active Session / Locked Status & Actions
-          Flexible(
-            child: activeStaff != null
-                ? _buildActiveStaffBar(context, activeStaff!)
-                : _buildLockedStatusBar(context),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActiveStaffBar(BuildContext context, Staff staff) {
-    final department = staff.departmentName ?? 'General';
-    final roleName = staff.role.displayName;
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: [
-        // Staff Info Pill
-        Flexible(
-          child: Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: WarmCounterSpacing.space12,
-              vertical: WarmCounterSpacing.space8,
-            ),
-            decoration: BoxDecoration(
-              color: StreetFoodMafiaColors.darkNavy,
-              borderRadius: WarmCounterSpacing.controlBorderRadius,
-              border: Border.all(
-                color: StreetFoodMafiaColors.border,
-                width: 1.0,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.account_circle_outlined,
-                  size: 22,
-                  color: StreetFoodMafiaColors.cartelYellow,
-                ),
-                const SizedBox(width: WarmCounterSpacing.space8),
-                Flexible(
+            if (staff == null)
+              const Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.lock_outline_rounded, size: 16, color: StreetFoodMafiaColors.secondaryText),
+                SizedBox(width: 8),
+                Text('Register Locked', style: TextStyle(color: StreetFoodMafiaColors.secondaryText, fontSize: 12)),
+              ])
+            else ...[
+              if (!compact)
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 260),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
                     mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text(
-                        staff.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: WarmCounterTypography.bodyMedium.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: StreetFoodMafiaColors.offWhite,
-                          height: 1.1,
-                        ),
-                      ),
-                      Text(
-                        '$department • $roleName',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: WarmCounterTypography.secondaryLabel.copyWith(
-                          color: StreetFoodMafiaColors.secondaryText,
-                          height: 1.1,
-                        ),
-                      ),
+                      Text(staff.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                          style: WarmCounterTypography.bodyMedium.copyWith(fontWeight: FontWeight.w700)),
+                      Text('${staff.departmentName ?? 'General'} • ${staff.role.displayName}',
+                          maxLines: 1, overflow: TextOverflow.ellipsis,
+                          style: WarmCounterTypography.caption.copyWith(color: StreetFoodMafiaColors.secondaryText)),
                     ],
                   ),
                 ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(width: WarmCounterSpacing.space12),
-
-        // Reprint Tray Button with Failure Badge
-        if (reprintTrayController != null) ...[
-          ListenableBuilder(
-            listenable: reprintTrayController!,
-            builder: (context, _) {
-              final hasFailures = reprintTrayController!.hasFailures;
-              final failedCount = reprintTrayController!.failedCount;
-
-              return Padding(
-                padding: const EdgeInsets.only(right: WarmCounterSpacing.space12),
-                child: OutlinedButton.icon(
-                  key: const ValueKey('header_reprint_tray_button'),
-                  onPressed: () {
-                    showDialog<void>(
-                      context: context,
-                      builder: (ctx) => ReprintTrayDialog(
-                        controller: reprintTrayController!,
-                        currentStaff: staff,
-                        orderController: orderController,
-                        authService: authService,
+              const SizedBox(width: 12),
+              if (reprintTrayController != null)
+                ListenableBuilder(
+                  listenable: reprintTrayController!,
+                  builder: (context, _) {
+                    final failures = reprintTrayController!.failedCount;
+                    final label = failures > 0 ? 'Reprint Tray ($failures)' : 'Reprint Tray';
+                    return Tooltip(
+                      message: label,
+                      child: TextButton.icon(
+                        key: const ValueKey('header_reprint_tray_button'),
+                        onPressed: () => showDialog<void>(
+                          context: context,
+                          builder: (_) => ReprintTrayDialog(
+                            controller: reprintTrayController!, currentStaff: staff,
+                            orderController: orderController, authService: authService,
+                          ),
+                        ),
+                        icon: Icon(Icons.print_outlined, size: 18,
+                            color: failures > 0 ? StreetFoodMafiaColors.statusCanceled : StreetFoodMafiaColors.secondaryText),
+                        label: Text(compact ? (failures > 0 ? '$failures' : '') : label),
                       ),
                     );
                   },
-                  icon: Icon(
-                    Icons.print_outlined,
-                    size: 18,
-                    color: hasFailures
-                        ? StreetFoodMafiaColors.statusCanceled
-                        : StreetFoodMafiaColors.offWhite,
-                  ),
-                  label: Text(
-                    hasFailures ? 'Reprint Tray ($failedCount)' : 'Reprint Tray',
-                    style: TextStyle(
-                      color: hasFailures
-                          ? StreetFoodMafiaColors.statusCanceled
-                          : StreetFoodMafiaColors.offWhite,
-                      fontWeight: hasFailures ? FontWeight.bold : FontWeight.w500,
-                    ),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    backgroundColor: hasFailures ? const Color(0xFF2C1518) : null,
-                    side: BorderSide(
-                      color: hasFailures ? StreetFoodMafiaColors.statusCanceled : StreetFoodMafiaColors.border,
-                    ),
-                    minimumSize: const Size(110, WarmCounterSpacing.minTouchTargetSize),
-                    shape: const RoundedRectangleBorder(
-                      borderRadius: WarmCounterSpacing.controlBorderRadius,
-                    ),
-                  ),
                 ),
-              );
-            },
-          ),
-        ],
-
-        // 1-Tap Lock Register Button
-        OutlinedButton.icon(
-          key: const ValueKey('lock_register_button'),
-          onPressed: onLock,
-          icon: const Icon(Icons.lock_outline_rounded, size: 18),
-          label: const Text('Lock Register'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: StreetFoodMafiaColors.offWhite,
-            minimumSize: const Size(120, WarmCounterSpacing.minTouchTargetSize),
-            side: const BorderSide(
-              color: StreetFoodMafiaColors.border,
-              width: 1.0,
-            ),
-            shape: const RoundedRectangleBorder(
-              borderRadius: WarmCounterSpacing.controlBorderRadius,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildLockedStatusBar(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: WarmCounterSpacing.space16,
-        vertical: WarmCounterSpacing.space8,
-      ),
-      decoration: BoxDecoration(
-        color: StreetFoodMafiaColors.darkNavy,
-        borderRadius: WarmCounterSpacing.controlBorderRadius,
-        border: Border.all(
-          color: StreetFoodMafiaColors.border,
-          width: 1.0,
-        ),
-      ),
-      child: const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.lock_outline_rounded,
-            size: 18,
-            color: StreetFoodMafiaColors.secondaryText,
-          ),
-          SizedBox(width: WarmCounterSpacing.space8),
-          Text(
-            'Register Locked',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: StreetFoodMafiaColors.secondaryText,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildWorkspaceTabButton(
-    BuildContext context, {
-    required AppWorkspaceTab tab,
-    required bool isSelected,
-  }) {
-    return InkWell(
-      key: ValueKey('workspace_tab_${tab.name}'),
-      onTap: () => onWorkspaceSelected?.call(tab),
-      borderRadius: WarmCounterSpacing.controlBorderRadius,
-      child: Container(
-        constraints: WarmCounterSpacing.minTouchTargetConstraints,
-        alignment: Alignment.center,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? StreetFoodMafiaColors.activeNavHighlight
-              : Colors.transparent,
-          borderRadius: WarmCounterSpacing.controlBorderRadius,
-          border: Border.all(
-            color: isSelected
-                ? StreetFoodMafiaColors.cartelYellow
-                : StreetFoodMafiaColors.border,
-            width: isSelected ? 1.5 : 1.0,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              tab.icon,
-              size: 18,
-              color: isSelected
-                  ? StreetFoodMafiaColors.cartelYellow
-                  : StreetFoodMafiaColors.secondaryText,
-            ),
-            const SizedBox(width: WarmCounterSpacing.space8),
-            Text(
-              tab.label,
-              style: TextStyle(
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                color: isSelected
-                    ? StreetFoodMafiaColors.cartelYellow
-                    : StreetFoodMafiaColors.offWhite,
-                fontSize: 13,
+              const SizedBox(width: 8),
+              Tooltip(
+                message: 'Lock Register',
+                child: OutlinedButton.icon(
+                  key: const ValueKey('lock_register_button'),
+                  onPressed: onLock,
+                  icon: const Icon(Icons.lock_outline_rounded, size: 18),
+                  label: Text(compact ? 'Lock' : 'Lock Register'),
+                ),
               ),
-            ),
-          ],
-        ),
+            ],
+          ]);
+        }),
       ),
     );
   }
 }
+

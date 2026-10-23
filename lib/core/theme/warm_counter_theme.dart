@@ -193,6 +193,25 @@ abstract final class WarmCounterTheme {
         thickness: 1.0,
         space: 1.0,
       ),
+      chipTheme: ChipThemeData(
+        backgroundColor: StreetFoodMafiaColors.darkNavy,
+        selectedColor: StreetFoodMafiaColors.cartelYellow,
+        secondarySelectedColor: StreetFoodMafiaColors.cartelYellow,
+        checkmarkColor: StreetFoodMafiaColors.textOnPrimary,
+        labelStyle: const TextStyle(
+          fontFamily: WarmCounterTypography.fontFamily,
+          fontFamilyFallback: WarmCounterTypography.fontFallbacks,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: StreetFoodMafiaColors.offWhite,
+        ),
+        secondaryLabelStyle: const TextStyle(fontFamily: WarmCounterTypography.fontFamily,
+          fontFamilyFallback: WarmCounterTypography.fontFallbacks,
+          color: StreetFoodMafiaColors.textOnPrimary, fontSize: 13),
+        side: const BorderSide(color: StreetFoodMafiaColors.border),
+        shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      ),
       dataTableTheme: DataTableThemeData(
         headingRowColor: WidgetStateProperty.all(StreetFoodMafiaColors.darkNavy),
         dataRowColor: WidgetStateProperty.resolveWith((states) {

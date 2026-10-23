@@ -372,8 +372,7 @@ class CatalogPhotoGalleryDialogState extends State<CatalogPhotoGalleryDialog> {
                 value: _makePrimaryOnUpload,
                 onChanged: (val) => setState(() => _makePrimaryOnUpload = val ?? false),
               ),
-              const Text('Designate as primary thumbnail'),
-              const Spacer(),
+              const Expanded(child: Text('Designate as primary thumbnail', maxLines: 2, overflow: TextOverflow.ellipsis)),
               TextButton.icon(
                 key: const ValueKey('add_sample_photo_button'),
                 icon: const Icon(Icons.auto_awesome_outlined, size: 16),
@@ -393,7 +392,7 @@ class CatalogPhotoGalleryDialogState extends State<CatalogPhotoGalleryDialog> {
                 onPressed: _isUploading ? null : () => _handleUpload(),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: WarmCounterColors.lightPrimaryAction,
-                  foregroundColor: Colors.white,
+                  foregroundColor: WarmCounterColors.lightTextOnPrimary,
                 ),
               ),
             ],

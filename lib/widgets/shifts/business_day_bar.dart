@@ -97,7 +97,7 @@ class BusinessDayBar extends StatelessWidget {
                             onPressed: onOpenBusinessDayTap,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: WarmCounterColors.lightPrimaryAction,
-                              foregroundColor: Colors.white,
+                              foregroundColor: WarmCounterColors.lightTextOnPrimary,
                               minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
                             ),
                           ),
@@ -110,7 +110,7 @@ class BusinessDayBar extends StatelessWidget {
                             onPressed: onOpenShiftTap,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: WarmCounterColors.lightPrimaryAction,
-                              foregroundColor: Colors.white,
+                              foregroundColor: WarmCounterColors.lightTextOnPrimary,
                               minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
                             ),
                           ),

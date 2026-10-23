@@ -268,7 +268,7 @@ class _RecipeBuilderDialogState extends State<RecipeBuilderDialog> {
                           onPressed: _isAdding ? null : _handleAddOrUpdate,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: WarmCounterColors.lightPrimaryAction,
-                            foregroundColor: Colors.white,
+                            foregroundColor: WarmCounterColors.lightTextOnPrimary,
                             minimumSize: const Size(120, WarmCounterSpacing.touchTargetMin),
                           ),
                         ),
@@ -366,7 +366,7 @@ class _RecipeBuilderDialogState extends State<RecipeBuilderDialog> {
           onPressed: () => Navigator.of(context).pop(),
           style: ElevatedButton.styleFrom(
             backgroundColor: WarmCounterColors.lightPrimaryAction,
-            foregroundColor: Colors.white,
+            foregroundColor: WarmCounterColors.lightTextOnPrimary,
           ),
           child: const Text('Done'),
         ),

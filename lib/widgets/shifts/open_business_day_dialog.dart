@@ -132,7 +132,7 @@ class _OpenBusinessDayDialogState extends State<OpenBusinessDayDialog> {
                     onPressed: _isSubmitting ? null : _submit,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: WarmCounterColors.lightPrimaryAction,
-                      foregroundColor: Colors.white,
+                      foregroundColor: WarmCounterColors.lightTextOnPrimary,
                       minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
                       shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
                     ),

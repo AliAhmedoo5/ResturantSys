@@ -19,7 +19,7 @@ class PinNumpad extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 320),
+      constraints: const BoxConstraints(maxWidth: 288),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -69,8 +69,8 @@ class PinNumpad extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: Ink(
-        width: 88,
-        height: 62,
+        width: 80,
+        height: 48,
         decoration: BoxDecoration(
           color: WarmCounterColors.lightCardBackground,
           borderRadius: WarmCounterSpacing.controlBorderRadius,
@@ -86,7 +86,7 @@ class PinNumpad extends StatelessWidget {
             child: Text(
               digit,
               style: WarmCounterTypography.pageHeading.copyWith(
-                fontSize: 28,
+                fontSize: 22,
                 fontWeight: FontWeight.w700,
                 color: WarmCounterColors.lightPrimaryText,
               ),
@@ -110,8 +110,8 @@ class PinNumpad extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: Ink(
-          width: 88,
-          height: 62,
+          width: 80,
+          height: 48,
           decoration: BoxDecoration(
             color: color,
             borderRadius: WarmCounterSpacing.controlBorderRadius,
