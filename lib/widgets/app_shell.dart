@@ -70,7 +70,28 @@ class _AppShellState extends State<AppShell> {
   @override
   void initState() {
     super.initState();
+    widget.session.addListener(_resetWorkspace);
     _checkOnboarding();
+  }
+
+  void _resetWorkspace() {
+    setState(() => _selectedWorkspace = AppWorkspaceTab.register);
+  }
+
+  @override
+  void didUpdateWidget(covariant AppShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.session != widget.session) {
+      oldWidget.session.removeListener(_resetWorkspace);
+      widget.session.addListener(_resetWorkspace);
+      _selectedWorkspace = AppWorkspaceTab.register;
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.session.removeListener(_resetWorkspace);
+    super.dispose();
   }
 
   Future<void> _checkOnboarding() async {
@@ -190,6 +211,11 @@ class _AppShellState extends State<AppShell> {
   }
 
   Widget _buildWorkspaceBody(BuildContext context, Staff staff) {
+    // Gate the content as well as the navigation, including stale selections.
+    if (_selectedWorkspace != AppWorkspaceTab.register &&
+        !staff.canAccessSupervisorPortal && !staff.canAccessKitchen) {
+      return _buildRegisterWorkspace(staff);
+    }
     if (_selectedWorkspace == AppWorkspaceTab.catalog && widget.catalogController != null) {
       return SupervisorCatalogWorkspace(
         controller: widget.catalogController!,
@@ -250,6 +276,10 @@ class _AppShellState extends State<AppShell> {
       );
     }
 
+    return _buildRegisterWorkspace(staff);
+  }
+
+  Widget _buildRegisterWorkspace(Staff staff) {
     if (widget.shiftController != null) {
       return RegisterShiftWorkspace(
         controller: widget.shiftController!,

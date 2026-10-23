@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/auth/auth_service.dart';
 import '../../core/auth/department.dart';
+import '../../core/auth/job_role.dart';
+import 'job_roles_dialog.dart';
 import '../../core/auth/staff.dart';
 import '../../core/auth/staff_role.dart';
 import '../../core/hardware/reprint_tray_controller.dart';
@@ -88,6 +90,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
 
   // Staff & Departments State
   List<Department> _departments = [];
+  List<JobRole> _jobRoles = [];
   List<Staff> _staffMembers = [];
   bool _isLoadingStaff = true;
 
@@ -187,9 +190,11 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
     try {
       final depts = await widget.authService!.getDepartments();
       final staff = await widget.authService!.getAllStaff();
+      final jobRoles = await widget.authService!.getJobRoles();
       if (mounted) {
         setState(() {
           _departments = depts;
+          _jobRoles = jobRoles;
           _staffMembers = staff;
           _isLoadingStaff = false;
         });
@@ -392,11 +397,14 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
       context: context,
       builder: (ctx) => StaffFormDialog(
         departments: _departments,
+        jobRoles: _jobRoles,
         onSave: ({
           required String name,
           required int departmentId,
           required StaffRole role,
           required String pin,
+          required bool loginEnabled,
+          required int? jobRoleId,
           bool? isActive,
         }) async {
           if (widget.authService != null) {
@@ -404,6 +412,8 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
               name: name,
               departmentId: departmentId,
               role: role,
+              loginEnabled: loginEnabled,
+              jobRoleId: jobRoleId,
               pin: pin,
             );
           } else {
@@ -417,7 +427,10 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
               departmentId: departmentId,
               departmentName: dept.name,
               pinHash: pin,
+              jobRoleName: _jobRoles.where((r) => r.id == jobRoleId).firstOrNull?.name,
               role: role,
+              loginEnabled: loginEnabled,
+              jobRoleId: jobRoleId,
               isActive: isActive ?? true,
             );
             setState(() => _staffMembers.add(newStaff));
@@ -435,12 +448,15 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
       context: context,
       builder: (ctx) => StaffFormDialog(
         departments: _departments,
+        jobRoles: _jobRoles,
         initialStaff: staff,
         onSave: ({
           required String name,
           required int departmentId,
           required StaffRole role,
           required String pin,
+          required bool loginEnabled,
+          required int? jobRoleId,
           bool? isActive,
         }) async {
           if (widget.authService != null) {
@@ -449,6 +465,8 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
               name: name,
               departmentId: departmentId,
               role: role,
+              loginEnabled: loginEnabled,
+              jobRoleId: jobRoleId,
               newPin: pin.isNotEmpty ? pin : null,
               isActive: isActive,
             );
@@ -466,7 +484,10 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                   departmentId: departmentId,
                   departmentName: dept.name,
                   pinHash: pin.isNotEmpty ? pin : staff.pinHash,
+                  jobRoleName: _jobRoles.where((r) => r.id == jobRoleId).firstOrNull?.name,
                   role: role,
+              loginEnabled: loginEnabled,
+              jobRoleId: jobRoleId,
                   isActive: isActive ?? staff.isActive,
                 );
               }
@@ -985,7 +1006,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                           ),
                         ),
                         Text(
-                          'Configure 4-digit numeric PINs, operational roles, and department assignments.',
+                          'Manage job roles, departments, and Cashier/Manager system access.',
                           style: WarmCounterTypography.secondaryLabel.copyWith(
                             color: WarmCounterColors.lightSecondaryText,
                           ),
@@ -993,6 +1014,15 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                       ],
                     )),
                     const SizedBox(width: 12),
+                    if (widget.authService != null) TextButton.icon(
+                      key: const ValueKey('manage_job_roles'),
+                      icon: const Icon(Icons.badge_outlined),
+                      label: const Text('Job Roles'),
+                      onPressed: () async {
+                        await showDialog<void>(context: context, builder: (_) => JobRolesDialog(authService: widget.authService!));
+                        if (mounted) await _loadStaffAndDepartments();
+                      },
+                    ),
                     ElevatedButton.icon(
                       key: const ValueKey('register_staff_button'),
                       onPressed: _openRegisterStaffDialog,
@@ -1019,6 +1049,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                         DataColumn(label: Text('Name', style: TextStyle(fontWeight: FontWeight.bold))),
                         DataColumn(label: Text('Department', style: TextStyle(fontWeight: FontWeight.bold))),
                         DataColumn(label: Text('Role', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text('System access', style: TextStyle(fontWeight: FontWeight.bold))),
                         DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
                         DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold))),
                       ],
@@ -1035,7 +1066,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                                   borderRadius: WarmCounterSpacing.controlBorderRadius,
                                 ),
                                 child: Text(
-                                  staff.role.displayName,
+                                  staff.jobRoleName ?? staff.role.displayName,
                                   style: const TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
@@ -1044,6 +1075,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                                 ),
                               ),
                             ),
+                            DataCell(Text(staff.loginEnabled ? staff.role.displayName : 'No login')),
                             DataCell(
                               Row(
                                 children: [
@@ -1073,7 +1105,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                                     key: ValueKey('update_pin_${staff.id}'),
                                     icon: const Icon(Icons.pin_rounded, size: 20),
                                     tooltip: 'Update 4-Digit PIN',
-                                    onPressed: () => _openUpdatePinDialog(staff),
+                                    onPressed: staff.loginEnabled ? () => _openUpdatePinDialog(staff) : null,
                                   ),
                                   IconButton(
                                     key: ValueKey('edit_staff_${staff.id}'),
@@ -1379,6 +1411,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                         DataColumn(label: Text('Shift / Cashier', style: TextStyle(fontWeight: FontWeight.bold))),
                         DataColumn(label: Text('Opened & Closed', style: TextStyle(fontWeight: FontWeight.bold))),
                         DataColumn(label: Text('Variance Amount', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text('System access', style: TextStyle(fontWeight: FontWeight.bold))),
                         DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
                         DataColumn(label: Text('Resolution Notes', style: TextStyle(fontWeight: FontWeight.bold))),
                         DataColumn(label: Text('Action', style: TextStyle(fontWeight: FontWeight.bold))),

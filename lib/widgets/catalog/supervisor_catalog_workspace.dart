@@ -925,6 +925,13 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
     );
   }
 
+  void _filterMenuItems(int? categoryId) {
+    setState(() {
+      _menuItemCategoryFilter = categoryId;
+      _menuItems = _allMenuItems.where((item) => categoryId == null || item.categoryId == categoryId).toList();
+    });
+  }
+
   // Tab 1: Categories
   Widget _buildCategoriesTab() {
     return SingleChildScrollView(
@@ -980,7 +987,13 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                     borderRadius: WarmCounterSpacing.controlBorderRadius,
                     border: Border.all(color: WarmCounterColors.lightBorder),
                   ),
-                  child: Row(
+                  child: InkWell(
+                    key: ValueKey('open_category_${cat.id}'),
+                    onTap: () {
+                      _filterMenuItems(cat.id);
+                      DefaultTabController.of(context).animateTo(1);
+                    },
+                    child: Row(
                     children: [
                       Container(
                         width: 24,
@@ -1017,6 +1030,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                         onPressed: () => _confirmDeleteCategory(cat),
                       ),
                     ],
+                  ),
                   ),
                 );
               },
@@ -1071,8 +1085,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                   label: const Text('All Categories'),
                   selected: _menuItemCategoryFilter == null,
                   onSelected: (_) {
-                    setState(() => _menuItemCategoryFilter = null);
-                    _loadAllCatalogData();
+                    _filterMenuItems(null);
                   },
                 ),
                 const SizedBox(width: 8),
@@ -1083,8 +1096,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                       label: Text(c.name),
                       selected: _menuItemCategoryFilter == c.id,
                       onSelected: (selected) {
-                        setState(() => _menuItemCategoryFilter = selected ? c.id : null);
-                        _loadAllCatalogData();
+                        _filterMenuItems(selected ? c.id : null);
                       },
                     ),
                   );

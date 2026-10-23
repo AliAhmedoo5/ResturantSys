@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/auth/department.dart';
+import '../../core/auth/job_role.dart';
 import '../../core/auth/staff.dart';
 import '../../core/auth/staff_role.dart';
 import '../../core/theme/theme.dart';
@@ -9,17 +10,21 @@ class StaffFormDialog extends StatefulWidget {
   const StaffFormDialog({
     super.key,
     required this.departments,
+    this.jobRoles = const [],
     this.initialStaff,
     required this.onSave,
   });
 
   final List<Department> departments;
+  final List<JobRole> jobRoles;
   final Staff? initialStaff;
   final Future<void> Function({
     required String name,
     required int departmentId,
     required StaffRole role,
     required String pin,
+    required bool loginEnabled,
+    required int? jobRoleId,
     bool? isActive,
   }) onSave;
 
@@ -34,6 +39,8 @@ class _StaffFormDialogState extends State<StaffFormDialog> {
   late int _selectedDepartmentId;
   late StaffRole _selectedRole;
   late bool _isActive;
+  bool _loginEnabled = false;
+  int? _jobRoleId;
   bool _obscurePin = true;
   bool _isSubmitting = false;
   String? _errorMessage;
@@ -47,6 +54,8 @@ class _StaffFormDialogState extends State<StaffFormDialog> {
     _selectedDepartmentId = staff?.departmentId ??
         (widget.departments.isNotEmpty ? widget.departments.first.id : 1);
     _selectedRole = staff?.role ?? StaffRole.cashier;
+    _loginEnabled = staff?.loginEnabled ?? false;
+    _jobRoleId = staff?.jobRoleId;
     _isActive = staff?.isActive ?? true;
   }
 
@@ -71,6 +80,8 @@ class _StaffFormDialogState extends State<StaffFormDialog> {
         departmentId: _selectedDepartmentId,
         role: _selectedRole,
         pin: _pinController.text.trim(),
+        loginEnabled: _loginEnabled,
+        jobRoleId: _jobRoleId,
         isActive: _isActive,
       );
       if (mounted) {
@@ -192,30 +203,44 @@ class _StaffFormDialogState extends State<StaffFormDialog> {
                   const SizedBox(width: WarmCounterSpacing.space12),
                   // Role Dropdown
                   Expanded(
-                    child: DropdownButtonFormField<StaffRole>(
+                    child: DropdownButtonFormField<String>(
                       key: const ValueKey('staff_role_dropdown'),
                       isExpanded: true,
-                      initialValue: _selectedRole,
+                      initialValue: _loginEnabled ? _selectedRole.code : 'NONE',
                       decoration: const InputDecoration(
-                        labelText: 'Role',
+                        labelText: 'System access',
                         border: OutlineInputBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
                         contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       ),
-                      items: StaffRole.values.map((role) {
-                        return DropdownMenuItem<StaffRole>(
-                          value: role,
-                          child: Text(role.displayName, overflow: TextOverflow.ellipsis),
-                        );
-                      }).toList(),
+                      items: [
+                        const DropdownMenuItem(value: 'NONE', child: Text('No login')),
+                        ...StaffRole.values.map((role) => DropdownMenuItem(
+                          value: role.code, child: Text(role.displayName, overflow: TextOverflow.ellipsis))),
+                      ],
                       onChanged: (val) {
-                        if (val != null) setState(() => _selectedRole = val);
+                        if (val != null) setState(() {
+                          _loginEnabled = val != 'NONE';
+                          if (_loginEnabled) _selectedRole = StaffRole.fromCode(val);
+                        });
                       },
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: WarmCounterSpacing.space16),
-              TextFormField(
+              DropdownButtonFormField<int>(
+                key: ValueKey('staff_job_role_${_jobRoleId ?? 0}'),
+                initialValue: _jobRoleId ?? 0,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Job role', helperText: 'Job titles do not grant system access.'),
+                items: [
+                  const DropdownMenuItem(value: 0, child: Text('No job role assigned')),
+                  ...widget.jobRoles.map((role) => DropdownMenuItem(value: role.id, child: Text(role.name))),
+                ],
+                onChanged: (id) => setState(() => _jobRoleId = id == 0 ? null : id),
+              ),
+              const SizedBox(height: WarmCounterSpacing.space16),
+              if (_loginEnabled) TextFormField(
                 key: const ValueKey('staff_pin_input'),
                 controller: _pinController,
                 obscureText: _obscurePin,
@@ -237,7 +262,7 @@ class _StaffFormDialogState extends State<StaffFormDialog> {
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 ),
                 validator: (val) {
-                  if (isEditing && (val == null || val.trim().isEmpty)) {
+                  if (isEditing && widget.initialStaff!.loginEnabled && (val == null || val.trim().isEmpty)) {
                     return null; // Keep existing PIN
                   }
                   final trimmed = val?.trim() ?? '';

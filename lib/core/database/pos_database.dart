@@ -122,6 +122,7 @@ class PosDatabase {
     await _upgradeToVersion11(db);
     await _upgradeToVersion12(db);
     await _upgradeToVersion14(db);
+    await _upgradeToVersion15(db);
   }
 
   Future<void> _createOperationalAccountingTables(DatabaseExecutor executor) async {
@@ -434,6 +435,13 @@ class PosDatabase {
     if (oldVersion < 12) await _upgradeToVersion12(db);
     if (oldVersion < 13) await _upgradeToVersion13(db);
     if (oldVersion < 14) await _upgradeToVersion14(db);
+    if (oldVersion < 15) await _upgradeToVersion15(db);
+  }
+
+  Future<void> _upgradeToVersion15(DatabaseExecutor db) async {
+    await db.execute('CREATE TABLE job_roles (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL COLLATE NOCASE UNIQUE)');
+    await db.execute('ALTER TABLE staff ADD COLUMN job_role_id INTEGER REFERENCES job_roles(id) ON DELETE RESTRICT');
+    await db.execute('ALTER TABLE staff ADD COLUMN login_enabled INTEGER NOT NULL DEFAULT 1 CHECK(login_enabled IN (0, 1))');
   }
 
   Future<void> _upgradeToVersion14(DatabaseExecutor db) async {

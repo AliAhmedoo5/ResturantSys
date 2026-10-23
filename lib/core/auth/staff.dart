@@ -11,7 +11,14 @@ class Staff {
     required this.role,
     required this.isActive,
     this.createdAt,
+    this.jobRoleId,
+    this.jobRoleName,
+    this.loginEnabled = true,
   });
+
+  final int? jobRoleId;
+  final String? jobRoleName;
+  final bool loginEnabled;
 
   final int id;
   final String name;
@@ -28,22 +35,22 @@ class Staff {
 
   /// Can open shifts, tender orders, and operate the counter cash drawer.
   /// Strictly restricted to Cashiers; Manager credentials cannot operate the counter.
-  bool get canAccessRegister => role == StaffRole.cashier;
+  bool get canAccessRegister => loginEnabled && role == StaffRole.cashier;
 
   /// Can view kitchen display/tokens and log ingredient prep/wastage chits.
-  bool get canAccessKitchen => role == StaffRole.manager;
+  bool get canAccessKitchen => loginEnabled && role == StaffRole.manager;
 
   /// Can access back-office settings, Khata, staff management, and reports.
-  bool get canAccessSupervisorPortal => role == StaffRole.manager;
+  bool get canAccessSupervisorPortal => loginEnabled && role == StaffRole.manager;
 
   /// Can authorize discounts exceeding cashier threshold, void orders, and kick drawer.
-  bool get canAuthorizeOverrides => role == StaffRole.manager;
+  bool get canAuthorizeOverrides => loginEnabled && role == StaffRole.manager;
 
   /// Can authorize post-print order voids and reprint void slips.
-  bool get canVoidOrders => role == StaffRole.manager;
+  bool get canVoidOrders => loginEnabled && role == StaffRole.manager;
 
   /// Can execute End-of-Day Z-Report, locking shifts and resetting daily tokens.
-  bool get canPerformZReport => role == StaffRole.manager;
+  bool get canPerformZReport => loginEnabled && role == StaffRole.manager;
 
   Staff copyWith({
     int? id,
@@ -54,8 +61,14 @@ class Staff {
     StaffRole? role,
     bool? isActive,
     DateTime? createdAt,
+    int? jobRoleId,
+    String? jobRoleName,
+    bool? loginEnabled,
   }) {
     return Staff(
+      jobRoleId: jobRoleId ?? this.jobRoleId,
+      jobRoleName: jobRoleName ?? this.jobRoleName,
+      loginEnabled: loginEnabled ?? this.loginEnabled,
       id: id ?? this.id,
       name: name ?? this.name,
       departmentId: departmentId ?? this.departmentId,
@@ -69,6 +82,9 @@ class Staff {
 
   factory Staff.fromMap(Map<String, Object?> map, {String? departmentName}) {
     return Staff(
+      jobRoleId: map['job_role_id'] as int?,
+      jobRoleName: map['job_role_name'] as String?,
+      loginEnabled: (map['login_enabled'] as int? ?? 1) == 1,
       id: map['id'] as int,
       name: map['name'] as String,
       departmentId: map['department_id'] as int,
@@ -84,6 +100,8 @@ class Staff {
 
   Map<String, Object?> toMap() {
     return {
+      'job_role_id': jobRoleId,
+      'login_enabled': loginEnabled ? 1 : 0,
       'id': id,
       'name': name,
       'department_id': departmentId,

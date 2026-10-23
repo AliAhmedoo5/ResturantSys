@@ -179,6 +179,10 @@ void main() {
 
       expect(find.text('Register New Staff Member'), findsOneWidget);
       await tester.enterText(find.byKey(const ValueKey('staff_name_input')), 'Kamran Rider');
+      await tester.tap(find.byKey(const ValueKey('staff_role_dropdown')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Front Counter Cashier').last);
+      await tester.pumpAndSettle();
       await tester.enterText(find.byKey(const ValueKey('staff_pin_input')), '9876');
       await tester.tap(find.byKey(const ValueKey('staff_save_button')));
       await tester.pumpAndSettle();
