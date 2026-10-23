@@ -31,7 +31,7 @@ class ShiftAndCashController {
   Future<Map<String, dynamic>> _assertActiveRole(int staffId, StaffRole requiredRole, String errorMessage) async {
     final staffRow = await database.query(
       PosDatabaseConstants.tableStaff,
-      where: 'id = ? AND is_active = 1',
+      where: 'id = ? AND is_active = 1 AND login_enabled = 1',
       whereArgs: [staffId],
       limit: 1,
     );
@@ -78,6 +78,9 @@ class ShiftAndCashController {
       whereArgs: [openedByStaffId],
       limit: 1,
     );
+    if (staffRows.isEmpty || staffRows.first['login_enabled'] == 0 || staffRows.first['is_active'] != 1) {
+      throw StateError('Authorization error: Active system login required.');
+    }
     if (staffRows.isNotEmpty) {
       final role = StaffRole.fromCode(staffRows.first['role'] as String);
       if (role == StaffRole.cashier) {
@@ -124,7 +127,7 @@ class ShiftAndCashController {
     bool autoLockActiveShifts = false,
   }) async {
     return database.transaction((txn) async {
-      final staff = await txn.query('staff', where: 'id = ? AND is_active = 1', whereArgs: [closedByStaffId]);
+      final staff = await txn.query('staff', where: 'id = ? AND is_active = 1 AND login_enabled = 1', whereArgs: [closedByStaffId]);
       if (staff.isEmpty || StaffRole.fromCode(staff.first['role'] as String) != StaffRole.manager) {
         throw StateError('Authorization error: Business Day must be closed by an active Manager.');
       }
@@ -195,6 +198,9 @@ class ShiftAndCashController {
       whereArgs: [staffId],
       limit: 1,
     );
+    if (staffRows.isEmpty || staffRows.first['login_enabled'] == 0 || staffRows.first['is_active'] != 1) {
+      throw StateError('Authorization error: Active system login required.');
+    }
     if (staffRows.isNotEmpty) {
       final role = StaffRole.fromCode(staffRows.first['role'] as String);
       if (role != StaffRole.cashier) {

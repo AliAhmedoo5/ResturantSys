@@ -64,7 +64,7 @@ class DeliveryController {
   }
 
   Future<void> _requireManager(DatabaseExecutor db, int staffId) async {
-    final rows = await db.query('staff', where: 'id = ? AND is_active = 1', whereArgs: [staffId]);
+    final rows = await db.query('staff', where: 'id = ? AND is_active = 1 AND login_enabled = 1', whereArgs: [staffId]);
     if (rows.isEmpty || StaffRole.fromCode(rows.single['role'] as String) != StaffRole.manager) {
       throw StateError('Only an active Manager can configure delivery areas and fees.');
     }

@@ -990,7 +990,7 @@ class PosDatabase {
     // 3. Seed default system settings
     // Existing installations predate the wizard. Only infer completion when the
     // marker is first created; an explicit false marker survives partial setup.
-    final existingStaff = await db.query(PosDatabaseConstants.tableStaff, where: 'is_active = 1');
+    final existingStaff = await db.query(PosDatabaseConstants.tableStaff, where: 'is_active = 1 AND login_enabled = 1');
     final hasManager = existingStaff.any((s) =>
         const ['MANAGER', 'SUPERVISOR', 'OWNER'].contains(s['role']));
     final hasCashier = existingStaff.any((s) => s['role'] == 'CASHIER');

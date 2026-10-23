@@ -739,7 +739,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
 
   @override
   Widget build(BuildContext context) {
-    final hasActiveCashier = _staffMembers.any((s) => s.role == StaffRole.cashier && s.isActive);
+    final hasActiveCashier = _staffMembers.any((s) => s.role == StaffRole.cashier && s.isActive && s.loginEnabled);
 
     return Container(
       color: WarmCounterColors.lightPageBackground,
@@ -1066,7 +1066,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                                   borderRadius: WarmCounterSpacing.controlBorderRadius,
                                 ),
                                 child: Text(
-                                  staff.jobRoleName ?? staff.role.displayName,
+                                  staff.jobRoleName ?? (staff.loginEnabled ? staff.role.displayName : 'Unassigned'),
                                   style: const TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,

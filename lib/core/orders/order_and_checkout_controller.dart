@@ -447,7 +447,7 @@ class OrderAndCheckoutController {
       throw StateError('Authorization error: Cashier ID #$cashierId not found.');
     }
     final role = StaffRole.fromCode(staffRows.first['role'] as String);
-    if (role != StaffRole.cashier) {
+    if (role != StaffRole.cashier || staffRows.first['login_enabled'] == 0 || staffRows.first['is_active'] != 1) {
       throw StateError('Authorization error: Manager credentials cannot initiate checkout or process payments.');
     }
 
