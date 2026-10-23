@@ -110,8 +110,11 @@ void main() {
   });
 
   test('Gmail authentication rejection is sanitized and requires correcting credentials', () async {
+    var reject = true;
     final service = ReportDeliveryService(database: db, credentialStore: credentials,
-      gmailSubmission: (_, __) async => throw mail.SmtpClientAuthenticationException(secret));
+      gmailSubmission: (_, __) async {
+        if (reject) throw mail.SmtpClientAuthenticationException(secret);
+      });
     await configure(service);
     await closeDay();
     await service.processPending(now: DateTime.now().add(const Duration(minutes: 1)));
@@ -119,6 +122,11 @@ void main() {
     expect(job['status'], 'FAILED');
     expect(job['error_message'], contains('app password'));
     expect(jsonEncode(job), isNot(contains(secret)));
+    reject = false;
+    await configure(service);
+    await service.retry(managerStaffId: manager, jobId: job['id'] as int, reason: 'Replaced revoked Google app password');
+    await service.processPending(now: DateTime.now().add(const Duration(minutes: 1)));
+    expect((await service.history(managerStaffId: manager)).single['status'], 'ACCEPTED');
   });
 
   test('An uncertain Gmail send is never automatically resubmitted', () async {
@@ -164,5 +172,26 @@ void main() {
     await service.forgetGmailPassword(managerStaffId: manager);
     expect(credentials.values, isEmpty);
     expect((await service.settings(managerStaffId: manager))['gmail_password_saved'], isFalse);
+    await service.configure(managerStaffId: manager, emailProvider: 'GMAIL',
+      gmailSender: 'synthetic.restaurant@gmail.com', autoSend: false, recipients: []);
+    expect((await service.settings(managerStaffId: manager))['auto_send'], isFalse,
+      reason: 'A restored installation can disable sending without the old app password');
+  });
+
+  test('Manager can check saved Gmail sign-in without sending email or closing a day', () async {
+    var verifications = 0;
+    final service = ReportDeliveryService(database: db, credentialStore: credentials,
+      gmailSubmission: (_, __) async => fail('Sign-in check must not send an email'),
+      gmailVerification: (server) async {
+        expect(server.username, 'synthetic.restaurant@gmail.com');
+        expect(server.password, secret);
+        verifications++;
+      });
+    await configure(service);
+    await expectLater(service.verifyGmailSignIn(managerStaffId: cashier), throwsStateError);
+    await service.verifyGmailSignIn(managerStaffId: manager);
+    expect(verifications, 1);
+    expect(await service.history(managerStaffId: manager), isEmpty);
+    expect(await db.query('business_days'), isEmpty);
   });
 }

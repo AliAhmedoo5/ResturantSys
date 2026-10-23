@@ -28,6 +28,10 @@ password. A blank password field keeps the existing saved credential. **Remove
 saved Gmail password** disconnects it. Changing your Google password revokes
 app passwords; generate and save a replacement to resume sending.
 
+After saving, **Check saved Gmail sign-in** verifies authentication without
+sending an email or closing a Business Day. This checks the saved configuration;
+save any edited address/password first.
+
 Restoring a database on a different PC or Windows account requires entering the
 app password again. Never include it in support logs, source code, or database
 backups. Updating the saved password for the same sender can resume existing

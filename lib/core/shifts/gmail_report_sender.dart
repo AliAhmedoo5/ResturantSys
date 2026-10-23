@@ -8,16 +8,34 @@ import 'package:path/path.dart' as p;
 import 'report_delivery_failure.dart';
 
 typedef GmailSubmission = Future<void> Function(mail.Message message, SmtpServer server);
+typedef GmailVerification = Future<void> Function(SmtpServer server);
 
 /// Submits immutable report bytes to Gmail over TLS. Successful SMTP submission
 /// is acceptance, not evidence that the recipient received the message.
 class GmailReportSender {
-  GmailReportSender({GmailSubmission? submit}) : _submit = submit ?? _submitToGmail;
+  GmailReportSender({GmailSubmission? submit, GmailVerification? verify})
+      : _submit = submit ?? _submitToGmail, _verify = verify ?? _verifyGmail;
 
   final GmailSubmission _submit;
+  final GmailVerification _verify;
 
   static Future<void> _submitToGmail(mail.Message message, SmtpServer server) async {
     await mail.send(message, server, timeout: const Duration(seconds: 20));
+  }
+
+  static Future<void> _verifyGmail(SmtpServer server) async {
+    await mail.checkCredentials(server, timeout: const Duration(seconds: 15));
+  }
+
+  Future<void> verify({required String sender, required String password}) async {
+    try {
+      await _verify(SmtpServer('smtp.gmail.com', port: 465, ssl: true,
+        username: sender, password: password)).timeout(const Duration(seconds: 25));
+    } on mail.SmtpClientAuthenticationException {
+      throw const ReportDeliveryFailure('Gmail sign-in failed. Check the saved address and Google app password.');
+    } catch (_) {
+      throw const ReportDeliveryFailure('Unable to verify Gmail sign-in. Check internet access and the saved app password.');
+    }
   }
 
   Future<String> send(Map<String, dynamic> job, {

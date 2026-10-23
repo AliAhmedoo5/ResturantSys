@@ -25,10 +25,11 @@ class ReportRecipient {
 /// Offline outbox worker. It never mutates financial or inventory records.
 class ReportDeliveryService {
   ReportDeliveryService({required this.database, ReportTransport? transport,
-    ReportCredentialStore? credentialStore, GmailSubmission? gmailSubmission})
+    ReportCredentialStore? credentialStore, GmailSubmission? gmailSubmission,
+    GmailVerification? gmailVerification})
       : _transport = transport,
         _credentials = credentialStore ?? SecureReportCredentialStore(database.path),
-        _gmail = GmailReportSender(submit: gmailSubmission);
+        _gmail = GmailReportSender(submit: gmailSubmission, verify: gmailVerification);
   final Database database;
   final ReportTransport? _transport;
   final ReportCredentialStore _credentials;
@@ -47,8 +48,14 @@ class ReportDeliveryService {
     await _manager(managerStaffId);
     final policy = await _settings();
     final reference = policy['gmail_credential_id'] as String?;
-    return {...policy, 'gmail_password_saved': reference != null &&
-      await _credentials.read(reference) != null};
+    var saved = false;
+    if (reference != null) {
+      try { saved = await _credentials.read(reference) != null; } catch (_) {
+        // A credential backend outage must not hide the local report archive
+        // or prevent the Manager from disabling/reconfiguring delivery.
+      }
+    }
+    return {...policy, 'gmail_password_saved': saved};
   }
 
   Future<Map<String,dynamic>> _settings() async {
@@ -110,7 +117,7 @@ class ReportDeliveryService {
       } else {
         credentialId = previous['gmail_sender'] == sender
             ? previous['gmail_credential_id'] as String? : null;
-        if (credentialId == null || await _credentials.read(credentialId) == null) {
+        if (autoSend && (credentialId == null || await _credentials.read(credentialId) == null)) {
           throw ArgumentError('Enter a Google app password for this Gmail address.');
         }
       }
@@ -146,6 +153,22 @@ class ReportDeliveryService {
       'staff_id':managerStaffId, 'action':'REMOVE_GMAIL_PASSWORD',
       'details_json':'{}', 'created_at':DateTime.now().toUtc().toIso8601String(),
     });
+  }
+
+  /// Checks authentication only; it sends no report and creates no outbox job.
+  Future<void> verifyGmailSignIn({required int managerStaffId}) async {
+    await _manager(managerStaffId);
+    final policy = await _settings();
+    final sender = policy['gmail_sender'] as String?;
+    final reference = policy['gmail_credential_id'] as String?;
+    if (policy['email_provider'] != 'GMAIL' || sender == null || reference == null) {
+      throw const ReportDeliveryFailure('Save Gmail settings and an app password first.');
+    }
+    String? password;
+    try { password = await _credentials.read(reference); }
+    catch (_) { throw const ReportDeliveryFailure('Unable to unlock the saved Gmail app password on this device.'); }
+    if (password == null) throw const ReportDeliveryFailure('Save the Gmail app password on this device first.');
+    await _gmail.verify(sender: sender, password: password);
   }
 
   Future<String> _deliver(Map<String, dynamic> job) async {

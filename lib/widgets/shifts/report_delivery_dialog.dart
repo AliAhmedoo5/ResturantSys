@@ -80,6 +80,16 @@ class _ReportDeliveryDialogState extends State<ReportDeliveryDialog> {
       if(mounted)setState((){_busy=false;_message='Unable to remove the saved Gmail password.';});
     }
   }
+  Future<void> _verifyGmail() async {
+    setState(()=>_busy=true);
+    try {
+      await widget.service.verifyGmailSignIn(managerStaffId:widget.managerStaffId);
+      if(mounted)setState(()=>_message='Gmail sign-in verified. No email was sent.');
+    } catch (error) {
+      if(mounted)setState(()=>_message=error is ReportDeliveryFailure
+          ? error.message : 'Unable to verify Gmail sign-in.');
+    } finally { if(mounted)setState(()=>_busy=false); }
+  }
   Future<void> _retry(Map<String,dynamic> job) async {
     final reason=TextEditingController();
     final confirmed=await showDialog<bool>(context:context,builder:(context)=>AlertDialog(
@@ -132,6 +142,8 @@ class _ReportDeliveryDialogState extends State<ReportDeliveryDialog> {
                     :'Enable Google 2-Step Verification, then create a 16-character app password.')),
             const Padding(padding:EdgeInsets.symmetric(vertical:8),child:Text(
               'Use an app password from myaccount.google.com/apppasswords. Your normal Google password will not work. The password stays in protected storage on this device.')),
+            if(_passwordSaved) Align(alignment:Alignment.centerLeft,
+              child:OutlinedButton(onPressed:_verifyGmail,child:const Text('Check saved Gmail sign-in (no email sent)'))),
             if(_passwordSaved) Align(alignment:Alignment.centerLeft,
               child:TextButton(onPressed:_forgetPassword,child:const Text('Remove saved Gmail password'))),
           ],
