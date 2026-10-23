@@ -20,6 +20,8 @@ import 'token_queue_tray.dart';
 import '../shifts/z_report_dialog.dart';
 import '../../core/shifts/z_report.dart';
 import '../../core/shifts/excel_reporting_engine.dart';
+import '../../core/shifts/report_delivery_service.dart';
+import '../shifts/report_delivery_dialog.dart';
 import '../../core/database/database_backup_service.dart';
 import '../../core/database/pos_database_constants.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -558,7 +560,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 480),
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(WarmCounterSpacing.space24),
+                  padding: const EdgeInsets.all(WarmCounterSpacing.space16),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -672,7 +674,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: WarmCounterColors.lightPrimaryAction,
-                            foregroundColor: Colors.white,
+                            foregroundColor: WarmCounterColors.lightTextOnPrimary,
                           ),
                           child: const Text('Resolve Discrepancy'),
                         ),
@@ -699,7 +701,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
 
     return Container(
       color: WarmCounterColors.lightPageBackground,
-      padding: const EdgeInsets.all(WarmCounterSpacing.space24),
+      padding: const EdgeInsets.all(WarmCounterSpacing.space16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -788,68 +790,38 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
 
   Widget _buildTopTabBar(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(6),
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: WarmCounterColors.lightCardBackground,
         borderRadius: WarmCounterSpacing.panelBorderRadius,
         border: Border.all(color: WarmCounterColors.lightBorder),
       ),
-      child: Wrap(
-        spacing: 4,
-        runSpacing: 4,
-        children: SupervisorPortalTab.values.map((tab) {
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(children: SupervisorPortalTab.values.map((tab) {
           final isSelected = _activeTab == tab;
-          return SizedBox(
-            width: 185,
-            child: InkWell(
-              key: ValueKey('portal_tab_${tab.name}'),
-              onTap: () => setState(() => _activeTab = tab),
-              borderRadius: WarmCounterSpacing.controlBorderRadius,
-              child: Container(
-                constraints: const BoxConstraints(minHeight: 46),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? WarmCounterColors.lightActiveNavHighlight
-                      : Colors.transparent,
-                  borderRadius: WarmCounterSpacing.controlBorderRadius,
-                  border: isSelected
-                      ? Border.all(color: WarmCounterColors.lightPrimaryAction)
-                      : null,
+          return Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: Semantics(
+              selected: isSelected,
+              child: TextButton(
+                key: ValueKey('portal_tab_${tab.name}'),
+                onPressed: () => setState(() => _activeTab = tab),
+                style: TextButton.styleFrom(
+                  backgroundColor: isSelected ? WarmCounterColors.lightActiveNavHighlight : null,
+                  foregroundColor: isSelected ? WarmCounterColors.lightPrimaryAction : WarmCounterColors.lightSecondaryText,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  textStyle: TextStyle(fontFamily: WarmCounterTypography.fontFamily, fontFamilyFallback: WarmCounterTypography.fontFallbacks, fontSize: 13, fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500),
+                  shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
                 ),
-                child: Wrap(
-        spacing: 4,
-        runSpacing: 4,
-                  alignment: WrapAlignment.center,
-                  children: [
-                    Icon(
-                      tab.icon,
-                      size: 20,
-                      color: isSelected
-                          ? WarmCounterColors.lightPrimaryAction
-                          : WarmCounterColors.lightSecondaryText,
-                    ),
-                    const SizedBox(width: WarmCounterSpacing.space8),
-                    Text(
-                      tab.label,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                        color: isSelected
-                            ? WarmCounterColors.lightPrimaryAction
-                            : WarmCounterColors.lightPrimaryText,
-                      ),
-                    ),
-                  ],
-                ),
+                child: Text(tab.label),
               ),
             ),
           );
-        }).toList(),
+        }).toList()),
       ),
     );
   }
-
   Widget _buildTabContent(BuildContext context) {
     switch (_activeTab) {
       case SupervisorPortalTab.deliveryAreas:
@@ -893,7 +865,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
       children: [
         // Left Column: Departments Directory
         SizedBox(
-          width: 320,
+          width: 230,
           child: Material(
             color: WarmCounterColors.lightCardBackground,
             borderRadius: WarmCounterSpacing.panelBorderRadius,
@@ -909,13 +881,15 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
+                    Expanded(child: Text(
                       'Departments (${_departments.length})',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: WarmCounterTypography.pageHeading.copyWith(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
                       ),
-                    ),
+                    )),
                     IconButton(
                       key: const ValueKey('add_department_button'),
                       icon: const Icon(Icons.add_circle_outline_rounded, color: WarmCounterColors.lightPrimaryAction),
@@ -979,7 +953,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
+                    Expanded(child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
@@ -996,7 +970,8 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                           ),
                         ),
                       ],
-                    ),
+                    )),
+                    const SizedBox(width: 12),
                     ElevatedButton.icon(
                       key: const ValueKey('register_staff_button'),
                       onPressed: _openRegisterStaffDialog,
@@ -1004,7 +979,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                       label: const Text('Register Staff'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: WarmCounterColors.lightPrimaryAction,
-                        foregroundColor: Colors.white,
+                        foregroundColor: WarmCounterColors.lightTextOnPrimary,
                         shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
                       ),
                     ),
@@ -1015,6 +990,8 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                 // Staff Table
                 Expanded(
                   child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: SingleChildScrollView(
                     child: DataTable(
                       headingRowColor: WidgetStateProperty.all(WarmCounterColors.lightPageBackground),
                       columns: const [
@@ -1089,7 +1066,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                           ],
                         );
                       }).toList(),
-                    ),
+                    )),
                   ),
                 ),
               ],
@@ -1279,7 +1256,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                         onPressed: _isSavingThreshold ? null : _handleSaveDiscrepancyThreshold,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: WarmCounterColors.lightPrimaryAction,
-                          foregroundColor: Colors.white,
+                          foregroundColor: WarmCounterColors.lightTextOnPrimary,
                           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                           shape: const RoundedRectangleBorder(
                             borderRadius: WarmCounterSpacing.controlBorderRadius,
@@ -1466,7 +1443,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                                       onPressed: () => _openResolveDiscrepancyDialog(shift),
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: WarmCounterColors.lightPrimaryAction,
-                                        foregroundColor: Colors.white,
+                                        foregroundColor: WarmCounterColors.lightTextOnPrimary,
                                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                       ),
                                       child: const Text('Resolve', style: TextStyle(fontSize: 12)),
@@ -1515,6 +1492,12 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  if (widget.shiftController != null && widget.currentStaff != null)
+                    Align(alignment:Alignment.centerRight,child:TextButton.icon(
+                      icon:const Icon(Icons.outgoing_mail),label:const Text('Report delivery & archive'),
+                      onPressed:()=>showDialog<void>(context:context,builder:(_)=>ReportDeliveryDialog(
+                        service:ReportDeliveryService(database:widget.shiftController!.database),managerStaffId:widget.currentStaff!.id)),
+                    )),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -1628,7 +1611,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                                     const Text('Net Drawer Discrepancy', style: TextStyle(color: WarmCounterColors.lightSecondaryText, fontSize: 12)),
                                     const SizedBox(height: 2),
                                     Text(
-                                      'PKR ${_currencyFormat.format(_activeZReport!.netCashVariance)}',
+                                      _activeZReport!.hasUncountedShifts?'Missing blind count':'PKR ${_currencyFormat.format(_activeZReport!.netCashVariance)}',
                                       style: TextStyle(
                                         fontWeight: FontWeight.w700,
                                         fontSize: 14,
@@ -1658,7 +1641,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                           label: const Text('View Full Z-Report & Summary'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: WarmCounterColors.lightPrimaryAction,
-                            foregroundColor: Colors.white,
+                            foregroundColor: WarmCounterColors.lightTextOnPrimary,
                             minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
                           ),
                           onPressed: () async {
@@ -1700,7 +1683,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                                       messenger.showSnackBar(
                                         SnackBar(
                                           content: Text(
-                                            'Business Day #${dayId ?? ""} finalized with Z-Report. Backup archived and tokens reset to #01.',
+                                            'Business Day #${dayId ?? ""} closed. PDF/Excel export and delivery status are available in Report delivery & archive. Next day tokens start at #01.',
                                           ),
                                         ),
                                       );

@@ -800,12 +800,12 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
               indicatorColor: WarmCounterColors.lightPrimaryAction,
               indicatorWeight: 3.0,
               tabs: [
-                Tab(key: ValueKey('tab_categories'), icon: Icon(Icons.category_outlined), text: 'Categories'),
-                Tab(key: ValueKey('tab_menu_items'), icon: Icon(Icons.restaurant_menu_outlined), text: 'Menu Items & BOM'),
-                Tab(key: ValueKey('tab_raw_ingredients'), icon: Icon(Icons.inventory_2_outlined), text: 'Raw Ingredients'),
-                Tab(key: ValueKey('tab_modifiers'), icon: Icon(Icons.tune_outlined), text: 'Modifiers'),
-                Tab(key: ValueKey('tab_discounts'), icon: Icon(Icons.local_offer_outlined), text: 'Pre-Approved Discounts'),
-                Tab(key: ValueKey('tab_settings'), icon: Icon(Icons.settings_outlined), text: 'Settings & Toggles'),
+                Tab(key: ValueKey('tab_categories'), text: 'Categories'),
+                Tab(key: ValueKey('tab_menu_items'), text: 'Menu Items & BOM'),
+                Tab(key: ValueKey('tab_raw_ingredients'), text: 'Raw Ingredients'),
+                Tab(key: ValueKey('tab_modifiers'), text: 'Modifiers'),
+                Tab(key: ValueKey('tab_discounts'), text: 'Pre-Approved Discounts'),
+                Tab(key: ValueKey('tab_settings'), text: 'Settings & Toggles'),
               ],
             ),
           ),
@@ -828,7 +828,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
 
   Widget _buildSettingsTab() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(WarmCounterSpacing.space24),
+      padding: const EdgeInsets.all(WarmCounterSpacing.space16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -896,7 +896,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
   // Tab 1: Categories
   Widget _buildCategoriesTab() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(WarmCounterSpacing.space24),
+      padding: const EdgeInsets.all(WarmCounterSpacing.space16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -923,7 +923,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                 onPressed: _showAddCategoryDialog,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: WarmCounterColors.lightPrimaryAction,
-                  foregroundColor: Colors.white,
+                  foregroundColor: WarmCounterColors.lightTextOnPrimary,
                 ),
               ),
             ],
@@ -997,7 +997,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
   // Tab 2: Menu Items & BOM
   Widget _buildMenuItemsTab() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(WarmCounterSpacing.space24),
+      padding: const EdgeInsets.all(WarmCounterSpacing.space16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1023,7 +1023,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                 onPressed: _showAddMenuItemDialog,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: WarmCounterColors.lightPrimaryAction,
-                  foregroundColor: Colors.white,
+                  foregroundColor: WarmCounterColors.lightTextOnPrimary,
                 ),
               ),
             ],
@@ -1206,7 +1206,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
   // Tab 3: Raw Ingredients
   Widget _buildRawIngredientsTab() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(WarmCounterSpacing.space24),
+      padding: const EdgeInsets.all(WarmCounterSpacing.space16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1256,7 +1256,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                     onPressed: _showAddRawIngredientDialog,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: WarmCounterColors.lightPrimaryAction,
-                      foregroundColor: Colors.white,
+                      foregroundColor: WarmCounterColors.lightTextOnPrimary,
                     ),
                   ),
                 ],
@@ -1402,7 +1402,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
   // Tab 4: Modifiers
   Widget _buildModifiersTab() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(WarmCounterSpacing.space24),
+      padding: const EdgeInsets.all(WarmCounterSpacing.space16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1429,7 +1429,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                 onPressed: _showAddModifierDialog,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: WarmCounterColors.lightPrimaryAction,
-                  foregroundColor: Colors.white,
+                  foregroundColor: WarmCounterColors.lightTextOnPrimary,
                 ),
               ),
             ],
@@ -1538,7 +1538,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
   // Tab 5: Pre-Approved Discounts
   Widget _buildDiscountsTab() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(WarmCounterSpacing.space24),
+      padding: const EdgeInsets.all(WarmCounterSpacing.space16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1565,7 +1565,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                 onPressed: _showAddDiscountDialog,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: WarmCounterColors.lightPrimaryAction,
-                  foregroundColor: Colors.white,
+                  foregroundColor: WarmCounterColors.lightTextOnPrimary,
                 ),
               ),
             ],

@@ -234,7 +234,7 @@ class _DiscrepancyReviewDialogState extends State<DiscrepancyReviewDialog> {
                                       onPressed: _isSubmitting ? null : () => _submitResolution(shift.id),
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: WarmCounterColors.lightPrimaryAction,
-                                        foregroundColor: Colors.white,
+                                        foregroundColor: WarmCounterColors.lightTextOnPrimary,
                                         minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
                                       ),
                                       child: Text(_isSubmitting ? 'Resolving...' : 'Confirm Resolution'),

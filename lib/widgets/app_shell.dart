@@ -10,6 +10,7 @@ import '../core/auth/auth_service.dart';
 import '../core/procurement/procurement_and_wastage_controller.dart';
 import '../core/khata/vendor_khata_controller.dart';
 import 'app_header.dart';
+import 'app_sidebar.dart';
 import 'catalog/supervisor_catalog_workspace.dart';
 import 'khata/vendor_khata_workspace.dart';
 import 'pin_lock_screen.dart';
@@ -137,7 +138,7 @@ class _AppShellState extends State<AppShell> {
           return Scaffold(
             backgroundColor: WarmCounterColors.lightPageBackground,
             appBar: const PreferredSize(
-              preferredSize: Size.fromHeight(64),
+              preferredSize: Size.fromHeight(56),
               child: AppHeader(
                 activeStaff: null,
                 onLock: null,
@@ -161,19 +162,28 @@ class _AppShellState extends State<AppShell> {
 
         return Scaffold(
           backgroundColor: WarmCounterColors.lightPageBackground,
-          appBar: PreferredSize(
-            preferredSize: const Size.fromHeight(64),
-            child: AppHeader(
-              activeStaff: staff,
-              onLock: () => widget.session.lock(),
-              selectedWorkspace: _selectedWorkspace,
-              onWorkspaceSelected: (AppWorkspaceTab tab) => setState(() => _selectedWorkspace = tab),
-              reprintTrayController: widget.reprintTrayController,
-              orderController: widget.orderController,
-              authService: widget.authService,
-            ),
-          ),
-          body: widget.child ?? _buildWorkspaceBody(context, staff),
+          body: LayoutBuilder(builder: (context, constraints) {
+            return Row(children: [
+              AppSidebar(
+                staff: staff,
+                selected: _selectedWorkspace,
+                compact: constraints.maxWidth < 1180,
+                onSelected: (tab) => setState(() => _selectedWorkspace = tab),
+              ),
+              Expanded(child: Column(children: [
+                AppHeader(
+                  activeStaff: staff,
+                  onLock: () => widget.session.lock(),
+                  selectedWorkspace: _selectedWorkspace,
+                  showBrand: false,
+                  reprintTrayController: widget.reprintTrayController,
+                  orderController: widget.orderController,
+                  authService: widget.authService,
+                ),
+                Expanded(child: widget.child ?? _buildWorkspaceBody(context, staff)),
+              ])),
+            ]);
+          }),
         );
       },
     );

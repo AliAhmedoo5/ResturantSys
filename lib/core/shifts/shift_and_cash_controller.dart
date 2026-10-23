@@ -1,6 +1,8 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:resturant_sys/core/database/pos_database_constants.dart';
 import 'business_day.dart';
+import 'report_export_service.dart';
+import 'report_delivery_service.dart';
 import 'shift.dart';
 import 'cash_movement.dart';
 import 'x_report.dart';
@@ -121,95 +123,37 @@ class ShiftAndCashController {
     DateTime? closedAt,
     bool autoLockActiveShifts = false,
   }) async {
-    // Only Managers can close Business Days (ADR-0009)
-    final staffRows = await database.query(
-      PosDatabaseConstants.tableStaff,
-      where: 'id = ?',
-      whereArgs: [closedByStaffId],
-      limit: 1,
-    );
-    if (staffRows.isNotEmpty) {
-      final role = StaffRole.fromCode(staffRows.first['role'] as String);
-      if (role == StaffRole.cashier) {
-        throw StateError('Authorization error: Business Day must be closed by a Manager.');
+    return database.transaction((txn) async {
+      final staff = await txn.query('staff', where: 'id = ? AND is_active = 1', whereArgs: [closedByStaffId]);
+      if (staff.isEmpty || StaffRole.fromCode(staff.first['role'] as String) != StaffRole.manager) {
+        throw StateError('Authorization error: Business Day must be closed by an active Manager.');
       }
-    }
-
-    final active = await getActiveBusinessDay();
-    if (active == null) {
-      throw StateError('No active Business Day to close.');
-    }
-
-    final activeShift = await getActiveShift();
-    if (activeShift != null) {
-      if (!autoLockActiveShifts) {
-        throw StateError(
-          'Cannot close Business Day while shift #${activeShift.id} is still open. Complete shift handover first.',
-        );
+      final days = await txn.query('business_days', where: "status = 'OPEN'", orderBy: 'id DESC', limit: 1);
+      if (days.isEmpty) throw StateError('No active Business Day to close.');
+      final day = BusinessDay.fromMap(days.first);
+      final shifts = await txn.query('shifts', where: "business_day_id = ? AND status = 'OPEN'", whereArgs: [day.id]);
+      if (shifts.isNotEmpty && !autoLockActiveShifts) {
+        throw StateError('Cannot close Business Day while a shift is still open. Complete shift handover first.');
       }
-
-      // Auto-lock all open shifts under this business day
-      final openShifts = await database.query(
-        PosDatabaseConstants.tableShifts,
-        where: 'business_day_id = ? AND status = ?',
-        whereArgs: [active.id, ShiftStatus.open.dbValue],
-      );
-      final effectiveClosedAt = closedAt ?? DateTime.now();
-      final formattedClosedAt = _formatTimestamp(effectiveClosedAt);
-
-      for (final row in openShifts) {
-        final shift = Shift.fromMap(row);
-        final movements = await getCashMovements(shift.id);
-        double totalPayIn = 0.0;
-        double totalPayOut = 0.0;
-        for (final m in movements) {
-          if (m.isPayIn) {
-            totalPayIn += m.amount;
-          } else {
-            totalPayOut += m.amount;
-          }
-        }
-        final cashSales = await calculateCashSales(shift.id);
-        final expectedCash = shift.openingFloat + cashSales + totalPayIn - totalPayOut;
-
-        await database.update(
-          PosDatabaseConstants.tableShifts,
-          {
-            'closed_at': formattedClosedAt,
-            'counted_cash': shift.countedCash ?? expectedCash,
-            'expected_cash': expectedCash,
-            'discrepancy': (shift.countedCash ?? expectedCash) - expectedCash,
-            'discrepancy_status': DiscrepancyStatus.clean.dbValue,
-            'status': ShiftStatus.closed.dbValue,
-          },
-          where: 'id = ?',
-          whereArgs: [shift.id],
-        );
+      final timestamp = _formatTimestamp(closedAt ?? DateTime.now());
+      for (final shift in shifts) {
+        final id = shift['id'] as int;
+        final cashReceiptsPaisa = await _drawerCashReceiptsPaisa(txn, shiftId: id);
+        final movements = await txn.rawQuery("SELECT COALESCE(SUM(CASE WHEN type='PAY_IN' THEN amount ELSE -amount END),0) AS net FROM cash_movements WHERE shift_id=?", [id]);
+        final expected = (shift['opening_float'] as num).toDouble() + cashReceiptsPaisa / 100 + (movements.first['net'] as num).toDouble();
+        final counted = (shift['counted_cash'] as num?)?.toDouble();
+        await txn.update('shifts', {
+          'status': 'CLOSED', 'closed_at': timestamp, 'expected_cash': expected,
+          'counted_cash': counted, 'discrepancy': counted == null ? null : counted-expected,
+          'discrepancy_status': counted == null ? 'FLAGGED' : shift['discrepancy_status'],
+        }, where: 'id=?', whereArgs: [id]);
       }
-    }
-
-    final effectiveClosedAt = closedAt ?? DateTime.now();
-    final formattedClosedAt = _formatTimestamp(effectiveClosedAt);
-
-    await database.update(
-      PosDatabaseConstants.tableBusinessDays,
-      {
-        'closed_at': formattedClosedAt,
-        'closed_by_staff_id': closedByStaffId,
-        'status': BusinessDayStatus.closed.dbValue,
-      },
-      where: 'id = ?',
-      whereArgs: [active.id],
-    );
-
-    return BusinessDay(
-      id: active.id,
-      openedAt: active.openedAt,
-      closedAt: effectiveClosedAt,
-      openedByStaffId: active.openedByStaffId,
-      closedByStaffId: closedByStaffId,
-      status: BusinessDayStatus.closed,
-    );
+      await txn.update('business_days', {
+        'status': 'CLOSED', 'closed_at': timestamp, 'closed_by_staff_id': closedByStaffId,
+      }, where: "id=? AND status='OPEN'", whereArgs: [day.id]);
+      await ReportExportService.capture(txn, day.id, closedByStaffId);
+      return BusinessDay.fromMap({...days.first, 'status':'CLOSED', 'closed_at':timestamp, 'closed_by_staff_id':closedByStaffId});
+    });
   }
 
   // ===========================================================================
@@ -443,26 +387,31 @@ class ShiftAndCashController {
     );
   }
 
-  /// Computes settled cash order totals for a shift.
-  Future<double> calculateCashSales(int shiftId) async {
-    try {
-      final rows = await database.rawQuery('''
-        SELECT COALESCE(SUM(op.amount_tendered - op.change_returned), 0.0) as cash_sales
-        FROM ${PosDatabaseConstants.tableOrderPayments} op
-        JOIN ${PosDatabaseConstants.tableOrders} o ON op.order_id = o.id
-        WHERE o.shift_id = ? 
-          AND o.payment_status IN ('SETTLED', 'REFUND_PENDING', 'CANCELLED', 'REFUNDED') 
-          AND op.payment_method = 'CASH'
-          AND op.amount_tendered > 0;
-      ''', [shiftId]);
+  /// Physical cash receipts before refunds, which are posted separately as
+  /// drawer PAY_OUT movements. Net tender collection must not be used here.
+  Future<int> _drawerCashReceiptsPaisa(
+    DatabaseExecutor executor, {
+    int? shiftId,
+    int? businessDayId,
+  }) async {
+    final scope = shiftId != null ? 'o.shift_id' : 'o.business_day_id';
+    final rows = await executor.rawQuery("""
+      SELECT COALESCE(SUM(
+        COALESCE(op.amount_tendered_paisa, CAST(ROUND(op.amount_tendered * 100) AS INTEGER))
+        - COALESCE(op.change_returned_paisa, CAST(ROUND(op.change_returned * 100) AS INTEGER))
+      ), 0) AS receipt_paisa
+      FROM order_payments op JOIN orders o ON o.id = op.order_id
+      WHERE $scope = ? AND op.payment_method = 'CASH'
+        AND COALESCE(op.amount_tendered_paisa, CAST(ROUND(op.amount_tendered * 100) AS INTEGER)) > 0
+        AND o.payment_status IN ('SETTLED', 'REFUND_PENDING', 'CANCELLED', 'REFUNDED')
+    """, [shiftId ?? businessDayId]);
+    return (rows.single['receipt_paisa'] as num).toInt();
+  }
 
-      if (rows.isNotEmpty) {
-        return (rows.first['cash_sales'] as num?)?.toDouble() ?? 0.0;
-      }
-    } catch (_) {
-      // Graceful fallback if orders table is empty or being initialized
-    }
-    return 0.0;
+  /// Returns physical cash receipts for drawer reconciliation. Cash refund
+  /// payment lines are excluded because their PAY_OUT already reduces the till.
+  Future<double> calculateCashSales(int shiftId) async {
+    return await _drawerCashReceiptsPaisa(database, shiftId: shiftId) / 100;
   }
 
   /// Retrieves a shift by [id].
@@ -800,7 +749,7 @@ class ShiftAndCashController {
         COALESCE(SUM(tax_amount), 0.0) as total_tax,
         COALESCE(SUM(grand_total), 0.0) as net_sales
       FROM ${PosDatabaseConstants.tableOrders}
-      WHERE business_day_id = ? AND payment_status = 'SETTLED';
+      WHERE business_day_id = ? AND payment_status NOT IN ('VOIDED','CANCELLED','REFUNDED');
     ''', [businessDayId]);
 
     if (salesRows.isNotEmpty) {
@@ -812,33 +761,21 @@ class ShiftAndCashController {
       netSales = (r['net_sales'] as num?)?.toDouble() ?? 0.0;
     }
 
-    // 3. Payment Tenders breakdown
-    double cashSales = 0.0;
-    double cardSales = 0.0;
-    double raastSales = 0.0;
-
-    final tenderRows = await database.rawQuery('''
-      SELECT op.payment_method, 
-             COALESCE(SUM(op.amount_tendered), 0.0) as total_tendered,
-             COALESCE(SUM(op.change_returned), 0.0) as total_change
-      FROM ${PosDatabaseConstants.tableOrderPayments} op
-      JOIN ${PosDatabaseConstants.tableOrders} o ON op.order_id = o.id
-      WHERE o.business_day_id = ? AND o.payment_status = 'SETTLED'
-      GROUP BY op.payment_method;
-    ''', [businessDayId]);
-
-    for (final row in tenderRows) {
-      final method = row['payment_method'] as String;
-      final tendered = (row['total_tendered'] as num).toDouble();
-      final change = (row['total_change'] as num).toDouble();
-      if (method == 'CASH') {
-        cashSales += (tendered - change);
-      } else if (method == 'CARD') {
-        cardSales += tendered;
-      } else if (method == 'RAAST') {
-        raastSales += tendered;
-      }
-    }
+    // Collected tender balances include funds retained pending explicit refund.
+    final tenderRows = await database.rawQuery("""
+      SELECT op.payment_method,
+        SUM(COALESCE(op.amount_tendered_paisa,CAST(ROUND(op.amount_tendered*100) AS INTEGER))
+        -COALESCE(op.change_returned_paisa,CAST(ROUND(op.change_returned*100) AS INTEGER))) AS paisa
+      FROM order_payments op JOIN orders o ON o.id=op.order_id
+      WHERE o.business_day_id=? AND o.payment_status IN ('SETTLED','REFUND_PENDING','CANCELLED','REFUNDED')
+      GROUP BY op.payment_method
+    """,[businessDayId]);
+    final tenderSalesPaisa = {for(final row in tenderRows) row['payment_method'] as String:(row['paisa'] as num).toInt()};
+    final cashSales=(tenderSalesPaisa['CASH']??0)/100;
+    final cardSales=(tenderSalesPaisa['CARD']??0)/100;
+    final raastSales=(tenderSalesPaisa['RAAST']??0)/100;
+    final dueRows=await database.rawQuery("SELECT COALESCE(SUM(CAST(ROUND(grand_total*100) AS INTEGER)),0) AS paisa FROM orders WHERE business_day_id=? AND payment_status='COLLECTION_DUE'",[businessDayId]);
+    final collectionDuePaisa=(dueRows.single['paisa'] as num).toInt();
 
     // 4. Voids
     int totalVoidCount = 0;
@@ -875,7 +812,10 @@ class ShiftAndCashController {
       }
     }
 
-    final totalExpectedDrawerCash = totalOpeningFloat + cashSales + totalPayIn - totalPayOut;
+    final drawerCashReceiptsPaisa = await _drawerCashReceiptsPaisa(
+      database, businessDayId: businessDayId,
+    );
+    final totalExpectedDrawerCash = totalOpeningFloat + drawerCashReceiptsPaisa / 100 + totalPayIn - totalPayOut;
     final netCashVariance = totalCountedCash - totalExpectedDrawerCash;
 
     // 6. Kitchen Wastage, Mandi Procurements, and Vendor Khata in day timeframe
@@ -946,6 +886,9 @@ class ShiftAndCashController {
       cashSales: cashSales,
       cardSales: cardSales,
       raastSales: raastSales,
+      drawerCashReceiptsPaisa: drawerCashReceiptsPaisa,
+      tenderSalesPaisa:tenderSalesPaisa,
+      collectionDuePaisa:collectionDuePaisa,
       totalOpeningFloat: totalOpeningFloat,
       totalPayIn: totalPayIn,
       totalPayOut: totalPayOut,
@@ -978,6 +921,14 @@ class ShiftAndCashController {
       closedAt: closedAt,
       autoLockActiveShifts: true,
     );
+
+    // Filesystem failures are recoverable from the committed snapshot on restart.
+    try {
+      await ReportExportService(database: database).exportPending();
+      await ReportDeliveryService(database: database).enqueueReadyReports();
+    } catch (_) {
+      // Committed report snapshots are retried by the startup/background worker.
+    }
 
     // Automated dual-target database backup on every Z-Report closure
     try {

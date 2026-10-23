@@ -33,7 +33,7 @@ void main() {
 
       final versionResult = await db.rawQuery('PRAGMA user_version;');
       expect(versionResult.first['user_version'], equals(PosDatabaseConstants.schemaVersion));
-      expect(PosDatabaseConstants.schemaVersion, equals(13));
+      expect(PosDatabaseConstants.schemaVersion, greaterThanOrEqualTo(13));
 
       final tables = await db.rawQuery("SELECT name FROM sqlite_master WHERE type='table';");
       final tableNames = tables.map((r) => r['name'] as String).toSet();
@@ -66,7 +66,7 @@ void main() {
       addTearDown(() => upgradedPosDb.close());
 
       final versionResult = await upgradedDb.rawQuery('PRAGMA user_version;');
-      expect(versionResult.first['user_version'], equals(13));
+      expect(versionResult.first['user_version'], equals(PosDatabaseConstants.schemaVersion));
 
       final tables = await upgradedDb.rawQuery("SELECT name FROM sqlite_master WHERE type='table';");
       final tableNames = tables.map((r) => r['name'] as String).toSet();

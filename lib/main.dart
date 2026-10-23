@@ -5,6 +5,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'core/database/pos_database.dart';
 import 'core/auth/auth_service.dart';
 import 'core/shifts/shift_and_cash_controller.dart';
+import 'core/shifts/report_delivery_service.dart';
 import 'core/catalog/catalog_and_recipe_controller.dart';
 import 'core/orders/order_and_checkout_controller.dart';
 import 'core/procurement/procurement_and_wastage_controller.dart';
@@ -26,6 +27,7 @@ void main() async {
 
   final posDatabase = PosDatabase(seedDefaultStaff: false);
   final database = await posDatabase.initialize();
+  ReportDeliveryService(database:database).start();
   final authService = AuthService(database: database);
   final shiftController = ShiftAndCashController(database: database);
   final catalogController = CatalogAndRecipeController(database: database);

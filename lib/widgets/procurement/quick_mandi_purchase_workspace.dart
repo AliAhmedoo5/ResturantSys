@@ -223,7 +223,7 @@ class _QuickMandiPurchaseWorkspaceState extends State<QuickMandiPurchaseWorkspac
         return Scaffold(
           backgroundColor: WarmCounterColors.lightPageBackground,
           body: SingleChildScrollView(
-            padding: const EdgeInsets.all(WarmCounterSpacing.space24),
+            padding: const EdgeInsets.all(WarmCounterSpacing.space16),
             child: isWide
                 ? Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -261,7 +261,7 @@ class _QuickMandiPurchaseWorkspaceState extends State<QuickMandiPurchaseWorkspac
       shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.panelBorderRadius),
       elevation: 0,
       child: Padding(
-        padding: const EdgeInsets.all(WarmCounterSpacing.space24),
+        padding: const EdgeInsets.all(WarmCounterSpacing.space16),
         child: Form(
           key: _formKey,
           child: Column(
@@ -758,7 +758,7 @@ class _QuickMandiPurchaseWorkspaceState extends State<QuickMandiPurchaseWorkspac
                 const SizedBox(height: WarmCounterSpacing.space12),
                 if (_recentProcurements.isEmpty)
                   const Padding(
-                    padding: EdgeInsets.all(WarmCounterSpacing.space24),
+                    padding: EdgeInsets.all(WarmCounterSpacing.space16),
                     child: Center(
                       child: Text(
                         'No wholesale purchases recorded yet.',

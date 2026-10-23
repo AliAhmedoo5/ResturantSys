@@ -25,48 +25,48 @@ abstract final class WarmCounterTypography {
   // Core Text Styles
   // ---------------------------------------------------------------------------
 
-  /// Page headings: 24px, semibold (600).
+  /// Page headings: 22px, semibold (600).
   static const TextStyle pageHeading = TextStyle(
     fontFamily: fontFamily,
     fontFamilyFallback: fontFallbacks,
-    fontSize: 24.0,
+    fontSize: 22.0,
     fontWeight: FontWeight.w600,
     height: 1.25,
     letterSpacing: -0.3,
   );
 
-  /// Body text and input field content: 16px, regular (400).
+  /// Body text and input field content: 14px, regular (400).
   static const TextStyle body = TextStyle(
     fontFamily: fontFamily,
     fontFamilyFallback: fontFallbacks,
-    fontSize: 16.0,
+    fontSize: 14.0,
     fontWeight: FontWeight.w400,
     height: 1.4,
   );
 
-  /// Body medium (buttons, active list items): 16px, medium (500).
+  /// Body medium (buttons, active list items): 14px, medium (500).
   static const TextStyle bodyMedium = TextStyle(
     fontFamily: fontFamily,
     fontFamilyFallback: fontFallbacks,
-    fontSize: 16.0,
+    fontSize: 14.0,
     fontWeight: FontWeight.w500,
     height: 1.4,
   );
 
-  /// Secondary labels and metadata: 14px, regular (400).
+  /// Secondary labels and metadata: 12px, regular (400).
   static const TextStyle secondaryLabel = TextStyle(
     fontFamily: fontFamily,
     fontFamilyFallback: fontFallbacks,
-    fontSize: 14.0,
+    fontSize: 12.0,
     fontWeight: FontWeight.w400,
     height: 1.4,
   );
 
-  /// Secondary label medium (table headers, field captions): 14px, medium (500).
+  /// Secondary label medium (table headers, field captions): 12px, medium (500).
   static const TextStyle secondaryLabelMedium = TextStyle(
     fontFamily: fontFamily,
     fontFamilyFallback: fontFallbacks,
-    fontSize: 14.0,
+    fontSize: 12.0,
     fontWeight: FontWeight.w500,
     height: 1.4,
   );
@@ -93,11 +93,11 @@ abstract final class WarmCounterTypography {
     letterSpacing: -0.5,
   );
 
-  /// Table amount cell: 16px, medium (500) with tabular numerals for right-aligned columns.
+  /// Table amount cell: 14px, medium (500) with tabular numerals for right-aligned columns.
   static const TextStyle tableAmount = TextStyle(
     fontFamily: fontFamily,
     fontFamilyFallback: fontFallbacks,
-    fontSize: 16.0,
+    fontSize: 14.0,
     fontWeight: FontWeight.w500,
     height: 1.4,
     fontFeatures: tabularFigures,
