@@ -788,13 +788,13 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
+    // Keep the controller mounted while persisted catalog changes reload.
+    // Removing it for the loading indicator resets the selected tab to zero.
     return DefaultTabController(
       length: 7,
-      child: Column(
+      child: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
         children: [
           // Sub-navigation TabBar
           Container(

@@ -732,6 +732,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
           cashierId: widget.currentStaff.id,
           shiftId: widget.shiftId,
           orderController: widget.orderController!,
+          catalogController: widget.catalogController,
           onRevisionCompleted: () {
             _refreshToken();
             widget.onOrderCompleted?.call();
