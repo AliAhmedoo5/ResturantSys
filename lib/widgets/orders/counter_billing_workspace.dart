@@ -20,7 +20,6 @@ import '../../core/orders/dining_type.dart';
 import '../../core/orders/order.dart';
 import '../../core/orders/order_and_checkout_controller.dart';
 import '../../core/orders/payment_method.dart';
-import '../../core/hardware/in_memory_hardware_adapter.dart';
 import '../../core/hardware/reprint_tray_controller.dart';
 import '../../core/theme/theme.dart';
 import 'cashier_order_revision_dialog.dart';
@@ -733,6 +732,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
           cashierId: widget.currentStaff.id,
           shiftId: widget.shiftId,
           orderController: widget.orderController!,
+          catalogController: widget.catalogController,
           onRevisionCompleted: () {
             _refreshToken();
             widget.onOrderCompleted?.call();
@@ -849,8 +849,6 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
 
     if (selectedOrder != null && mounted) {
       final auth = widget.authService ?? AuthService(database: widget.orderController!.database);
-      final reprintTray = widget.reprintTrayController ??
-          ReprintTrayController(hardwareAdapter: InMemoryHardwareAdapter());
       await showDialog<void>(
         context: context,
         builder: (ctx) => SupervisorVoidDialog(
@@ -858,7 +856,6 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
           cashierId: widget.currentStaff.id,
           orderController: widget.orderController!,
           authService: auth,
-          reprintTrayController: reprintTray,
           onVoidSuccess: () {
             _refreshToken();
             widget.onOrderCompleted?.call();

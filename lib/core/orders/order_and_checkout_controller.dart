@@ -447,7 +447,7 @@ class OrderAndCheckoutController {
       throw StateError('Authorization error: Cashier ID #$cashierId not found.');
     }
     final role = StaffRole.fromCode(staffRows.first['role'] as String);
-    if (role != StaffRole.cashier) {
+    if (role != StaffRole.cashier || staffRows.first['login_enabled'] == 0 || staffRows.first['is_active'] != 1) {
       throw StateError('Authorization error: Manager credentials cannot initiate checkout or process payments.');
     }
 
@@ -996,33 +996,6 @@ class OrderAndCheckoutController {
       PosDatabaseConstants.tableSystemSettings,
       {
         'key': PosDatabaseConstants.settingCashierVoidRequestsEnabled,
-        'value': enabled ? 'true' : 'false',
-        'updated_at': now,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-  }
-
-  /// Reads whether the interactive Token Queue Tray is enabled from system settings.
-  Future<bool> isTokenTrayEnabled() async {
-    final rows = await database.query(
-      PosDatabaseConstants.tableSystemSettings,
-      where: 'key = ?',
-      whereArgs: [PosDatabaseConstants.settingTokenTrayEnabled],
-    );
-    if (rows.isNotEmpty) {
-      return (rows.first['value'] as String).toLowerCase() == 'true';
-    }
-    return true; // Default enabled
-  }
-
-  /// Sets whether the interactive Token Queue Tray is enabled in system settings.
-  Future<void> setTokenTrayEnabled(bool enabled) async {
-    final now = _formatTimestamp(DateTime.now());
-    await database.insert(
-      PosDatabaseConstants.tableSystemSettings,
-      {
-        'key': PosDatabaseConstants.settingTokenTrayEnabled,
         'value': enabled ? 'true' : 'false',
         'updated_at': now,
       },

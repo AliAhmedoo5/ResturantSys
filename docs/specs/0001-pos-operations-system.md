@@ -34,18 +34,18 @@ A standalone, offline-first Desktop POS & Operations System built with Flutter a
 10. As a cashier, I want to select from pre-approved discount buttons configured by management without needing a supervisor PIN, so that promotional checkout moves quickly while logging my cashier ID.
 11. As a cashier, I want to enter the cash amount tendered by a customer and see the exact change return calculated in large numerals, so that mental math mistakes are eliminated under pressure.
 12. As a cashier, I want to settle orders using Cash, Card, Raast QR, or Split Tender (e.g., partial cash and partial Raast), so that customer payment flexibility is fully supported.
-13. As a cashier, I want the system to silently print a Customer Receipt and Kitchen Order Ticket (KOT) with a daily sequential Token number upon checkout, so that food assembly and pickup proceed smoothly.
+13. As a cashier, I want the system to print a customer receipt with a daily sequential Token number upon checkout; preparation changes are communicated verbally.
 14. As a cashier, I want the cash drawer to automatically kick open only on Cash transactions, so that the drawer remains safely locked during card and Raast settlements.
-15. As a cashier, I want a dedicated Reprint tray to reprint the last receipt or KOT with a single tap, so that paper jams or printer disconnects do not block ongoing counter sales.
+15. As a cashier, I want a dedicated Reprint tray to reprint the last customer receipt with a single tap, so that paper jams or printer disconnects do not block ongoing counter sales.
 16. As a cashier, I want to record Cash Pay-In and Pay-Out movements (petty cash for ice, milk runs, or owner cash drops) with amounts and mandatory notes, so that drawer cash outflows are accounted for.
 17. As a cashier, I want to submit a blind physical cash count at shift handover without seeing system totals, so that my shift closes cleanly and generates an interim X-Report.
 18. As a cashier, I want to hand over the register to the next cashier even if my blind count has a discrepancy, so that line operations are never frozen while awaiting supervisor review.
 19. As a cashier, I want to initiate a void on an already-printed order by picking a reason and calling a supervisor, so that customer cancellations after payment are properly audited.
 
 ### Kitchen Staff Operations
-20. As a kitchen cook, I want to receive a printed KOT displaying the Token number and Dining Type in large bold text without prices, so that I can prepare orders accurately without clutter.
-21. As a kitchen cook, I want the KOT to clearly highlight meal modifiers and bundle choices (e.g., + EXTRA CHEESE, *** NO MAYO ***), so that cooking mistakes are avoided.
-22. As a kitchen cook, I want the printer to automatically output a bold KOT Void Slip whenever an order is cancelled post-print, so that I immediately halt cooking and eliminate food waste.
+20. As a cashier, I want to communicate the order token and dining type verbally to the nearby kitchen, without a kitchen ticket or screen.
+21. As a cashier, I want to communicate modifiers and bundle choices clearly when informing the kitchen of an order.
+22. As a cashier, I want to record and verbally communicate cancellation reasons so preparation can stop without a kitchen printer or queue.
 23. As a kitchen cook, I want to switch to the on-screen Kitchen Token Station using my Kitchen PIN and tap active tokens to mark them Ready, so that counter staff know food is on the pass.
 24. As a kitchen cook, I want to log kitchen food wastage (burned patties, dropped buns) under my Kitchen PIN with categorized reasons, so that accidents are distinguished from inventory theft.
 
@@ -135,15 +135,15 @@ A standalone, offline-first Desktop POS & Operations System built with Flutter a
    - Business day and shift lifecycle transitions (opening, handover, closing, extending past midnight).
    - Atomic checkout execution: verify accurate tax calculation, sequential token reset at new Business Day, and correct raw ingredient stock deductions across complex combos and modifiers.
    - Soft inventory tolerance: verify that checkout succeeds and records negative stock when ingredients are at zero balance.
-   - Void transaction testing: assert that post-print voids require supervisor PIN, record void audit records, reverse ingredient consumption, and dispatch KOT void slips.
+   - Void transaction testing: assert that post-print voids require supervisor PIN, record void audit records, reverse ingredient consumption, without dispatching any kitchen print job.
    - Blind cash discrepancy calculations: assert exact variances across opening floats, sales, cash pay-ins, and pay-outs.
    - Non-blocking discrepancy policy: assert that high-discrepancy shifts flag status for supervisor review while allowing incoming shifts to open without delay.
 2. **`InventoryEngine` & Mandi Calculations**:
    - Verify unit conversion multipliers from traditional units (Mann, Darjan, Peti) into metric recipe units.
    - Verify kitchen wastage cost computations and stock updates.
 3. **`HardwareDeviceAdapter` Byte Stream Tests**:
-   - Assert standard 80mm ESC/POS byte formatting for receipts and KOTs.
-   - Assert inclusion of large bold token headers on KOTs and suppression of prices.
+   - Assert standard 80mm ESC/POS byte formatting for customer receipts only.
+   - Assert that checkout emits one customer receipt and no kitchen ticket; no kitchen station or queue is exposed.
    - Assert presence of `GS V 0` cut commands and `ESC p` cash drawer pulse bytes.
 4. **`ExcelReportingEngine` Export Verification**:
    - Verify that generated `.xlsx` workbooks contain all 6 sheets with matching sums and valid ISO datetime formatting.

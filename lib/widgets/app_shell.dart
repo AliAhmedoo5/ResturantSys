@@ -18,9 +18,7 @@ import 'procurement/kitchen_wastage_workspace.dart';
 import 'procurement/quick_mandi_purchase_workspace.dart';
 import 'shifts/register_shift_workspace.dart';
 
-import '../core/orders/token_queue_controller.dart';
 import 'supervisor/supervisor_portal_workspace.dart';
-import 'supervisor/token_queue_tray.dart';
 import 'onboarding/onboarding_wizard.dart';
 import '../core/delivery/rider_trip_controller.dart';
 import 'delivery/rider_trip_dispatch_workspace.dart';
@@ -39,7 +37,6 @@ class AppShell extends StatefulWidget {
     this.procurementController,
     this.vendorKhataController,
     this.authService,
-    this.tokenQueueController,
     this.riderTripController,
     this.child,
   });
@@ -53,7 +50,6 @@ class AppShell extends StatefulWidget {
   final ProcurementAndWastageController? procurementController;
   final VendorKhataController? vendorKhataController;
   final AuthService? authService;
-  final TokenQueueController? tokenQueueController;
   final RiderTripController? riderTripController;
   final Widget? child;
 
@@ -70,7 +66,28 @@ class _AppShellState extends State<AppShell> {
   @override
   void initState() {
     super.initState();
+    widget.session.addListener(_resetWorkspace);
     _checkOnboarding();
+  }
+
+  void _resetWorkspace() {
+    setState(() => _selectedWorkspace = AppWorkspaceTab.register);
+  }
+
+  @override
+  void didUpdateWidget(covariant AppShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.session != widget.session) {
+      oldWidget.session.removeListener(_resetWorkspace);
+      widget.session.addListener(_resetWorkspace);
+      _selectedWorkspace = AppWorkspaceTab.register;
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.session.removeListener(_resetWorkspace);
+    super.dispose();
   }
 
   Future<void> _checkOnboarding() async {
@@ -190,6 +207,11 @@ class _AppShellState extends State<AppShell> {
   }
 
   Widget _buildWorkspaceBody(BuildContext context, Staff staff) {
+    // Gate the content as well as the navigation, including stale selections.
+    if (_selectedWorkspace != AppWorkspaceTab.register &&
+        !staff.canAccessSupervisorPortal) {
+      return _buildRegisterWorkspace(staff);
+    }
     if (_selectedWorkspace == AppWorkspaceTab.catalog && widget.catalogController != null) {
       return SupervisorCatalogWorkspace(
         controller: widget.catalogController!,
@@ -224,7 +246,6 @@ class _AppShellState extends State<AppShell> {
         authService: widget.authService!,
         shiftController: widget.shiftController,
         orderController: widget.orderController,
-        tokenQueueController: widget.tokenQueueController,
         reprintTrayController: widget.reprintTrayController,
         currentStaff: staff,
       );
@@ -244,12 +265,10 @@ class _AppShellState extends State<AppShell> {
       }
     }
 
-    if (_selectedWorkspace == AppWorkspaceTab.tokenQueue && widget.tokenQueueController != null) {
-      return TokenQueueTray(
-        controller: widget.tokenQueueController!,
-      );
-    }
+    return _buildRegisterWorkspace(staff);
+  }
 
+  Widget _buildRegisterWorkspace(Staff staff) {
     if (widget.shiftController != null) {
       return RegisterShiftWorkspace(
         controller: widget.shiftController!,
@@ -335,7 +354,6 @@ class _AppShellState extends State<AppShell> {
             _buildCapabilityRow('Department', department),
             _buildCapabilityRow('Role', staff.role.displayName),
             _buildCapabilityRow('Register Billing Access', staff.canAccessRegister ? 'Granted' : 'Restricted'),
-            _buildCapabilityRow('Kitchen Slip Management', staff.canAccessKitchen ? 'Granted' : 'Restricted'),
             _buildCapabilityRow('Supervisor Portal & Voids', staff.canAccessSupervisorPortal ? 'Authorized' : 'Restricted'),
           ],
         ),

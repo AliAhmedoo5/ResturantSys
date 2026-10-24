@@ -1,6 +1,7 @@
 import 'package:sqflite_common/sqlite_api.dart';
 import 'package:resturant_sys/core/database/pos_database_constants.dart';
 import 'department.dart';
+import 'job_role.dart';
 import 'pin_hasher.dart';
 import 'session_state.dart';
 import 'staff.dart';
@@ -32,6 +33,9 @@ class AuthService {
 
     final results = await database.rawQuery('''
       SELECT 
+        s.job_role_id,
+        s.login_enabled,
+        j.name AS job_role_name,
         s.id, 
         s.name, 
         s.department_id, 
@@ -41,9 +45,10 @@ class AuthService {
         s.created_at,
         d.name AS department_name
       FROM ${PosDatabaseConstants.tableStaff} s
+      LEFT JOIN job_roles j ON s.job_role_id = j.id
       LEFT JOIN ${PosDatabaseConstants.tableDepartments} d 
         ON s.department_id = d.id
-      WHERE s.pin_hash = ? AND s.is_active = 1
+      WHERE s.pin_hash = ? AND s.is_active = 1 AND s.login_enabled = 1
       LIMIT 1;
     ''', [hashedPin]);
 
@@ -129,6 +134,44 @@ class AuthService {
         '${twoDigits(dt.hour)}:${twoDigits(dt.minute)}:${twoDigits(dt.second)}';
   }
 
+  Future<List<JobRole>> getJobRoles() async =>
+      (await database.query('job_roles', orderBy: 'name COLLATE NOCASE')).map(JobRole.fromMap).toList();
+
+  String _jobName(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) throw ArgumentError('Job role name cannot be empty.');
+    return trimmed;
+  }
+
+  Future<JobRole> createJobRole(String name) async {
+    final trimmed = _jobName(name);
+    final id = await database.insert('job_roles', {'name': trimmed});
+    return JobRole(id: id, name: trimmed);
+  }
+
+  Future<void> updateJobRole(int id, String name) async {
+    final count = await database.update('job_roles', {'name': _jobName(name)}, where: 'id = ?', whereArgs: [id]);
+    if (count == 0) throw StateError('Job role no longer exists.');
+  }
+
+  Future<void> deleteJobRole(int id) async {
+    await database.transaction((txn) async {
+      final assigned = await txn.query('staff', columns: ['id'], where: 'job_role_id = ?', whereArgs: [id], limit: 1);
+      if (assigned.isNotEmpty) throw StateError('Reassign staff before deleting this job role.');
+      await txn.delete('job_roles', where: 'id = ?', whereArgs: [id]);
+    });
+  }
+
+  Future<void> _validateJobRole(int? id) async {
+    if (id != null && await _jobRoleName(id) == null) throw ArgumentError('Job role does not exist.');
+  }
+
+  Future<String?> _jobRoleName(int? id) async {
+    if (id == null) return null;
+    final rows = await database.query('job_roles', where: 'id = ?', whereArgs: [id]);
+    return rows.isEmpty ? null : rows.first['name'] as String;
+  }
+
   /// Retrieves all configured departments in the system.
   Future<List<Department>> getDepartments() async {
     final rows = await database.query(
@@ -167,13 +210,17 @@ class AuthService {
     required int departmentId,
     required StaffRole role,
     required String pin,
+    int? jobRoleId,
+    bool loginEnabled = true,
   }) async {
     final trimmedName = name.trim();
     if (trimmedName.isEmpty) {
       throw ArgumentError('Staff name cannot be empty.');
     }
 
-    if (role == StaffRole.manager) {
+    if (!loginEnabled) {
+      // Non-login staff have no usable PIN.
+    } else if (role == StaffRole.manager) {
       if (!_managerPinRegex.hasMatch(pin)) {
         throw ArgumentError('Manager PIN must be between 4 and 8 numeric digits.');
       }
@@ -195,8 +242,9 @@ class AuthService {
     }
     final departmentName = deptRows.first['name'] as String;
 
-    final hashedPin = PinHasher.hashPin(pin);
+    final hashedPin = loginEnabled ? PinHasher.hashPin(pin) : 'NO_LOGIN_${DateTime.now().microsecondsSinceEpoch}';
 
+    await _validateJobRole(jobRoleId);
     // Verify unique PIN
     final existingPinRows = await database.query(
       PosDatabaseConstants.tableStaff,
@@ -212,6 +260,8 @@ class AuthService {
     final id = await database.insert(
       PosDatabaseConstants.tableStaff,
       {
+        'job_role_id': jobRoleId,
+        'login_enabled': loginEnabled ? 1 : 0,
         'name': trimmedName,
         'department_id': departmentId,
         'pin_hash': hashedPin,
@@ -223,6 +273,9 @@ class AuthService {
 
     return Staff(
       id: id,
+      jobRoleId: jobRoleId,
+      jobRoleName: await _jobRoleName(jobRoleId),
+      loginEnabled: loginEnabled,
       name: trimmedName,
       departmentId: departmentId,
       departmentName: departmentName,
@@ -286,6 +339,9 @@ class AuthService {
   Future<List<Staff>> getAllStaff() async {
     final rows = await database.rawQuery('''
       SELECT 
+        s.job_role_id,
+        s.login_enabled,
+        j.name AS job_role_name,
         s.id, 
         s.name, 
         s.department_id, 
@@ -295,6 +351,7 @@ class AuthService {
         s.created_at,
         d.name AS department_name
       FROM ${PosDatabaseConstants.tableStaff} s
+      LEFT JOIN job_roles j ON s.job_role_id = j.id
       LEFT JOIN ${PosDatabaseConstants.tableDepartments} d 
         ON s.department_id = d.id
       ORDER BY s.id ASC;
@@ -331,6 +388,8 @@ class AuthService {
     required StaffRole role,
     String? newPin,
     bool? isActive,
+    int? jobRoleId,
+    bool loginEnabled = true,
   }) async {
     final trimmedName = name.trim();
     if (trimmedName.isEmpty) {
@@ -348,7 +407,15 @@ class AuthService {
     }
     final departmentName = deptRows.first['name'] as String;
 
+    await _validateJobRole(jobRoleId);
+    final existing = await database.query('staff', where: 'id = ?', whereArgs: [staffId]);
+    if (existing.isEmpty) throw StateError('Staff member does not exist.');
+    if (loginEnabled && existing.first['login_enabled'] == 0 && newPin == null) {
+      throw ArgumentError('Set a PIN when enabling system access.');
+    }
     final updateValues = <String, Object?>{
+      'job_role_id': jobRoleId,
+      'login_enabled': loginEnabled ? 1 : 0,
       'name': trimmedName,
       'department_id': departmentId,
       'role': role.code,
@@ -358,7 +425,7 @@ class AuthService {
       updateValues['is_active'] = isActive ? 1 : 0;
     }
 
-    if (newPin != null) {
+    if (newPin != null && loginEnabled) {
       if (role == StaffRole.manager) {
         if (!_managerPinRegex.hasMatch(newPin)) {
           throw ArgumentError('Manager PIN must be between 4 and 8 numeric digits.');
@@ -390,6 +457,9 @@ class AuthService {
 
     final staffRows = await database.rawQuery('''
       SELECT 
+        s.job_role_id,
+        s.login_enabled,
+        j.name AS job_role_name,
         s.id, 
         s.name, 
         s.department_id, 
@@ -399,6 +469,7 @@ class AuthService {
         s.created_at,
         d.name AS department_name
       FROM ${PosDatabaseConstants.tableStaff} s
+      LEFT JOIN job_roles j ON s.job_role_id = j.id
       LEFT JOIN ${PosDatabaseConstants.tableDepartments} d 
         ON s.department_id = d.id
       WHERE s.id = ?
@@ -432,7 +503,7 @@ class AuthService {
   /// Checks whether there is at least one active Cashier profile.
   Future<bool> hasActiveCashier() async {
     final cashierCountResult = await database.rawQuery(
-      "SELECT COUNT(*) as count FROM ${PosDatabaseConstants.tableStaff} WHERE role = 'CASHIER' AND is_active = 1;",
+      "SELECT COUNT(*) as count FROM ${PosDatabaseConstants.tableStaff} WHERE role = 'CASHIER' AND is_active = 1 AND login_enabled = 1;",
     );
     final count = (cashierCountResult.isNotEmpty ? cashierCountResult.first['count'] as int? : 0) ?? 0;
     return count > 0;
@@ -441,8 +512,8 @@ class AuthService {
   /// Marks first-run onboarding as completed in system settings.
   Future<void> completeOnboarding() async {
     final staff = await getAllStaff();
-    if (!staff.any((s) => s.isActive && s.role.isManager) ||
-        !staff.any((s) => s.isActive && s.role.isCashier)) {
+    if (!staff.any((s) => s.isActive && s.loginEnabled && s.role.isManager) ||
+        !staff.any((s) => s.isActive && s.loginEnabled && s.role.isCashier)) {
       throw StateError('Onboarding requires an active Manager and a distinct active Cashier.');
     }
     final now = _formatTimestamp(DateTime.now());
@@ -467,7 +538,7 @@ class AuthService {
     if (!await isOnboardingRequired()) {
       throw StateError('Onboarding is already complete.');
     }
-    final existing = (await getAllStaff()).where((s) => s.role == role);
+    final existing = (await getAllStaff()).where((s) => s.loginEnabled && s.role == role);
     if (existing.isNotEmpty) {
       final authenticated = await authenticateWithPin(pin);
       if (authenticated == null || authenticated.role != role) {

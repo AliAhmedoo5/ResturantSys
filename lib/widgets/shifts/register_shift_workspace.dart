@@ -161,11 +161,6 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
         context: context,
         builder: (ctx) => ZReportDialog(
           report: zReport,
-          onPrint: () async {
-            if (widget.reprintTrayController != null) {
-              await widget.reprintTrayController!.dispatchZReportPrinting(report: zReport);
-            }
-          },
           onExportExcel: () async {
             final engine = ExcelReportingEngine(database: widget.controller.database);
             final file = await engine.exportDailyReportToFile(

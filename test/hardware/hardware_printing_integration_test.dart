@@ -8,7 +8,6 @@ import 'package:resturant_sys/core/database/pos_database.dart';
 import 'package:resturant_sys/core/hardware/esc_pos_constants.dart';
 import 'package:resturant_sys/core/hardware/in_memory_hardware_adapter.dart';
 import 'package:resturant_sys/core/hardware/paper_width.dart';
-import 'package:resturant_sys/core/hardware/printer_topology.dart';
 import 'package:resturant_sys/core/hardware/reprint_tray_controller.dart';
 import 'package:resturant_sys/core/orders/cart_item.dart';
 import 'package:resturant_sys/core/orders/dining_type.dart';
@@ -48,7 +47,6 @@ void main() {
       hardwareAdapter = InMemoryHardwareAdapter();
       reprintTrayController = ReprintTrayController(
         hardwareAdapter: hardwareAdapter,
-        topology: PrinterTopology.single,
         paperWidth: PaperWidth.mm80,
       );
       await reprintTrayController.loadSettings(db);
@@ -106,8 +104,8 @@ void main() {
       expect(hardwareAdapter.drawerKickCount, equals(1));
       expect(hardwareAdapter.drawerPulses.first, equals(EscPosConstants.kickDrawerPulse));
 
-      // Verify two sequential tickets emitted on counter printer (Receipt + KOT)
-      expect(hardwareAdapter.counterPrintedBytes.length, equals(2));
+      // Verify only the customer receipt is emitted
+      expect(hardwareAdapter.counterPrintedBytes.length, equals(1));
 
       // Customer Tax Receipt
       final receiptBytes = hardwareAdapter.counterPrintedBytes[0];
@@ -119,17 +117,7 @@ void main() {
       expect(decodedReceipt, contains('GRAND TOTAL:'));
       expect(decodedReceipt, contains('1,000.00'));
 
-      // Kitchen Order Ticket (KOT)
-      final kotBytes = hardwareAdapter.counterPrintedBytes[1];
-      expect(kotBytes.sublist(0, 2), equals(EscPosConstants.initPrinter));
-      expect(kotBytes.sublist(kotBytes.length - 3), equals(EscPosConstants.cutPaperFull));
-      final decodedKot = latin1.decode(kotBytes);
-      expect(decodedKot, contains('TOKEN #01'));
-      expect(decodedKot, contains('*** TAKEAWAY ***'));
-      expect(decodedKot, contains('2x ZINGER BURGER'));
-      // KOT strictly zero prices
-      expect(decodedKot, isNot(contains('Rs')));
-      expect(decodedKot, isNot(contains('1,000.00')));
+
     });
 
     test('Printer hardware failure leaves SQLite commit intact and enqueues to Reprint Tray', () async {
@@ -178,17 +166,17 @@ void main() {
 
       // Reprint tray captured the failure
       expect(reprintTrayController.hasFailures, isTrue);
-      expect(reprintTrayController.failedCount, equals(2));
+      expect(reprintTrayController.failedCount, equals(1));
 
       // Simulate printer repaired and paper replaced
       hardwareAdapter.shouldFailCounterPrint = false;
 
       // 1-tap retry all failed jobs
       final retriedCount = await reprintTrayController.retryAllFailed();
-      expect(retriedCount, equals(2));
+      expect(retriedCount, equals(1));
       expect(reprintTrayController.hasFailures, isFalse);
       expect(reprintTrayController.failedCount, equals(0));
-      expect(hardwareAdapter.counterPrintedBytes.length, equals(2));
+      expect(hardwareAdapter.counterPrintedBytes.length, equals(1));
     });
   });
 }

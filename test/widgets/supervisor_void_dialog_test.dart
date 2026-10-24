@@ -5,8 +5,6 @@ import 'package:resturant_sys/core/auth/session_state.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/auth/staff_role.dart';
 import 'package:resturant_sys/core/hardware/in_memory_hardware_adapter.dart';
-import 'package:resturant_sys/core/hardware/print_job.dart';
-import 'package:resturant_sys/core/hardware/printer_topology.dart';
 import 'package:resturant_sys/core/hardware/reprint_tray_controller.dart';
 import 'package:resturant_sys/core/catalog/discount_preset.dart';
 import 'package:resturant_sys/core/orders/cart_item.dart';
@@ -171,7 +169,6 @@ void main() {
       hardwareAdapter = InMemoryHardwareAdapter();
       reprintTrayController = ReprintTrayController(
         hardwareAdapter: hardwareAdapter,
-        topology: PrinterTopology.dual,
       );
 
       testOrder = Order(
@@ -207,7 +204,6 @@ void main() {
           cashierId: cashierStaff.id,
           orderController: orderController,
           authService: authService,
-          reprintTrayController: reprintTrayController,
         ),
       ));
       await tester.pumpAndSettle();
@@ -243,7 +239,6 @@ void main() {
           cashierId: cashierStaff.id,
           orderController: orderController,
           authService: authService,
-          reprintTrayController: reprintTrayController,
         ),
       ));
       await tester.pumpAndSettle();
@@ -278,7 +273,6 @@ void main() {
           cashierId: cashierStaff.id,
           orderController: orderController,
           authService: authService,
-          reprintTrayController: reprintTrayController,
           onVoidSuccess: () => voidSuccessCallbackCalled = true,
         ),
       ));
@@ -305,11 +299,9 @@ void main() {
       expect(orderController.lastVoidResult!.reason, equals(VoidReason.cashierMistake));
       expect(orderController.lastVoidResult!.supervisorName, equals('Supervisor'));
 
-      // ESC/POS Kitchen Void Slip was automatically dispatched!
-      expect(reprintTrayController.recentJobs.length, equals(1));
-      final voidJob = reprintTrayController.recentJobs.first;
-      expect(voidJob.type, equals(PrintJobType.kitchenVoidSlip));
-      expect(hardwareAdapter.kitchenPrintedBytes.length, equals(1));
+      // Cancellation remains audited without emitting any kitchen print job.
+      expect(reprintTrayController.recentJobs, isEmpty);
+      expect(hardwareAdapter.counterPrintedBytes, isEmpty);
 
       // Cashier remains logged in throughout the entire flow
       expect(authService.session.currentStaff?.id, equals(cashierStaff.id));

@@ -9,7 +9,6 @@ import 'hardware_device_adapter.dart';
 import 'paper_width.dart';
 import 'print_job.dart';
 import 'printer_target.dart';
-import 'printer_topology.dart';
 
 /// Controller coordinating decoupled hardware printing, cash drawer kick pulses,
 /// and an on-screen Reprint Tray for paper jams or hardware disconnects.
@@ -17,7 +16,6 @@ class ReprintTrayController extends ChangeNotifier {
   ReprintTrayController({
     required this.hardwareAdapter,
     this.generator = const EscPosGenerator(),
-    this.topology = PrinterTopology.single,
     this.paperWidth = PaperWidth.mm80,
     this.cashDrawerEnabled = true,
     this.storeName = 'RESTURANT POS',
@@ -30,7 +28,6 @@ class ReprintTrayController extends ChangeNotifier {
   final HardwareDeviceAdapter hardwareAdapter;
   final EscPosGenerator generator;
 
-  PrinterTopology topology;
   PaperWidth paperWidth;
   bool cashDrawerEnabled;
 
@@ -56,9 +53,6 @@ class ReprintTrayController extends ChangeNotifier {
       final rows = await executor.query(PosDatabaseConstants.tableSystemSettings);
       final settings = {for (final r in rows) r['key'] as String: r['value'] as String};
 
-      if (settings.containsKey('printer_topology')) {
-        topology = PrinterTopology.fromSetting(settings['printer_topology']);
-      }
       if (settings.containsKey('paper_width')) {
         paperWidth = PaperWidth.fromSetting(settings['paper_width']);
       }
@@ -74,7 +68,7 @@ class ReprintTrayController extends ChangeNotifier {
     }
   }
 
-  /// Decoupled printing of Customer Tax Receipt and Kitchen Order Ticket (KOT).
+  /// Decoupled printing of the customer receipt.
   ///
   /// CRITICAL GUARANTEE:
   /// - Invoked strictly AFTER the order transaction commits to SQLite.
@@ -109,41 +103,6 @@ class ReprintTrayController extends ChangeNotifier {
     final receiptJob = createCustomerReceiptJob(order);
     await _executeJob(receiptJob);
 
-    // 3. Kitchen Order Ticket (KOT)
-    // In Single Printer topology, KOT routes sequentially to Counter printer.
-    // In Dual Printer topology, KOT routes to Kitchen printer.
-    final kotJob = createKitchenOrderTicketJob(order);
-    await _executeJob(kotJob);
-  }
-
-  /// Dispatches an Automatic Kitchen Void Slip upon supervisor order cancellation (ADR-0005).
-  Future<void> dispatchKitchenVoidSlip({
-    required Order order,
-    required String reason,
-    required String supervisorName,
-  }) async {
-    final kotTarget = topology == PrinterTopology.single
-        ? PrinterTarget.counter
-        : PrinterTarget.kitchen;
-
-    final voidBytes = generator.generateKitchenVoidSlip(
-      order: order,
-      reason: reason,
-      supervisorName: supervisorName,
-      paperWidth: paperWidth,
-    );
-
-    final voidJob = PrintJob(
-      id: 'void_${order.id}_${DateTime.now().millisecondsSinceEpoch}',
-      target: kotTarget,
-      type: PrintJobType.kitchenVoidSlip,
-      bytes: voidBytes,
-      orderId: order.id,
-      tokenDisplay: order.tokenDisplay,
-      createdAt: DateTime.now(),
-    );
-
-    await _executeJob(voidJob);
   }
 
   /// Dispatches an End-of-Day Master Z-Report to the thermal printer.
@@ -257,38 +216,9 @@ class ReprintTrayController extends ChangeNotifier {
     );
   }
 
-  /// Creates a Kitchen Order Ticket (KOT) print job routed according to active topology.
-  PrintJob createKitchenOrderTicketJob(Order order, {String? idPrefix}) {
-    final kotTarget = topology == PrinterTopology.single
-        ? PrinterTarget.counter
-        : PrinterTarget.kitchen;
-
-    final kotBytes = generator.generateKitchenOrderTicket(
-      order: order,
-      paperWidth: paperWidth,
-    );
-
-    final prefix = idPrefix ?? 'kot';
-    return PrintJob(
-      id: '${prefix}_${order.id}_${DateTime.now().millisecondsSinceEpoch}',
-      target: kotTarget,
-      type: PrintJobType.kitchenOrderTicket,
-      bytes: kotBytes,
-      orderId: order.id,
-      tokenDisplay: order.tokenDisplay,
-      createdAt: DateTime.now(),
-    );
-  }
-
   /// Reprints a customer receipt on demand for duplicate request or manual reprint.
   Future<bool> reprintCustomerReceipt(Order order) async {
     final job = createCustomerReceiptJob(order, idPrefix: 'reprint_receipt');
-    return await _executeJob(job);
-  }
-
-  /// Reprints a Kitchen Order Ticket on demand.
-  Future<bool> reprintKitchenOrderTicket(Order order) async {
-    final job = createKitchenOrderTicketJob(order, idPrefix: 'reprint_kot');
     return await _executeJob(job);
   }
 

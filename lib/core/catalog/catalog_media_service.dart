@@ -3,7 +3,6 @@ import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../auth/staff.dart';
-import '../auth/staff_role.dart';
 import '../database/pos_database_constants.dart';
 import 'catalog_image.dart';
 import 'catalog_photo_change.dart';
@@ -46,7 +45,7 @@ class CatalogMediaService {
   }
 
   void _verifyManagerRole(Staff? staff) {
-    if (staff != null && staff.role == StaffRole.cashier) {
+    if (staff != null && !staff.canAccessSupervisorPortal) {
       throw StateError('Cashiers are not permitted to manage catalog media.');
     }
   }

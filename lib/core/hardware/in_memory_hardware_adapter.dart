@@ -18,7 +18,6 @@ class InMemoryHardwareAdapter implements HardwareDeviceAdapter {
 
   // Emitted Byte Buffers
   final List<List<int>> counterPrintedBytes = [];
-  final List<List<int>> kitchenPrintedBytes = [];
   final List<List<int>> drawerPulses = [];
   int drawerKickCount = 0;
 
@@ -26,8 +25,6 @@ class InMemoryHardwareAdapter implements HardwareDeviceAdapter {
   bool shouldFailCounterPrint = false;
   String counterPrintErrorMessage = 'Printer hardware error / paper jam';
 
-  bool shouldFailKitchenPrint = false;
-  String kitchenPrintErrorMessage = 'Kitchen network printer unreachable';
 
   bool shouldFailDrawerKick = false;
   String drawerKickErrorMessage = 'Drawer solenoid disconnect';
@@ -43,11 +40,6 @@ class InMemoryHardwareAdapter implements HardwareDeviceAdapter {
         throw StateError(counterPrintErrorMessage);
       }
       counterPrintedBytes.add(List<int>.unmodifiable(bytes));
-    } else if (target == PrinterTarget.kitchen) {
-      if (shouldFailKitchenPrint) {
-        throw StateError(kitchenPrintErrorMessage);
-      }
-      kitchenPrintedBytes.add(List<int>.unmodifiable(bytes));
     }
   }
 
@@ -69,13 +61,11 @@ class InMemoryHardwareAdapter implements HardwareDeviceAdapter {
   /// Clears all recorded buffers and resets fault injection flags.
   void reset() {
     counterPrintedBytes.clear();
-    kitchenPrintedBytes.clear();
     drawerPulses.clear();
     drawerKickCount = 0;
     isDrawerConnected = true;
     isPrinterConnected = true;
     shouldFailCounterPrint = false;
-    shouldFailKitchenPrint = false;
     shouldFailDrawerKick = false;
   }
 }
