@@ -78,4 +78,15 @@ void main() {
       expect(find.text('Mark Collected'), findsOneWidget);
     });
   }
+
+  testWidgets('cancelled prepaid order shows cancellation separately from refund owed', (tester) async {
+    final orders = StatusOrders();
+    orders.order = Order.fromMap({...orders.order.toMap(), 'grand_total': 0.0,
+      'payment_status': 'REFUND_PENDING', 'has_cancellation_revision': 1});
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: CashierOrdersPanel(
+      controller: orders, cashierId: 2, businessDayId: 1))));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Cancelled • REFUND_PENDING'), findsOneWidget);
+    expect(find.text('Mark Ready'), findsNothing);
+  });
 }

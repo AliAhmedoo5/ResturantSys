@@ -660,7 +660,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
       limit: 15,
     );
     final eligibleOrders = recentOrders
-        .where((o) => !o.isVoided && !o.isCancelled)
+        .where((o) => !o.isVoided && (!o.isCancelled || o.isRefundPending))
         .toList();
 
     if (eligibleOrders.isEmpty) {

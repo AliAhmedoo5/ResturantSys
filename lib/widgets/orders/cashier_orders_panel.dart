@@ -46,6 +46,7 @@ class _CashierOrdersPanelState extends State<CashierOrdersPanel> {
   }
 
   String _stage(Order order) {
+    if (order.isCancelled) return 'Cancelled';
     if (order.tokenStatus != TokenStatus.delivered || order.diningType == DiningType.delivery) {
       return order.tokenStatus.displayName;
     }
@@ -53,7 +54,7 @@ class _CashierOrdersPanelState extends State<CashierOrdersPanel> {
   }
 
   String? _action(Order order) {
-    if (order.isCancelled || order.isVoided || order.grandTotal == 0 || order.isRefundPending) return null;
+    if (order.isCancelled || order.isVoided) return null;
     switch (order.tokenStatus) {
       case TokenStatus.confirmed: return 'Start Preparing';
       case TokenStatus.preparing: return 'Mark Ready';

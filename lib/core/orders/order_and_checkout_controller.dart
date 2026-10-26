@@ -949,7 +949,8 @@ class OrderAndCheckoutController {
     final limitClause = limit != null ? 'LIMIT $limit' : '';
 
     final rows = await database.rawQuery('''
-      SELECT o.*, st.name as cashier_name
+      SELECT o.*, st.name as cashier_name,
+        EXISTS(SELECT 1 FROM order_revisions r WHERE r.order_id = o.id AND r.action = 'CANCEL') AS has_cancellation_revision
       FROM ${PosDatabaseConstants.tableOrders} o
       JOIN ${PosDatabaseConstants.tableStaff} st ON o.cashier_id = st.id
       $whereClause
@@ -969,7 +970,8 @@ class OrderAndCheckoutController {
 
   Future<Order> getOrder(int id) async {
     final rows = await database.rawQuery('''
-      SELECT o.*, st.name as cashier_name
+      SELECT o.*, st.name as cashier_name,
+        EXISTS(SELECT 1 FROM order_revisions r WHERE r.order_id = o.id AND r.action = 'CANCEL') AS has_cancellation_revision
       FROM ${PosDatabaseConstants.tableOrders} o
       JOIN ${PosDatabaseConstants.tableStaff} st ON o.cashier_id = st.id
       WHERE o.id = ?;
@@ -1306,7 +1308,7 @@ class OrderAndCheckoutController {
     }
 
     final order = await getOrder(orderId);
-    if (order.isVoided || order.paymentStatus == 'CANCELLED') {
+    if (order.isVoided || order.isCancelled) {
       throw StateError('Cannot cancel order #$orderId: Order is already voided or canceled.');
     }
 
@@ -1601,7 +1603,7 @@ class OrderAndCheckoutController {
     }
 
     final order = await getOrder(orderId);
-    if (order.isVoided || order.paymentStatus == 'CANCELLED') {
+    if (order.isVoided || order.isCancelled) {
       throw StateError('Cannot revise order #$orderId: Order is already voided or canceled.');
     }
 
