@@ -31,6 +31,7 @@ class Order {
     this.customerName,
     this.deliveryFeePaisa = 0,
     this.cashRoundingPaisa = 0,
+    this.hasCancellationRevision = false,
   });
 
   final int? deliveryAreaId;
@@ -51,6 +52,8 @@ class Order {
   final DateTime createdAt;
   final TokenStatus tokenStatus;
   final int currentRevision;
+  /// Read projection from append-only revision history, independent of money owed.
+  final bool hasCancellationRevision;
   final List<OrderItem> items;
   final List<OrderPayment> payments;
   final String? cashierName;
@@ -60,7 +63,7 @@ class Order {
 
   bool get isSettled => paymentStatus == 'SETTLED';
   bool get isVoided => paymentStatus == 'VOIDED';
-  bool get isCancelled => paymentStatus == 'CANCELLED';
+  bool get isCancelled => hasCancellationRevision || paymentStatus == 'CANCELLED';
   bool get isRefundPending =>
       paymentStatus == 'REFUND_PENDING' || paymentStatus == 'REFUND_OWED';
 
@@ -95,6 +98,7 @@ class Order {
           ? TokenStatus.fromCode(map['token_status'] as String)
           : TokenStatus.preparing,
       currentRevision: (map['current_revision'] as int?) ?? 1,
+      hasCancellationRevision: map['has_cancellation_revision'] == 1,
       items: items,
       payments: payments,
       cashierName: cashierName ?? map['cashier_name'] as String?,

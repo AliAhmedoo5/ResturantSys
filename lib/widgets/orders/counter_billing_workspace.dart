@@ -21,6 +21,7 @@ import '../../core/orders/order.dart';
 import '../../core/orders/order_and_checkout_controller.dart';
 import '../../core/theme/theme.dart';
 import 'cashier_order_revision_dialog.dart';
+import 'cashier_orders_panel.dart';
 import 'deal_selection_dialog.dart';
 import 'modifier_selection_dialog.dart';
 import 'supervisor_void_dialog.dart';
@@ -96,6 +97,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
   int _nextTokenNumber = 1;
   DeliveryDetails? _deliveryDetails;
   bool _checkoutOpen = false;
+  bool _ordersOpen = false;
 
   @override
   void dispose() {
@@ -542,7 +544,11 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
 
                     // Items Grid
                     Expanded(
-                      child: _buildCatalogGrid(),
+                      child: _ordersOpen && widget.orderController != null
+                          ? CashierOrdersPanel(controller: widget.orderController!,
+                              key: ValueKey('orders_${widget.currentStaff.id}_${widget.businessDayId}'),
+                              cashierId: widget.currentStaff.id, businessDayId: widget.businessDayId)
+                          : _buildCatalogGrid(),
                     ),
                   ],
                 ),
@@ -601,6 +607,10 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
           crossAxisAlignment: WrapCrossAlignment.center,
           alignment: WrapAlignment.end,
           children: [
+            if (widget.orderController != null && widget.currentStaff.isActive && widget.currentStaff.canAccessRegister)
+              ElevatedButton.icon(key: const ValueKey('open_order_status_button'),
+                onPressed: () => setState(() => _ordersOpen = !_ordersOpen),
+                icon: const Icon(Icons.receipt_long), label: Text(_ordersOpen ? 'Back to Menu' : 'Orders')),
             if (widget.orderController != null) _buildReviseOrderButton(),
             if (widget.orderController != null) _buildVoidOrderButton(),
             Text(
@@ -650,7 +660,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
       limit: 15,
     );
     final eligibleOrders = recentOrders
-        .where((o) => !o.isVoided && !o.isCancelled)
+        .where((o) => !o.isVoided && (!o.isCancelled || o.isRefundPending))
         .toList();
 
     if (eligibleOrders.isEmpty) {
