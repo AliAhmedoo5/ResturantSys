@@ -19,13 +19,11 @@ import '../../core/orders/deal.dart';
 import '../../core/orders/dining_type.dart';
 import '../../core/orders/order.dart';
 import '../../core/orders/order_and_checkout_controller.dart';
-import '../../core/orders/payment_method.dart';
-import '../../core/hardware/reprint_tray_controller.dart';
 import '../../core/theme/theme.dart';
 import 'cashier_order_revision_dialog.dart';
+import 'cashier_orders_panel.dart';
 import 'deal_selection_dialog.dart';
 import 'modifier_selection_dialog.dart';
-import 'reprint_tray_dialog.dart';
 import 'supervisor_void_dialog.dart';
 import 'tender_checkout_dialog.dart';
 
@@ -36,7 +34,6 @@ class CounterBillingWorkspace extends StatefulWidget {
     this.orderController,
     this.catalogController,
     this.mediaService,
-    this.reprintTrayController,
     this.authService,
     required this.currentStaff,
     required this.businessDayId,
@@ -56,7 +53,6 @@ class CounterBillingWorkspace extends StatefulWidget {
   final OrderAndCheckoutController? orderController;
   final CatalogAndRecipeController? catalogController;
   final CatalogMediaService? mediaService;
-  final ReprintTrayController? reprintTrayController;
   final AuthService? authService;
   final Staff currentStaff;
   final int businessDayId;
@@ -101,6 +97,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
   int _nextTokenNumber = 1;
   DeliveryDetails? _deliveryDetails;
   bool _checkoutOpen = false;
+  bool _ordersOpen = false;
 
   @override
   void dispose() {
@@ -399,15 +396,6 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
                 delivery: _deliveryDetails,
               );
 
-              // Decoupled hardware printing executed strictly AFTER transaction commit
-              if (widget.reprintTrayController != null) {
-                final isCashPaid = tenders.any((t) => t.method == PaymentMethod.cash);
-                await widget.reprintTrayController!.dispatchOrderPrinting(
-                  order: result.order,
-                  isCashPaid: isCashPaid,
-                );
-              }
-
               if (mounted) {
                 _showCheckoutSuccessBanner(result);
               }
@@ -556,7 +544,11 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
 
                     // Items Grid
                     Expanded(
-                      child: _buildCatalogGrid(),
+                      child: _ordersOpen && widget.orderController != null
+                          ? CashierOrdersPanel(controller: widget.orderController!,
+                              key: ValueKey('orders_${widget.currentStaff.id}_${widget.businessDayId}'),
+                              cashierId: widget.currentStaff.id, businessDayId: widget.businessDayId)
+                          : _buildCatalogGrid(),
                     ),
                   ],
                 ),
@@ -615,9 +607,12 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
           crossAxisAlignment: WrapCrossAlignment.center,
           alignment: WrapAlignment.end,
           children: [
+            if (widget.orderController != null && widget.currentStaff.isActive && widget.currentStaff.canAccessRegister)
+              ElevatedButton.icon(key: const ValueKey('open_order_status_button'),
+                onPressed: () => setState(() => _ordersOpen = !_ordersOpen),
+                icon: const Icon(Icons.receipt_long), label: Text(_ordersOpen ? 'Back to Menu' : 'Orders')),
             if (widget.orderController != null) _buildReviseOrderButton(),
             if (widget.orderController != null) _buildVoidOrderButton(),
-            if (widget.reprintTrayController != null) _buildReprintTrayButton(),
             Text(
               '[Space / Numpad Enter] Checkout | [Esc] Clear',
               overflow: TextOverflow.ellipsis,
@@ -665,7 +660,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
       limit: 15,
     );
     final eligibleOrders = recentOrders
-        .where((o) => !o.isVoided && !o.isCancelled)
+        .where((o) => !o.isVoided && (!o.isCancelled || o.isRefundPending))
         .toList();
 
     if (eligibleOrders.isEmpty) {
@@ -868,59 +863,6 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
         ),
       );
     }
-  }
-
-  Widget _buildReprintTrayButton() {
-    return ListenableBuilder(
-      listenable: widget.reprintTrayController!,
-      builder: (context, _) {
-        final hasFailures = widget.reprintTrayController!.hasFailures;
-        final failedCount = widget.reprintTrayController!.failedCount;
-
-        return OutlinedButton.icon(
-          key: const ValueKey('open_reprint_tray_button'),
-          icon: Icon(
-            Icons.print_rounded,
-            size: 16,
-            color: hasFailures
-                ? WarmCounterColors.lightDestructiveAction
-                : WarmCounterColors.lightPrimaryText,
-          ),
-          label: Text(
-            hasFailures ? 'Reprint Tray ($failedCount)' : 'Reprint Tray',
-            style: TextStyle(
-              color: hasFailures
-                  ? WarmCounterColors.lightDestructiveAction
-                  : WarmCounterColors.lightPrimaryText,
-              fontWeight: hasFailures ? FontWeight.bold : FontWeight.w500,
-              fontSize: 12,
-            ),
-          ),
-          style: OutlinedButton.styleFrom(
-            backgroundColor: hasFailures ? WarmCounterColors.lightDestructiveHighlight : null,
-            side: BorderSide(
-              color: hasFailures ? WarmCounterColors.lightDestructive : WarmCounterColors.lightBorder,
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            minimumSize: const Size(110, WarmCounterSpacing.minTouchTargetSize),
-          ),
-          onPressed: _openReprintTray,
-        );
-      },
-    );
-  }
-
-  void _openReprintTray() {
-    if (widget.reprintTrayController == null) return;
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => ReprintTrayDialog(
-        controller: widget.reprintTrayController!,
-        currentStaff: widget.currentStaff,
-        orderController: widget.orderController,
-        authService: widget.authService ?? (widget.orderController != null ? AuthService(database: widget.orderController!.database) : null),
-      ),
-    );
   }
 
   // ---------------------------------------------------------------------------

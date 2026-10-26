@@ -13,13 +13,10 @@ import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
 import 'package:resturant_sys/core/orders/payment_method.dart';
 import 'package:resturant_sys/core/orders/deal_item.dart';
 import 'package:resturant_sys/core/orders/deal_item_option.dart';
-import 'package:resturant_sys/core/hardware/in_memory_hardware_adapter.dart';
-import 'package:resturant_sys/core/hardware/reprint_tray_controller.dart';
 import 'package:resturant_sys/core/theme/warm_counter_theme.dart';
 import 'package:resturant_sys/widgets/orders/counter_billing_workspace.dart';
 import 'package:resturant_sys/widgets/orders/deal_selection_dialog.dart';
 import 'package:resturant_sys/widgets/orders/modifier_selection_dialog.dart';
-import 'package:resturant_sys/widgets/orders/reprint_tray_dialog.dart';
 import 'package:resturant_sys/widgets/orders/tender_checkout_dialog.dart';
 
 void main() {
@@ -466,13 +463,11 @@ void main() {
       expect(find.text('Rs 50.00'), findsOneWidget);
     });
 
-    testWidgets('shows Reprint Tray button and opens ReprintTrayDialog when tapped', (tester) async {
+    testWidgets('cashier checkout exposes no printer or drawer workflow', (tester) async {
       tester.view.physicalSize = const Size(1920, 1080);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
 
-      final adapter = InMemoryHardwareAdapter();
-      final reprintTray = ReprintTrayController(hardwareAdapter: adapter);
 
       await tester.pumpWidget(
         MaterialApp(
@@ -482,7 +477,6 @@ void main() {
               currentStaff: testStaff,
               businessDayId: 1,
               shiftId: 1,
-              reprintTrayController: reprintTray,
               initialCategories: testCategories,
               initialMenuItems: testMenuItems,
               initialDeals: testDeals,
@@ -492,14 +486,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const ValueKey('open_reprint_tray_button')), findsOneWidget);
-      expect(find.text('Reprint Tray'), findsOneWidget);
+      expect(find.byKey(const ValueKey('open_reprint_tray_button')), findsNothing);
+      expect(find.text('Reprint Tray'), findsNothing);
 
-      await tester.tap(find.byKey(const ValueKey('open_reprint_tray_button')));
-      await tester.pumpAndSettle();
-
-      expect(find.byType(ReprintTrayDialog), findsOneWidget);
-      expect(find.text('Hardware & Reprint Tray'), findsOneWidget);
     });
 
     testWidgets('renders primary thumbnail when image exists and falls back to placeholder with 0 images', (tester) async {

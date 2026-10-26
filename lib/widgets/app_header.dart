@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import '../core/auth/auth_service.dart';
 import '../core/auth/staff.dart';
-import '../core/hardware/reprint_tray_controller.dart';
 import '../core/orders/order_and_checkout_controller.dart';
 import '../core/theme/theme.dart';
-import 'orders/reprint_tray_dialog.dart';
 
 enum AppWorkspaceTab {
   register('Register', Icons.point_of_sale_outlined),
@@ -28,7 +26,6 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
     required this.onLock,
     this.selectedWorkspace,
     this.onWorkspaceSelected,
-    this.reprintTrayController,
     this.orderController,
     this.authService,
     this.title = 'ResturantPOS',
@@ -39,7 +36,6 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onLock;
   final AppWorkspaceTab? selectedWorkspace;
   final ValueChanged<AppWorkspaceTab>? onWorkspaceSelected;
-  final ReprintTrayController? reprintTrayController;
   final OrderAndCheckoutController? orderController;
   final AuthService? authService;
   final String title;
@@ -97,31 +93,6 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
                   ),
                 ),
               const SizedBox(width: 12),
-              if (reprintTrayController != null)
-                ListenableBuilder(
-                  listenable: reprintTrayController!,
-                  builder: (context, _) {
-                    final failures = reprintTrayController!.failedCount;
-                    final label = failures > 0 ? 'Reprint Tray ($failures)' : 'Reprint Tray';
-                    return Tooltip(
-                      message: label,
-                      child: TextButton.icon(
-                        key: const ValueKey('header_reprint_tray_button'),
-                        onPressed: () => showDialog<void>(
-                          context: context,
-                          builder: (_) => ReprintTrayDialog(
-                            controller: reprintTrayController!, currentStaff: staff,
-                            orderController: orderController, authService: authService,
-                          ),
-                        ),
-                        icon: Icon(Icons.print_outlined, size: 18,
-                            color: failures > 0 ? StreetFoodMafiaColors.statusCanceled : StreetFoodMafiaColors.secondaryText),
-                        label: Text(compact ? (failures > 0 ? '$failures' : '') : label),
-                      ),
-                    );
-                  },
-                ),
-              const SizedBox(width: 8),
               Tooltip(
                 message: 'Lock Register',
                 child: OutlinedButton.icon(

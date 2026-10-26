@@ -123,6 +123,7 @@ class PosDatabase {
     await _upgradeToVersion12(db);
     await _upgradeToVersion14(db);
     await _upgradeToVersion15(db);
+    await _upgradeToVersion16(db);
   }
 
   Future<void> _createOperationalAccountingTables(DatabaseExecutor executor) async {
@@ -436,6 +437,22 @@ class PosDatabase {
     if (oldVersion < 13) await _upgradeToVersion13(db);
     if (oldVersion < 14) await _upgradeToVersion14(db);
     if (oldVersion < 15) await _upgradeToVersion15(db);
+    if (oldVersion < 16) await _upgradeToVersion16(db);
+  }
+
+  Future<void> _upgradeToVersion16(DatabaseExecutor db) async {
+    await db.execute('''CREATE TABLE IF NOT EXISTS order_status_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL REFERENCES orders(id),
+      cashier_id INTEGER NOT NULL REFERENCES staff(id),
+      from_status TEXT NOT NULL,
+      to_status TEXT NOT NULL,
+      recorded_at TEXT NOT NULL
+    )''');
+    await db.execute('CREATE INDEX IF NOT EXISTS order_status_events_order ON order_status_events(order_id, id)');
+    for (final operation in ['UPDATE', 'DELETE']) {
+      await db.execute("CREATE TRIGGER IF NOT EXISTS order_status_events_no_$operation BEFORE $operation ON order_status_events BEGIN SELECT RAISE(ABORT,'Order status history is immutable'); END");
+    }
   }
 
   Future<void> _upgradeToVersion15(DatabaseExecutor db) async {
@@ -1002,7 +1019,6 @@ class PosDatabase {
     final defaultSettings = {
       'schema_version': '${PosDatabaseConstants.schemaVersion}',
       'app_name': 'ResturantPOS',
-      'paper_width': '80mm',
       PosDatabaseConstants.settingDiscrepancyThreshold: PosDatabaseConstants.defaultDiscrepancyThreshold,
       PosDatabaseConstants.settingCashierVoidRequestsEnabled: PosDatabaseConstants.defaultCashierVoidRequestsEnabled,
       PosDatabaseConstants.settingRestaurantName: PosDatabaseConstants.defaultRestaurantName,
