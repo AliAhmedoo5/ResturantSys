@@ -137,7 +137,12 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
       }
     } catch (_) {
       if (mounted && revision == _revision && _authorized) {
-        setState(() => _error = 'Unable to load analytics. Check your Manager session and retry.');
+        setState(() {
+          // The service may reject a persisted role change before the session
+          // notifier knows about it. Never retain financial data after rejection.
+          _snapshot = null;
+          _error = 'Unable to load analytics. Check your Manager session and retry.';
+        });
       }
     } finally {
       if (mounted) {
@@ -235,10 +240,10 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
         ' • Asia/Karachi • ${_query.live ? 'active Business Day cohort (may open on an earlier date)' : '${DateFormat('dd MMM yyyy').format(_query.startDate)} to ${DateFormat('dd MMM yyyy').format(_query.endDateExclusive)} (end exclusive)'}',
         style: const TextStyle(color: StreetFoodMafiaColors.secondaryText, fontSize: 12)),
       if (snapshot != null) Text(
-        '${_error != null ? 'STALE • last successful refresh' : 'Last successful refresh'}: '
+        'Last successful refresh: '
         '${DateFormat('dd MMM yyyy HH:mm:ss').format(snapshot.generatedAt.isUtc ? snapshot.generatedAt.add(const Duration(hours: 5)) : snapshot.generatedAt)} • Business Days: '
         '${snapshot.businessDayIds.isEmpty ? 'none in selection' : snapshot.businessDayIds.join(', ')}',
-        style: TextStyle(fontSize: 12, color: _error != null ? StreetFoodMafiaColors.statusCanceled : StreetFoodMafiaColors.secondaryText)),
+        style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
       const SizedBox(height: 8),
       if (_busy) const LinearProgressIndicator(minHeight: 2),
       Expanded(child: ListView(key: const ValueKey('analytics_body'), padding: const EdgeInsets.only(top: 8), children: [
