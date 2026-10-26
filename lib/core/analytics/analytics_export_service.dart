@@ -21,6 +21,7 @@ class AnalyticsExportService {
         '${metric.label}: ${_pdfValue(metric.value, metric.unit)} [${metric.quality.name}]',
         'Formula / explanation: ${metric.explanation}',
         'Coverage: ${metric.sampleCount ?? "unknown"} / ${metric.populationCount ?? "unknown"}; change percent: ${metric.changePercent ?? "unavailable"}',
+        'Absolute change: ${metric.changeAbsolute == null ? "unavailable" : _pdfValue(metric.changeAbsolute, metric.unit)}',
       ],
       'Source details (${section.rows.length} rows)',
       for (final row in section.rows) ...[
@@ -144,8 +145,8 @@ class AnalyticsExportService {
     ['source_row_count', s.rows.length],
     ['metric_count', s.metrics.length],
     for (final note in s.notes) ['section_note', note],
-    ['Metric ID', 'Metric', 'Value', 'Unit', 'Quality', 'Formula / explanation', 'Sample count', 'Population count', 'Change percent'],
-    for (final m in s.metrics) [m.id, m.label, m.value, m.unit.name, m.quality.name, m.explanation, m.sampleCount, m.populationCount, m.changePercent],
+    ['Metric ID', 'Metric', 'Value', 'Unit', 'Quality', 'Formula / explanation', 'Sample count', 'Population count', 'Change percent', 'Change absolute'],
+    for (final m in s.metrics) [m.id, m.label, m.value, m.unit.name, m.quality.name, m.explanation, m.sampleCount, m.populationCount, m.changePercent, m.changeAbsolute],
     ['Row ID', 'Source type', 'Source ID', ...s.columns.map((c) => c.unit == null ? c.label : '${c.label} (${c.unit!.name})')],
     for (final row in s.rows) [row.id, row.sourceType, row.sourceId, ...s.columns.map((c) => row.cells[c.key])],
   ];

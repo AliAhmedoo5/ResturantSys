@@ -31,7 +31,7 @@ class SnapshotService implements AnalyticsService {
     sections: [
       AnalyticsSection(family: AnalyticsFamily.overview, title: 'Overview', metrics: [
         AnalyticsMetric(id: 'recorded', label: marker ?? 'Recorded order value', value: 123450,
-          unit: AnalyticsUnit.paisa, explanation: 'Eligible orders including Collection Due.'),
+          unit: AnalyticsUnit.paisa, explanation: 'Eligible orders including Collection Due.', changeAbsolute: 123450),
       ]),
       AnalyticsSection(family: AnalyticsFamily.sales, title: 'Sales', metrics: [
         const AnalyticsMetric(id: 'total', label: 'Recorded order value', value: 123450,
@@ -81,6 +81,7 @@ void main() {
     ))));
     await tester.pumpAndSettle();
     expect(find.text('PKR 1,234.50'), findsOneWidget);
+    expect(find.text('Change: +PKR 1,234.50 vs preceding comparable period'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('analytics_family')));
     await tester.pumpAndSettle();
     await tester.drag(find.byType(Scrollable).last, const Offset(0, -500));
@@ -145,6 +146,58 @@ void main() {
     expect(find.text('PKR 1,234.50'), findsNothing);
     expect(find.text('Retry'), findsOneWidget);
   });
+
+  for (final invalidation in ['session lock', 'rejected refresh', 'workspace disposal']) {
+    testWidgets('Open source detail is revoked after $invalidation without closing unrelated routes', (tester) async {
+      tester.view.physicalSize = const Size(1366, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final session = SessionState()..login(const Staff(id: 1, name: 'Manager', departmentId: 1,
+        pinHash: 'unused', role: StaffRole.manager, isActive: true));
+      final showWorkspace = ValueNotifier(true);
+      addTearDown(session.dispose);
+      addTearDown(showWorkspace.dispose);
+      var reject = false;
+      final service = SnapshotService(onLoad: (query) async {
+        if (reject) throw StateError('Manager access revoked.');
+        return SnapshotService.fixture(query);
+      });
+      final navigator = GlobalKey<NavigatorState>();
+      await tester.pumpWidget(MaterialApp(navigatorKey: navigator, home: Scaffold(
+        body: ValueListenableBuilder<bool>(valueListenable: showWorkspace, builder: (context, show, _) => show
+          ? ManagerAnalyticsWorkspace(service: service, session: session)
+          : const Text('Workspace closed')),
+      )));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('analytics_family')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sales').last);
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(find.text('Source detail • table alternative'), 250,
+        scrollable: find.descendant(of: find.byKey(const ValueKey('analytics_body')), matching: find.byType(Scrollable)).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('business_day #1'));
+      await tester.pumpAndSettle();
+      expect(find.text('Source IDs: 1'), findsOneWidget);
+      // A separate root dialog must survive removal of the source route beneath it.
+      navigator.currentState!.push(DialogRoute<void>(context: navigator.currentContext!,
+        builder: (_) => const AlertDialog(title: Text('Unrelated notification'))));
+      await tester.pumpAndSettle();
+      if (invalidation == 'session lock') {
+        session.lock();
+      } else if (invalidation == 'rejected refresh') {
+        reject = true;
+        await tester.pump(const Duration(seconds: 30));
+      } else {
+        showWorkspace.value = false;
+      }
+      await tester.pumpAndSettle();
+      expect(find.text('Source IDs: 1', skipOffstage: false), findsNothing);
+      expect(find.text('Unrelated notification'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets('Session lock immediately hides financial data and rejects a pending refresh', (tester) async {
     final session = SessionState()..login(const Staff(id: 1, name: 'Manager', departmentId: 1,

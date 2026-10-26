@@ -3,13 +3,14 @@ enum AnalyticsUnit { count, paisa, percent, decimal, minutes }
 enum AnalyticsQuality { complete, estimated, missing, notApplicable }
 
 class AnalyticsMetric {
-  const AnalyticsMetric({required this.id, required this.label, this.value, required this.unit, required this.explanation, this.quality = AnalyticsQuality.complete, this.sampleCount, this.populationCount, this.changePercent});
+  const AnalyticsMetric({required this.id, required this.label, this.value, required this.unit, required this.explanation, this.quality = AnalyticsQuality.complete, this.sampleCount, this.populationCount, this.changePercent, this.changeAbsolute});
   final String id, label, explanation;
   final num? value;
   final AnalyticsUnit unit;
   final AnalyticsQuality quality;
   final int? sampleCount, populationCount;
   final double? changePercent;
+  final num? changeAbsolute;
 }
 
 class AnalyticsColumn {

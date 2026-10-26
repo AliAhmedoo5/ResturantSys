@@ -65,7 +65,7 @@ Shared models in `analytics_models.dart`:
 - `enum AnalyticsFamily { overview, sales, orders, delivery, customers, menu, inventory, procurement, suppliers, cash, expenses, staff, profitability, audit }`
 - `enum AnalyticsUnit { count, paisa, percent, decimal, minutes }`
 - `enum AnalyticsQuality { complete, estimated, missing, notApplicable }`
-- `AnalyticsMetric({required String id, required String label, num? value, required AnalyticsUnit unit, required String explanation, AnalyticsQuality quality = AnalyticsQuality.complete, int? sampleCount, int? populationCount, double? changePercent})`.
+- `AnalyticsMetric({required String id, required String label, num? value, required AnalyticsUnit unit, required String explanation, AnalyticsQuality quality = AnalyticsQuality.complete, int? sampleCount, int? populationCount, double? changePercent, num? changeAbsolute})`. Absolute change uses the metric's unit and retains a comparable historical current-minus-prior difference when the prior value is zero; percentage remains unavailable for a zero baseline. Both comparisons are withheld for live/open coverage without an equivalent elapsed baseline.
 - `AnalyticsColumn({required String key, required String label, AnalyticsUnit? unit})`.
 - `AnalyticsRow({required String id, required Map<String, Object?> cells, required String sourceType, String? sourceId})`.
 - `AnalyticsSection({required AnalyticsFamily family, required String title, List<AnalyticsMetric> metrics = const [], List<AnalyticsColumn> columns = const [], List<AnalyticsRow> rows = const [], List<String> notes = const []})`.

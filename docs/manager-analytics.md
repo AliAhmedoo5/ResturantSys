@@ -15,7 +15,7 @@ Select **Overview** or one of the 13 report families:
 | Sales | Recorded value, order volume, discounts, tax, delivery fees, rounding, received tenders and trends |
 | Order operations | Status counts, revisions, cancellations and refund exposure |
 | Delivery | Area activity, trips, delivery/return evidence, Collection Due and settlement exposure |
-| Customers | Known/guest coverage, repeat purchase rate and masked customer activity |
+| Customers | Known/guest coverage, repeat purchase rate, known-customer average ticket and masked customer activity |
 | Menu & deals | Recorded quantities and line values, popular and zero-selling catalog entries |
 | Inventory | Current low/negative stock, recorded movement history and quantity evidence |
 | Procurement | Recorded purchase spend, converted quantities and unit costs |
@@ -35,11 +35,12 @@ Trend tables and detail tables provide the values behind the visual display. Sou
 ## Interpreting the calculations
 
 - **Recorded order value** includes valid committed orders, including Collection Due. It excludes canceled, voided and fully refunded orders. It is distinct from tax-exclusive recognized revenue.
+- **Known-customer average ticket** divides eligible recorded order value for known normalized phone identities by their eligible order count, with the denominator displayed. Guests are excluded. This weights orders equally; it does not average customer means. Customer aggregate rows show each masked identity's own average and contributing source orders separately from order history. With no known orders, the average is Not applicable.
 - **Collected tender** is recorded tender minus change, with explicit refund rows applied. Legacy payments are grouped by their order's Business Day; their tables do not support a complete actual-receipt-time cash-flow statement.
 - **Expected drawer** follows the cashier ledger. Cash refunds recorded as PAY_OUT reduce the drawer once, rather than being subtracted again through negative tender rows. A missing blind count leaves variance unknown.
 - **Collection Due** remains separate from physical delivery. An unsettled trip's expected amount is cash exposure; it is not proof that the rider collected it.
 - **Purchases**, **supplier credit**, **supplier payments** and **operating expenses** are different measures. Adding them together would double-count activity. Likewise, current purchase prices cannot establish historical sales COGS.
-- **Period comparisons** disclose the baseline. A zero baseline has no percentage growth. A partially completed live day must not be compared with a complete earlier day as though coverage were equal.
+- **Period comparisons** disclose the baseline and the absolute difference in the metric's unit. A zero baseline retains that absolute difference and has no percentage growth. Comparisons are withheld for live/open coverage without an equivalent elapsed baseline.
 
 Monetary aggregation uses integer paisa. Existing legacy rupee fields are converted per record before summing; this reporting behavior does not imply that every historical database field has been migrated to integer storage.
 
