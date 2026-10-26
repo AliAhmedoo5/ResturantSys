@@ -43,7 +43,7 @@ class Staff {
   /// Can authorize discounts exceeding cashier threshold, void orders, and kick drawer.
   bool get canAuthorizeOverrides => loginEnabled && role == StaffRole.manager;
 
-  /// Can authorize post-print order voids and reprint void slips.
+  /// Can authorize audited order voids.
   bool get canVoidOrders => loginEnabled && role == StaffRole.manager;
 
   /// Can execute End-of-Day Z-Report, locking shifts and resetting daily tokens.

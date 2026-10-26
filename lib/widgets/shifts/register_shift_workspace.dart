@@ -18,7 +18,6 @@ import '../../core/shifts/excel_reporting_engine.dart';
 import '../../core/auth/auth_service.dart';
 import '../../core/orders/order_and_checkout_controller.dart';
 import '../../core/catalog/catalog_and_recipe_controller.dart';
-import '../../core/hardware/reprint_tray_controller.dart';
 import '../orders/counter_billing_workspace.dart';
 
 /// Counter register operational workspace coordinating Business Day and Shift lifecycles.
@@ -29,7 +28,6 @@ class RegisterShiftWorkspace extends StatefulWidget {
     required this.currentStaff,
     this.orderController,
     this.catalogController,
-    this.reprintTrayController,
     this.authService,
     this.onLock,
   });
@@ -38,7 +36,6 @@ class RegisterShiftWorkspace extends StatefulWidget {
   final Staff currentStaff;
   final OrderAndCheckoutController? orderController;
   final CatalogAndRecipeController? catalogController;
-  final ReprintTrayController? reprintTrayController;
   final AuthService? authService;
   final VoidCallback? onLock;
 
@@ -375,7 +372,6 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
               ? CounterBillingWorkspace(
                   orderController: widget.orderController!,
                   catalogController: widget.catalogController!,
-                  reprintTrayController: widget.reprintTrayController,
                   authService: widget.authService,
                   currentStaff: widget.currentStaff,
                   businessDayId: _activeBusinessDay!.id,

@@ -13,8 +13,6 @@ import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
 import 'package:resturant_sys/core/orders/payment_method.dart';
 import 'package:resturant_sys/core/orders/deal_item.dart';
 import 'package:resturant_sys/core/orders/deal_item_option.dart';
-import 'package:resturant_sys/core/hardware/in_memory_hardware_adapter.dart';
-import 'package:resturant_sys/core/hardware/reprint_tray_controller.dart';
 import 'package:resturant_sys/core/theme/warm_counter_theme.dart';
 import 'package:resturant_sys/widgets/orders/counter_billing_workspace.dart';
 import 'package:resturant_sys/widgets/orders/deal_selection_dialog.dart';
@@ -470,8 +468,6 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
 
-      final adapter = InMemoryHardwareAdapter();
-      final reprintTray = ReprintTrayController(hardwareAdapter: adapter);
 
       await tester.pumpWidget(
         MaterialApp(
@@ -481,7 +477,6 @@ void main() {
               currentStaff: testStaff,
               businessDayId: 1,
               shiftId: 1,
-              reprintTrayController: reprintTray,
               initialCategories: testCategories,
               initialMenuItems: testMenuItems,
               initialDeals: testDeals,

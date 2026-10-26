@@ -3,16 +3,14 @@ import 'package:flutter/services.dart';
 import 'package:resturant_sys/core/shifts/x_report.dart';
 import 'package:resturant_sys/core/theme/theme.dart';
 
-/// Modal dialog for reviewing and printing interim and closing X-Reports.
+/// Modal dialog for reviewing and copying interim and closing X-Reports.
 class XReportDialog extends StatelessWidget {
   const XReportDialog({
     super.key,
     required this.report,
-    this.onPrint,
   });
 
   final XReport report;
-  final VoidCallback? onPrint;
 
   @override
   Widget build(BuildContext context) {
@@ -63,7 +61,7 @@ class XReportDialog extends StatelessWidget {
                 ),
                 IconButton(
                   icon: const Icon(Icons.copy_rounded),
-                  tooltip: 'Copy printable text',
+                  tooltip: 'Copy report text',
                   onPressed: () {
                     Clipboard.setData(ClipboardData(text: printable));
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -75,7 +73,7 @@ class XReportDialog extends StatelessWidget {
             ),
             const Divider(height: WarmCounterSpacing.space24, color: WarmCounterColors.lightBorder),
 
-            // Monospace thermal receipt preview container
+            // Monospace report text preview
             Expanded(
               child: Container(
                 padding: const EdgeInsets.all(WarmCounterSpacing.space16),
@@ -111,30 +109,6 @@ class XReportDialog extends StatelessWidget {
                       shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
                     ),
                     child: const Text('Close'),
-                  ),
-                ),
-                const SizedBox(width: WarmCounterSpacing.space12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    key: const ValueKey('print_x_report_button'),
-                    icon: const Icon(Icons.print_rounded, size: 20),
-                    label: const Text('Print X-Report'),
-                    onPressed: () {
-                      if (onPrint != null) {
-                        onPrint!();
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Dispatched X-Report to thermal printer queue.')),
-                        );
-                      }
-                      Navigator.of(context).maybePop();
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: WarmCounterColors.lightPrimaryAction,
-                      foregroundColor: WarmCounterColors.lightTextOnPrimary,
-                      minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
-                      shape: const RoundedRectangleBorder(borderRadius: WarmCounterSpacing.controlBorderRadius),
-                    ),
                   ),
                 ),
               ],

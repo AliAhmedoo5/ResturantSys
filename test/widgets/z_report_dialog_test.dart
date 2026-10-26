@@ -106,13 +106,12 @@ void main() {
       // Buttons
       expect(find.byKey(const ValueKey('close_z_report_button')), findsOneWidget);
       expect(find.byKey(const ValueKey('export_excel_button')), findsOneWidget);
-      expect(find.byKey(const ValueKey('print_z_report_button')), findsOneWidget);
+      expect(find.byKey(const ValueKey('print_z_report_button')), findsNothing);
       expect(find.byKey(const ValueKey('finalize_day_button')), findsOneWidget);
 
       // Verify minimum 48px touch target heights
       expect(tester.getSize(find.byKey(const ValueKey('close_z_report_button'))).height, greaterThanOrEqualTo(48.0));
       expect(tester.getSize(find.byKey(const ValueKey('export_excel_button'))).height, greaterThanOrEqualTo(48.0));
-      expect(tester.getSize(find.byKey(const ValueKey('print_z_report_button'))).height, greaterThanOrEqualTo(48.0));
       expect(tester.getSize(find.byKey(const ValueKey('finalize_day_button'))).height, greaterThanOrEqualTo(48.0));
     });
 
@@ -205,31 +204,5 @@ void main() {
       expect(finalized, isTrue);
     });
 
-    testWidgets('triggers onPrint callback when print button tapped', (tester) async {
-      tester.view.physicalSize = const Size(1280, 900);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
-
-      bool printTriggered = false;
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: ZReportDialog(
-              report: dummyZReport,
-              onPrint: () {
-                printTriggered = true;
-              },
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.byKey(const ValueKey('print_z_report_button')));
-      await tester.pumpAndSettle();
-
-      expect(printTriggered, isTrue);
-    });
   });
 }
