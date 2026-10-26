@@ -39,6 +39,9 @@ class RiderTripController {
     if (orderIds.isEmpty) {
       throw ArgumentError('At least one delivery order must be assigned to the trip.');
     }
+    if (orderIds.toSet().length != orderIds.length) {
+      throw ArgumentError('A delivery order can only appear once in a trip.');
+    }
 
     // Verify shift is open
     final shiftRows = await database.query(
@@ -52,6 +55,9 @@ class RiderTripController {
     final shift = Shift.fromMap(shiftRows.first);
     if (shift.isClosed) {
       throw StateError('Cannot dispatch rider trip: Shift #$shiftId is closed.');
+    }
+    if (shift.businessDayId != businessDayId) {
+      throw StateError('Dispatch shift must belong to the selected Business Day.');
     }
 
     // Verify rider staff exists and is active
@@ -86,8 +92,12 @@ class RiderTripController {
         if (order.diningType != DiningType.delivery) {
           throw StateError('Order #$orderId is not a Delivery order (found: ${order.diningType.code}).');
         }
-        if (order.isCancelled || order.isVoided) {
-          throw StateError('Order #$orderId is already voided or cancelled.');
+        if (order.isCancelled || order.isVoided || order.paymentStatus == 'REFUNDED' ||
+            order.tokenStatus == TokenStatus.delivered || order.tokenStatus == TokenStatus.outForDelivery) {
+          throw StateError('Order #$orderId is no longer awaiting dispatch.');
+        }
+        if (order.businessDayId != businessDayId) {
+          throw StateError('Order #$orderId belongs to another Business Day.');
         }
 
         // Verify order is not already in an active (non-settled and non-cancelled) rider trip
@@ -403,6 +413,12 @@ class RiderTripController {
     if (shift.isClosed) {
       throw StateError('Cannot settle trip: Shift #$shiftId is closed.');
     }
+    if (shift.staffId != cashierStaffId) {
+      throw StateError('Only the Cashier operating this shift can settle rider cash.');
+    }
+    if (shift.businessDayId != trip.businessDayId) {
+      throw StateError('Rider settlement must remain in the trip Business Day.');
+    }
 
     final now = settledAt ?? DateTime.now();
     final formattedNow = _formatTimestamp(now);
@@ -650,7 +666,7 @@ class RiderTripController {
   Future<List<Order>> getPendingDeliveryOrders({int? shiftId, int? businessDayId}) async {
     final conditions = [
       "o.dining_type = 'DELIVERY'",
-      "o.payment_status NOT IN ('CANCELLED', 'VOIDED')",
+      "o.payment_status NOT IN ('CANCELLED', 'VOIDED', 'REFUNDED')",
       "o.token_status NOT IN ('OUT_FOR_DELIVERY', 'DELIVERED')",
       '''NOT EXISTS (
         SELECT 1 FROM ${PosDatabaseConstants.tableRiderTripOrders} rto

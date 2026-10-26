@@ -37,6 +37,11 @@ class Staff {
   /// Strictly restricted to Cashiers; Manager credentials cannot operate the counter.
   bool get canAccessRegister => loginEnabled && role == StaffRole.cashier;
 
+  /// Both operating roles can assign and monitor delivery trips.
+  /// Cash collection remains restricted to the Cashier's own open shift.
+  bool get canAccessRiderTrips => isActive && loginEnabled &&
+      (role == StaffRole.cashier || role == StaffRole.manager);
+
   /// Can access back-office settings, Khata, staff management, and reports.
   bool get canAccessSupervisorPortal => loginEnabled && role == StaffRole.manager;
 

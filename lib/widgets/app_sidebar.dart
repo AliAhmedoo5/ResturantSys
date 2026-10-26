@@ -20,7 +20,7 @@ class AppSidebar extends StatelessWidget {
     final tabs = [
       if (manager) AppWorkspaceTab.dashboard,
       AppWorkspaceTab.register,
-      if (manager) AppWorkspaceTab.riderTrips,
+      if (staff.canAccessRiderTrips) AppWorkspaceTab.riderTrips,
       if (manager) ...[AppWorkspaceTab.catalog, AppWorkspaceTab.khata, AppWorkspaceTab.supervisor],
       if (manager) ...[
         AppWorkspaceTab.mandi, AppWorkspaceTab.wastage,

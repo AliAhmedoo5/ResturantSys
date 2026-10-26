@@ -149,6 +149,47 @@ void main() {
       return result.order;
     }
 
+    test('Dispatch rejects duplicate orders without creating a trip or doubling COD', () async {
+      final order = await createTestDeliveryOrder(phone: '03005556666', isCod: true);
+      await expectLater(riderTripController.createRiderTrip(riderStaffId: riderStaffId,
+        shiftId: shiftId, businessDayId: businessDayId, tripName: 'Duplicate batch',
+        orderIds: [order.id, order.id]), throwsArgumentError);
+      expect(await db.query('rider_trips'), isEmpty);
+      expect((await orderController.getOrder(order.id)).paymentStatus, 'COLLECTION_DUE');
+    });
+
+    test('Manager and a different Cashier cannot settle another Cashier drawer', () async {
+      final order = await createTestDeliveryOrder(phone: '03005556666', isCod: true);
+      final trip = await riderTripController.createRiderTrip(riderStaffId: riderStaffId,
+        shiftId: shiftId, businessDayId: businessDayId, tripName: 'Cashier collection', orderIds: [order.id]);
+      await riderTripController.markOrderDelivered(tripId: trip.id, orderId: order.id);
+      for (final actor in [1, riderStaffId]) {
+        await expectLater(riderTripController.settleRiderTrip(tripId: trip.id, cashierStaffId: actor,
+          shiftId: shiftId, cashCountedPaisa: 80000), throwsStateError);
+      }
+      expect((await orderController.getOrder(order.id)).paymentStatus, 'COLLECTION_DUE');
+      expect((await riderTripController.getTrip(trip.id)).isSettled, isFalse);
+    });
+
+    test('A waiting order from the previous shift is dispatched and collected in the current shift', () async {
+      final order = await createTestDeliveryOrder(phone: '03005556666', isCod: true);
+      await db.update('shifts', {'status': 'CLOSED', 'closed_at': DateTime.now().toIso8601String()},
+        where: 'id=?', whereArgs: [shiftId]);
+      final currentShift = await shiftController.openShift(staffId: cashierId, openingFloat: 0);
+      final pending = await riderTripController.getPendingDeliveryOrders(businessDayId: businessDayId);
+      expect(pending.map((o) => o.id), contains(order.id));
+      final trip = await riderTripController.createRiderTrip(riderStaffId: riderStaffId,
+        shiftId: currentShift.id, businessDayId: businessDayId, tripName: 'Handover delivery', orderIds: [order.id]);
+      expect((await orderController.getOrder(order.id)).shiftId, shiftId);
+      await riderTripController.markOrderDelivered(tripId: trip.id, orderId: order.id);
+      expect((await orderController.getOrder(order.id)).paymentStatus, 'COLLECTION_DUE');
+      await riderTripController.settleRiderTrip(tripId: trip.id, cashierStaffId: cashierId,
+        shiftId: currentShift.id, cashCountedPaisa: 80000);
+      expect((await orderController.getOrder(order.id)).paymentStatus, 'SETTLED');
+      final movements = await db.query('cash_movements', where: 'shift_id=?', whereArgs: [currentShift.id]);
+      expect(movements, hasLength(1));
+    });
+
     test('1. Delivery orders can be batched and assigned to named rider trips', () async {
       final order1 = await createTestDeliveryOrder(phone: '03001234567', isCod: true);
       final order2 = await createTestDeliveryOrder(phone: '03007654321', isCod: true);

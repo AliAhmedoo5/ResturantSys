@@ -22,6 +22,17 @@ import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
 import 'package:resturant_sys/widgets/delivery/rider_trip_dispatch_workspace.dart';
 import 'package:resturant_sys/widgets/delivery/rider_trip_settlement_dialog.dart';
 
+class FailingQueueController extends RiderTripController {
+  FailingQueueController({required super.database});
+  bool fail = true;
+
+  @override
+  Future<List<Order>> getPendingDeliveryOrders({int? shiftId, int? businessDayId}) async {
+    if (fail) throw StateError('Synthetic queue load failure');
+    return super.getPendingDeliveryOrders(shiftId: shiftId, businessDayId: businessDayId);
+  }
+}
+
 void main() {
   setUpAll(() {
     sqfliteFfiInit();
@@ -204,8 +215,13 @@ void main() {
       await tester.pumpWidget(MaterialApp(home: AppShell(session: session,
         onAuthenticatePin: (_) async => null, shiftController: shiftController,
         orderController: orderController, riderTripController: riderTripController,
+        catalogController: catalogController,
       )));
-      await tester.pump();
+      final menuItem = find.byKey(ValueKey('menu_item_tile_${burgerItem.id}'));
+      await settleUntil(tester, () => menuItem.evaluate().isNotEmpty, 'cashier register');
+      await tester.tap(menuItem);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('cart_item_name_0')), findsOneWidget);
       final riders = find.byKey(const ValueKey('workspace_tab_riderTrips'));
       expect(riders, findsOneWidget);
       await tester.tap(riders);
@@ -218,6 +234,46 @@ void main() {
       expect(session.currentStaff?.id, activeCashier.id);
       expect((await tester.runAsync(() => orderController.getOrder(order.id)))!.tokenStatus,
         TokenStatus.outForDelivery);
+      await tester.tap(find.byKey(const ValueKey('workspace_tab_register')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('cart_item_name_0')), findsOneWidget,
+        reason: 'Opening Riders must preserve the unfinished cashier cart.');
+    });
+
+    testWidgets('delivery loading errors are visible and can be retried', (tester) async {
+      tester.view.physicalSize = const Size(1366, 768);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final order = (await tester.runAsync(createTestOrder))!;
+      final controller = FailingQueueController(database: db);
+      await pumpWorkspace(tester, MaterialApp(home: Scaffold(body: RiderTripDispatchWorkspace(
+        controller: controller, currentStaff: activeCashier, shiftController: shiftController,
+      ))));
+      expect(find.byKey(const ValueKey('rider_load_error')), findsOneWidget);
+      controller.fail = false;
+      await tapAndSettle(tester, find.text('Retry'),
+        () => find.text(order.tokenDisplay).evaluate().isNotEmpty, 'retry deliveries');
+      expect(find.byKey(const ValueKey('rider_load_error')), findsNothing);
+    });
+
+    testWidgets('active rider trips remain visible across cashier handovers', (tester) async {
+      tester.view.physicalSize = const Size(1366, 768);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final order = (await tester.runAsync(createTestOrder))!;
+      await tester.runAsync(() async {
+        await riderTripController.createRiderTrip(riderStaffId: 3, shiftId: activeShift.id,
+          businessDayId: activeShift.businessDayId, tripName: 'Carryover trip', orderIds: [order.id]);
+        await db.update('shifts', {'status': 'CLOSED', 'closed_at': DateTime.now().toIso8601String()},
+          where: 'id=?', whereArgs: [activeShift.id]);
+        await shiftController.openShift(staffId: activeCashier.id, openingFloat: 0);
+      });
+      await pumpWorkspace(tester, MaterialApp(home: Scaffold(body: RiderTripDispatchWorkspace(
+        controller: riderTripController, currentStaff: activeCashier, shiftController: shiftController,
+      ))));
+      expect(find.textContaining('Carryover trip'), findsOneWidget);
     });
 
     testWidgets('renders pending orders and batches into a new trip', (tester) async {
