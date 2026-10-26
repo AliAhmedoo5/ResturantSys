@@ -198,6 +198,8 @@ void main() {
       }))!;
       expect(order.tokenStatus, TokenStatus.preparing);
       expect(order.paymentStatus, 'SETTLED');
+      final assignees = (await tester.runAsync(() => riderTripController.getAvailableRiders()))!;
+      expect(assignees.map((rider) => rider.name), contains('Legacy Kitchen Helper'));
       await pumpWorkspace(tester, MaterialApp(home: Scaffold(body: RiderTripDispatchWorkspace(
         controller: riderTripController, currentStaff: activeCashier, shiftController: shiftController,
       ))));

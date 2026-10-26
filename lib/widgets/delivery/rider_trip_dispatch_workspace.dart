@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/auth/staff.dart';
 import '../../core/delivery/rider_trip.dart';
 import '../../core/delivery/rider_trip_controller.dart';
+import '../../core/delivery/rider_assignee.dart';
 import '../../core/orders/order.dart';
 import '../../core/orders/paisa_engine.dart';
 import '../../core/shifts/shift_and_cash_controller.dart';
@@ -29,7 +30,7 @@ class RiderTripDispatchWorkspace extends StatefulWidget {
   final List<Order>? initialPendingOrders;
   final List<RiderTrip>? initialActiveTrips;
   final List<RiderDispatchAlert>? initialActiveAlerts;
-  final List<Staff>? initialAvailableRiders;
+  final List<RiderAssignee>? initialAvailableRiders;
 
   @override
   State<RiderTripDispatchWorkspace> createState() => _RiderTripDispatchWorkspaceState();
@@ -40,10 +41,10 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
   List<Order> _pendingOrders = [];
   List<RiderTrip> _activeTrips = [];
   List<RiderDispatchAlert> _activeAlerts = [];
-  List<Staff> _availableRiders = [];
+  List<RiderAssignee> _availableRiders = [];
 
   final Set<int> _selectedOrderIds = {};
-  Staff? _selectedRider;
+  RiderAssignee? _selectedRider;
   final _tripNameController = TextEditingController();
   bool _isDispatching = false;
   bool _loadingData = false;
@@ -113,7 +114,7 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
           _activeTrips = active;
           _activeAlerts = alerts;
           _availableRiders = riders;
-          // Database refreshes create new Staff instances. Preserve the choice
+          // Database refreshes create new assignee instances. Preserve the choice
           // by ID and rebind it to the refreshed list, or choose a valid fallback.
           final previousRiderId = _selectedRider?.id;
           final matchingRiders = riders.where((rider) => rider.id == previousRiderId);
