@@ -94,6 +94,21 @@ void main() {
       );
     }
 
+    testWidgets('Dashboard reports missing dependencies and staff management remains accessible', (tester) async {
+      tester.view.physicalSize = const Size(1366, 768);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(createTestApp());
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('portal_tab_dashboard')));
+      await tester.pumpAndSettle();
+      expect(find.text('Analytics unavailable. A Manager session and database are required.'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('portal_tab_staff')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('add_department_button')), findsOneWidget);
+    });
+
     testWidgets('renders all tabs and allows department creation and staff registration', (tester) async {
       tester.view.physicalSize = const Size(1920, 1080);
       tester.view.devicePixelRatio = 1.0;
