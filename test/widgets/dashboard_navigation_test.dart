@@ -12,7 +12,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final session = SessionState();
-    session.login(const Staff(id: 1, name: 'Manager', pinHash: 'fixture',
+    session.login(const Staff(id: 1, departmentId: 1, name: 'Manager', pinHash: 'fixture',
       role: StaffRole.manager, isActive: true));
     await tester.pumpWidget(MaterialApp(home: AppShell(
       session: session, onAuthenticatePin: (_) async => null,
@@ -26,7 +26,7 @@ void main() {
     expect(tester.takeException(), isNull);
     session.lock();
     await tester.pumpAndSettle();
-    session.login(const Staff(id: 2, name: 'Cashier', pinHash: 'fixture',
+    session.login(const Staff(id: 2, departmentId: 1, name: 'Cashier', pinHash: 'fixture',
       role: StaffRole.cashier, isActive: true));
     await tester.pumpAndSettle();
     expect(dashboard, findsNothing);
