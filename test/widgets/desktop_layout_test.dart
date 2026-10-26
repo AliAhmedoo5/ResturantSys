@@ -61,6 +61,15 @@ Future<void> capture(WidgetTester tester, String name) async {
 }
 
 void main() {
+  testWidgets('cashier menu photos have a larger readable card area', (tester) async {
+    await pumpDesktop(tester, const Size(1366, 768), 1, staff: cashier, child: counter());
+    final tile = find.byKey(const ValueKey('menu_item_tile_1'));
+    final photo = find.descendant(of: tile, matching: find.byType(Expanded)).first;
+    expect(tester.getSize(tile).width, greaterThanOrEqualTo(210));
+    expect(tester.getSize(tile).height, greaterThanOrEqualTo(232));
+    expect(tester.getSize(photo).height, greaterThanOrEqualTo(160));
+    expect(find.byKey(const ValueKey('proceed_to_tender_button')).hitTestable(), findsOneWidget);
+  });
   setUpAll(() async {
     // CI-only preview font. Production continues to use the system font fallback.
     final file = File('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf');
