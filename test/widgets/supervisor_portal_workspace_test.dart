@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:resturant_sys/core/auth/department.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/auth/staff_role.dart';
-import 'package:resturant_sys/core/hardware/reprint_tray_controller.dart';
 import 'package:resturant_sys/core/shifts/shift.dart';
 import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
 import 'package:resturant_sys/core/shifts/z_report.dart';
@@ -71,7 +70,6 @@ void main() {
       List<Shift>? initialDiscrepancies,
       ZReport? initialZReport,
       Future<void> Function()? onFinalizeBusinessDay,
-      ReprintTrayController? reprintTrayController,
       ShiftAndCashController? shiftController,
       double? initialDiscrepancyThreshold,
     }) {
@@ -87,7 +85,6 @@ void main() {
             initialDiscrepancies: initialDiscrepancies,
             initialZReport: initialZReport,
             onFinalizeBusinessDay: onFinalizeBusinessDay,
-            reprintTrayController: reprintTrayController,
             initialDiscrepancyThreshold: initialDiscrepancyThreshold,
           ),
         ),

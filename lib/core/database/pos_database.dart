@@ -1019,7 +1019,6 @@ class PosDatabase {
     final defaultSettings = {
       'schema_version': '${PosDatabaseConstants.schemaVersion}',
       'app_name': 'ResturantPOS',
-      'paper_width': '80mm',
       PosDatabaseConstants.settingDiscrepancyThreshold: PosDatabaseConstants.defaultDiscrepancyThreshold,
       PosDatabaseConstants.settingCashierVoidRequestsEnabled: PosDatabaseConstants.defaultCashierVoidRequestsEnabled,
       PosDatabaseConstants.settingRestaurantName: PosDatabaseConstants.defaultRestaurantName,

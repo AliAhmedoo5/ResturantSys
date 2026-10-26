@@ -5,10 +5,14 @@ on:
   push:
     tags: [ 'v*' ]
 
+permissions:
+  contents: read
+
 jobs:
   build:
     name: Build Windows x64 Desktop Release
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -34,6 +38,7 @@ jobs:
       - name: Package Windows Release ZIP
         shell: pwsh
         run: |
+          ./scripts/ci/verify-windows-bundle.ps1 -BundlePath build/windows/x64/runner/Release
           New-Item -ItemType Directory -Force -Path dist
           Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath dist\resturant-pos-windows-x64.zip
 

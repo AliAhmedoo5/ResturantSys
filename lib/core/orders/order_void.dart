@@ -1,4 +1,4 @@
-/// Mandatory reasons for cancelling and voiding a post-print order.
+/// Mandatory reasons for cancelling and voiding a confirmed order.
 abstract final class VoidReason {
   static const String customerCancelled = 'Customer Cancelled';
   static const String cashierMistake = 'Cashier Mistake';
