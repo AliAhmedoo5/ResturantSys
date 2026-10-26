@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/auth/staff_role.dart';
+import 'package:resturant_sys/core/catalog/discount_preset.dart';
+import 'package:resturant_sys/core/orders/cart_item.dart';
 import 'package:resturant_sys/core/orders/dining_type.dart';
 import 'package:resturant_sys/core/orders/order.dart';
 import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
@@ -13,6 +15,9 @@ class StatusOrders implements OrderAndCheckoutController {
     tokenNumber: 7, diningType: DiningType.takeaway, subtotal: 500,
     grandTotal: 500, paymentStatus: 'SETTLED', createdAt: DateTime(2026));
   int? actor;
+  @override
+  CartTotals calculateCartTotals({required List<CartItem> items, DiscountPreset? discount}) =>
+    const CartTotals(subtotal: 0, discountAmount: 0, taxAmount: 0, grandTotal: 0);
   @override
   Future<List<Order>> getOrders({int? businessDayId, int? shiftId, int? limit}) async => [order];
   @override
