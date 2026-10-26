@@ -4,8 +4,6 @@ import 'package:resturant_sys/core/auth/auth_service.dart';
 import 'package:resturant_sys/core/auth/session_state.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/auth/staff_role.dart';
-import 'package:resturant_sys/core/hardware/in_memory_hardware_adapter.dart';
-import 'package:resturant_sys/core/hardware/reprint_tray_controller.dart';
 import 'package:resturant_sys/core/catalog/discount_preset.dart';
 import 'package:resturant_sys/core/orders/cart_item.dart';
 import 'package:resturant_sys/core/orders/dining_type.dart';
@@ -14,7 +12,6 @@ import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
 import 'package:resturant_sys/core/orders/order_void.dart';
 import 'package:resturant_sys/core/theme/warm_counter_theme.dart';
 import 'package:resturant_sys/widgets/orders/counter_billing_workspace.dart';
-import 'package:resturant_sys/widgets/orders/reprint_tray_dialog.dart';
 import 'package:resturant_sys/widgets/orders/supervisor_void_dialog.dart';
 import 'package:sqflite_common/sqlite_api.dart';
 
@@ -149,8 +146,6 @@ void main() {
   group('SupervisorVoidDialog Widget Tests', () {
     late FakeAuthService authService;
     late FakeOrderController orderController;
-    late InMemoryHardwareAdapter hardwareAdapter;
-    late ReprintTrayController reprintTrayController;
     late Order testOrder;
 
     const cashierStaff = Staff(
@@ -166,10 +161,6 @@ void main() {
     setUp(() {
       authService = FakeAuthService();
       orderController = FakeOrderController();
-      hardwareAdapter = InMemoryHardwareAdapter();
-      reprintTrayController = ReprintTrayController(
-        hardwareAdapter: hardwareAdapter,
-      );
 
       testOrder = Order(
         id: 42,
@@ -263,7 +254,7 @@ void main() {
       expect(authService.session.currentStaff?.id, equals(cashierStaff.id));
     });
 
-    testWidgets('authorizes with valid supervisor PIN (1234), voids order, emits void slip, and pops', (tester) async {
+    testWidgets('authorizes with valid supervisor PIN (1234), voids order and keeps the cashier session', (tester) async {
       authService.session.login(cashierStaff);
       bool voidSuccessCallbackCalled = false;
 
@@ -300,79 +291,9 @@ void main() {
       expect(orderController.lastVoidResult!.supervisorName, equals('Supervisor'));
 
       // Cancellation remains audited without emitting any kitchen print job.
-      expect(reprintTrayController.recentJobs, isEmpty);
-      expect(hardwareAdapter.counterPrintedBytes, isEmpty);
 
       // Cashier remains logged in throughout the entire flow
       expect(authService.session.currentStaff?.id, equals(cashierStaff.id));
-    });
-
-    testWidgets('ReprintTrayDialog allows supervisor to view and toggle cashier void requests switch', (tester) async {
-      const supervisorStaff = Staff(
-        id: 1,
-        name: 'Supervisor',
-        departmentId: 1,
-        pinHash: 'hash',
-        role: StaffRole.supervisor,
-        isActive: true,
-      );
-
-      await tester.pumpWidget(createTestApp(
-        ReprintTrayDialog(
-          controller: reprintTrayController,
-          currentStaff: supervisorStaff,
-          orderController: orderController,
-          authService: authService,
-        ),
-      ));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-
-      final switchFinder = find.byKey(const ValueKey('toggle_cashier_void_switch'));
-      expect(switchFinder, findsOneWidget);
-      expect(find.text('Cashier Void Requests: Enabled'), findsOneWidget);
-
-      await tester.tap(switchFinder);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-
-      expect(find.text('Cashier Void Requests: Disabled'), findsOneWidget);
-      final enabled = await orderController.isCashierVoidEnabled();
-      expect(enabled, isFalse);
-    });
-
-    testWidgets('ReprintTrayDialog recent settled job displays Void button and launches SupervisorVoidDialog', (tester) async {
-      const supervisorStaff = Staff(
-        id: 1,
-        name: 'Supervisor',
-        departmentId: 1,
-        pinHash: 'hash',
-        role: StaffRole.supervisor,
-        isActive: true,
-      );
-
-      await reprintTrayController.dispatchOrderPrinting(order: testOrder, isCashPaid: true);
-
-      await tester.pumpWidget(createTestApp(
-        ReprintTrayDialog(
-          controller: reprintTrayController,
-          currentStaff: supervisorStaff,
-          orderController: orderController,
-          authService: authService,
-        ),
-      ));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-
-      final voidBtn = find.byKey(ValueKey('void_job_${reprintTrayController.recentJobs.first.id}'));
-      expect(voidBtn, findsOneWidget);
-
-      await tester.tap(voidBtn);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-
-      expect(find.byType(SupervisorVoidDialog), findsOneWidget);
-      expect(find.text('Supervisor Void Authorization'), findsOneWidget);
     });
 
     testWidgets('CounterBillingWorkspace alerts when cashier void requests are disabled', (tester) async {
@@ -385,7 +306,6 @@ void main() {
           shiftId: 1,
           orderController: orderController,
           authService: authService,
-          reprintTrayController: reprintTrayController,
           initialCategories: const [],
           initialMenuItems: const [],
           initialDeals: const [],

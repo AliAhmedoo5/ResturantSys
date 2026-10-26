@@ -5,7 +5,6 @@ import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
 import 'package:resturant_sys/core/theme/theme.dart';
 import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
 import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
-import 'package:resturant_sys/core/hardware/reprint_tray_controller.dart';
 import '../core/auth/auth_service.dart';
 import '../core/procurement/procurement_and_wastage_controller.dart';
 import '../core/khata/vendor_khata_controller.dart';
@@ -33,7 +32,6 @@ class AppShell extends StatefulWidget {
     this.shiftController,
     this.catalogController,
     this.orderController,
-    this.reprintTrayController,
     this.procurementController,
     this.vendorKhataController,
     this.authService,
@@ -46,7 +44,6 @@ class AppShell extends StatefulWidget {
   final ShiftAndCashController? shiftController;
   final CatalogAndRecipeController? catalogController;
   final OrderAndCheckoutController? orderController;
-  final ReprintTrayController? reprintTrayController;
   final ProcurementAndWastageController? procurementController;
   final VendorKhataController? vendorKhataController;
   final AuthService? authService;
@@ -193,7 +190,6 @@ class _AppShellState extends State<AppShell> {
                   onLock: () => widget.session.lock(),
                   selectedWorkspace: _selectedWorkspace,
                   showBrand: false,
-                  reprintTrayController: widget.reprintTrayController,
                   orderController: widget.orderController,
                   authService: widget.authService,
                 ),
@@ -246,7 +242,6 @@ class _AppShellState extends State<AppShell> {
         authService: widget.authService!,
         shiftController: widget.shiftController,
         orderController: widget.orderController,
-        reprintTrayController: widget.reprintTrayController,
         currentStaff: staff,
       );
     }
@@ -275,7 +270,6 @@ class _AppShellState extends State<AppShell> {
         currentStaff: staff,
         orderController: widget.orderController,
         catalogController: widget.catalogController,
-        reprintTrayController: widget.reprintTrayController,
         authService: widget.authService,
         onLock: () => widget.session.lock(),
       );

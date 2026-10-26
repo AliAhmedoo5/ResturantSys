@@ -59,7 +59,7 @@ A temporary, unconfirmed cart snapshot saved locally for later recall before tok
 _Avoid_: Draft order, parked sale, paused bill
 
 **Receipt**:
-A customer-facing summary slip detailing ordered items, applied taxes, discounts, delivery fees, and payment tenders.
+A customer-facing digital summary detailing ordered items, applied taxes, discounts, delivery fees, and payment tenders. Physical printing is outside the business workflow.
 _Avoid_: Bill, tax invoice slip, customer check
 
 **Dining Type**:

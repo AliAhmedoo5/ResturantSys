@@ -89,7 +89,7 @@ class ZReport {
   static final NumberFormat _currencyFormat = NumberFormat('#,##0.00', 'en_US');
   static final DateFormat _dateFormat = DateFormat('yyyy-MM-dd HH:mm:ss');
 
-  /// Formats the Z-Report as a clean 42-column monospace thermal slip suitable for ESC/POS printing.
+  /// Formats the Z-Report as a compact monospace text summary for review and copying.
   String toPrintableString() {
     final buffer = StringBuffer();
     const divider = '==========================================';

@@ -8,7 +8,6 @@ import '../../core/auth/job_role.dart';
 import 'job_roles_dialog.dart';
 import '../../core/auth/staff.dart';
 import '../../core/auth/staff_role.dart';
-import '../../core/hardware/reprint_tray_controller.dart';
 import '../../core/orders/order_and_checkout_controller.dart';
 import '../../core/shifts/shift.dart';
 import '../../core/shifts/shift_and_cash_controller.dart';
@@ -50,7 +49,6 @@ class SupervisorPortalWorkspace extends StatefulWidget {
     this.authService,
     this.shiftController,
     this.orderController,
-    this.reprintTrayController,
     this.currentStaff,
     this.initialDepartments,
     this.initialStaff,
@@ -64,7 +62,6 @@ class SupervisorPortalWorkspace extends StatefulWidget {
   final AuthService? authService;
   final ShiftAndCashController? shiftController;
   final OrderAndCheckoutController? orderController;
-  final ReprintTrayController? reprintTrayController;
   final Staff? currentStaff;
   final List<Department>? initialDepartments;
   final List<Staff>? initialStaff;
@@ -1233,7 +1230,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                 style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
               ),
               subtitle: const Text(
-                'Allows front counter cashiers to request post-print order voids with mandatory cancellation reasons requiring supervisor PIN authorization.',
+                'Allows front counter cashiers to request order voids with mandatory cancellation reasons requiring supervisor PIN authorization.',
               ),
               secondary: Container(
                 padding: const EdgeInsets.all(8),

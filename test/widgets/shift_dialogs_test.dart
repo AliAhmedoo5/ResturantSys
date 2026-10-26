@@ -194,7 +194,7 @@ void main() {
 
       expect(find.text('Interim X-Report Preview'), findsOneWidget);
       expect(find.textContaining('INTERIM X-REPORT'), findsOneWidget);
-      expect(find.byKey(const ValueKey('print_x_report_button')), findsOneWidget);
+      expect(find.byKey(const ValueKey('print_x_report_button')), findsNothing);
     });
 
     testWidgets('DiscrepancyReviewDialog displays flagged shift and submits supervisor resolution', (tester) async {

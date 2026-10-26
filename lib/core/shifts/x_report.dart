@@ -2,7 +2,7 @@ import 'package:intl/intl.dart';
 import 'cash_movement.dart';
 import 'shift.dart';
 
-/// Summarizes an interim or finalized cashier shift for thermal X-Report printout and audit.
+/// Summarizes an interim or finalized cashier shift for digital X-Report review and audit.
 class XReport {
   XReport({
     required this.businessDayId,
@@ -51,7 +51,7 @@ class XReport {
   static final NumberFormat _currencyFormat = NumberFormat('#,##0.00', 'en_US');
   static final DateFormat _dateFormat = DateFormat('yyyy-MM-dd HH:mm:ss');
 
-  /// Formats the report as a clean 42-column monospace thermal slip suitable for ESC/POS printing.
+  /// Formats the report as a compact monospace text summary for review and copying.
   String toPrintableString() {
     final buffer = StringBuffer();
     const divider = '==========================================';
