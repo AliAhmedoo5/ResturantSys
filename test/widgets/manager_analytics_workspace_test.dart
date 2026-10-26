@@ -130,6 +130,22 @@ void main() {
     expect(find.textContaining('Unable to load analytics'), findsNothing);
   });
 
+  testWidgets('A rejected refresh clears previously visible financial data', (tester) async {
+    var authorized = true;
+    final service = SnapshotService(onLoad: (query) async {
+      if (!authorized) throw StateError('Manager access is no longer enabled.');
+      return SnapshotService.fixture(query);
+    });
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: ManagerAnalyticsWorkspace(service: service))));
+    await tester.pumpAndSettle();
+    expect(find.text('PKR 1,234.50'), findsOneWidget);
+    authorized = false;
+    await tester.tap(find.byKey(const ValueKey('analytics_refresh')));
+    await tester.pumpAndSettle();
+    expect(find.text('PKR 1,234.50'), findsNothing);
+    expect(find.text('Retry'), findsOneWidget);
+  });
+
   testWidgets('Session lock immediately hides financial data and rejects a pending refresh', (tester) async {
     final session = SessionState()..login(const Staff(id: 1, name: 'Manager', departmentId: 1,
       pinHash: 'unused', role: StaffRole.manager, isActive: true));
