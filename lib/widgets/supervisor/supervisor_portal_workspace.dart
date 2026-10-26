@@ -79,6 +79,7 @@ class SupervisorPortalWorkspace extends StatefulWidget {
 
 class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
   SupervisorPortalTab _activeTab = SupervisorPortalTab.staff;
+  AnalyticsService? _analyticsService;
   final NumberFormat _currencyFormat = NumberFormat('#,##0.00');
   final DateFormat _dateFormat = DateFormat('yyyy-MM-dd HH:mm');
 
@@ -881,8 +882,11 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
         if (auth == null) {
           return const Center(child: Text('Analytics unavailable. A Manager session and database are required.'));
         }
+        if (_analyticsService?.authService != auth || _analyticsService?.database != auth.database) {
+          _analyticsService = AnalyticsService(database: auth.database, authService: auth);
+        }
         return ManagerAnalyticsWorkspace(
-          service: AnalyticsService(database: auth.database, authService: auth),
+          service: _analyticsService!,
           session: auth.session,
         );
       case SupervisorPortalTab.deliveryAreas:

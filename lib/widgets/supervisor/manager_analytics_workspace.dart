@@ -7,6 +7,8 @@ import '../../core/analytics/analytics_models.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/auth/session_state.dart';
 import '../../core/auth/staff_role.dart';
+import '../../core/orders/dining_type.dart';
+import '../../core/orders/payment_method.dart';
 import '../../core/theme/theme.dart';
 
 const _familyLabels = <AnalyticsFamily, String>{
@@ -271,18 +273,17 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
         SizedBox(width: 160, child: DropdownButtonFormField<String>(
           key: const ValueKey('analytics_dining'), value: _dining, isExpanded: true,
           decoration: const InputDecoration(labelText: 'Dining Type', border: OutlineInputBorder(), isDense: true),
-          items: const [DropdownMenuItem<String>(value: null, child: Text('All')),
-            DropdownMenuItem(value: 'DINE_IN', child: Text('Dine-In')),
-            DropdownMenuItem(value: 'TAKEAWAY', child: Text('Takeaway')),
-            DropdownMenuItem(value: 'DELIVERY', child: Text('Delivery'))],
+          items: [const DropdownMenuItem<String>(value: null, child: Text('All')),
+            for (final type in DiningType.values)
+              DropdownMenuItem(value: type.code, child: Text(type.displayName))],
           onChanged: (value) => setState(() => _dining = value),
         )),
         SizedBox(width: 180, child: DropdownButtonFormField<String>(
           key: const ValueKey('analytics_payment'), value: _payment, isExpanded: true,
           decoration: const InputDecoration(labelText: 'Payment method', border: OutlineInputBorder(), isDense: true),
           items: [const DropdownMenuItem<String>(value: null, child: Text('All')),
-            for (final method in ['CASH', 'JAZZCASH', 'EASYPAISA', 'BANK_TRANSFER', 'RAAST', 'CARD', 'COD'])
-              DropdownMenuItem(value: method, child: Text(method.replaceAll('_', ' ')))],
+            for (final method in PaymentMethod.values.where((method) => method != PaymentMethod.split))
+              DropdownMenuItem(value: method.code, child: Text(method.displayName))],
           onChanged: (value) => setState(() => _payment = value),
         )),
         FilledButton(key: const ValueKey('analytics_apply_filters'), onPressed: _applyFilters, child: const Text('Apply')),
@@ -344,6 +345,8 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
         Text(quality, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
           color: metric.quality == AnalyticsQuality.complete ? StreetFoodMafiaColors.statusReady : StreetFoodMafiaColors.burntGold)),
         Text(metric.explanation, style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
+        Text('Unit: ${switch (metric.unit) { AnalyticsUnit.paisa => 'PKR (stored as integer paisa)', AnalyticsUnit.percent => 'percent', AnalyticsUnit.minutes => 'minutes', AnalyticsUnit.count => 'count', AnalyticsUnit.decimal => 'decimal; see formula' }}',
+          style: const TextStyle(fontSize: 11, color: StreetFoodMafiaColors.secondaryText)),
         if (metric.sampleCount != null) Text('Coverage: ${metric.sampleCount}'
           '${metric.populationCount == null ? ' valid samples' : ' / ${metric.populationCount}'}', style: const TextStyle(fontSize: 12)),
         if (metric.changePercent != null) Text('${metric.changePercent! >= 0 ? '+' : ''}'
