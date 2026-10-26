@@ -165,6 +165,13 @@ class OrderAndCheckoutController {
         '${twoDigits(dt.hour)}:${twoDigits(dt.minute)}:${twoDigits(dt.second)}';
   }
 
+  Future<void> _requireActiveCashier(DatabaseExecutor executor, int cashierId) async {
+    final rows = await executor.query('staff',
+      where: 'id = ? AND is_active = 1 AND login_enabled = 1', whereArgs: [cashierId]);
+    if (rows.isEmpty || rows.single['role'] != StaffRole.cashier.code) {
+      throw StateError('Only an active Cashier can modify customer orders.');
+    }
+  }
   // ===========================================================================
   // DEALS MANAGEMENT
   // ===========================================================================
@@ -1240,6 +1247,7 @@ class OrderAndCheckoutController {
     required String reason,
     required String commandId,
   }) async {
+    await _requireActiveCashier(database, cashierId);
     final trimmedReason = reason.trim();
     if (trimmedReason.isEmpty) {
       throw ArgumentError('Cancellation reason is mandatory.');
@@ -1533,6 +1541,7 @@ class OrderAndCheckoutController {
     required List<CartItem> newItems,
     String action = 'CHANGE',
   }) async {
+    await _requireActiveCashier(database, cashierId);
     final trimmedReason = reason.trim();
     if (trimmedReason.isEmpty) {
       throw ArgumentError('Revision reason is mandatory.');
@@ -1986,6 +1995,7 @@ class OrderAndCheckoutController {
     if (amountPaisa <= 0) {
       throw ArgumentError('Refund amount must be greater than zero.');
     }
+    await _requireActiveCashier(database, cashierId);
     final trimmedReason = reason.trim();
     if (trimmedReason.isEmpty) {
       throw ArgumentError('Refund reason is mandatory.');
