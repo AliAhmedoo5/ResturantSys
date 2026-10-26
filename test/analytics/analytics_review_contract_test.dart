@@ -25,7 +25,7 @@ void main() {
     await db.insert('business_days', {'opened_at': '2026-10-24 18:00:00',
       'closed_at': '2026-10-25 17:00:00', 'status': 'CLOSED', 'opened_by_staff_id': manager['id']});
     final day = await db.insert('business_days', {'opened_at': '2026-10-25 18:00:00',
-      'closed_at': '2026-10-26 17:00:00', 'status': 'CLOSED', 'opened_by_staff_id': manager['id']});
+      'closed_at': '2026-10-26 17:00:00', 'status': 'OPEN', 'opened_by_staff_id': manager['id']});
     final shift = await db.insert('shifts', {'business_day_id': day, 'staff_id': cashier['id'],
       'opened_at': '2026-10-25 18:00:00', 'opening_float': 0, 'status': 'OPEN'});
     for (var token = 1; token <= 2; token++) {
@@ -40,6 +40,9 @@ void main() {
       'created_at': '2026-10-26 00:30:00'});
     final service = AnalyticsService(database: db, authService: auth);
     final query = AnalyticsQuery(startDate: DateTime(2026, 10, 25), endDateExclusive: DateTime(2026, 10, 26));
+    final incomplete = await service.load(query);
+    expect(incomplete.section(AnalyticsFamily.procurement).metrics.firstWhere((m) => m.id == 'purchase_spend').changeAbsolute, isNull);
+    await db.update('business_days', {'status': 'CLOSED'}, where: 'id=?', whereArgs: [day]);
     final snapshot = await service.load(query);
     AnalyticsMetric metric(AnalyticsFamily family, String id) => snapshot.section(family).metrics.firstWhere((m) => m.id == id);
     expect(metric(AnalyticsFamily.sales, 'recorded_value').changeAbsolute, 30000);
@@ -64,8 +67,5 @@ void main() {
       expect(result.exitCode, 0);
       expect((result.stdout as String).replaceAll(RegExp(r'\s+'), ' '), contains('Absolute change: PKR 450.00'));
     }
-    await db.update('business_days', {'status': 'OPEN'}, where: 'id=?', whereArgs: [day]);
-    final incomplete = await service.load(query);
-    expect(incomplete.section(AnalyticsFamily.procurement).metrics.firstWhere((m) => m.id == 'purchase_spend').changeAbsolute, isNull);
   });
 }
