@@ -24,8 +24,11 @@ import '../shifts/report_delivery_dialog.dart';
 import '../../core/database/database_backup_service.dart';
 import '../../core/database/pos_database_constants.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import '../../core/analytics/analytics_service.dart';
+import 'manager_analytics_workspace.dart';
 
 enum SupervisorPortalTab {
+  dashboard('Dashboard', Icons.insights_rounded),
   deliveryAreas('Delivery Areas', Icons.delivery_dining),
   staff('Staff & Departments', Icons.badge_rounded),
   toggles('Feature Toggles', Icons.toggle_on_rounded),
@@ -76,6 +79,7 @@ class SupervisorPortalWorkspace extends StatefulWidget {
 
 class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
   SupervisorPortalTab _activeTab = SupervisorPortalTab.staff;
+  AnalyticsService? _analyticsService;
   final NumberFormat _currencyFormat = NumberFormat('#,##0.00');
   final DateFormat _dateFormat = DateFormat('yyyy-MM-dd HH:mm');
 
@@ -873,6 +877,18 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
   }
   Widget _buildTabContent(BuildContext context) {
     switch (_activeTab) {
+      case SupervisorPortalTab.dashboard:
+        final auth = widget.authService;
+        if (auth == null) {
+          return const Center(child: Text('Analytics unavailable. A Manager session and database are required.'));
+        }
+        if (_analyticsService?.authService != auth || _analyticsService?.database != auth.database) {
+          _analyticsService = AnalyticsService(database: auth.database, authService: auth);
+        }
+        return ManagerAnalyticsWorkspace(
+          service: _analyticsService!,
+          session: auth.session,
+        );
       case SupervisorPortalTab.deliveryAreas:
         if (widget.orderController == null || widget.currentStaff == null) return const Center(child: Text('Delivery areas unavailable.'));
         return DeliveryAreasWorkspace(controller: DeliveryController(database: widget.orderController!.database), staffId: widget.currentStaff!.id);
