@@ -206,6 +206,10 @@ void main() {
       expect(find.text(order.tokenDisplay), findsOneWidget,
         reason: 'A non-login staff record must not hide a dispatchable Preparing delivery.');
       expect(find.byKey(const ValueKey('rider_load_error')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('rider_select_dropdown')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Legacy Kitchen Helper').last);
+      await tester.pumpAndSettle();
       await tester.tap(find.byType(Checkbox).first);
       await tapAndSettle(tester, find.byKey(const ValueKey('dispatch_trip_btn')),
         () => find.text('COD: Rs. 0').evaluate().isNotEmpty, 'prepaid preparing dispatch');

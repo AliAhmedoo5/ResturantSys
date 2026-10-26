@@ -69,7 +69,7 @@ class RiderTripController {
     if (staffRows.isEmpty) {
       throw StateError('Rider staff #$riderStaffId not found or inactive.');
     }
-    final riderStaff = Staff.fromMap(staffRows.first);
+    final riderStaff = RiderAssignee.fromMap(staffRows.first);
 
     return await database.transaction((txn) async {
       final now = dispatchedAt ?? DateTime.now();
