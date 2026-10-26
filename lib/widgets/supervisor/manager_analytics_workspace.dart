@@ -423,12 +423,21 @@ class _SourceTableState extends State<_SourceTable> {
   bool _ascending = true;
   static const _pageSize = 10;
 
+  String _sourceLabel(AnalyticsRow row) {
+    final source = row.sourceId ?? row.id;
+    final ids = source.split(',');
+    return ids.length > 1
+        ? '${row.sourceType} • ${ids.length} records'
+        : '${row.sourceType} #$source';
+  }
+
   void _showSource(AnalyticsRow row) {
     showDialog<void>(context: context, builder: (context) => AlertDialog(
-      title: Text('${row.sourceType} • ${row.sourceId ?? row.id}'),
+      title: Text(_sourceLabel(row)),
       content: SizedBox(width: 520, child: SingleChildScrollView(child: Column(
         crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
           const Text('Safe reporting projection • source values from this snapshot'),
+          SelectableText('Source IDs: ${row.sourceId ?? row.id}'),
           const SizedBox(height: 12),
           for (final column in widget.section.columns) Padding(padding: const EdgeInsets.only(bottom: 8),
             child: SelectableText('${column.label}: ${_format(row.cells[column.key], column.unit)}')),
@@ -463,7 +472,7 @@ class _SourceTableState extends State<_SourceTable> {
         ), const DataColumn(label: Text('Source'))],
         rows: [for (final row in rows.sublist(start, end)) DataRow(cells: [
           for (final column in section.columns) DataCell(Text(_format(row.cells[column.key], column.unit))),
-          DataCell(TextButton(onPressed: () => _showSource(row), child: Text('${row.sourceType} #${row.sourceId ?? row.id}'))),
+          DataCell(TextButton(onPressed: () => _showSource(row), child: Text(_sourceLabel(row)))),
         ])],
       )),
       Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: Wrap(alignment: WrapAlignment.end,
