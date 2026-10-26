@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:convert';
 import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,6 +17,29 @@ AnalyticsSnapshot fixture() => AnalyticsSnapshot(
 );
 
 void main() {
+  test('saved PDF carries displayed PKR values, missing explanations and source metadata', () async {
+    final directory = await Directory.systemTemp.createTemp('analytics-export-fixture-');
+    addTearDown(() => directory.delete(recursive: true));
+    final service = AnalyticsExportService();
+    final file = await service.saveToDirectory(fixture(), AnalyticsFamily.sales, AnalyticsExportFormat.pdf, directory.path);
+    expect(await file.exists(), isTrue);
+    expect((await file.readAsBytes()).take(4), [37, 80, 68, 70]);
+    if (Platform.isLinux) {
+      final result = await Process.run('pdftotext', [file.path, '-']);
+      expect(result.exitCode, 0);
+      final text = result.stdout as String;
+      expect(text, contains('PKR 123.45'));
+      expect(text, contains('cashier_id: 7'));
+      expect(text, contains('generated_by_staff_id: 3'));
+      expect(text, contains('orders / 81'));
+      expect(text, contains('Sum eligible committed orders'));
+      expect(text, contains('estimated'));
+    }
+    final other = await service.saveToDirectory(fixture(), AnalyticsFamily.sales, AnalyticsExportFormat.pdf, directory.path);
+    expect(other.path, isNot(file.path), reason: 'Export never silently overwrites a previous file');
+    final profit = await service.pdf(fixture(), AnalyticsFamily.profitability);
+    expect(profit, isNotEmpty);
+  });
   test('workbook includes every snapshot family, numeric paisa and missing coverage', () {
     final bytes = AnalyticsExportService().workbook(fixture());
     final archive = ZipDecoder().decodeBytes(bytes);
@@ -49,4 +73,5 @@ void main() {
     expect(csv, isNot(contains('No event-time costing')));
   });
 }
+
 
