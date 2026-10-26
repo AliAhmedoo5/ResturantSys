@@ -5,13 +5,14 @@ import '../core/orders/order_and_checkout_controller.dart';
 import '../core/theme/theme.dart';
 
 enum AppWorkspaceTab {
+  dashboard('Dashboard', Icons.space_dashboard_outlined),
   register('Register', Icons.point_of_sale_outlined),
   riderTrips('Riders', Icons.two_wheeler_outlined),
   catalog('Catalog', Icons.restaurant_menu_outlined),
   khata('Khata', Icons.menu_book_outlined),
   mandi('Mandi', Icons.shopping_basket_outlined),
   wastage('Wastage', Icons.delete_outline_rounded),
-  supervisor('Supervisor', Icons.admin_panel_settings_outlined);
+  supervisor('Manager', Icons.admin_panel_settings_outlined);
 
   const AppWorkspaceTab(this.label, this.icon);
   final String label;

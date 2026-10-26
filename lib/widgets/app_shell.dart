@@ -18,6 +18,7 @@ import 'procurement/quick_mandi_purchase_workspace.dart';
 import 'shifts/register_shift_workspace.dart';
 
 import 'supervisor/supervisor_portal_workspace.dart';
+import 'supervisor/manager_dashboard_workspace.dart';
 import 'onboarding/onboarding_wizard.dart';
 import '../core/delivery/rider_trip_controller.dart';
 import 'delivery/rider_trip_dispatch_workspace.dart';
@@ -207,6 +208,9 @@ class _AppShellState extends State<AppShell> {
     if (_selectedWorkspace != AppWorkspaceTab.register &&
         !staff.canAccessSupervisorPortal) {
       return _buildRegisterWorkspace(staff);
+    }
+    if (_selectedWorkspace == AppWorkspaceTab.dashboard) {
+      return ManagerDashboardWorkspace(authService: widget.authService);
     }
     if (_selectedWorkspace == AppWorkspaceTab.catalog && widget.catalogController != null) {
       return SupervisorCatalogWorkspace(
