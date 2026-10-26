@@ -165,14 +165,15 @@ void main() {
       await settleUntil(tester, isReady, description);
     }
 
-    Future<Order> createTestOrder() async {
+    Future<Order> createTestOrder({bool prepaid = false}) async {
       final result = await orderController.checkoutOrder(
         businessDayId: activeShift.businessDayId,
         shiftId: activeShift.id,
         cashierId: activeCashier.id,
         diningType: DiningType.delivery,
         items: [CartItem(menuItem: burgerItem, quantity: 1)],
-        payments: const [PaymentTender(method: PaymentMethod.cod, amountTendered: 0)],
+        payments: [PaymentTender(method: prepaid ? PaymentMethod.cash : PaymentMethod.cod,
+          amountTendered: prepaid ? 850 : 0)],
         delivery: DeliveryDetails(
           areaId: deliveryArea.id,
           quotedFeePaisa: deliveryArea.deliveryFeePaisa,
@@ -183,6 +184,32 @@ void main() {
       );
       return result.order;
     }
+
+    testWidgets('Preparing prepaid deliveries stay visible with legacy non-login staff', (tester) async {
+      tester.view.physicalSize = const Size(1366, 768);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final order = (await tester.runAsync(() async {
+        await db.insert('staff', {'name': 'Legacy Kitchen Helper', 'department_id': 1,
+          'pin_hash': 'legacy-kitchen-fixture', 'role': 'KITCHEN', 'is_active': 1,
+          'login_enabled': 0, 'created_at': DateTime.now().toIso8601String()});
+        return createTestOrder(prepaid: true);
+      }))!;
+      expect(order.tokenStatus, TokenStatus.preparing);
+      expect(order.paymentStatus, 'SETTLED');
+      await pumpWorkspace(tester, MaterialApp(home: Scaffold(body: RiderTripDispatchWorkspace(
+        controller: riderTripController, currentStaff: activeCashier, shiftController: shiftController,
+      ))));
+      expect(find.text(order.tokenDisplay), findsOneWidget,
+        reason: 'A non-login staff record must not hide a dispatchable Preparing delivery.');
+      expect(find.byKey(const ValueKey('rider_load_error')), findsNothing);
+      await tester.tap(find.byType(Checkbox).first);
+      await tapAndSettle(tester, find.byKey(const ValueKey('dispatch_trip_btn')),
+        () => find.text('COD: Rs. 0').evaluate().isNotEmpty, 'prepaid preparing dispatch');
+      expect((await tester.runAsync(() => orderController.getOrder(order.id)))!.tokenStatus,
+        TokenStatus.outForDelivery);
+    });
 
     testWidgets('Manager sees a confirmed delivery after cashier shift handover', (tester) async {
       tester.view.physicalSize = const Size(1366, 768);
