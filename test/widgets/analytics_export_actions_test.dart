@@ -33,7 +33,7 @@ void main() {
     await tester.pump();
     picker.complete(directory.path);
     await tester.runAsync(() async {
-      for (var i = 0; i < 100 && directory.listSync().isEmpty; i++) {
+      for (var i = 0; i < 100 && !directory.listSync().any((f) => f.path.endsWith('.csv')); i++) {
         await Future<void>.delayed(const Duration(milliseconds: 10));
       }
     });
@@ -41,3 +41,4 @@ void main() {
     expect(directory.listSync().whereType<File>().where((f) => f.path.endsWith('.csv')), hasLength(1));
   });
 }
+
