@@ -79,4 +79,34 @@ void main() {
     await db.update('staff',{'login_enabled':0},where:'id=?',whereArgs:[manager['id']]);
     await expectLater(service.load(query),throwsStateError);
   });
+  test('menu popularity aggregates repeated lines and retains contributing source evidence', () async {
+    final store = PosDatabase(factory:databaseFactoryFfi, customPath:inMemoryDatabasePath);
+    final db = await store.initialize();
+    addTearDown(store.close);
+    final staff = await db.query('staff');
+    final manager = staff.firstWhere((r)=>r['role']!='CASHIER');
+    final cashier = staff.firstWhere((r)=>r['role']=='CASHIER');
+    final auth = AuthService(database:db)..session.login(Staff.fromMap(manager));
+    final day = await db.insert('business_days', {'opened_at':'2026-10-25 18:00:00','status':'OPEN','opened_by_staff_id':manager['id']});
+    final shift = await db.insert('shifts', {'business_day_id':day,'staff_id':cashier['id'],'opened_at':'2026-10-25 18:00:00','opening_float':0,'status':'OPEN'});
+    final category = await db.insert('categories', {'name':'Synthetic menu','color_hex':'#FFFFFF','created_at':'2026-10-25 18:00:00'});
+    final popular = await db.insert('menu_items', {'name':'Often ordered','category_id':category,'base_price':100,'created_at':'2026-10-25 18:00:00'});
+    final other = await db.insert('menu_items', {'name':'One larger line','category_id':category,'base_price':100,'created_at':'2026-10-25 18:00:00'});
+    final lineIds = <int>[];
+    for(var i=1;i<=3;i++) {
+      final order = await db.insert('orders', {'business_day_id':day,'shift_id':shift,'cashier_id':cashier['id'],'token_number':i,'dining_type':'TAKEAWAY','subtotal':100,'grand_total':100,'payment_status':'SETTLED','created_at':'2026-10-26 01:00:00'});
+      lineIds.add(await db.insert('order_items', {'order_id':order,'menu_item_id':popular,'name':'Often ordered','quantity':1,'unit_price':100,'total_price':100,'created_at':'2026-10-26 01:00:00'}));
+      if(i==1) await db.insert('order_items', {'order_id':order,'menu_item_id':other,'name':'One larger line','quantity':2,'unit_price':100,'total_price':200,'created_at':'2026-10-26 01:00:00'});
+    }
+    final snapshot = await AnalyticsService(database:db,authService:auth).load(AnalyticsQuery(startDate:DateTime(2026,10,25),endDateExclusive:DateTime(2026,10,26)));
+    final menu = snapshot.section(AnalyticsFamily.menu);
+    final aggregate = menu.rows.singleWhere((r)=>r.cells['catalog_id']==popular && r.cells['kind']=='Item/deal aggregate');
+    expect(aggregate.cells['quantity'],3);
+    expect(aggregate.cells['order_count'],3);
+    expect(aggregate.cells['line_value_paisa'],30000);
+    expect(aggregate.cells['popularity_rank'],1);
+    expect(aggregate.sourceType,'order_items');
+    expect(aggregate.sourceId,lineIds.join(','));
+    expect(menu.metrics.firstWhere((m)=>m.id=='item_margin').value,isNull);
+  });
 }
