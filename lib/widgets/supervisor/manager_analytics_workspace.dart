@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/analytics/analytics_models.dart';
@@ -55,6 +56,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
     with WidgetsBindingObserver {
   late AnalyticsQuery _query;
   AnalyticsSnapshot? _snapshot;
+  DialogRoute<void>? _sourceRoute;
   AnalyticsFamily _family = AnalyticsFamily.overview;
   Timer? _timer;
   bool _busy = false;
@@ -110,6 +112,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
   }
 
   void _sessionChanged() {
+    _dismissSource();
     _revision++;
     _queued = false;
     setState(() { _snapshot = null; _error = null; });
@@ -133,10 +136,12 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
     try {
       final snapshot = await widget.service.load(query);
       if (mounted && revision == _revision && _authorized) {
+        _dismissSource();
         setState(() => _snapshot = snapshot);
       }
     } catch (_) {
       if (mounted && revision == _revision && _authorized) {
+        _dismissSource();
         setState(() {
           // The service may reject a persisted role change before the session
           // notifier knows about it. Never retain financial data after rejection.
@@ -153,6 +158,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
   }
 
   void _changeQuery(AnalyticsQuery query) {
+    _dismissSource();
     _revision++;
     setState(() { _query = query; _snapshot = null; _error = null; });
     _startTimer();
@@ -193,6 +199,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
 
   @override
   void dispose() {
+    _dismissSource();
     _revision++;
     _timer?.cancel();
     widget.session?.removeListener(_sessionChanged);
@@ -200,6 +207,52 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
     _cashier.dispose();
     _shift.dispose();
     super.dispose();
+  }
+
+  // The route belongs to this authorized snapshot, rather than to the root
+  // Navigator. Remove this exact route even when another dialog is above it.
+  void _dismissSource() {
+    final route = _sourceRoute;
+    _sourceRoute = null;
+    if (route == null) return;
+    void remove() {
+      final navigator = route.navigator;
+      if (navigator != null && navigator.mounted && route.isActive) {
+        navigator.removeRoute(route);
+      }
+    }
+    if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => remove());
+    } else {
+      remove();
+    }
+  }
+
+  void _showSource(AnalyticsSection section, AnalyticsRow row) {
+    final snapshot = _snapshot;
+    if (snapshot == null || !_authorized) return;
+    _dismissSource();
+    final route = DialogRoute<void>(context: context, builder: (context) {
+      if (!mounted || !_authorized || !identical(_snapshot, snapshot)) {
+        return const SizedBox.shrink();
+      }
+      return AlertDialog(
+        title: Text(_sourceLabel(row)),
+        content: SizedBox(width: 520, child: SingleChildScrollView(child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+            const Text('Safe reporting projection • source values from this snapshot'),
+            SelectableText('Source IDs: ${row.sourceId ?? row.id}'),
+            const SizedBox(height: 12),
+            for (final column in section.columns) Padding(padding: const EdgeInsets.only(bottom: 8),
+              child: SelectableText('${column.label}: ${_format(row.cells[column.key], column.unit)}')),
+          ]))),
+        actions: [TextButton(onPressed: _dismissSource, child: const Text('Close'))],
+      );
+    });
+    _sourceRoute = route;
+    Navigator.of(context, rootNavigator: true).push(route).whenComplete(() {
+      if (identical(_sourceRoute, route)) _sourceRoute = null;
+    });
   }
 
   @override
@@ -215,7 +268,9 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
           key: const ValueKey('analytics_family'), value: _family, isExpanded: true,
           decoration: const InputDecoration(labelText: 'Report', isDense: true, border: OutlineInputBorder()),
           items: _familyLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
-          onChanged: (family) { if (family != null) setState(() => _family = family); },
+          onChanged: (family) {
+            if (family != null) { _dismissSource(); setState(() => _family = family); }
+          },
         )),
         SizedBox(width: 190, child: DropdownButtonFormField<String>(
           key: const ValueKey('analytics_period'), value: _preset, isExpanded: true,
@@ -327,7 +382,8 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
         _SalesTrend(rows: section.rows),
       const SizedBox(height: 12),
       if (section.columns.isNotEmpty && section.rows.isNotEmpty)
-        _SourceTable(key: ValueKey('table_${section.family.name}_${snapshot.generatedAt.toIso8601String()}_${section.title}'), section: section)
+        _SourceTable(key: ValueKey('table_${section.family.name}_${snapshot.generatedAt.toIso8601String()}_${section.title}'),
+          section: section, onShowSource: (row) => _showSource(section, row))
       else _note(section.rows.isEmpty ? 'No source rows match this report. Missing inputs are explained above.' : 'Source detail unavailable for this dataset.'),
       const SizedBox(height: 16),
     ]];
@@ -411,8 +467,9 @@ class _SalesTrend extends StatelessWidget {
 }
 
 class _SourceTable extends StatefulWidget {
-  const _SourceTable({super.key, required this.section});
+  const _SourceTable({super.key, required this.section, required this.onShowSource});
   final AnalyticsSection section;
+  final void Function(AnalyticsRow) onShowSource;
   @override
   State<_SourceTable> createState() => _SourceTableState();
 }
@@ -422,29 +479,6 @@ class _SourceTableState extends State<_SourceTable> {
   int? _sortColumn;
   bool _ascending = true;
   static const _pageSize = 10;
-
-  String _sourceLabel(AnalyticsRow row) {
-    final source = row.sourceId ?? row.id;
-    final ids = source.split(',');
-    return ids.length > 1
-        ? '${row.sourceType} • ${ids.length} records'
-        : '${row.sourceType} #$source';
-  }
-
-  void _showSource(AnalyticsRow row) {
-    showDialog<void>(context: context, builder: (context) => AlertDialog(
-      title: Text(_sourceLabel(row)),
-      content: SizedBox(width: 520, child: SingleChildScrollView(child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-          const Text('Safe reporting projection • source values from this snapshot'),
-          SelectableText('Source IDs: ${row.sourceId ?? row.id}'),
-          const SizedBox(height: 12),
-          for (final column in widget.section.columns) Padding(padding: const EdgeInsets.only(bottom: 8),
-            child: SelectableText('${column.label}: ${_format(row.cells[column.key], column.unit)}')),
-        ]))),
-      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
-    ));
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -472,7 +506,7 @@ class _SourceTableState extends State<_SourceTable> {
         ), const DataColumn(label: Text('Source'))],
         rows: [for (final row in rows.sublist(start, end)) DataRow(cells: [
           for (final column in section.columns) DataCell(Text(_format(row.cells[column.key], column.unit))),
-          DataCell(TextButton(onPressed: () => _showSource(row), child: Text(_sourceLabel(row)))),
+          DataCell(TextButton(onPressed: () => widget.onShowSource(row), child: Text(_sourceLabel(row)))),
         ])],
       )),
       Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: Wrap(alignment: WrapAlignment.end,
@@ -483,4 +517,12 @@ class _SourceTableState extends State<_SourceTable> {
         ])),
     ]));
   }
+}
+
+String _sourceLabel(AnalyticsRow row) {
+  final source = row.sourceId ?? row.id;
+  final ids = source.split(',');
+  return ids.length > 1
+      ? '${row.sourceType} • ${ids.length} records'
+      : '${row.sourceType} #$source';
 }
