@@ -22,6 +22,7 @@ import 'order_revision_line.dart';
 import '../shifts/cash_movement.dart';
 import 'payment_method.dart';
 import 'token_status.dart';
+import 'order_status_event.dart';
 
 /// Immutable daily token allocation or lifecycle audit event.
 class CheckoutTokenEvent {
@@ -171,6 +172,40 @@ class OrderAndCheckoutController {
     if (rows.isEmpty || rows.single['role'] != StaffRole.cashier.code) {
       throw StateError('Only an active Cashier can modify customer orders.');
     }
+  }
+
+  Future<List<OrderStatusEvent>> getOrderStatusEvents(int orderId) async {
+    final rows = await database.query('order_status_events',
+      where: 'order_id = ?', whereArgs: [orderId], orderBy: 'id');
+    return List.unmodifiable(rows.map(OrderStatusEvent.fromMap));
+  }
+
+  /// Records one explicitly observed milestone; stale clicks cannot skip stages.
+  /// Delivery completion belongs exclusively to the existing rider trip workflow.
+  Future<TokenStatus> advanceOrderStatus({required int orderId,
+    required int cashierId, required TokenStatus expectedStatus}) async {
+    return database.transaction((txn) async {
+      await _requireActiveCashier(txn, cashierId);
+      final rows = await txn.rawQuery('''SELECT o.* FROM orders o
+        JOIN business_days b ON b.id = o.business_day_id
+        WHERE o.id = ? AND b.status = 'OPEN'
+        AND NOT EXISTS (SELECT 1 FROM order_revisions r WHERE r.order_id = o.id AND r.action = 'CANCEL')''', [orderId]);
+      if (rows.isEmpty) throw StateError('Order is unavailable, cancelled, or its Business Day is closed.');
+      final order = Order.fromMap(rows.single);
+      if (order.isCancelled || order.isVoided || order.tokenStatus != expectedStatus) {
+        throw StateError('Order changed. Refresh its current status before continuing.');
+      }
+      final next = expectedStatus.nextStatus;
+      if (next == null || expectedStatus == TokenStatus.outForDelivery ||
+          (order.diningType == DiningType.delivery && next == TokenStatus.delivered)) {
+        throw StateError('Use Rider Trips for delivery fulfillment; completed orders cannot advance.');
+      }
+      await txn.update('orders', {'token_status': next.code}, where: 'id = ?', whereArgs: [orderId]);
+      await txn.insert('order_status_events', {'order_id': orderId, 'cashier_id': cashierId,
+        'from_status': expectedStatus.code, 'to_status': next.code,
+        'recorded_at': DateTime.now().toUtc().toIso8601String()});
+      return next;
+    });
   }
   // ===========================================================================
   // DEALS MANAGEMENT
