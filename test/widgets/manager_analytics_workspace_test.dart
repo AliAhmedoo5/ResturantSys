@@ -31,7 +31,7 @@ class SnapshotService implements AnalyticsService {
     sections: [
       AnalyticsSection(family: AnalyticsFamily.overview, title: 'Overview', metrics: [
         AnalyticsMetric(id: 'recorded', label: marker ?? 'Recorded order value', value: 123450,
-          unit: AnalyticsUnit.paisa, explanation: 'Eligible orders including Collection Due.'),
+          unit: AnalyticsUnit.paisa, explanation: 'Eligible orders including Collection Due.', changeAbsolute: 123450),
       ]),
       AnalyticsSection(family: AnalyticsFamily.sales, title: 'Sales', metrics: [
         const AnalyticsMetric(id: 'total', label: 'Recorded order value', value: 123450,
@@ -81,6 +81,7 @@ void main() {
     ))));
     await tester.pumpAndSettle();
     expect(find.text('PKR 1,234.50'), findsOneWidget);
+    expect(find.text('Change: +PKR 1,234.50 vs preceding comparable period'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('analytics_family')));
     await tester.pumpAndSettle();
     await tester.drag(find.byType(Scrollable).last, const Offset(0, -500));
