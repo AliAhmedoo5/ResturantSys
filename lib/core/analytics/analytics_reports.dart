@@ -8,6 +8,7 @@ class _ReportBuilder {
   List<_Record> get valid => orders.where(_valid).toList();
   Set<Object?> get validIds => valid.map((o) => o['id']).toSet();
   List<_Record> get soldItems => e.get('items').where((i) => validIds.contains(i['order_id'])).toList();
+  bool get partial => e.query.live || e.get('days').any((d) => d['status'] == 'OPEN');
   static const _orderBasis = 'Filtered order cohort by Business Day FK. Recorded current valid value includes Collection Due; excludes VOIDED, CANCELLED and REFUNDED. This is not recognized revenue.';
   static const _globalBasis = 'Selected Business Days, all shifts/domain events. Cashier, shift, Dining Type and payment filters apply only to order-based reports, not these totals.';
   static const _currentBasis = 'Current installation-wide position at refresh; not historical. Order filters do not apply.';
@@ -31,7 +32,7 @@ class _ReportBuilder {
       'Legacy REAL rupees are normalized once per source amount through PaisaEngine; integer-paisa columns are preferred. Historical floating-point precision is not restored.',
       _intervalBasis,
       if (e.query.hasOrderFilters) 'Order filters affect sales/orders/customers/menu, related delivery attempts and order audits. Current inventory/staff/Khata and whole-day cash/procurement/expense totals keep their labeled scope.',
-      if (e.query.live) 'Live percentage comparisons withheld: the active Business Day is incomplete and equivalent elapsed prior coverage is not established.',
+      if (partial) 'Percentage comparisons withheld: selected coverage contains a live/open Business Day and equivalent elapsed prior coverage is not established.',
       if (e.get('days').isEmpty) 'No Business Days match the selected date range.',
       if (e.absent.isNotEmpty) 'Missing source tables: ${e.absent.join(', ')}. No unavailable dataset is represented as a reliable zero.',
     ]);
@@ -62,21 +63,25 @@ class _ReportBuilder {
       _metric('collected_tender', 'Collected tender', payments.fold<int>(0, (sum, p) => sum + _money(p, 'amount_tendered') - _money(p, 'change_returned')), explanation: 'Tender minus change, including negative explicit refunds; retained funds in SETTLED/REFUND_PENDING/CANCELLED/REFUNDED orders. Order Business Day cohort, not receipt-event date. ${e.query.paymentMethod == null ? 'All methods.' : 'Only ${e.query.paymentMethod} tender lines; full matching orders remain the sales cohort.'}'),
       _average('average_ticket', 'Average ticket', value, valid.length, AnalyticsUnit.paisa, 'Recorded eligible order value / eligible order count; denominator shown. $_orderBasis'),
       _missing('recognized_revenue', 'Recognized revenue', 'Recorded value is available; a named recognition/allocation policy is required for tax-exclusive recognized revenue.'),
-      _metric('recorded_value_change', 'Change from preceding window', value - _sum(prior, 'grand_total'), explanation: e.query.live ? 'Unavailable for incomplete live coverage.' : 'Absolute current minus preceding equal Business Day date-window recorded value.', unavailable: e.query.live),
+      _metric('recorded_value_change', 'Change from preceding window', value - _sum(prior, 'grand_total'), explanation: partial ? 'Unavailable for incomplete open-day coverage.' : 'Absolute current minus preceding equal Business Day date-window recorded value.', unavailable: partial),
     ];
+    final dimensions = <AnalyticsRow>[];
     for (final key in ['dining_type', 'cashier_id', 'shift_id']) {
       final groups = _group(valid, key);
       for (final group in groups.entries) {
-        metrics.add(_metric('${key}_${group.key}', '${_label(key)} ${group.key}: recorded value', _sum(group.value, 'grand_total'), explanation: 'Independent $key breakdown, ${group.value.length} eligible orders; do not add different dimensions together. $_orderBasis'));
+        dimensions.add(AnalyticsRow(id: 'sales-$key-${group.key}', sourceType: 'orders', sourceId: group.value.map((o) => o['id']).join(','), cells: {'kind': 'Independent dimension', 'dimension': _label(key), 'dimension_value': group.key, 'orders': group.value.length, 'recorded_value_paisa': _sum(group.value, 'grand_total')}));
       }
     }
     for (final entry in _group(payments, 'payment_method').entries) {
-      metrics.add(_metric('tender_${entry.key}', '${entry.key} collected', entry.value.fold<int>(0, (sum, p) => sum + _money(p, 'amount_tendered') - _money(p, 'change_returned')), explanation: 'Net tender method breakdown of the same filtered order cohort; refunds included once.'));
+      dimensions.add(AnalyticsRow(id: 'tender-${entry.key}', sourceType: 'order_payments', sourceId: entry.value.map((p) => p['id']).join(','), cells: {'kind': 'Tender breakdown', 'dimension': 'Payment method', 'dimension_value': entry.key, 'collected_paisa': entry.value.fold<int>(0, (sum, p) => sum + _money(p, 'amount_tendered') - _money(p, 'change_returned'))}));
     }
     for (final hour in _group(valid.map((o) => {...o, 'hour': _karachi(o['created_at'])?.hour}).toList(), 'hour').entries) {
-      metrics.add(_metric('hour_${hour.key}', 'Orders in hour ${hour.key} (Karachi)', hour.value.length, unit: AnalyticsUnit.count, explanation: 'Eligible confirmed orders by creation hour, retaining Business Day selection. Missing timestamps labeled unknown.'));
+      dimensions.add(AnalyticsRow(id: 'hour-${hour.key}', sourceType: 'orders', sourceId: hour.value.map((o) => o['id']).join(','), cells: {'kind': 'Hourly breakdown', 'dimension': 'Creation hour (Karachi)', 'dimension_value': hour.key, 'orders': hour.value.length, 'recorded_value_paisa': _sum(hour.value, 'grand_total')}));
     }
-    return _section(AnalyticsFamily.sales, 'Sales', metrics, daily.entries.map((entry) => AnalyticsRow(id: 'business-date-${entry.key}', sourceType: 'business_days', sourceId: entry.value.map((r) => r.sourceId).join(','), cells: {'business_date': entry.key, 'orders': entry.value.fold<int>(0, (s, r) => s + (r.cells['orders'] as int)), 'recorded_value_paisa': entry.value.fold<int>(0, (s, r) => s + (r.cells['recorded_value_paisa'] as int))})).toList(), ['business_date', 'orders', 'recorded_value_paisa'], [_orderBasis, 'Daily rows and chart use these identical values. Source IDs identify contributing Business Days; order detail is in Order operations.', 'Historical comparisons use the preceding equal opening-date window with identical order filters. A zero prior baseline has no percentage.', 'Each Dining Type/cashier/shift/hour/payment breakdown is independent; never add different dimensions together.']);
+    return _section(AnalyticsFamily.sales, 'Sales', metrics, [
+      ...daily.entries.map((entry) => AnalyticsRow(id: 'business-date-${entry.key}', sourceType: 'business_days', sourceId: entry.value.map((r) => r.sourceId).join(','), cells: {'kind': 'Daily total', 'business_date': entry.key, 'orders': entry.value.fold<int>(0, (s, r) => s + (r.cells['orders'] as int)), 'recorded_value_paisa': entry.value.fold<int>(0, (s, r) => s + (r.cells['recorded_value_paisa'] as int))})),
+      ...dimensions,
+    ], ['kind', 'business_date', 'dimension', 'dimension_value', 'orders', 'recorded_value_paisa', 'collected_paisa'], [_orderBasis, 'Daily rows and chart use these identical values. Source IDs identify contributing Business Days; order detail is in Order operations.', 'Historical comparisons use the preceding equal opening-date window with identical order filters. A zero prior baseline has no percentage.', 'Daily totals, each Dining Type/cashier/shift/hour breakdown and tender breakdown are independent views; never sum these different row kinds together.']);
   }
 
   AnalyticsSection _orders() {
@@ -97,7 +102,7 @@ class _ReportBuilder {
       _metric('revision_events', 'Revision events', revisions.length, unit: AnalyticsUnit.count, explanation: 'Revision events, separate from distinct revised order count.'),
       _metric('revision_delta', 'Revision price delta', _integers(revisions, 'money_delta_paisa'), explanation: 'Sum append-only revision money deltas for selected order cohort; event dates may differ.'),
       _metric('cancelled_orders', 'Cancelled/refunded orders', cancelled.length, unit: AnalyticsUnit.count, explanation: 'Distinct selected orders with CANCEL event or current cancelled/voided/refunded state.'),
-      _rate('cancel_rate', 'Cancellation rate', cancelled.length, orders.length, 'Distinct cancelled orders / all committed selected orders; refunded states included.'),
+      _rate('cancel_rate', 'Cancel/refund rate', cancelled.length, orders.length, 'Distinct cancelled/refunded orders / all committed selected orders; refunded states included.'),
       _metric('refunds', 'Explicit refunds', -_sum(refunds, 'amount_tendered'), explanation: 'Negative payment records only; cancellation does not itself disburse cash.'),
       _metric('refund_exposure', 'Retained funds above current payable', exposure, explanation: 'Per order max(0, net collected - current payable), using zero payable for cancelled/refunded orders. This is exposure, not a completed refund.'),
       _missing('prep_time', 'Preparation time', 'No persisted confirmed/preparing/ready lifecycle timestamps. Current state cannot establish historical durations.', unit: AnalyticsUnit.minutes),
@@ -149,9 +154,9 @@ class _ReportBuilder {
     }
     return _section(AnalyticsFamily.delivery, 'Delivery and riders', metrics, [
       ...deliveredOrders.map((o) => _row('orders', o, {'order_id': o['id'], 'area': o['delivery_area_name_snapshot'] ?? 'Unknown area', 'fee_paisa': o['delivery_fee_paisa'], 'payment_status': o['payment_status']})),
-      ...trips.map((t) => _row('rider_trips', t, {'trip_id': t['id'], 'rider_id': t['rider_staff_id'], 'shift_id': t['shift_id'], 'status': t['status'], 'expected_paisa': t['cash_expected_paisa'], 'counted_paisa': t['cash_collected_paisa'], 'dispatched_at': t['dispatched_at'], 'settled_at': t['settled_at_utc']})),
+      ...trips.map((t) => _row('rider_trips', t, {'trip_id': t['id'], 'rider_id': t['rider_staff_id'], 'shift_id': t['shift_id'], 'status': t['status'], 'selected_order_load': attempts.where((a) => a['trip_id'] == t['id']).length, 'expected_paisa': t['cash_expected_paisa'], 'counted_paisa': t['cash_collected_paisa'], 'dispatched_at': t['dispatched_at'], 'settled_at': t['settled_at_utc']})),
       ...attempts.map((a) => _row('rider_trip_orders', a, {'order_id': a['order_id'], 'trip_id': a['trip_id'], 'rider_id': a['rider_staff_id'], 'status': a['status'], 'dispatched_at': a['dispatched_at'], 'delivered_at': a['delivered_at'], 'returned_at': a['returned_at']})),
-    ], ['order_id', 'trip_id', 'rider_id', 'shift_id', 'area', 'fee_paisa', 'payment_status', 'status', 'expected_paisa', 'counted_paisa', 'dispatched_at', 'delivered_at', 'returned_at', 'settled_at'], ['Order/attempt rows use order filters; trip rows and trip exposure use whole selected Business Days. All-outstanding measures explicitly ignore date/order filters.', 'Travel excludes invalid/missing timestamps and reports coverage. Percentiles interpolate sorted valid minutes. No final failure/reattempt or unrecorded failure-reason inference.']);
+    ], ['order_id', 'trip_id', 'rider_id', 'shift_id', 'selected_order_load', 'area', 'fee_paisa', 'payment_status', 'status', 'expected_paisa', 'counted_paisa', 'dispatched_at', 'delivered_at', 'returned_at', 'settled_at'], ['Order/attempt rows and selected-order load use order filters; trip rows and trip exposure use whole selected Business Days. All-outstanding measures explicitly ignore date/order filters.', 'Travel excludes invalid/missing timestamps and reports coverage. Percentiles interpolate sorted valid minutes. No final failure/reattempt or unrecorded failure-reason inference.']);
   }
 
   AnalyticsSection _customers() {
@@ -243,7 +248,7 @@ class _ReportBuilder {
       _metric('purchase_count', 'Recorded purchases', purchases.length, unit: AnalyticsUnit.count, explanation: 'Mandi purchase rows in selected actual day intervals.', previous: e.get('previous_purchases').length),
       _metric('purchased_ingredients', 'Distinct purchased ingredients', purchases.map((p) => p['raw_ingredient_id']).toSet().length, unit: AnalyticsUnit.count, explanation: 'Distinct ingredient IDs in selected Mandi purchase records.'),
       _missing('supplier_performance', 'Supplier delivery performance', 'Mandi purchase records lack supplier link and promised/actual delivery performance timestamps.', unit: AnalyticsUnit.percent),
-    ], purchases.map((p) => _row('mandi_procurements', p, {'ingredient_id': p['raw_ingredient_id'], 'purchase_unit': p['traditional_unit'], 'purchase_quantity': p['quantity'], 'base_quantity': p['converted_quantity'], 'spend_paisa': _money(p, 'total_cost'), 'unit_cost_paisa': _money(p, 'cost_per_recipe_unit'), 'created_at': p['created_at']})).toList(), ['ingredient_id', 'purchase_unit', 'purchase_quantity', 'base_quantity', 'spend_paisa', 'unit_cost_paisa', 'created_at'], [_intervalBasis, _globalBasis, 'Per-ingredient unit-cost and quantity rows permit price/frequency trends. Different base-unit dimensions must not be totaled. Purchase spend is not sales COGS.']);
+    ], purchases.map((p) => _row('mandi_procurements', p, {'ingredient_id': p['raw_ingredient_id'], 'purchase_unit': p['traditional_unit'], 'purchase_quantity': p['quantity'], 'base_quantity': p['converted_quantity'], 'spend_paisa': _money(p, 'total_cost'), 'unit_cost_rupees_per_base_unit': p['cost_per_recipe_unit'], 'created_at': p['created_at']})).toList(), ['ingredient_id', 'purchase_unit', 'purchase_quantity', 'base_quantity', 'spend_paisa', 'unit_cost_rupees_per_base_unit', 'created_at'], [_intervalBasis, _globalBasis, 'Per-ingredient unit rates retain their recorded decimal PKR/base-unit precision (a rate, not a rounded monetary amount). Different base-unit dimensions must not be totaled. Purchase spend is not sales COGS.']);
   }
 
   AnalyticsSection _suppliers() {
@@ -360,7 +365,7 @@ class _ReportBuilder {
   }
 
   AnalyticsMetric _metric(String id, String label, num value, {AnalyticsUnit unit = AnalyticsUnit.paisa, String explanation = _orderBasis, num? previous, bool unavailable = false}) {
-    final comparable = !e.query.live && previous != null && previous != 0;
+    final comparable = !partial && previous != null && previous != 0;
     return AnalyticsMetric(id: id, label: label, value: unavailable ? null : value, unit: unit, explanation: explanation, quality: unavailable ? AnalyticsQuality.notApplicable : AnalyticsQuality.complete, changePercent: comparable ? (value - previous) / previous.abs() * 100 : null);
   }
   static AnalyticsMetric _missing(String id, String label, String explanation, {AnalyticsUnit unit = AnalyticsUnit.paisa}) => AnalyticsMetric(id: id, label: label, unit: unit, explanation: explanation, quality: AnalyticsQuality.missing);

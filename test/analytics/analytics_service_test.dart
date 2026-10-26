@@ -58,7 +58,7 @@ void main() {
     expect(snapshot.sections.map((s)=>s.family).toSet(), AnalyticsFamily.values.toSet());
     expect(metric(AnalyticsFamily.sales,'recorded_value'),20002);
     expect(metric(AnalyticsFamily.sales,'collected_tender'),10000);
-    expect(snapshot.section(AnalyticsFamily.sales).rows.single.cells['business_date'],'2026-10-25');
+    expect(snapshot.section(AnalyticsFamily.sales).rows.singleWhere((r)=>r.cells['business_date']!=null).cells['business_date'],'2026-10-25');
     expect(metric(AnalyticsFamily.customers,'repeat_rate'),100);
     expect(metric(AnalyticsFamily.procurement,'purchase_spend'),40000);
     expect(metric(AnalyticsFamily.inventory,'negative_stock'),1);
