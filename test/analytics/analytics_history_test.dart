@@ -20,7 +20,7 @@ void main() {
     addTearDown(auth.session.dispose);
 
     Future<int> day(String opened, String closed) => db.insert('business_days', {
-      'opened_at': opened, 'closed_at': closed, 'status': 'CLOSED',
+      'opened_at': opened, 'closed_at': closed, 'status': 'OPEN',
       'opened_by_staff_id': manager['id'], 'closed_by_staff_id': manager['id'],
     });
     final previous = await day('2026-10-23 18:00:00', '2026-10-24 02:00:00');
@@ -73,6 +73,10 @@ void main() {
       });
     }
 
+    // Populate history while days are open; production integrity triggers reject
+    // inserting orders into already closed Business Days.
+    await db.update('business_days', {'status': 'CLOSED'},
+        where: 'id IN (?, ?)', whereArgs: [previous, selected]);
     final report = await AnalyticsService(database: db, authService: auth).load(
       AnalyticsQuery(startDate: DateTime(2026, 10, 24), endDateExclusive: DateTime(2026, 10, 26)),
     );
