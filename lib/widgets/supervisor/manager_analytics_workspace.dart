@@ -370,7 +370,7 @@ String _format(Object? value, AnalyticsUnit? unit) {
     AnalyticsUnit.paisa => 'PKR ${NumberFormat('#,##0.00').format(value / 100)}',
     AnalyticsUnit.percent => '${value.toStringAsFixed(1)}%',
     AnalyticsUnit.minutes => '${value.toStringAsFixed(1)} min',
-    AnalyticsUnit.decimal => NumberFormat('#,##0.##').format(value),
+    AnalyticsUnit.decimal => NumberFormat('#,##0.########').format(value),
     _ => NumberFormat('#,##0.##').format(value),
   };
 }
