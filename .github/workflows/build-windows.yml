@@ -30,6 +30,11 @@ jobs:
       - name: Generate Windows platform runner
         run: flutter create --platforms=windows .
 
+      - name: Apply Crunch Cartel app icon and window title
+        run: |
+          python -m pip install Pillow==12.1.0
+          python scripts/ci/apply-windows-brand.py
+
       - name: Install dependencies
         run: flutter pub get
 

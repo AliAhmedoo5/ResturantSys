@@ -69,7 +69,7 @@ class RestaurantPosApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'ResturantPOS',
+      title: 'Crunch Cartel POS',
       debugShowCheckedModeBanner: false,
       theme: WarmCounterTheme.darkTheme,
       darkTheme: WarmCounterTheme.darkTheme,

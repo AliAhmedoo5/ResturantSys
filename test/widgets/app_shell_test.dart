@@ -40,7 +40,7 @@ void main() {
         ),
       );
 
-      expect(find.text('ResturantPOS'), findsOneWidget);
+      expect(find.byKey(const ValueKey('pos_brand_wordmark')), findsOneWidget);
       expect(find.text('Register Locked'), findsOneWidget);
       expect(find.byKey(const ValueKey('lock_register_button')), findsNothing);
     });

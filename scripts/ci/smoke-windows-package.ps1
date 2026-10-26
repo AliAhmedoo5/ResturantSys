@@ -20,6 +20,7 @@ try {
         $ready = (Test-Path -LiteralPath $database) -and $process.MainWindowHandle -ne 0 -and $process.Responding
     } until ($ready -or [DateTime]::UtcNow -ge $deadline)
     if (-not $ready) { throw 'Packaged app did not open a responsive window with an isolated database.' }
+    if ($process.MainWindowTitle -ne 'Crunch Cartel POS') { throw "Unexpected app title: $($process.MainWindowTitle)" }
     Start-Sleep -Seconds 10
     $process.Refresh()
     if ($process.HasExited -or -not $process.Responding) { throw 'Packaged app failed its startup stability check.' }

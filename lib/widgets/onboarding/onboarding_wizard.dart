@@ -10,6 +10,7 @@ import '../../core/database/pos_database_constants.dart';
 import '../../core/shifts/business_day.dart';
 import '../../core/shifts/shift_and_cash_controller.dart';
 import '../../core/theme/theme.dart';
+import '../pos_brand.dart';
 
 /// Compulsory 5-Step First-Run Onboarding Wizard.
 ///
@@ -41,7 +42,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
 
   // Step 1: Restaurant Identity State
   final _step1FormKey = GlobalKey<FormState>();
-  final _restaurantNameController = TextEditingController(text: 'ResturantPOS');
+  final _restaurantNameController = TextEditingController(text: 'Crunch Cartel');
   final _localPathController = TextEditingController(text: r'C:\ProgramData\ResturantPOS\data');
 
   // Step 2: Manager Account State
@@ -368,17 +369,10 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
         elevation: 0,
         title: Row(
           children: [
-            Container(
-              padding: const EdgeInsets.all(WarmCounterSpacing.space8),
-              decoration: const BoxDecoration(
-                color: WarmCounterColors.lightPrimaryAction,
-                borderRadius: WarmCounterSpacing.controlBorderRadius,
-              ),
-              child: const Icon(Icons.rocket_launch_rounded, color: Colors.white, size: 20),
-            ),
+            const PosBrand(compact: true, height: 36),
             const SizedBox(width: WarmCounterSpacing.space12),
             Text(
-              'Restaurant POS — First-Run Setup Wizard',
+              'Crunch Cartel — First-Run Setup Wizard',
               style: WarmCounterTypography.pageHeading.copyWith(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,

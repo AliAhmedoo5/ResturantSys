@@ -1,4 +1,4 @@
-# ResturantPOS for Windows x64
+# Crunch Cartel POS for Windows x64
 
 Extract the entire ZIP into a writable application folder, then launch
 `resturant_sys.exe`. Keep the `data` folder and every DLL beside the executable.

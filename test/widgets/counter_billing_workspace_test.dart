@@ -541,6 +541,8 @@ void main() {
       // Zinger Burger has a primary thumbnail rendered via imageBuilder
       final zingerTile = find.byKey(const ValueKey('menu_item_tile_101'));
       expect(find.descendant(of: zingerTile, matching: find.byKey(const ValueKey('catalog_image_thumbnail'))), findsOneWidget);
+      expect(tester.getSize(find.byKey(const ValueKey('catalog_image_thumbnail'))).height,
+        greaterThanOrEqualTo(160), reason: 'Keep the actual picture large enough to recognize the Menu Item.');
 
       // Beef Smash has placeholder icon
       final beefTile = find.byKey(const ValueKey('menu_item_tile_102'));

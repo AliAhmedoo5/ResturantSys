@@ -3,6 +3,7 @@ import '../core/auth/auth_service.dart';
 import '../core/auth/staff.dart';
 import '../core/orders/order_and_checkout_controller.dart';
 import '../core/theme/theme.dart';
+import 'pos_brand.dart';
 
 enum AppWorkspaceTab {
   dashboard('Dashboard', Icons.space_dashboard_outlined),
@@ -29,7 +30,7 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
     this.onWorkspaceSelected,
     this.orderController,
     this.authService,
-    this.title = 'ResturantPOS',
+    this.title = 'Crunch Cartel POS',
     this.showBrand = true,
   });
 
@@ -59,12 +60,10 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
           final compact = constraints.maxWidth < 700;
           final staff = activeStaff;
           return Row(children: [
-            if (showBrand) ...[
-              const Icon(Icons.storefront_outlined, color: StreetFoodMafiaColors.cartelYellow, size: 24),
-              const SizedBox(width: 10),
-            ],
             Expanded(
-              child: Text(
+              child: showBrand && title == 'Crunch Cartel POS'
+                ? const Align(alignment: Alignment.centerLeft, child: PosBrand(height: 38))
+                : Text(
                 showBrand ? title : selectedWorkspace?.label ?? 'Register',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,

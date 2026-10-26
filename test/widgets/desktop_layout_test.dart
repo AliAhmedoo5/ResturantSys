@@ -11,6 +11,7 @@ import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/auth/staff_role.dart';
 import 'package:resturant_sys/core/catalog/menu_category.dart';
 import 'package:resturant_sys/core/catalog/menu_item.dart';
+import 'package:resturant_sys/core/orders/deal.dart';
 import 'package:resturant_sys/core/theme/theme.dart';
 import 'package:resturant_sys/widgets/app_shell.dart';
 import 'package:resturant_sys/widgets/orders/counter_billing_workspace.dart';
@@ -70,6 +71,21 @@ void main() {
     expect(tester.getSize(photo).height, greaterThanOrEqualTo(160));
     expect(find.byKey(const ValueKey('proceed_to_tender_button')).hitTestable(), findsOneWidget);
   });
+  testWidgets('Deal cards use the same larger photo area and stay selectable', (tester) async {
+    await pumpDesktop(tester, const Size(1366, 768), 1, staff: cashier,
+      child: CounterBillingWorkspace(currentStaff: cashier, businessDayId: 1, shiftId: 1,
+        initialCategories: categories, initialMenuItems: menu,
+        initialDeals: [Deal(id: 1, name: 'Burger Deal', basePrice: 950, createdAt: DateTime(2026))]));
+    await tester.tap(find.byKey(const ValueKey('category_tab_deals')));
+    await tester.pumpAndSettle();
+    final tile = find.byKey(const ValueKey('deal_tile_1'));
+    expect(tester.getSize(tile).width, greaterThanOrEqualTo(210));
+    expect(tester.getSize(tile).height, greaterThanOrEqualTo(232));
+    final photo = find.descendant(of: tile, matching: find.byType(Expanded)).first;
+    expect(tester.getSize(photo).height, greaterThanOrEqualTo(160));
+    expect(tile.hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
   setUpAll(() async {
     // CI-only preview font. Production continues to use the system font fallback.
     final file = File('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf');
@@ -90,6 +106,8 @@ void main() {
   ]) {
     testWidgets('login fits ${viewport.name}', (tester) async {
       await pumpDesktop(tester, viewport.size, viewport.scale);
+      expect(find.byKey(const ValueKey('pos_brand_icon')), findsOneWidget);
+      expect(find.byKey(const ValueKey('pos_brand_wordmark')), findsOneWidget);
       final card = tester.getRect(find.byKey(const ValueKey('login_card')));
       expect(card.width, lessThanOrEqualTo(400));
       expect(find.text('9').hitTestable(), findsOneWidget);
@@ -105,6 +123,9 @@ void main() {
 
     testWidgets('cashier cart remains pinned at ${viewport.name}', (tester) async {
       await pumpDesktop(tester, viewport.size, viewport.scale, staff: cashier, child: counter());
+      expect(find.byKey(const ValueKey('pos_brand_icon')), findsOneWidget);
+      expect(find.byKey(const ValueKey('pos_brand_wordmark')),
+        viewport.size.width / viewport.scale >= 1180 ? findsOneWidget : findsNothing);
       expect(find.byKey(const ValueKey('workspace_tab_catalog')), findsNothing);
       final charge = find.byKey(const ValueKey('proceed_to_tender_button'));
       final before = tester.getRect(charge);

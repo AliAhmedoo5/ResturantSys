@@ -20,7 +20,7 @@ flutter --version --machine | Set-Content -LiteralPath (Join-Path $bundle 'flutt
 if ($LASTEXITCODE -ne 0) { throw 'Could not record the Flutter toolchain.' }
 $version = (Select-String -LiteralPath 'pubspec.yaml' -Pattern '^version:\s*(.+)$').Matches.Groups[1].Value
 @{
-    application = 'ResturantPOS'
+    application = 'Crunch Cartel POS'
     version = $version
     source_commit = $env:GITHUB_SHA
     workflow_run = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"

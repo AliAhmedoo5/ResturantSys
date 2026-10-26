@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../core/auth/staff.dart';
 import '../core/theme/theme.dart';
 import 'app_header.dart';
+import 'pos_brand.dart';
 
 /// Persistent navigation retaining the workspaces' existing capability gates.
 class AppSidebar extends StatelessWidget {
@@ -36,15 +37,7 @@ class AppSidebar extends StatelessWidget {
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           SizedBox(
             height: 72,
-            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              const Icon(Icons.storefront_outlined, color: StreetFoodMafiaColors.cartelYellow, size: 28),
-              if (!compact) ...[
-                const SizedBox(width: 10),
-                const Flexible(child: Text('RESTAURANT\nPOS', maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13,
-                    height: 1.2, fontWeight: FontWeight.w800, letterSpacing: 1,
-                    color: StreetFoodMafiaColors.offWhite))),
-              ],
-            ]),
+            child: Center(child: PosBrand(compact: compact, height: 42)),
           ),
           const Divider(),
           Expanded(
