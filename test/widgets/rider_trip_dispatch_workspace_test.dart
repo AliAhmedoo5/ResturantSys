@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:resturant_sys/core/auth/session_state.dart';
+import 'package:resturant_sys/widgets/app_shell.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
@@ -169,6 +171,53 @@ void main() {
       );
       return result.order;
     }
+
+    testWidgets('Manager sees a confirmed delivery after cashier shift handover', (tester) async {
+      tester.view.physicalSize = const Size(1366, 768);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final order = (await tester.runAsync(createTestOrder))!;
+      await tester.runAsync(() async {
+        await db.update('shifts', {'status': 'CLOSED', 'closed_at': DateTime.now().toIso8601String()},
+          where: 'id=?', whereArgs: [activeShift.id]);
+        await shiftController.openShift(staffId: activeCashier.id, openingFloat: 0);
+      });
+      await pumpWorkspace(tester, MaterialApp(home: Scaffold(body: RiderTripDispatchWorkspace(
+        controller: riderTripController, shiftController: shiftController,
+        currentStaff: const Staff(id: 1, name: 'Manager', departmentId: 1,
+          pinHash: 'fixture', role: StaffRole.manager, isActive: true),
+      ))));
+      expect(find.text(order.tokenDisplay), findsOneWidget,
+        reason: 'Unassigned deliveries belong to the Business Day, including earlier cashier shifts.');
+    });
+
+    testWidgets('Cashier opens Riders and assigns a confirmed delivery without switching session', (tester) async {
+      tester.view.physicalSize = const Size(1366, 768);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final order = (await tester.runAsync(createTestOrder))!;
+      final session = SessionState()..login(activeCashier);
+      addTearDown(session.dispose);
+      await tester.pumpWidget(MaterialApp(home: AppShell(session: session,
+        onAuthenticatePin: (_) async => null, shiftController: shiftController,
+        orderController: orderController, riderTripController: riderTripController,
+      )));
+      await tester.pump();
+      final riders = find.byKey(const ValueKey('workspace_tab_riderTrips'));
+      expect(riders, findsOneWidget);
+      await tester.tap(riders);
+      await settleUntil(tester, () => find.text(order.tokenDisplay).evaluate().isNotEmpty, 'cashier delivery queue');
+      expect(find.byKey(const ValueKey('workspace_tab_supervisor')), findsNothing);
+      expect(find.byKey(const ValueKey('workspace_tab_dashboard')), findsNothing);
+      await tester.tap(find.byType(Checkbox).first);
+      await tapAndSettle(tester, find.byKey(const ValueKey('dispatch_trip_btn')),
+        () => find.text('COD: Rs. 850').evaluate().isNotEmpty, 'cashier dispatch');
+      expect(session.currentStaff?.id, activeCashier.id);
+      expect((await tester.runAsync(() => orderController.getOrder(order.id)))!.tokenStatus,
+        TokenStatus.outForDelivery);
+    });
 
     testWidgets('renders pending orders and batches into a new trip', (tester) async {
       tester.view.physicalSize = const Size(1366, 768);
