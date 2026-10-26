@@ -546,6 +546,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
                     Expanded(
                       child: _ordersOpen && widget.orderController != null
                           ? CashierOrdersPanel(controller: widget.orderController!,
+                              key: ValueKey('orders_${widget.currentStaff.id}_${widget.businessDayId}'),
                               cashierId: widget.currentStaff.id, businessDayId: widget.businessDayId)
                           : _buildCatalogGrid(),
                     ),

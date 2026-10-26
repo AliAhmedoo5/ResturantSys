@@ -1320,6 +1320,7 @@ class OrderAndCheckoutController {
     }
 
     return await database.transaction((txn) async {
+      await _requireActiveCashier(txn, cashierId);
       final settledTripRows = await txn.rawQuery('''
         SELECT rt.id, rt.trip_name
         FROM ${PosDatabaseConstants.tableRiderTripOrders} rto
@@ -1614,6 +1615,7 @@ class OrderAndCheckoutController {
     }
 
     return await database.transaction((txn) async {
+      await _requireActiveCashier(txn, cashierId);
       final settledTripRows = await txn.rawQuery('''
         SELECT rt.id, rt.trip_name
         FROM ${PosDatabaseConstants.tableRiderTripOrders} rto
