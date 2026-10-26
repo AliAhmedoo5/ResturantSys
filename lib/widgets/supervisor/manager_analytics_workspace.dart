@@ -410,6 +410,8 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
           style: const TextStyle(fontSize: 11, color: StreetFoodMafiaColors.secondaryText)),
         if (metric.sampleCount != null) Text('Coverage: ${metric.sampleCount}'
           '${metric.populationCount == null ? ' valid samples' : ' / ${metric.populationCount}'}', style: const TextStyle(fontSize: 12)),
+        if (metric.changeAbsolute != null) Text('Change: ${metric.changeAbsolute! >= 0 ? '+' : ''}'
+          '${_format(metric.changeAbsolute, metric.unit)} vs preceding comparable period', style: const TextStyle(fontSize: 12)),
         if (metric.changePercent != null) Text('${metric.changePercent! >= 0 ? '+' : ''}'
           '${metric.changePercent!.toStringAsFixed(1)}% vs preceding comparable period', style: const TextStyle(fontSize: 12)),
       ])));

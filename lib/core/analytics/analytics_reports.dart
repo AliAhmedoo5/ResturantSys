@@ -395,8 +395,11 @@ class _ReportBuilder {
   }
 
   AnalyticsMetric _metric(String id, String label, num value, {AnalyticsUnit unit = AnalyticsUnit.paisa, String explanation = _orderBasis, num? previous, bool unavailable = false}) {
-    final comparable = !partial && previous != null && previous != 0;
-    return AnalyticsMetric(id: id, label: label, value: unavailable ? null : value, unit: unit, explanation: explanation, quality: unavailable ? AnalyticsQuality.notApplicable : AnalyticsQuality.complete, changePercent: comparable ? (value - previous) / previous.abs() * 100 : null);
+    final difference = !partial && !unavailable && previous != null ? value - previous : null;
+    return AnalyticsMetric(id: id, label: label, value: unavailable ? null : value, unit: unit, explanation: explanation,
+      quality: unavailable ? AnalyticsQuality.notApplicable : AnalyticsQuality.complete,
+      changeAbsolute: difference,
+      changePercent: difference != null && previous != null && previous != 0 ? difference / previous.abs() * 100 : null);
   }
   static AnalyticsMetric _missing(String id, String label, String explanation, {AnalyticsUnit unit = AnalyticsUnit.paisa}) => AnalyticsMetric(id: id, label: label, unit: unit, explanation: explanation, quality: AnalyticsQuality.missing);
   static AnalyticsMetric _average(String id, String label, num numerator, int count, AnalyticsUnit unit, String explanation) => AnalyticsMetric(id: id, label: label, value: count == 0 ? null : numerator / count, unit: unit, explanation: explanation, quality: count == 0 ? AnalyticsQuality.notApplicable : AnalyticsQuality.complete, sampleCount: count, populationCount: count);
