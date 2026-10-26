@@ -73,5 +73,3 @@ void main() {
     expect(csv, isNot(contains('No event-time costing')));
   });
 }
-
-

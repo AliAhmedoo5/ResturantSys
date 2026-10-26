@@ -161,6 +161,3 @@ class AnalyticsExportService {
     return text.contains(RegExp('[,"\r\n]')) ? '"${text.replaceAll('"', '""')}"' : text;
   }
 }
-
-
-

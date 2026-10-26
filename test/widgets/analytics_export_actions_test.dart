@@ -39,6 +39,3 @@ void main() {
     expect(directory.listSync(), isEmpty);
   });
 }
-
-
-
