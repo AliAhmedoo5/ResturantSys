@@ -430,7 +430,7 @@ class _ReportBuilder {
     final safeMetrics = absent.isEmpty ? metrics : metrics.map((m) => AnalyticsMetric(id: m.id, label: m.label, unit: m.unit, explanation: '${m.explanation} Missing source tables: ${absent.join(', ')}.', quality: AnalyticsQuality.missing)).toList();
     return AnalyticsSection(family: family, title: title, metrics: safeMetrics, rows: rows, columns: _columns(keys), notes: [...notes, if (absent.isNotEmpty) 'Missing source tables: ${absent.join(', ')}. Values withheld rather than asserted zero.']);
   }
-  static List<AnalyticsColumn> _columns(List<String> keys) => keys.map((key) => AnalyticsColumn(key: key, label: _label(key), unit: key.endsWith('_paisa') ? AnalyticsUnit.paisa : null)).toList();
+  static List<AnalyticsColumn> _columns(List<String> keys) => keys.map((key) => AnalyticsColumn(key: key, label: _label(key), unit: key.endsWith('_paisa') ? AnalyticsUnit.paisa : key == 'unit_cost_rupees_per_base_unit' ? AnalyticsUnit.decimal : null)).toList();
   static String _label(String key) => key.replaceAll('_', ' ');
   static AnalyticsRow _row(String source, _Record record, Map<String, Object?> cells) => AnalyticsRow(id: '$source-${record['id']}', sourceType: source, sourceId: '${record['id']}', cells: cells);
   static Map<String, List<_Record>> _group(List<_Record> rows, String key) {
