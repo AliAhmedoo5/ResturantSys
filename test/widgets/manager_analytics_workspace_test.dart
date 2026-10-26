@@ -83,8 +83,8 @@ void main() {
     expect(find.text('PKR 1,234.50'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('analytics_family')));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Profitability'), 100,
-      scrollable: find.byType(Scrollable).last);
+    await tester.drag(find.byType(Scrollable).last, const Offset(0, -500));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Profitability').last);
     await tester.pumpAndSettle();
     expect(find.text('Historical net profit'), findsOneWidget);
@@ -174,6 +174,33 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 31));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Order filters validate IDs and apply and clear the selected cohort', (tester) async {
+    AnalyticsQuery? requested;
+    final service = SnapshotService(onLoad: (query) async {
+      requested = query;
+      return SnapshotService.fixture(query);
+    });
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: ManagerAnalyticsWorkspace(service: service))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Order cohort filters'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('analytics_cashier')), '-1');
+    await tester.ensureVisible(find.byKey(const ValueKey('analytics_apply_filters')));
+    await tester.tap(find.byKey(const ValueKey('analytics_apply_filters')));
+    await tester.pumpAndSettle();
+    expect(find.text('Positive ID required'), findsOneWidget);
+    expect(requested!.cashierId, isNull);
+    await tester.enterText(find.byKey(const ValueKey('analytics_cashier')), '7');
+    await tester.tap(find.byKey(const ValueKey('analytics_apply_filters')));
+    await tester.pumpAndSettle();
+    expect(requested!.cashierId, 7);
+    expect(find.textContaining('Filters applied'), findsOneWidget);
+    await tester.tap(find.text('Clear'));
+    await tester.pumpAndSettle();
+    expect(requested!.hasOrderFilters, isFalse);
+    expect(find.text('All cashiers, shifts, Dining Types and payment methods'), findsOneWidget);
   });
 
   for (final width in [1366.0, 390.0]) {
