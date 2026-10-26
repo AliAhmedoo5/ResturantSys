@@ -319,4 +319,23 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets('Overview exposes a real sales chart and preserves missing-data labels at larger text size', (tester) async {
+    tester.view.physicalSize = const Size(1024, 768);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(MaterialApp(theme: WarmCounterTheme.darkTheme,
+      builder: (context, child) => MediaQuery(data: MediaQuery.of(context).copyWith(
+        textScaler: const TextScaler.linear(1.3)), child: child!),
+      home: Scaffold(body: ManagerAnalyticsWorkspace(service: SnapshotService()))));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Sales performance'), 200,
+      scrollable: find.descendant(of: find.byKey(const ValueKey('analytics_body')),
+        matching: find.byType(Scrollable)).first);
+    expect(find.text('Sales performance'), findsOneWidget);
+    expect(find.text('Recorded order value (PKR) • by Business Day opening date'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
 }

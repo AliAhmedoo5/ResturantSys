@@ -17,6 +17,7 @@ class AppSidebar extends StatelessWidget {
   Widget build(BuildContext context) {
     final manager = staff.canAccessSupervisorPortal;
     final tabs = [
+      if (manager) AppWorkspaceTab.dashboard,
       AppWorkspaceTab.register,
       if (manager) AppWorkspaceTab.riderTrips,
       if (manager) ...[AppWorkspaceTab.catalog, AppWorkspaceTab.khata, AppWorkspaceTab.supervisor],
