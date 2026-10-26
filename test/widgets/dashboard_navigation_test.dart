@@ -69,7 +69,7 @@ void main() {
       for (var i = 0; i < 7; i++) {
         final date = DateTime(now.year, now.month, now.day).subtract(Duration(days: 6 - i));
         final day = await db.insert('business_days', {'opened_at': date.toIso8601String(),
-          'status': i == 6 ? 'OPEN' : 'CLOSED', 'opened_by_staff_id': manager['id']});
+          'status': 'OPEN', 'opened_by_staff_id': manager['id']});
         final shift = await db.insert('shifts', {'business_day_id': day, 'staff_id': cashier['id'],
           'opened_at': date.toIso8601String(), 'opening_float': 1000, 'status': 'OPEN'});
         for (var token = 1; token <= 12 + i * 3; token++) {
@@ -77,6 +77,11 @@ void main() {
           await db.insert('orders', {'business_day_id': day, 'shift_id': shift, 'cashier_id': cashier['id'],
             'token_number': token, 'dining_type': 'TAKEAWAY', 'subtotal': value, 'grand_total': value,
             'payment_status': 'SETTLED', 'created_at': date.toIso8601String()});
+        }
+        if (i < 6) {
+          final closedAt = date.add(const Duration(hours: 23)).toIso8601String();
+          await db.update('shifts', {'status': 'CLOSED', 'closed_at': closedAt}, where: 'id=?', whereArgs: [shift]);
+          await db.update('business_days', {'status': 'CLOSED', 'closed_at': closedAt}, where: 'id=?', whereArgs: [day]);
         }
       }
       return service;
@@ -104,9 +109,22 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Business intelligence'), findsOneWidget);
     expect(find.text('CSV (this report)'), findsOneWidget);
+    expect(find.text('PKR 30,000.00'), findsOneWidget);
     expect(find.text('Analytics unavailable'), findsNothing);
     expect(tester.takeException(), isNull);
     if (Platform.environment['CAPTURE_DESKTOP'] == 'true') {
+      await tester.tap(find.byKey(const ValueKey('analytics_period')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Last 7 dates').last);
+      await tester.runAsync(() async {
+        for (var attempt = 0; attempt < 400; attempt++) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+          await tester.pump();
+          if (find.text('CSV (this report)').evaluate().isNotEmpty) break;
+        }
+      });
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
       final boundary = tester.renderObject<RenderRepaintBoundary>(find.byKey(const ValueKey('dashboard_shell_preview')));
       await tester.runAsync(() async {
         final image = await boundary.toImage();
