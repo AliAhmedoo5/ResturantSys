@@ -60,7 +60,7 @@ class AnalyticsService {
     await read('inventory', 'inventory_movements', 'SELECT m.* FROM inventory_movements m JOIN business_days b ON b.id=m.business_day_id WHERE $dayScope', dayArgs);
     final cutoff = e.get('days').map((d) => _karachi(d['closed_at']) ?? _karachi(e.now.toIso8601String())!).fold<DateTime?>(null, (latest, time) => latest == null || time.isAfter(latest) ? time : latest);
     if (cutoff != null) {
-      await read('balances', 'inventory_movements', 'SELECT m.* FROM inventory_movements m WHERE ${_localSql('m.recorded_at')}<=? AND NOT EXISTS(SELECT 1 FROM inventory_movements n WHERE n.ingredient_id=m.ingredient_id AND ${_localSql('n.recorded_at')}<=? AND (${_localSql('n.recorded_at')}>${_localSql('m.recorded_at')} OR (${_localSql('n.recorded_at')}=${_localSql('m.recorded_at')} AND n.id>m.id)))', [_sqlTime(cutoff), _sqlTime(cutoff)]);
+      await read('balances', 'inventory_movements', 'SELECT id,ingredient_id,balance_after,recorded_at FROM (SELECT m.*,ROW_NUMBER() OVER(PARTITION BY ingredient_id ORDER BY ${_localSql('m.recorded_at')} DESC,id DESC) AS evidence_rank FROM inventory_movements m WHERE ${_localSql('m.recorded_at')}<=?) WHERE evidence_rank=1', [_sqlTime(cutoff)]);
     }
     final interval = _intervalScope(query, 'x.created_at');
     final intervalArgs = [...dayArgs, _sqlTime(_karachi(e.now.toIso8601String())!)];

@@ -5,9 +5,9 @@ class _ReportBuilder {
   _ReportBuilder(this.e);
   final _Evidence e;
   List<_Record> get orders => e.get('orders');
-  List<_Record> get valid => orders.where(_valid).toList();
-  Set<Object?> get validIds => valid.map((o) => o['id']).toSet();
-  List<_Record> get soldItems => e.get('items').where((i) => validIds.contains(i['order_id'])).toList();
+  late final List<_Record> valid = orders.where(_valid).toList();
+  late final Set<Object?> validIds = valid.map((o) => o['id']).toSet();
+  late final List<_Record> soldItems = e.get('items').where((i) => validIds.contains(i['order_id'])).toList();
   bool get partial => e.query.live || e.get('days').any((d) => d['status'] == 'OPEN');
   static const _orderBasis = 'Filtered order cohort by Business Day FK. Recorded current valid value includes Collection Due; excludes VOIDED, CANCELLED and REFUNDED. This is not recognized revenue.';
   static const _globalBasis = 'Selected Business Days, all shifts/domain events. Cashier, shift, Dining Type and payment filters apply only to order-based reports, not these totals.';
@@ -89,9 +89,10 @@ class _ReportBuilder {
     final revisedIds = revisions.map((r) => r['order_id']).toSet();
     final cancelled = {...orders.where((o) => ['CANCELLED', 'VOIDED', 'REFUNDED'].contains(o['payment_status'])).map((o) => o['id']), ...revisions.where((r) => r['action'] == 'CANCEL').map((r) => r['order_id'])};
     final refunds = e.get('payments').where((p) => _money(p, 'amount_tendered') < 0).toList();
+    final paymentsByOrder = _group(e.get('payments'), 'order_id');
     var exposure = 0;
     for (final o in orders) {
-      final payments = e.get('payments').where((p) => p['order_id'] == o['id']);
+      final payments = paymentsByOrder['${o['id']}'] ?? const <_Record>[];
       final retained = payments.fold<int>(0, (s, p) => s + _money(p, 'amount_tendered') - _money(p, 'change_returned'));
       final due = ['CANCELLED', 'VOIDED', 'REFUNDED'].contains(o['payment_status']) ? 0 : _money(o, 'grand_total');
       exposure += math.max(0, retained - due);
@@ -183,17 +184,46 @@ class _ReportBuilder {
     final items = soldItems;
     final rows = <AnalyticsRow>[];
     final sold = <String>{};
+    final groups = <String, List<_Record>>{};
     for (final item in items) {
       final type = item['deal_id'] != null ? 'deal' : 'item';
-      sold.add('$type:${item['deal_id'] ?? item['menu_item_id']}');
-      rows.add(_row('order_items', item, {'order_id': item['order_id'], 'kind': type, 'catalog_id': item['deal_id'] ?? item['menu_item_id'], 'name': _safeText(item['name']), 'quantity': item['quantity'], 'line_value_paisa': _money(item, 'total_price'), 'modifiers': _snapshotNames(item['modifiers_json']), 'choices': _snapshotNames(item['deal_choices_json'])}));
+      // Deleted catalog IDs can become NULL. Preserve their snapshotted names
+      // rather than merging every archived item into one anonymous product.
+      final key = '$type:${item['deal_id'] ?? item['menu_item_id'] ?? 'archived:${item['name']}'}';
+      sold.add(key);
+      groups.putIfAbsent(key, () => []).add(item);
+    }
+    final ranked = groups.entries.toList()..sort((a, b) {
+      final quantity = _integers(b.value, 'quantity').compareTo(_integers(a.value, 'quantity'));
+      return quantity != 0 ? quantity : a.key.compareTo(b.key);
+    });
+    var rank = 0;
+    int? previousQuantity;
+    for (var index = 0; index < ranked.length; index++) {
+      final entry = ranked[index];
+      final first = entry.value.first;
+      final quantity = _integers(entry.value, 'quantity');
+      if (quantity != previousQuantity) rank = index + 1;
+      previousQuantity = quantity;
+      rows.add(AnalyticsRow(id: 'menu-${entry.key}', sourceType: 'order_items', sourceId: entry.value.map((i) => i['id']).join(','), cells: {
+        'kind': 'Item/deal aggregate',
+        'catalog_kind': first['deal_id'] != null ? 'deal' : 'item',
+        'catalog_id': first['deal_id'] ?? first['menu_item_id'],
+        'name': entry.value.map((i) => _safeText(i['name'])).toSet().join(' / '),
+        'quantity': quantity,
+        'order_count': entry.value.map((i) => i['order_id']).toSet().length,
+        'line_value_paisa': _sum(entry.value, 'total_price'),
+        'popularity_rank': rank,
+        'modifiers': entry.value.map((i) => _snapshotNames(i['modifiers_json'])).where((name) => name.isNotEmpty).toSet().join(' / '),
+        'choices': entry.value.map((i) => _snapshotNames(i['deal_choices_json'])).where((name) => name.isNotEmpty).toSet().join(' / '),
+      }));
     }
     var zeroSellers = 0;
     for (final type in ['catalog', 'deals']) {
       for (final item in e.get(type)) {
         if (item['is_active'] != 1 || sold.contains('${type == 'deals' ? 'deal' : 'item'}:${item['id']}')) continue;
         zeroSellers++;
-        rows.add(_row(type == 'deals' ? 'deals' : 'menu_items', item, {'kind': type == 'deals' ? 'deal' : 'item', 'catalog_id': item['id'], 'name': _safeText(item['name']), 'quantity': 0, 'line_value_paisa': 0, 'status': 'Zero recorded sales in selected cohort'}));
+        rows.add(_row(type == 'deals' ? 'deals' : 'menu_items', item, {'kind': 'Current active zero seller', 'catalog_kind': type == 'deals' ? 'deal' : 'item', 'catalog_id': item['id'], 'name': _safeText(item['name']), 'quantity': 0, 'order_count': 0, 'line_value_paisa': 0, 'status': 'Zero recorded sales in selected cohort'}));
       }
     }
     final discounted = valid.where((o) => _money(o, 'discount_amount') > 0).length;
@@ -205,7 +235,7 @@ class _ReportBuilder {
       _average('quantity_per_order', 'Mean line quantity per order', _integers(items, 'quantity'), valid.length, AnalyticsUnit.decimal, 'Recorded eligible line quantity / eligible order count.'),
       _missing('item_net_sales', 'Allocated item net sales', 'Order discount/tax/delivery allocation is not persisted; stored line value must not be mislabeled net sales.'),
       _missing('item_margin', 'Historical item margin', 'BOM quantity snapshots have no event-time ingredient cost layers.'),
-    ], rows, ['kind', 'catalog_id', 'name', 'order_id', 'quantity', 'line_value_paisa', 'modifiers', 'choices', 'status'], [_orderBasis, 'Sortable quantity and line-value detail supports popular/slow sellers; zero sellers refer to current active catalog. Snapshotted modifier/choice names are source evidence, not inferred upsell profitability.']);
+    ], rows, ['kind', 'catalog_kind', 'catalog_id', 'name', 'quantity', 'order_count', 'line_value_paisa', 'popularity_rank', 'modifiers', 'choices', 'status'], [_orderBasis, 'Item/deal aggregate quantity and stored line value combine all eligible lines by catalog identity; order_count is distinct contributing orders. Popularity rank uses quantity descending with equal ranks for ties. Each aggregate retains every contributing order_item source ID.', 'Ascending quantity identifies slow sellers; zero sellers refer to current active catalog. Snapshotted modifier/choice names are source evidence, not inferred upsell profitability.']);
   }
 
   AnalyticsSection _inventory() {
