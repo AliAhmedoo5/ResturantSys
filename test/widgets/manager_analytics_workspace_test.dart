@@ -83,8 +83,8 @@ void main() {
     expect(find.text('PKR 1,234.50'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('analytics_family')));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Profitability'), 100,
-      scrollable: find.byType(Scrollable).last);
+    await tester.drag(find.byType(Scrollable).last, const Offset(0, -500));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Profitability').last);
     await tester.pumpAndSettle();
     expect(find.text('Historical net profit'), findsOneWidget);
