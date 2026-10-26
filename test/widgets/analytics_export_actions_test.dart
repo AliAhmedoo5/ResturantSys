@@ -12,7 +12,8 @@ void main() {
     var allowed = true;
     var picker = Completer<String?>();
     final snapshot = AnalyticsSnapshot(query: AnalyticsQuery(startDate: DateTime(2026, 10, 1), endDateExclusive: DateTime(2026, 10, 2)), generatedAt: DateTime.utc(2026, 10, 1), businessDayIds: [42], sections: [AnalyticsSection(family: AnalyticsFamily.sales, title: 'Sales')]);
-    await tester.pumpWidget(MaterialApp(home: Scaffold(body: AnalyticsExportActions(snapshot: snapshot, family: AnalyticsFamily.sales, canExport: () => allowed, pickDirectory: () => picker.future))));
+    Widget view() => MaterialApp(home: Scaffold(body: AnalyticsExportActions(snapshot: snapshot, family: AnalyticsFamily.sales, canExport: () => allowed, pickDirectory: () => picker.future)));
+    await tester.pumpWidget(view());
     await tester.tap(find.text('CSV (this report)'));
     await tester.pump();
     expect(tester.widget<OutlinedButton>(find.ancestor(of: find.text('XLSX (all reports)'), matching: find.byWidgetPredicate((w) => w is OutlinedButton))).onPressed, isNull);
@@ -28,6 +29,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(directory.listSync(), isEmpty);
     allowed = true;
+    await tester.pumpWidget(view());
     picker = Completer<String?>();
     await tester.tap(find.text('CSV (this report)'));
     await tester.pump();
@@ -37,5 +39,6 @@ void main() {
     expect(directory.listSync(), isEmpty);
   });
 }
+
 
 
