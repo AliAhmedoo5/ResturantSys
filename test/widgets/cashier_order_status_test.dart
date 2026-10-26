@@ -1,0 +1,56 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:resturant_sys/core/auth/staff.dart';
+import 'package:resturant_sys/core/auth/staff_role.dart';
+import 'package:resturant_sys/core/orders/dining_type.dart';
+import 'package:resturant_sys/core/orders/order.dart';
+import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
+import 'package:resturant_sys/core/orders/token_status.dart';
+import 'package:resturant_sys/widgets/orders/counter_billing_workspace.dart';
+
+class StatusOrders implements OrderAndCheckoutController {
+  Order order = Order(id: 1, businessDayId: 1, shiftId: 1, cashierId: 2,
+    tokenNumber: 7, diningType: DiningType.takeaway, subtotal: 500,
+    grandTotal: 500, paymentStatus: 'SETTLED', createdAt: DateTime(2026));
+  int? actor;
+  @override
+  Future<List<Order>> getOrders({int? businessDayId, int? shiftId, int? limit}) async => [order];
+  @override
+  Future<TokenStatus> advanceOrderStatus({required int orderId, required int cashierId,
+    required TokenStatus expectedStatus}) async {
+    actor = cashierId;
+    order = Order.fromMap({...order.toMap(), 'token_status': expectedStatus.nextStatus!.code});
+    return order.tokenStatus;
+  }
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+void main() {
+  testWidgets('Cashier opens Orders and explicitly records ready then collected', (tester) async {
+    tester.view.physicalSize = const Size(1366, 768);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final orders = StatusOrders();
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: CounterBillingWorkspace(
+      orderController: orders, currentStaff: const Staff(id: 2, name: 'Cashier',
+        departmentId: 1, pinHash: 'hash', role: StaffRole.cashier, isActive: true),
+      businessDayId: 1, shiftId: 1, initialCategories: const [], initialMenuItems: const [],
+      initialDeals: const [], initialDiscounts: const [], initialModifiers: const [],
+      initialNextTokenNumber: 8))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('open_order_status_button')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Token #07'), findsOneWidget);
+    await tester.tap(find.text('Mark Ready'));
+    await tester.pumpAndSettle();
+    expect(orders.actor, 2);
+    expect(find.text('Mark Collected'), findsOneWidget);
+    await tester.tap(find.text('Mark Collected'));
+    await tester.pumpAndSettle();
+    expect(orders.order.tokenStatus, TokenStatus.delivered);
+    expect(find.text('Collected'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+}
