@@ -170,14 +170,36 @@ class _ReportBuilder {
       groups.putIfAbsent(identity, () => []).add(order);
     }
     final repeat = groups.values.where((list) => list.length >= 2).length;
+    final knownValue = groups.values.fold<int>(0, (sum, list) => sum + _sum(list, 'grand_total'));
+    final rows = <AnalyticsRow>[];
+    for (final entry in groups.entries) {
+      final customer = 'Customer •••${entry.key.substring(entry.key.length - 4)}';
+      final value = _sum(entry.value, 'grand_total');
+      rows.add(AnalyticsRow(id: 'customer-${entry.value.first['id']}', sourceType: 'orders',
+        sourceId: entry.value.map((order) => order['id']).join(','), cells: {
+          'kind': 'Customer aggregate', 'customer': customer, 'orders_in_range': entry.value.length,
+          'recorded_value_paisa': value, 'average_ticket_paisa': value / entry.value.length,
+        }));
+      rows.addAll(entry.value.map((order) => _row('orders', order, {
+        'kind': 'Order history', 'customer': customer, 'order_id': order['id'],
+        'orders_in_range': entry.value.length, 'recorded_value_paisa': _money(order, 'grand_total'),
+        'area': order['delivery_area_name_snapshot'], 'created_at': order['created_at'],
+      })));
+    }
     return _section(AnalyticsFamily.customers, 'Customers', [
       _metric('known_customers', 'Known phone identities', groups.length, unit: AnalyticsUnit.count, explanation: 'Distinct normalized known phone proxies in eligible filtered orders; not guaranteed distinct people.'),
       _metric('known_orders', 'Orders with known phone', knownOrders, unit: AnalyticsUnit.count, explanation: 'Eligible filtered orders with usable normalized phone identity.'),
+      _average('known_customer_average_ticket', 'Known-customer average ticket', knownValue, knownOrders,
+        AnalyticsUnit.paisa, 'Recorded eligible known-phone order value / eligible known-phone order count. Guests and cancelled/voided/refunded orders excluded; includes Collection Due. Denominator shown; this is order-weighted, not an average of customer means.'),
       _metric('guest_orders', 'Guest/unknown orders', valid.length - knownOrders, unit: AnalyticsUnit.count, explanation: 'Eligible orders without usable known phone; excluded from repeat denominator.'),
       _rate('identity_coverage', 'Known identity coverage', knownOrders, valid.length, 'Known phone orders / eligible filtered orders.'),
       _rate('repeat_rate', 'Repeat-customer rate', repeat, groups.length, 'Known normalized phone proxies with at least two eligible selected orders / proxies with at least one. Guests excluded.'),
       _metric('single_order_customers', 'Single-order phone identities', groups.length - repeat, unit: AnalyticsUnit.count, explanation: 'One eligible order within selected range; cannot be called a new lifetime customer.'),
-    ], groups.entries.expand((entry) => entry.value.map((o) => _row('orders', o, {'customer': 'Customer •••${entry.key.substring(entry.key.length - 4)}', 'order_id': o['id'], 'orders_in_range': entry.value.length, 'recorded_value_paisa': _money(o, 'grand_total'), 'area': o['delivery_area_name_snapshot'], 'created_at': o['created_at']}))).toList(), ['customer', 'order_id', 'orders_in_range', 'recorded_value_paisa', 'area', 'created_at'], [_orderBasis, 'Phone normalization removes separators and unifies +92/0092/92 mobile prefixes with local 0. Shared numbers and masked suffix collisions are possible. Raw phones, names and addresses are excluded.']);
+    ], rows, ['kind', 'customer', 'order_id', 'orders_in_range', 'recorded_value_paisa', 'average_ticket_paisa', 'area', 'created_at'], [
+      _orderBasis,
+      'Phone normalization removes separators and unifies +92/0092/92 mobile prefixes with local 0. Shared numbers and masked suffix collisions are possible. Raw phones, names and addresses are excluded.',
+      'Customer aggregate rows show each known identity’s eligible recorded value / its eligible order count, with all contributing order source IDs. Order history rows are a separate view; do not sum these different row kinds together. No known orders makes average ticket Not applicable.',
+    ]);
   }
 
   AnalyticsSection _menu() {
