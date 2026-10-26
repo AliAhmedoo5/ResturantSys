@@ -931,8 +931,8 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
       return GridView.builder(
         key: const ValueKey('deals_grid'),
         gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 180,
-          mainAxisExtent: 176,
+          maxCrossAxisExtent: 260,
+          mainAxisExtent: 240,
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
         ),
@@ -960,8 +960,8 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
     return GridView.builder(
       key: ValueKey('menu_grid_$_selectedCategoryId'),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 180,
-        mainAxisExtent: 176,
+        maxCrossAxisExtent: 260,
+        mainAxisExtent: 240,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
       ),

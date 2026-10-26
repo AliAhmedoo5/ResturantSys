@@ -31,3 +31,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/brand/crunch-cartel-icon.png
+    - assets/brand/crunch-cartel-wordmark.png
