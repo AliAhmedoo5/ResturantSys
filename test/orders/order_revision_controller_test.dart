@@ -107,6 +107,61 @@ void main() {
       expect(events.first.recordedAt.isAfter(DateTime(2026, 1, 1)), isTrue);
       expect((await orderController.getOrder(checkout.order.id)).grandTotal, 500);
     });
+
+    test('inactive and no-login staff cannot record milestones or revisions', () async {
+      final checkout = await orderController.checkoutOrder(
+        businessDayId: businessDayId, shiftId: shiftId, cashierId: cashierId,
+        diningType: DiningType.takeaway, items: [CartItem(menuItem: burger, quantity: 1)],
+        payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 500)]);
+      for (final flags in [{'is_active': 0, 'login_enabled': 1}, {'is_active': 1, 'login_enabled': 0}]) {
+        await db.update('staff', flags, where: 'id = ?', whereArgs: [cashierId]);
+        await expectLater(orderController.advanceOrderStatus(orderId: checkout.order.id,
+          cashierId: cashierId, expectedStatus: TokenStatus.preparing), throwsStateError);
+        await expectLater(orderController.cancelOrder(orderId: checkout.order.id,
+          cashierId: cashierId, reason: 'Denied', commandId: 'denied-cancel'), throwsStateError);
+        await expectLater(orderController.reviseOrder(orderId: checkout.order.id,
+          cashierId: cashierId, reason: 'Denied', commandId: 'denied-revision',
+          newItems: [CartItem(menuItem: burger, quantity: 2)]), throwsStateError);
+      }
+      expect(await orderController.getOrderStatusEvents(checkout.order.id), isEmpty);
+      expect((await orderController.getOrder(checkout.order.id)).currentRevision, 1);
+    });
+
+    test('delivery completion stays in Rider Trips and cancelled orders cannot advance', () async {
+      final checkout = await orderController.checkoutOrder(
+        businessDayId: businessDayId, shiftId: shiftId, cashierId: cashierId,
+        diningType: DiningType.takeaway, items: [CartItem(menuItem: burger, quantity: 1)],
+        payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 500)]);
+      // Seed a ready Delivery fixture without requiring an unrelated area configuration flow.
+      await db.update('orders', {'dining_type': 'DELIVERY', 'token_status': 'READY'},
+        where: 'id = ?', whereArgs: [checkout.order.id]);
+      await expectLater(orderController.advanceOrderStatus(orderId: checkout.order.id,
+        cashierId: cashierId, expectedStatus: TokenStatus.ready), throwsStateError);
+      await orderController.cancelOrder(orderId: checkout.order.id, cashierId: cashierId,
+        reason: 'Customer cancelled', commandId: 'cancelled-no-progression');
+      await expectLater(orderController.advanceOrderStatus(orderId: checkout.order.id,
+        cashierId: cashierId, expectedStatus: TokenStatus.ready), throwsStateError);
+      expect(await orderController.getOrderStatusEvents(checkout.order.id), isEmpty);
+    });
+
+    test('v15 upgrade preserves existing order and leaves unobserved history empty', () async {
+      final checkout = await orderController.checkoutOrder(
+        businessDayId: businessDayId, shiftId: shiftId, cashierId: cashierId,
+        diningType: DiningType.takeaway, items: [CartItem(menuItem: burger, quantity: 1)],
+        payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 500)]);
+      // Reconstruct the prior release schema as an upgrade input fixture.
+      await db.execute('DROP TABLE order_status_events');
+      await db.execute('PRAGMA user_version = 15');
+      await posDb.close();
+      posDb = PosDatabase(factory: databaseFactoryFfi, customPath: testDbPath);
+      db = await posDb.initialize();
+      orderController = OrderAndCheckoutController(database: db);
+      expect((await orderController.getOrder(checkout.order.id)).grandTotal, 500);
+      expect(await orderController.getOrderStatusEvents(checkout.order.id), isEmpty);
+      await orderController.advanceOrderStatus(orderId: checkout.order.id,
+        cashierId: cashierId, expectedStatus: TokenStatus.preparing);
+      expect((await orderController.getOrderStatusEvents(checkout.order.id)).single.toStatus, TokenStatus.ready);
+    });
     test('Cashier can cancel confirmed order without a Manager PIN', () async {
       final checkout = await orderController.checkoutOrder(
         businessDayId: businessDayId,
