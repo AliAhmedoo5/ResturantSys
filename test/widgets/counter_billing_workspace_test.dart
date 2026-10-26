@@ -19,7 +19,6 @@ import 'package:resturant_sys/core/theme/warm_counter_theme.dart';
 import 'package:resturant_sys/widgets/orders/counter_billing_workspace.dart';
 import 'package:resturant_sys/widgets/orders/deal_selection_dialog.dart';
 import 'package:resturant_sys/widgets/orders/modifier_selection_dialog.dart';
-import 'package:resturant_sys/widgets/orders/reprint_tray_dialog.dart';
 import 'package:resturant_sys/widgets/orders/tender_checkout_dialog.dart';
 
 void main() {
