@@ -125,7 +125,7 @@ class AnalyticsExportService {
   List<List<Object?>> _metadata(AnalyticsSnapshot s, String family) => [
     ['report_version', 'manager-analytics-v1'],
     ['report_kind', 'Exploratory current-record snapshot; not a sealed Z-report'],
-    ['family', family], ['currency', 'PKR; monetary numbers are integer paisa (100 paisa = PKR 1)'],
+    ['family', family], ['currency', 'PKR; money amounts use integer paisa (100 paisa = PKR 1); decimal unit rates retain labeled PKR/base-unit precision'],
     ['generated_utc', s.generatedAt.toUtc().toIso8601String()],
     ['generated_local', '${s.generatedAt.toUtc().add(const Duration(hours: 5)).toIso8601String().replaceAll('Z', '')}+05:00'],
     ['timezone', 'Asia/Karachi'], ['generated_by_staff_id', s.generatedByStaffId],
@@ -141,6 +141,8 @@ class AnalyticsExportService {
 
   List<List<Object?>> _sectionRows(AnalyticsSection s) => [
     ['section', s.title],
+    ['source_row_count', s.rows.length],
+    ['metric_count', s.metrics.length],
     for (final note in s.notes) ['section_note', note],
     ['Metric ID', 'Metric', 'Value', 'Unit', 'Quality', 'Formula / explanation', 'Sample count', 'Population count', 'Change percent'],
     for (final m in s.metrics) [m.id, m.label, m.value, m.unit.name, m.quality.name, m.explanation, m.sampleCount, m.populationCount, m.changePercent],
@@ -158,5 +160,6 @@ class AnalyticsExportService {
     return text.contains(RegExp('[,"\r\n]')) ? '"${text.replaceAll('"', '""')}"' : text;
   }
 }
+
 
 
