@@ -9,6 +9,7 @@ import 'package:resturant_sys/core/orders/order.dart';
 import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
 import 'package:resturant_sys/core/orders/token_status.dart';
 import 'package:resturant_sys/widgets/orders/counter_billing_workspace.dart';
+import 'package:resturant_sys/widgets/orders/cashier_orders_panel.dart';
 
 class StatusOrders implements OrderAndCheckoutController {
   Order order = Order(id: 1, businessDayId: 1, shiftId: 1, cashierId: 2,
@@ -55,7 +56,26 @@ void main() {
     await tester.tap(find.text('Mark Collected'));
     await tester.pumpAndSettle();
     expect(orders.order.tokenStatus, TokenStatus.delivered);
-    expect(find.text('Collected'), findsOneWidget);
+    expect(find.textContaining('Collected •'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  for (final scenario in [
+    (name: 'partially revised prepaid order awaiting refund', total: 300.0, payment: 'REFUND_PENDING'),
+    (name: 'fully discounted valid order', total: 0.0, payment: 'SETTLED'),
+  ]) {
+    testWidgets('${scenario.name} still permits food fulfillment', (tester) async {
+      final orders = StatusOrders();
+      orders.order = Order.fromMap({...orders.order.toMap(), 'grand_total': scenario.total,
+        'payment_status': scenario.payment});
+      await tester.pumpWidget(MaterialApp(home: Scaffold(body: CashierOrdersPanel(
+        controller: orders, cashierId: 2, businessDayId: 1))));
+      await tester.pumpAndSettle();
+      expect(find.text('Mark Ready'), findsOneWidget);
+      await tester.tap(find.text('Mark Ready'));
+      await tester.pumpAndSettle();
+      expect(orders.order.tokenStatus, TokenStatus.ready);
+      expect(find.text('Mark Collected'), findsOneWidget);
+    });
+  }
 }

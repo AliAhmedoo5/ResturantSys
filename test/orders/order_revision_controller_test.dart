@@ -194,6 +194,8 @@ void main() {
       expect(updatedOrder.grandTotal, equals(0.0));
       expect(updatedOrder.currentRevision, equals(2));
       expect(updatedOrder.isRefundPending, isTrue); // Paid order flagged as refund pending
+      expect(updatedOrder.isCancelled, isTrue); // Cancellation is distinct from the refund balance.
+      expect((await orderController.getOrders(businessDayId: businessDayId)).single.isCancelled, isTrue);
     });
 
     test('Canceling or revising requires a mandatory non-empty reason', () async {
