@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../../core/shifts/z_report.dart';
+import '../../core/shifts/z_report_printer.dart';
 import '../../core/theme/theme.dart';
 
 /// Modal dialog for reviewing the End-of-Day Master Z-Report,
@@ -18,7 +20,7 @@ class ZReportDialog extends StatefulWidget {
 
   final ZReport report;
   final Future<void> Function()? onExportExcel;
-  final VoidCallback? onPrint;
+  final FutureOr<void> Function()? onPrint;
   final Future<void> Function()? onFinalizeBusinessDay;
   final bool isFinalized;
 
@@ -29,7 +31,35 @@ class ZReportDialog extends StatefulWidget {
 class _ZReportDialogState extends State<ZReportDialog> {
   bool _showThermalSlip = false;
   bool _isProcessing = false;
+  String? _printStatus;
+  bool _printFailed = false;
   final NumberFormat _currencyFormat = NumberFormat('#,##0.00');
+
+  Future<void> _printReport() async {
+    if (_isProcessing) return;
+    setState(() {
+      _isProcessing = true;
+      _printFailed = false;
+      _printStatus = 'Opening printer dialog...';
+    });
+    try {
+      bool printed = true;
+      if (widget.onPrint != null) {
+        await widget.onPrint!();
+      } else {
+        printed = await const ZReportPrinter().printReport(widget.report);
+      }
+      if (mounted) setState(() => _printStatus = printed
+          ? 'Z-Report sent to the printer.' : 'Printing cancelled.');
+    } catch (_) {
+      if (mounted) setState(() {
+        _printFailed = true;
+        _printStatus = 'Could not print Z-Report. Check your printer and try again.';
+      });
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
+  }
 
   Future<bool> _confirmFinalizeDay(BuildContext context, int dayId) async {
     final confirmed = await showDialog<bool>(
@@ -155,6 +185,16 @@ class _ZReportDialogState extends State<ZReportDialog> {
             const Divider(height: 1, color: WarmCounterColors.lightBorder),
             const SizedBox(height: WarmCounterSpacing.space16),
 
+            if (_printStatus != null) Padding(
+              padding: const EdgeInsets.only(bottom: WarmCounterSpacing.space12),
+              child: Semantics(liveRegion: true, child: Text(
+                _printStatus!,
+                key: const ValueKey('z_report_print_status'),
+                style: TextStyle(color: _printFailed
+                    ? WarmCounterColors.lightDestructiveAction
+                    : WarmCounterColors.lightPrimaryText),
+              )),
+            ),
             // Action Buttons Bar
             Wrap(
               alignment: WrapAlignment.end,
@@ -167,7 +207,7 @@ class _ZReportDialogState extends State<ZReportDialog> {
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
                   ),
-                  onPressed: () => Navigator.of(context).maybePop(false),
+                  onPressed: _isProcessing ? null : () => Navigator.of(context).maybePop(false),
                   child: const Text('Close'),
                 ),
                 OutlinedButton.icon(
@@ -177,15 +217,7 @@ class _ZReportDialogState extends State<ZReportDialog> {
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
                   ),
-                  onPressed: () {
-                    if (widget.onPrint != null) {
-                      widget.onPrint!();
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Dispatched Z-Report to 80mm thermal printer.')),
-                      );
-                    }
-                  },
+                  onPressed: _isProcessing ? null : _printReport,
                 ),
                 ElevatedButton.icon(
                   key: const ValueKey('export_excel_button'),

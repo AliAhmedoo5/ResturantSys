@@ -1,4 +1,4 @@
-/// Fulfillment progression status for kitchen and pickup queue.
+/// Cashier-recorded preparation and fulfillment milestones.
 enum TokenStatus {
   confirmed('CONFIRMED', 'Confirmed'),
   preparing('PREPARING', 'Preparing'),

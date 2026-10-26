@@ -788,13 +788,13 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
+    // Keep the controller mounted while persisted catalog changes reload.
+    // Removing it for the loading indicator resets the selected tab to zero.
     return DefaultTabController(
       length: 7,
-      child: Column(
+      child: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
         children: [
           // Sub-navigation TabBar
           Container(
@@ -925,6 +925,13 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
     );
   }
 
+  void _filterMenuItems(int? categoryId) {
+    setState(() {
+      _menuItemCategoryFilter = categoryId;
+      _menuItems = _allMenuItems.where((item) => categoryId == null || item.categoryId == categoryId).toList();
+    });
+  }
+
   // Tab 1: Categories
   Widget _buildCategoriesTab() {
     return SingleChildScrollView(
@@ -980,7 +987,13 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                     borderRadius: WarmCounterSpacing.controlBorderRadius,
                     border: Border.all(color: WarmCounterColors.lightBorder),
                   ),
-                  child: Row(
+                  child: InkWell(
+                    key: ValueKey('open_category_${cat.id}'),
+                    onTap: () {
+                      _filterMenuItems(cat.id);
+                      DefaultTabController.of(context).animateTo(1);
+                    },
+                    child: Row(
                     children: [
                       Container(
                         width: 24,
@@ -1018,6 +1031,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                       ),
                     ],
                   ),
+                  ),
                 );
               },
             ),
@@ -1028,6 +1042,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
 
   // Tab 2: Menu Items & BOM
   Widget _buildMenuItemsTab() {
+    final menuItems = _menuItems;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(WarmCounterSpacing.space16),
       child: Column(
@@ -1071,8 +1086,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                   label: const Text('All Categories'),
                   selected: _menuItemCategoryFilter == null,
                   onSelected: (_) {
-                    setState(() => _menuItemCategoryFilter = null);
-                    _loadAllCatalogData();
+                    _filterMenuItems(null);
                   },
                 ),
                 const SizedBox(width: 8),
@@ -1083,8 +1097,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                       label: Text(c.name),
                       selected: _menuItemCategoryFilter == c.id,
                       onSelected: (selected) {
-                        setState(() => _menuItemCategoryFilter = selected ? c.id : null);
-                        _loadAllCatalogData();
+                        _filterMenuItems(selected ? c.id : null);
                       },
                     ),
                   );
@@ -1094,16 +1107,16 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
           ),
           const SizedBox(height: WarmCounterSpacing.space16),
 
-          if (_menuItems.isEmpty)
+          if (menuItems.isEmpty)
             _buildEmptyState('No menu items found. Tap "Add Menu Item" to create dishes.')
           else
             ListView.separated(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              itemCount: _menuItems.length,
+              itemCount: menuItems.length,
               separatorBuilder: (_, __) => const SizedBox(height: 8),
               itemBuilder: (context, index) {
-                final item = _menuItems[index];
+                final item = menuItems[index];
 
                 return Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

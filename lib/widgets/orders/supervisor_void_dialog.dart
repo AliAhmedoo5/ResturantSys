@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/auth/auth_service.dart';
-import '../../core/hardware/reprint_tray_controller.dart';
 import '../../core/orders/order.dart';
 import '../../core/orders/order_and_checkout_controller.dart';
 import '../../core/orders/order_void.dart';
@@ -12,8 +11,7 @@ import '../pin_numpad.dart';
 ///
 /// Opens over the active counter billing workspace WITHOUT logging the cashier out.
 /// Captures mandatory cancellation reasons, verifies supervisor 4-digit PIN,
-/// marks order VOIDED, reverses BOM inventory deductions, and automatically
-/// prints an ESC/POS Kitchen Void Slip to halt food prep.
+/// marks the order VOIDED and records the stock reversal without a kitchen print job.
 class SupervisorVoidDialog extends StatefulWidget {
   const SupervisorVoidDialog({
     super.key,
@@ -21,7 +19,6 @@ class SupervisorVoidDialog extends StatefulWidget {
     required this.cashierId,
     required this.orderController,
     required this.authService,
-    required this.reprintTrayController,
     this.onVoidSuccess,
   });
 
@@ -29,7 +26,6 @@ class SupervisorVoidDialog extends StatefulWidget {
   final int cashierId;
   final OrderAndCheckoutController orderController;
   final AuthService authService;
-  final ReprintTrayController reprintTrayController;
   final VoidCallback? onVoidSuccess;
 
   @override
@@ -103,13 +99,6 @@ class _SupervisorVoidDialogState extends State<SupervisorVoidDialog> {
         supervisorStaffId: supervisor.id,
         cashierStaffId: widget.cashierId,
         reason: _selectedReason,
-      );
-
-      // 3. Emit automatic ESC/POS Kitchen Void Slip (ADR-0005)
-      await widget.reprintTrayController.dispatchKitchenVoidSlip(
-        order: widget.order,
-        reason: _selectedReason,
-        supervisorName: supervisor.name,
       );
 
       if (mounted) {
@@ -340,7 +329,7 @@ class _SupervisorVoidDialogState extends State<SupervisorVoidDialog> {
                                   const SizedBox(width: 6),
                                   Expanded(
                                     child: Text(
-                                      'Voiding restores BOM stock & automatically prints Kitchen Void Slip.',
+                                      'Voiding records the cancellation and restores eligible BOM stock.',
                                       style: WarmCounterTypography.caption.copyWith(
                                         fontSize: 11,
                                         color: WarmCounterColors.lightDestructiveAction,

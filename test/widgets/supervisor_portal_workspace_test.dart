@@ -3,14 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:resturant_sys/core/auth/department.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/auth/staff_role.dart';
-import 'package:resturant_sys/core/hardware/in_memory_hardware_adapter.dart';
-import 'package:resturant_sys/core/hardware/print_job.dart';
 import 'package:resturant_sys/core/hardware/reprint_tray_controller.dart';
-import 'package:resturant_sys/core/orders/dining_type.dart';
-import 'package:resturant_sys/core/orders/order.dart';
-import 'package:resturant_sys/core/orders/order_item.dart';
-import 'package:resturant_sys/core/orders/token_queue_controller.dart';
-import 'package:resturant_sys/core/orders/token_status.dart';
 import 'package:resturant_sys/core/shifts/shift.dart';
 import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
 import 'package:resturant_sys/core/shifts/z_report.dart';
@@ -56,35 +49,6 @@ void main() {
       ),
     ];
 
-    final testOrder = Order(
-      id: 101,
-      businessDayId: 1,
-      shiftId: 1,
-      cashierId: 1,
-      cashierName: 'Supervisor',
-      tokenNumber: 1,
-      diningType: DiningType.dineIn,
-      subtotal: 500.0,
-      discountAmount: 0.0,
-      taxAmount: 0.0,
-      grandTotal: 500.0,
-      paymentStatus: 'SETTLED',
-      createdAt: DateTime(2026, 1, 1, 12, 0),
-      tokenStatus: TokenStatus.preparing,
-      items: [
-        OrderItem(
-          id: 1,
-          orderId: 101,
-          menuItemId: 1,
-          name: 'Zinger Burger',
-          quantity: 1,
-          unitPrice: 500.0,
-          totalPrice: 500.0,
-          createdAt: DateTime(2026, 1, 1, 12, 0),
-        ),
-      ],
-    );
-
     final testDiscrepancyShift = Shift(
       id: 10,
       businessDayId: 1,
@@ -103,12 +67,10 @@ void main() {
     Widget createTestApp({
       List<Department>? initialDepartments,
       List<Staff>? initialStaff,
-      bool? initialTokenTrayEnabled,
       bool? initialCashierVoidEnabled,
       List<Shift>? initialDiscrepancies,
       ZReport? initialZReport,
       Future<void> Function()? onFinalizeBusinessDay,
-      TokenQueueController? tokenQueueController,
       ReprintTrayController? reprintTrayController,
       ShiftAndCashController? shiftController,
       double? initialDiscrepancyThreshold,
@@ -121,12 +83,10 @@ void main() {
             shiftController: shiftController,
             initialDepartments: initialDepartments ?? List.of(testDepartments),
             initialStaff: initialStaff ?? List.of(testStaffList),
-            initialTokenTrayEnabled: initialTokenTrayEnabled ?? true,
             initialCashierVoidEnabled: initialCashierVoidEnabled ?? true,
             initialDiscrepancies: initialDiscrepancies,
             initialZReport: initialZReport,
             onFinalizeBusinessDay: onFinalizeBusinessDay,
-            tokenQueueController: tokenQueueController,
             reprintTrayController: reprintTrayController,
             initialDiscrepancyThreshold: initialDiscrepancyThreshold,
           ),
@@ -147,8 +107,8 @@ void main() {
       expect(find.byKey(const ValueKey('portal_tab_toggles')), findsOneWidget);
       expect(find.byKey(const ValueKey('portal_tab_discrepancies')), findsOneWidget);
       expect(find.byKey(const ValueKey('portal_tab_reports')), findsOneWidget);
-      expect(find.byKey(const ValueKey('portal_tab_tokenQueue')), findsOneWidget);
-      expect(find.byKey(const ValueKey('portal_tab_kitchenStation')), findsOneWidget);
+      expect(find.byKey(const ValueKey('portal_tab_tokenQueue')), findsNothing);
+      expect(find.byKey(const ValueKey('portal_tab_kitchenStation')), findsNothing);
 
       // Verify default Staff & Departments tab content
       expect(find.text('Staff & Departments'), findsOneWidget);
@@ -179,6 +139,10 @@ void main() {
 
       expect(find.text('Register New Staff Member'), findsOneWidget);
       await tester.enterText(find.byKey(const ValueKey('staff_name_input')), 'Kamran Rider');
+      await tester.tap(find.byKey(const ValueKey('staff_role_dropdown')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Front Counter Cashier').last);
+      await tester.pumpAndSettle();
       await tester.enterText(find.byKey(const ValueKey('staff_pin_input')), '9876');
       await tester.tap(find.byKey(const ValueKey('staff_save_button')));
       await tester.pumpAndSettle();
@@ -199,33 +163,21 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Operational Feature Toggles'), findsOneWidget);
-      expect(find.text('Interactive Token Queue Tray'), findsOneWidget);
       expect(find.text('Cashier Void Requests'), findsOneWidget);
 
-      final tokenTrayFinder = find.byKey(const ValueKey('toggle_token_tray_switch'));
       final voidFinder = find.byKey(const ValueKey('toggle_cashier_void_switch'));
 
-      expect(tokenTrayFinder, findsOneWidget);
       expect(voidFinder, findsOneWidget);
 
       // Verify initial states
-      expect(tester.widget<SwitchListTile>(tokenTrayFinder).value, isTrue);
       expect(tester.widget<SwitchListTile>(voidFinder).value, isTrue);
 
-      // Toggle Token Tray Off
-      await tester.tap(tokenTrayFinder);
-      await tester.pumpAndSettle();
-      expect(tester.widget<SwitchListTile>(tokenTrayFinder).value, isFalse);
 
       // Toggle Cashier Void Off
       await tester.tap(voidFinder);
       await tester.pumpAndSettle();
       expect(tester.widget<SwitchListTile>(voidFinder).value, isFalse);
 
-      // Toggle Token Tray back On
-      await tester.tap(tokenTrayFinder);
-      await tester.pumpAndSettle();
-      expect(tester.widget<SwitchListTile>(tokenTrayFinder).value, isTrue);
     });
 
     testWidgets('allows manager to view and configure discrepancy threshold in operational settings', (tester) async {
@@ -299,69 +251,6 @@ void main() {
       expect(find.textContaining('Audited: short drawer'), findsOneWidget);
     });
 
-    testWidgets('token queue tray shows active tokens with 1-tap progression', (tester) async {
-      tester.view.physicalSize = const Size(1920, 1080);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
-
-      final tokenController = TokenQueueController(initialOrders: [testOrder]);
-
-      await tester.pumpWidget(createTestApp(tokenQueueController: tokenController));
-      await tester.pumpAndSettle();
-
-      // Switch to Token Queue Tray
-      await tester.tap(find.byKey(const ValueKey('portal_tab_tokenQueue')));
-      await tester.pumpAndSettle();
-
-      expect(find.text('#01'), findsOneWidget);
-      expect(find.text('PREPARING'), findsOneWidget);
-
-      // 1-Tap Advance: Preparing -> Ready
-      final advanceBtn = find.byKey(const ValueKey('advance_token_101'));
-      expect(advanceBtn, findsOneWidget);
-      await tester.tap(advanceBtn);
-      await tester.pumpAndSettle();
-
-      expect(find.text('READY ON PASS'), findsOneWidget);
-
-      // 1-Tap Advance: Ready -> Delivered
-      await tester.tap(advanceBtn);
-      await tester.pumpAndSettle();
-
-      // Token is now Delivered, so active count is 0
-      expect(find.text('Active (0)'), findsOneWidget);
-    });
-
-    testWidgets('Manager session opens kitchen station without Kitchen login', (tester) async {
-      tester.view.physicalSize = const Size(1920, 1080);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
-
-      final tokenController = TokenQueueController(initialOrders: [testOrder]);
-
-      await tester.pumpWidget(createTestApp(tokenQueueController: tokenController));
-      await tester.pumpAndSettle();
-
-      // Switch to Kitchen Station tab
-      await tester.tap(find.byKey(const ValueKey('portal_tab_kitchenStation')));
-      await tester.pumpAndSettle();
-
-      // Station unlocked
-      expect(find.text('Kitchen Token Station (The Pass)'), findsOneWidget);
-      expect(find.textContaining('Unlocked by Supervisor'), findsOneWidget);
-      expect(find.text('#01'), findsOneWidget);
-
-      // 1-Tap Mark Ready
-      final markReadyBtn = find.byKey(const ValueKey('kitchen_mark_ready_101'));
-      expect(markReadyBtn, findsOneWidget);
-      await tester.tap(markReadyBtn);
-      await tester.pumpAndSettle();
-
-      // Pass is now clear
-      expect(find.text('All orders plated! The pass is clear.'), findsOneWidget);
-      expect(tokenController.readyTokens.length, 1);
-    });
-
     testWidgets('reports and backups tab opens Z-Report dialog with wired day finalization', (tester) async {
       tester.view.physicalSize = const Size(1920, 1080);
       tester.view.devicePixelRatio = 1.0;
@@ -399,13 +288,10 @@ void main() {
         totalVendorSettlementsAmount: 0.0,
       );
 
-      final fakeHardware = InMemoryHardwareAdapter();
-      final reprintTray = ReprintTrayController(hardwareAdapter: fakeHardware);
       bool finalizedCalled = false;
 
       await tester.pumpWidget(createTestApp(
         initialZReport: testZReport,
-        reprintTrayController: reprintTray,
         onFinalizeBusinessDay: () async {
           finalizedCalled = true;
         },
@@ -443,15 +329,7 @@ void main() {
 
       expect(find.text('Master End-of-Day Z-Report'), findsOneWidget);
 
-      // Test Print button inside ZReportDialog dispatches to hardware adapter
-      final printBtn = find.byKey(const ValueKey('print_z_report_button'));
-      expect(printBtn, findsOneWidget);
-      await tester.tap(printBtn);
-      await tester.pumpAndSettle();
-
-      expect(fakeHardware.counterPrintedBytes, isNotEmpty);
-      expect(reprintTray.recentJobs, isNotEmpty);
-      expect(reprintTray.recentJobs.first.type, equals(PrintJobType.zReport));
+      // Native print dispatch is covered by z_report_native_print_test.dart.
 
       final finalizeBtn = find.byKey(const ValueKey('finalize_day_button'));
       expect(finalizeBtn, findsOneWidget);

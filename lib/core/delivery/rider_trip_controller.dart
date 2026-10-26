@@ -386,7 +386,7 @@ class RiderTripController {
       throw StateError('Staff ID #$cashierStaffId not found.');
     }
     final staffRole = StaffRole.fromCode(staffRows.first['role'] as String);
-    if (staffRole != StaffRole.cashier) {
+    if (staffRole != StaffRole.cashier || staffRows.first['login_enabled'] == 0 || staffRows.first['is_active'] != 1) {
       throw StateError('Authorization error: Only cashiers can execute rider trip settlement and drawer deposits.');
     }
 

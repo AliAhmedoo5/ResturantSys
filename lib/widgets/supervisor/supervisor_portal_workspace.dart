@@ -4,19 +4,18 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/auth/auth_service.dart';
 import '../../core/auth/department.dart';
+import '../../core/auth/job_role.dart';
+import 'job_roles_dialog.dart';
 import '../../core/auth/staff.dart';
 import '../../core/auth/staff_role.dart';
 import '../../core/hardware/reprint_tray_controller.dart';
 import '../../core/orders/order_and_checkout_controller.dart';
-import '../../core/orders/token_queue_controller.dart';
 import '../../core/shifts/shift.dart';
 import '../../core/shifts/shift_and_cash_controller.dart';
 import '../../core/theme/theme.dart';
 import 'department_form_dialog.dart';
-import 'kitchen_token_station.dart';
 import 'staff_form_dialog.dart';
 import 'staff_pin_dialog.dart';
-import 'token_queue_tray.dart';
 import '../shifts/z_report_dialog.dart';
 import '../../core/shifts/z_report.dart';
 import '../../core/shifts/excel_reporting_engine.dart';
@@ -31,9 +30,7 @@ enum SupervisorPortalTab {
   staff('Staff & Departments', Icons.badge_rounded),
   toggles('Feature Toggles', Icons.toggle_on_rounded),
   discrepancies('Discrepancy Review', Icons.assignment_late_rounded),
-  reports('Z-Reports & Backups', Icons.assessment_rounded),
-  tokenQueue('Token Queue Tray', Icons.confirmation_number_rounded),
-  kitchenStation('Kitchen Station', Icons.soup_kitchen_rounded);
+  reports('Z-Reports & Backups', Icons.assessment_rounded);
 
   const SupervisorPortalTab(this.label, this.icon);
   final String label;
@@ -42,19 +39,17 @@ enum SupervisorPortalTab {
 
 /// The back-office administrative hub protected by Supervisor/Owner PIN.
 /// Features custom Department management, universal Staff PIN configuration,
-/// operational Feature Toggles, discrepancy audit review table, and Token Queue tray.
+/// operational settings, discrepancy review, and business-day reports.
 class SupervisorPortalWorkspace extends StatefulWidget {
   const SupervisorPortalWorkspace({
     super.key,
     this.authService,
     this.shiftController,
     this.orderController,
-    this.tokenQueueController,
     this.reprintTrayController,
     this.currentStaff,
     this.initialDepartments,
     this.initialStaff,
-    this.initialTokenTrayEnabled,
     this.initialCashierVoidEnabled,
     this.initialDiscrepancies,
     this.initialZReport,
@@ -65,12 +60,10 @@ class SupervisorPortalWorkspace extends StatefulWidget {
   final AuthService? authService;
   final ShiftAndCashController? shiftController;
   final OrderAndCheckoutController? orderController;
-  final TokenQueueController? tokenQueueController;
   final ReprintTrayController? reprintTrayController;
   final Staff? currentStaff;
   final List<Department>? initialDepartments;
   final List<Staff>? initialStaff;
-  final bool? initialTokenTrayEnabled;
   final bool? initialCashierVoidEnabled;
   final List<Shift>? initialDiscrepancies;
   final ZReport? initialZReport;
@@ -88,11 +81,11 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
 
   // Staff & Departments State
   List<Department> _departments = [];
+  List<JobRole> _jobRoles = [];
   List<Staff> _staffMembers = [];
   bool _isLoadingStaff = true;
 
   // Feature Toggles State
-  bool _tokenTrayEnabled = true;
   bool _cashierVoidEnabled = true;
   bool _isLoadingToggles = true;
   double _discrepancyThreshold = 100.0;
@@ -121,10 +114,6 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
       _staffMembers = List.of(widget.initialStaff!);
       _isLoadingStaff = false;
     }
-    if (widget.initialTokenTrayEnabled != null) {
-      _tokenTrayEnabled = widget.initialTokenTrayEnabled!;
-      _isLoadingToggles = false;
-    }
     if (widget.initialCashierVoidEnabled != null) {
       _cashierVoidEnabled = widget.initialCashierVoidEnabled!;
       _isLoadingToggles = false;
@@ -150,14 +139,40 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
     _usbPathController.dispose();
     _localPathController.dispose();
     _thresholdController.dispose();
+    _featureSettingsScroll.dispose();
     super.dispose();
   }
 
   List<LowStockWarning> _stockAlerts = [];
+  bool _isRefreshingStock = false;
+  String? _stockRefreshError;
+  final ScrollController _featureSettingsScroll = ScrollController();
 
-  Future<void> _loadStockAlerts() async {
-    final alerts = await widget.orderController?.getManagerStockAlerts() ?? <LowStockWarning>[];
-    if (mounted) setState(() => _stockAlerts = alerts);
+  Future<void> _loadStockAlerts({bool showFeedback = false}) async {
+    if (_isRefreshingStock) return;
+    setState(() => _isRefreshingStock = true);
+    try {
+      final alerts = await widget.orderController?.getManagerStockAlerts() ?? <LowStockWarning>[];
+      if (!mounted) return;
+      setState(() {
+        _stockAlerts = alerts;
+        _stockRefreshError = null;
+      });
+      if (showFeedback) {
+        final message = alerts.isEmpty
+            ? 'Stock refreshed. No low-stock alerts remain.'
+            : 'Stock refreshed. ${alerts.length} ingredient(s) still low. Record a purchase to replenish stock.';
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(message)));
+      }
+    } catch (_) {
+      if (mounted) setState(() {
+        _stockRefreshError = 'Could not refresh stock alerts. Try again.';
+      });
+    } finally {
+      if (mounted) setState(() => _isRefreshingStock = false);
+    }
   }
 
   Future<void> _loadAllData() async {
@@ -165,7 +180,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
     if (widget.initialDepartments == null || widget.initialStaff == null) {
       await _loadStaffAndDepartments();
     }
-    if (widget.initialTokenTrayEnabled == null || widget.initialCashierVoidEnabled == null) {
+    if (widget.initialCashierVoidEnabled == null) {
       await _loadFeatureToggles();
     }
     if (widget.initialDiscrepancies == null) {
@@ -187,9 +202,11 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
     try {
       final depts = await widget.authService!.getDepartments();
       final staff = await widget.authService!.getAllStaff();
+      final jobRoles = await widget.authService!.getJobRoles();
       if (mounted) {
         setState(() {
           _departments = depts;
+          _jobRoles = jobRoles;
           _staffMembers = staff;
           _isLoadingStaff = false;
         });
@@ -206,7 +223,6 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
     }
     setState(() => _isLoadingToggles = true);
     try {
-      final tokenTray = await widget.orderController!.isTokenTrayEnabled();
       final cashierVoid = await widget.orderController!.isCashierVoidEnabled();
       if (widget.shiftController != null) {
         try {
@@ -217,7 +233,6 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
       }
       if (mounted) {
         setState(() {
-          _tokenTrayEnabled = tokenTray;
           _cashierVoidEnabled = cashierVoid;
           _isLoadingToggles = false;
         });
@@ -392,11 +407,14 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
       context: context,
       builder: (ctx) => StaffFormDialog(
         departments: _departments,
+        jobRoles: _jobRoles,
         onSave: ({
           required String name,
           required int departmentId,
           required StaffRole role,
           required String pin,
+          required bool loginEnabled,
+          required int? jobRoleId,
           bool? isActive,
         }) async {
           if (widget.authService != null) {
@@ -404,6 +422,8 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
               name: name,
               departmentId: departmentId,
               role: role,
+              loginEnabled: loginEnabled,
+              jobRoleId: jobRoleId,
               pin: pin,
             );
           } else {
@@ -417,7 +437,10 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
               departmentId: departmentId,
               departmentName: dept.name,
               pinHash: pin,
+              jobRoleName: _jobRoles.where((r) => r.id == jobRoleId).firstOrNull?.name,
               role: role,
+              loginEnabled: loginEnabled,
+              jobRoleId: jobRoleId,
               isActive: isActive ?? true,
             );
             setState(() => _staffMembers.add(newStaff));
@@ -435,12 +458,15 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
       context: context,
       builder: (ctx) => StaffFormDialog(
         departments: _departments,
+        jobRoles: _jobRoles,
         initialStaff: staff,
         onSave: ({
           required String name,
           required int departmentId,
           required StaffRole role,
           required String pin,
+          required bool loginEnabled,
+          required int? jobRoleId,
           bool? isActive,
         }) async {
           if (widget.authService != null) {
@@ -449,6 +475,8 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
               name: name,
               departmentId: departmentId,
               role: role,
+              loginEnabled: loginEnabled,
+              jobRoleId: jobRoleId,
               newPin: pin.isNotEmpty ? pin : null,
               isActive: isActive,
             );
@@ -466,7 +494,10 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                   departmentId: departmentId,
                   departmentName: dept.name,
                   pinHash: pin.isNotEmpty ? pin : staff.pinHash,
+                  jobRoleName: _jobRoles.where((r) => r.id == jobRoleId).firstOrNull?.name,
                   role: role,
+              loginEnabled: loginEnabled,
+              jobRoleId: jobRoleId,
                   isActive: isActive ?? staff.isActive,
                 );
               }
@@ -511,13 +542,6 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
           _staffMembers[index] = staff.copyWith(isActive: active);
         }
       });
-    }
-  }
-
-  Future<void> _handleToggleTokenTray(bool enabled) async {
-    setState(() => _tokenTrayEnabled = enabled);
-    if (widget.orderController != null) {
-      await widget.orderController!.setTokenTrayEnabled(enabled);
     }
   }
 
@@ -718,7 +742,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
 
   @override
   Widget build(BuildContext context) {
-    final hasActiveCashier = _staffMembers.any((s) => s.role == StaffRole.cashier && s.isActive);
+    final hasActiveCashier = _staffMembers.any((s) => s.role == StaffRole.cashier && s.isActive && s.loginEnabled);
 
     return Container(
       color: WarmCounterColors.lightPageBackground,
@@ -726,13 +750,17 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (_stockAlerts.isNotEmpty) ...[
+          if (_stockAlerts.isNotEmpty || _stockRefreshError != null) ...[
             MaterialBanner(
               key: const ValueKey('manager_stock_alert'),
               backgroundColor: WarmCounterColors.lightDestructiveHighlight,
               leading: const Icon(Icons.warning_amber_rounded, color: WarmCounterColors.lightDestructiveAction),
-              content: Text('Low stock  -  replenish now: ${_stockAlerts.map((a) => '${a.ingredientName}: ${a.currentStock} ${a.storageUnit}').join('; ')}', maxLines: 3, overflow: TextOverflow.ellipsis),
-              actions: [TextButton(onPressed: _loadStockAlerts, child: const Text('Refresh stock'))],
+              content: Text(_stockRefreshError ?? 'Low stock  -  replenish now: ${_stockAlerts.map((a) => '${a.ingredientName}: ${a.currentStock} ${a.storageUnit}').join('; ')}', maxLines: 3, overflow: TextOverflow.ellipsis),
+              actions: [TextButton(
+                key: const ValueKey('refresh_manager_stock'),
+                onPressed: _isRefreshingStock ? null : () => _loadStockAlerts(showFeedback: true),
+                child: Text(_isRefreshingStock ? 'Refreshing...' : 'Refresh stock'),
+              )],
             ),
             const SizedBox(height: 8),
           ],
@@ -856,19 +884,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
         return _buildDiscrepanciesView(context);
       case SupervisorPortalTab.reports:
         return _buildReportsAndBackupsView(context);
-      case SupervisorPortalTab.tokenQueue:
-        if (widget.tokenQueueController != null) {
-          return TokenQueueTray(controller: widget.tokenQueueController!);
-        }
-        return const Center(child: Text('Token Queue Controller not provided.'));
-      case SupervisorPortalTab.kitchenStation:
-        if (widget.tokenQueueController != null) {
-          return KitchenTokenStation(
-            controller: widget.tokenQueueController!,
-            currentStaff: widget.currentStaff,
-          );
-        }
-        return const Center(child: Text('Kitchen Token Station unavailable.'));
+
     }
   }
 
@@ -985,7 +1001,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                           ),
                         ),
                         Text(
-                          'Configure 4-digit numeric PINs, operational roles, and department assignments.',
+                          'Manage job roles, departments, and Cashier/Manager system access.',
                           style: WarmCounterTypography.secondaryLabel.copyWith(
                             color: WarmCounterColors.lightSecondaryText,
                           ),
@@ -993,6 +1009,15 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                       ],
                     )),
                     const SizedBox(width: 12),
+                    if (widget.authService != null) TextButton.icon(
+                      key: const ValueKey('manage_job_roles'),
+                      icon: const Icon(Icons.badge_outlined),
+                      label: const Text('Job Roles'),
+                      onPressed: () async {
+                        await showDialog<void>(context: context, builder: (_) => JobRolesDialog(authService: widget.authService!));
+                        if (mounted) await _loadStaffAndDepartments();
+                      },
+                    ),
                     ElevatedButton.icon(
                       key: const ValueKey('register_staff_button'),
                       onPressed: _openRegisterStaffDialog,
@@ -1019,6 +1044,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                         DataColumn(label: Text('Name', style: TextStyle(fontWeight: FontWeight.bold))),
                         DataColumn(label: Text('Department', style: TextStyle(fontWeight: FontWeight.bold))),
                         DataColumn(label: Text('Role', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text('System access', style: TextStyle(fontWeight: FontWeight.bold))),
                         DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
                         DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold))),
                       ],
@@ -1035,7 +1061,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                                   borderRadius: WarmCounterSpacing.controlBorderRadius,
                                 ),
                                 child: Text(
-                                  staff.role.displayName,
+                                  staff.jobRoleName ?? (staff.loginEnabled ? staff.role.displayName : 'Unassigned'),
                                   style: const TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
@@ -1044,6 +1070,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                                 ),
                               ),
                             ),
+                            DataCell(Text(staff.loginEnabled ? staff.role.displayName : 'No login')),
                             DataCell(
                               Row(
                                 children: [
@@ -1073,7 +1100,7 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                                     key: ValueKey('update_pin_${staff.id}'),
                                     icon: const Icon(Icons.pin_rounded, size: 20),
                                     tooltip: 'Update 4-Digit PIN',
-                                    onPressed: () => _openUpdatePinDialog(staff),
+                                    onPressed: staff.loginEnabled ? () => _openUpdatePinDialog(staff) : null,
                                   ),
                                   IconButton(
                                     key: ValueKey('edit_staff_${staff.id}'),
@@ -1108,7 +1135,13 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    return Center(
+    return Scrollbar(
+      controller: _featureSettingsScroll,
+      thumbVisibility: true,
+      child: SingleChildScrollView(
+        key: const ValueKey('feature_settings_scroll'),
+        controller: _featureSettingsScroll,
+        child: Center(
       child: Material(
         color: WarmCounterColors.lightCardBackground,
         borderRadius: WarmCounterSpacing.panelBorderRadius,
@@ -1161,30 +1194,6 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
               ],
             ),
             const Divider(height: WarmCounterSpacing.space32, color: WarmCounterColors.lightBorder),
-
-            // Toggle 1: Token Tray
-            SwitchListTile(
-              key: const ValueKey('toggle_token_tray_switch'),
-              value: _tokenTrayEnabled,
-              onChanged: _handleToggleTokenTray,
-              activeTrackColor: WarmCounterColors.lightPrimaryAction,
-              title: const Text(
-                'Interactive Token Queue Tray',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-              ),
-              subtitle: const Text(
-                'Displays active tokens on-screen with 1-tap fulfillment progression (Preparing -> Ready -> Delivered). When disabled, token tray navigation is hidden.',
-              ),
-              secondary: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: const BoxDecoration(
-                  color: WarmCounterColors.lightPageBackground,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.confirmation_number_rounded, color: WarmCounterColors.lightPrimaryAction),
-              ),
-            ),
-            const Divider(height: WarmCounterSpacing.space24, color: WarmCounterColors.lightBorder),
 
             // Toggle 2: Cashier Void Requests
             SwitchListTile(
@@ -1294,6 +1303,8 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
         ),
       ),
     ),
+        ),
+      ),
   );
   }
 
@@ -1670,11 +1681,6 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                               context: context,
                               builder: (ctx) => ZReportDialog(
                                 report: _activeZReport!,
-                                onPrint: () async {
-                                  if (widget.reprintTrayController != null) {
-                                    await widget.reprintTrayController!.dispatchZReportPrinting(report: _activeZReport!);
-                                  }
-                                },
                                 onExportExcel: () async {
                                   if (widget.shiftController != null) {
                                     final messenger = ScaffoldMessenger.of(context);

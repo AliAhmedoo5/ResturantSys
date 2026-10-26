@@ -1,6 +1,6 @@
 /// Constants and default configuration for the SQLite database.
 abstract final class PosDatabaseConstants {
-  static const int schemaVersion = 14;
+  static const int schemaVersion = 15;
   static const String databaseFileName = 'pos.db';
   static const String defaultProgramDataFolder = 'ResturantPOS';
   static const String defaultDataSubFolder = 'data';
@@ -63,8 +63,6 @@ abstract final class PosDatabaseConstants {
   static const String defaultDiscrepancyThreshold = '100.00';
   static const String settingCashierVoidRequestsEnabled = 'cashier_void_requests_enabled';
   static const String defaultCashierVoidRequestsEnabled = 'true';
-  static const String settingTokenTrayEnabled = 'token_tray_enabled';
-  static const String defaultTokenTrayEnabled = 'true';
   static const String settingSecondaryBackupPath = 'secondary_backup_path';
   static const String defaultSecondaryBackupPath = '';
   static const String settingLocalBackupPath = 'local_backup_path';

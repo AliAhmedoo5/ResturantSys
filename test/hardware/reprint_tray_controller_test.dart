@@ -4,7 +4,6 @@ import 'package:resturant_sys/core/hardware/in_memory_hardware_adapter.dart';
 import 'package:resturant_sys/core/hardware/paper_width.dart';
 import 'package:resturant_sys/core/hardware/print_job.dart';
 import 'package:resturant_sys/core/hardware/printer_target.dart';
-import 'package:resturant_sys/core/hardware/printer_topology.dart';
 import 'package:resturant_sys/core/hardware/reprint_tray_controller.dart';
 import 'package:resturant_sys/core/orders/dining_type.dart';
 import 'package:resturant_sys/core/orders/order.dart';
@@ -23,7 +22,6 @@ void main() {
       adapter = InMemoryHardwareAdapter();
       controller = ReprintTrayController(
         hardwareAdapter: adapter,
-        topology: PrinterTopology.single,
         paperWidth: PaperWidth.mm80,
       );
 
@@ -87,38 +85,23 @@ void main() {
       );
     });
 
-    test('Single Printer Topology sends sequential dual cuts (Receipt + KOT) to counter printer', () async {
-      controller.topology = PrinterTopology.single;
+    test('Checkout sends one customer receipt to the counter printer', () async {
 
       await controller.dispatchOrderPrinting(
         order: cashOrder,
         isCashPaid: true,
       );
 
-      // Both tickets routed to counter printer sequentially
-      expect(adapter.counterPrintedBytes.length, equals(2));
-      expect(adapter.kitchenPrintedBytes, isEmpty);
+      // One customer receipt is printed
+      expect(adapter.counterPrintedBytes.length, equals(1));
+
 
       // Drawer kicked on Cash payment
       expect(adapter.drawerKickCount, equals(1));
 
-      // Recent jobs records both successful tickets
-      expect(controller.recentJobs.length, equals(2));
+      // Recent jobs records the customer receipt
+      expect(controller.recentJobs.length, equals(1));
       expect(controller.failedCount, equals(0));
-    });
-
-    test('Dual Printer Topology routes receipt to Counter and KOT to Kitchen printer', () async {
-      controller.topology = PrinterTopology.dual;
-
-      await controller.dispatchOrderPrinting(
-        order: cashOrder,
-        isCashPaid: true,
-      );
-
-      // Receipt routed to counter, KOT routed to kitchen
-      expect(adapter.counterPrintedBytes.length, equals(1));
-      expect(adapter.kitchenPrintedBytes.length, equals(1));
-      expect(adapter.drawerKickCount, equals(1));
     });
 
     test('Cash payment strictly triggers drawer kick; Card payment leaves drawer closed', () async {
@@ -137,7 +120,7 @@ void main() {
       await controller.dispatchOrderPrinting(order: cashOrder, isCashPaid: true);
 
       expect(adapter.drawerKickCount, equals(0));
-      expect(adapter.counterPrintedBytes.length, equals(2));
+      expect(adapter.counterPrintedBytes.length, equals(1));
     });
 
     test('Hardware printer failures decouple from checkout and enqueue to Reprint Tray with 1-tap retry', () async {
@@ -147,9 +130,11 @@ void main() {
       // Must NOT throw exception to caller
       await controller.dispatchOrderPrinting(order: cashOrder, isCashPaid: true);
 
+      await controller.dispatchOrderPrinting(order: cardOrder, isCashPaid: false);
+
       // Print jobs enqueued into failedJobs
       expect(controller.hasFailures, isTrue);
-      expect(controller.failedCount, equals(2)); // Both receipt & KOT failed
+      expect(controller.failedCount, equals(2)); // Both customer receipts failed
       expect(controller.failedJobs.first.type, equals(PrintJobType.customerReceipt));
       expect(controller.failedJobs.first.isFailed, isTrue);
 
@@ -173,19 +158,6 @@ void main() {
 
       expect(overrideSuccess, isTrue);
       expect(adapter.drawerKickCount, equals(1));
-    });
-
-    test('dispatchKitchenVoidSlip formats and emits void ticket to kitchen target', () async {
-      controller.topology = PrinterTopology.dual;
-
-      await controller.dispatchKitchenVoidSlip(
-        order: cashOrder,
-        reason: 'Burned food / remake required',
-        supervisorName: 'Supervisor Tariq',
-      );
-
-      expect(adapter.kitchenPrintedBytes.length, equals(1));
-      expect(controller.recentJobs.first.type, equals(PrintJobType.kitchenVoidSlip));
     });
 
     test('reprintJob successfully reprints job and routes cash drawer kick', () async {

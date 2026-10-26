@@ -39,7 +39,7 @@ class ReportDeliveryService {
   bool _running = false;
 
   Future<void> _manager(int staffId) async {
-    final staff = await database.query('staff',where:'id=? AND is_active=1',whereArgs:[staffId]);
+    final staff = await database.query('staff',where:'id=? AND is_active=1 AND login_enabled=1',whereArgs:[staffId]);
     if (staff.isEmpty || StaffRole.fromCode(staff.single['role'] as String)!=StaffRole.manager) {
       throw StateError('Only an active Manager may manage report delivery.');
     }

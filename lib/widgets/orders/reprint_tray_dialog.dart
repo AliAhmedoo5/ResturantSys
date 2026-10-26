@@ -96,7 +96,7 @@ class _ReprintTrayDialogState extends State<ReprintTrayDialog> {
                                     style: WarmCounterTypography.pageHeading.copyWith(fontSize: 18),
                                   ),
                                   Text(
-                                    '${widget.controller.topology.label} • ${widget.controller.paperWidth.label}',
+                                    'Customer receipts • ${widget.controller.paperWidth.label}',
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: WarmCounterTypography.caption.copyWith(
@@ -305,7 +305,7 @@ class _ReprintTrayDialogState extends State<ReprintTrayDialog> {
                             ),
                             const SizedBox(width: 6),
                             Text(
-                              'Recent Receipts & KOTs',
+                              'Recent Receipts',
                               style: WarmCounterTypography.bodyMedium.copyWith(
                                 fontWeight: FontWeight.bold,
                                 color: WarmCounterColors.lightPrimaryText,
@@ -319,7 +319,7 @@ class _ReprintTrayDialogState extends State<ReprintTrayDialog> {
                             padding: const EdgeInsets.symmetric(vertical: 24),
                             child: Center(
                               child: Text(
-                                'No receipts or KOTs printed in this session.',
+                                'No receipts printed in this session.',
                                 style: WarmCounterTypography.caption.copyWith(
                                   color: WarmCounterColors.lightSecondaryText,
                                 ),
@@ -520,11 +520,10 @@ class _ReprintTrayDialogState extends State<ReprintTrayDialog> {
                             cashierId: widget.currentStaff?.id ?? 1,
                             orderController: widget.orderController!,
                             authService: widget.authService!,
-                            reprintTrayController: widget.controller,
                             onVoidSuccess: () {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text('Order #${order.id} (${order.tokenDisplay}) voided successfully. Kitchen Void Slip emitted.'),
+                                  content: Text('Order #${order.id} (${order.tokenDisplay}) voided successfully.'),
                                 ),
                               );
                             },

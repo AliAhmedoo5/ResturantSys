@@ -6,25 +6,22 @@ import 'app_header.dart';
 /// Persistent navigation retaining the workspaces' existing capability gates.
 class AppSidebar extends StatelessWidget {
   const AppSidebar({super.key, required this.staff, required this.selected,
-    required this.onSelected, this.compact = false, this.isTokenTrayEnabled = true});
+    required this.onSelected, this.compact = false});
 
   final Staff staff;
   final AppWorkspaceTab selected;
   final ValueChanged<AppWorkspaceTab> onSelected;
   final bool compact;
-  final bool isTokenTrayEnabled;
 
   @override
   Widget build(BuildContext context) {
     final manager = staff.canAccessSupervisorPortal;
-    final kitchen = staff.canAccessKitchen;
     final tabs = [
       AppWorkspaceTab.register,
-      if (manager || kitchen) AppWorkspaceTab.riderTrips,
+      if (manager) AppWorkspaceTab.riderTrips,
       if (manager) ...[AppWorkspaceTab.catalog, AppWorkspaceTab.khata, AppWorkspaceTab.supervisor],
-      if (manager || kitchen) ...[
+      if (manager) ...[
         AppWorkspaceTab.mandi, AppWorkspaceTab.wastage,
-        if (isTokenTrayEnabled) AppWorkspaceTab.tokenQueue,
       ],
     ];
     return Material(

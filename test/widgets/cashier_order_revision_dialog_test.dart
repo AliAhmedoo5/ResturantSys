@@ -1,6 +1,13 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common/sqlite_api.dart';
+import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
+import 'package:resturant_sys/core/catalog/menu_item.dart';
+import 'package:resturant_sys/core/catalog/modifier.dart';
+import 'package:resturant_sys/core/catalog/modifier_group.dart';
+import 'package:resturant_sys/core/orders/deal.dart';
+import 'package:resturant_sys/core/orders/deal_item.dart';
 import 'package:resturant_sys/core/orders/cart_item.dart';
 import 'package:resturant_sys/core/orders/dining_type.dart';
 import 'package:resturant_sys/core/orders/order.dart';
@@ -21,6 +28,11 @@ class FakeOrderController implements OrderAndCheckoutController {
   RefundResult? lastRefund;
   String? lastCancelReason;
   String? lastRevisionReason;
+  List<CartItem>? submittedItems;
+  List<Deal> deals = [];
+
+  @override
+  Future<List<Deal>> getDeals({bool? activeOnly}) async => deals;
 
   @override
   Database get database => throw UnimplementedError();
@@ -88,6 +100,7 @@ class FakeOrderController implements OrderAndCheckoutController {
     String action = 'CHANGE',
   }) async {
     lastRevisionReason = reason;
+    submittedItems = List.of(newItems);
     final newSubtotal = newItems.fold<double>(0.0, (sum, i) => sum + i.totalPrice);
     final oldTotalPaisa = PaisaEngine.rupeesToPaisa(order.grandTotal);
     final newTotalPaisa = PaisaEngine.rupeesToPaisa(newSubtotal);
@@ -111,6 +124,7 @@ class FakeOrderController implements OrderAndCheckoutController {
                 id: 1,
                 orderId: order.id,
                 menuItemId: ci.menuItem?.id,
+                dealId: ci.deal?.id,
                 name: ci.name,
                 quantity: ci.quantity,
                 unitPrice: ci.unitPrice,
@@ -188,6 +202,27 @@ class FakeOrderController implements OrderAndCheckoutController {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+class _RevisionCatalog implements CatalogAndRecipeController {
+  bool fail = false;
+  bool? requestedActiveOnly;
+  List<Modifier> modifiers = [];
+  @override
+  Future<List<MenuItem>> getMenuItems({int? categoryId, bool? activeOnly}) async {
+    requestedActiveOnly = activeOnly;
+    if (fail) throw StateError('Menu unavailable');
+    return const [
+      MenuItem(id: 101, categoryId: 1, name: 'Zinger Burger', basePrice: 500),
+      MenuItem(id: 102, categoryId: 1, name: 'Fries', basePrice: 200),
+    ];
+  }
+  @override
+  Future<List<Modifier>> getModifiers({int? menuItemId, bool? activeOnly}) async => modifiers;
+  @override
+  Future<List<ModifierGroup>> getModifierGroups({int? menuItemId, DatabaseExecutor? executor}) async => [];
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 void main() {
   group('CashierOrderRevisionDialog Widget Tests', () {
     const cashierId = 2;
@@ -223,6 +258,133 @@ void main() {
         ],
       );
       fakeOrderController = FakeOrderController(order: initialOrder);
+    });
+
+    Future<void> pumpRevision(WidgetTester tester, _RevisionCatalog catalog) async {
+      tester.view.physicalSize = const Size(1366, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(MaterialApp(home: Scaffold(body: CashierOrderRevisionDialog(
+        order: initialOrder, cashierId: cashierId, shiftId: shiftId,
+        orderController: fakeOrderController, catalogController: catalog,
+      ))));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('adds a menu item absent from original order and retains its token', (tester) async {
+      final catalog = _RevisionCatalog();
+      await pumpRevision(tester, catalog);
+      await tester.tap(find.byKey(const ValueKey('add_revision_items_button')));
+      await tester.pumpAndSettle();
+      expect(catalog.requestedActiveOnly, isTrue);
+      await tester.enterText(find.byKey(const ValueKey('revision_catalog_search')), 'fries');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('revision_catalog_item_101')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('revision_catalog_item_102')));
+      await tester.pumpAndSettle();
+      expect(find.text('New Total: Rs 1,200.00'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('apply_revision_button')));
+      await tester.pumpAndSettle();
+      expect(fakeOrderController.submittedItems!.map((i) => i.menuItem?.id), [101, 102]);
+      expect(fakeOrderController.order.id, initialOrder.id);
+      expect(fakeOrderController.order.tokenNumber, initialOrder.tokenNumber);
+      expect(fakeOrderController.order.grandTotal, 1200);
+    });
+
+    testWidgets('adds a new deal using the deal choice dialog', (tester) async {
+      fakeOrderController.deals = [Deal(id: 7, name: 'Burger Deal', basePrice: 700,
+        createdAt: DateTime(2026), items: const [
+          DealItem(id: 9, dealId: 7, groupName: 'Burger', defaultMenuItemId: 101),
+        ])];
+      await pumpRevision(tester, _RevisionCatalog());
+      await tester.tap(find.byKey(const ValueKey('add_revision_items_button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('revision_catalog_deal_7')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('add_deal_to_order_button')));
+      await tester.pumpAndSettle();
+      expect(find.text('New Total: Rs 1,700.00'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('apply_revision_button')));
+      await tester.pumpAndSettle();
+      final added = fakeOrderController.submittedItems!.last;
+      expect(added.deal!.id, 7);
+      expect(added.selectedDealChoices.single.menuItemId, 101);
+      expect(added.selectedDealChoices.single.dealItemId, 9);
+    });
+
+    testWidgets('adding an item preserves an existing deal, upgrades and modifiers', (tester) async {
+      initialOrder = Order(id: 1, businessDayId: 1, shiftId: shiftId, cashierId: cashierId,
+        tokenNumber: 1, diningType: DiningType.dineIn, subtotal: 800, grandTotal: 800,
+        paymentStatus: 'SETTLED', createdAt: DateTime(2026), items: [
+          OrderItem(id: 1, orderId: 1, dealId: 7, name: 'Original Deal',
+            quantity: 1, unitPrice: 800, totalPrice: 800, createdAt: DateTime(2026),
+            modifiersJson: jsonEncode([{'id': 4, 'name': 'Cheese', 'price_delta': 50,
+              'raw_ingredient_id': 3, 'ingredient_qty_delta': 1}]),
+            dealChoicesJson: jsonEncode([{'deal_item_id': 9, 'group_name': 'Burger',
+              'menu_item_id': 101, 'menu_item_name': 'Zinger Burger', 'upgrade_price': 100}]),
+          ),
+        ]);
+      fakeOrderController = FakeOrderController(order: initialOrder);
+      await pumpRevision(tester, _RevisionCatalog());
+      expect(find.text('New Total: Rs 800.00'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('add_revision_items_button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('revision_catalog_item_102')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('apply_revision_button')));
+      await tester.pumpAndSettle();
+      final original = fakeOrderController.submittedItems!.first;
+      expect(original.menuItem, isNull);
+      expect(original.deal!.id, 7);
+      expect(original.basePrice, 650);
+      expect(original.unitPrice, 800);
+      expect(original.selectedModifiers.single.rawIngredientId, 3);
+      expect(original.selectedDealChoices.single.upgradePrice, 100);
+    });
+
+    testWidgets('canceling picker and retrying a failed menu load leave lines intact', (tester) async {
+      final catalog = _RevisionCatalog()..fail = true;
+      await pumpRevision(tester, catalog);
+      await tester.tap(find.byKey(const ValueKey('add_revision_items_button')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Menu unavailable'), findsOneWidget);
+      expect(find.text('New Total: Rs 1,000.00'), findsOneWidget);
+      catalog.fail = false;
+      await tester.tap(find.byKey(const ValueKey('add_revision_items_button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Close'));
+      await tester.pumpAndSettle();
+      expect(find.text('New Total: Rs 1,000.00'), findsOneWidget);
+      expect(fakeOrderController.submittedItems, isNull);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a new item supports modifiers and canceling customization does not add it', (tester) async {
+      final catalog = _RevisionCatalog()..modifiers = const [
+        Modifier(id: 8, menuItemId: 102, name: 'Extra cheese', priceDelta: 50),
+      ];
+      await pumpRevision(tester, catalog);
+      await tester.tap(find.byKey(const ValueKey('add_revision_items_button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('revision_catalog_item_102')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+      await tester.pumpAndSettle();
+      expect(find.text('New Total: Rs 1,000.00'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('add_revision_items_button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('revision_catalog_item_102')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('modifier_tile_8')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('apply_modifiers_button')));
+      await tester.pumpAndSettle();
+      expect(find.text('New Total: Rs 1,250.00'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('apply_revision_button')));
+      await tester.pumpAndSettle();
+      expect(fakeOrderController.submittedItems!.last.selectedModifiers.single.id, 8);
     });
 
     testWidgets('renders dialog with order details and stage notice without requiring PIN', (tester) async {
