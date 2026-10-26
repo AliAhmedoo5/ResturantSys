@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'core/database/pos_database.dart';
 import 'core/auth/auth_service.dart';
@@ -15,6 +16,10 @@ import 'widgets/app_shell.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  LicenseRegistry.addLicense(() async* {
+    final license = await rootBundle.loadString('assets/fonts/knewave/OFL.txt');
+    yield LicenseEntryWithLineBreaks(['Knewave'], license);
+  });
 
   // Initialize SQLite FFI on desktop platforms (Windows, Linux, macOS)
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {

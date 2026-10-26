@@ -180,8 +180,8 @@ class _PinLockScreenState extends State<PinLockScreen> {
                   children: [
                     Container(width: 48, height: 4, color: StreetFoodMafiaColors.cartelYellow),
                     const SizedBox(height: 24),
-                    Text('READY FOR\nRUSH HOUR.', style: WarmCounterTypography.pageHeading.copyWith(
-                      fontSize: 48, height: 1.05, fontWeight: FontWeight.w900, letterSpacing: -1.5)),
+                    Text('READY FOR\nRUSH HOUR.', style: WarmCounterTypography.brandHeading.copyWith(
+                      fontSize: 48, height: 1.2)),
                     const SizedBox(height: 20),
                     Text('Your counter. Your kitchen. One place.',
                       style: WarmCounterTypography.body.copyWith(color: StreetFoodMafiaColors.secondaryText)),

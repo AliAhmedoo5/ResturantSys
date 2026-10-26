@@ -946,7 +946,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Menu Categories', style: WarmCounterTypography.pageHeading),
+                    const Text('Menu Categories', style: WarmCounterTypography.brandHeading),
                     Text(
                       'Configure customer-facing category tabs, ordering, and display colors.',
                       style: WarmCounterTypography.caption.copyWith(color: WarmCounterColors.lightSecondaryText),
@@ -1055,7 +1055,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Menu Items & Recipe BOM', style: WarmCounterTypography.pageHeading),
+                    const Text('Menu Items & Recipe BOM', style: WarmCounterTypography.brandHeading),
                     Text(
                       'Manage tax-inclusive prices, sales tax rates, and component recipe formulas.',
                       style: WarmCounterTypography.caption.copyWith(color: WarmCounterColors.lightSecondaryText),
@@ -1262,7 +1262,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Raw Ingredients Inventory', style: WarmCounterTypography.pageHeading),
+                    const Text('Raw Ingredients Inventory', style: WarmCounterTypography.brandHeading),
                     Text(
                       'Bulk kitchen stock tracked in grams (g), kilograms (kg), milliliters (ml), and piece counts.',
                       style: WarmCounterTypography.caption.copyWith(color: WarmCounterColors.lightSecondaryText),
@@ -1458,7 +1458,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Modifiers & Add-ons', style: WarmCounterTypography.pageHeading),
+                    const Text('Modifiers & Add-ons', style: WarmCounterTypography.brandHeading),
                     Text(
                       'Options that adjust item retail prices and recipe raw ingredient deductions.',
                       style: WarmCounterTypography.caption.copyWith(color: WarmCounterColors.lightSecondaryText),
@@ -1594,7 +1594,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Pre-Approved Discounts', style: WarmCounterTypography.pageHeading),
+                    const Text('Pre-Approved Discounts', style: WarmCounterTypography.brandHeading),
                     Text(
                       'Promotions cashiers can apply at the counter without requiring a supervisor PIN (ADR-0004).',
                       style: WarmCounterTypography.caption.copyWith(color: WarmCounterColors.lightSecondaryText),

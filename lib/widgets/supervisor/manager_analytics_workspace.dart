@@ -263,8 +263,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
     final snapshot = _snapshot;
     return ListView(key: const ValueKey('analytics_body'),
       padding: const EdgeInsets.all(20), children: [
-      const Text('Business intelligence', style: TextStyle(fontSize: 26,
-        fontWeight: FontWeight.w700, letterSpacing: -0.8)),
+      Text('Business intelligence', style: WarmCounterTypography.brandHeading.copyWith(fontSize: 26)),
       const SizedBox(height: 16),
       Container(padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(color: StreetFoodMafiaColors.darkNavy,
