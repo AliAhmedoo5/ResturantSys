@@ -11,7 +11,7 @@ and remove physical printing because the business does not require it.
   and records actor and event time. Historical events are not invented.
 - Revision and cancellation enforce the same service-level Cashier authorization.
 - No receipt printer, printer settings, print queue, cash drawer device or native
-  report printing is required or exposed. Digital receipts, PDF/CSV/XLSX exports
+  report printing is required or exposed. On-screen order confirmations, PDF/CSV/XLSX exports
   and report email remain available. Checkout must not pretend to print.
 - Windows distribution includes the executable, Flutter assets, native plugin
   libraries and Visual C++ runtime dependencies. It includes operating and backup

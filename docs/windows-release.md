@@ -20,6 +20,9 @@ Business data normally lives at `%ProgramData%\ResturantPOS\data\pos.db`; it is
 separate from this package. Preserve that directory and catalog media. Schema
 upgrades run automatically; reverting an executable does not undo a database
 migration. Recovery requires a verified pre-upgrade backup and matching app.
+This release adds job roles/login enablement (schema v15) and an append-only
+order status audit (v16). Existing orders are preserved; old stage events are
+not reconstructed.
 See the repository's `docs/backups.md` for the full backup/recovery procedure.
 
 ## Daily operation
