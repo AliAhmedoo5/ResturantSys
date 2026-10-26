@@ -46,7 +46,7 @@ Monetary aggregation uses integer paisa. Existing legacy rupee fields are conver
 
 ## History and missing evidence
 
-The database does not yet contain complete salary/accrual/advance ledgers, invoice due-date allocations, event-time sale cost layers, preparation lifecycle timestamps or a comprehensive security/configuration audit. Corresponding reports explain what cannot be calculated reliably. Older inventory history also has a coverage boundary: movement recording began with schema v14.
+The database does not yet contain complete salary/accrual/advance ledgers, invoice due-date allocations, event-time sale cost layers, historical preparation lifecycle timestamps or a comprehensive security/configuration audit. Corresponding reports explain what cannot be calculated reliably. Older inventory history also has a coverage boundary: movement recording began with schema v14. Schema v16 begins recording explicitly observed cashier status changes; it does not reconstruct older milestones or make historical preparation-time analytics complete.
 
 Closed Z-reports are immutable saved snapshots with their own revision/hash. A historical dashboard query over current records is exploratory and can differ after a later correction; it must not overwrite or silently replace the sealed report. Open **Z-Reports & Backups** for the original saved day-close report and its delivery archive.
 
