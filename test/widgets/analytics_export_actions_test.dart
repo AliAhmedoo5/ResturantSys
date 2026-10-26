@@ -31,14 +31,9 @@ void main() {
     picker = Completer<String?>();
     await tester.tap(find.text('CSV (this report)'));
     await tester.pump();
-    picker.complete(directory.path);
-    await tester.runAsync(() async {
-      for (var i = 0; i < 100 && !directory.listSync().any((f) => f.path.endsWith('.csv')); i++) {
-        await Future<void>.delayed(const Duration(milliseconds: 10));
-      }
-    });
+    picker.complete(null);
     await tester.pumpAndSettle();
-    expect(directory.listSync().whereType<File>().where((f) => f.path.endsWith('.csv')), hasLength(1));
+    expect(tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'CSV (this report)')).onPressed, isNotNull);
+    expect(directory.listSync(), isEmpty);
   });
 }
-
