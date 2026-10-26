@@ -70,6 +70,20 @@ void main() {
       }
     });
 
+    test('Manager cannot revise or cancel a customer order at the service boundary', () async {
+      final checkout = await orderController.checkoutOrder(
+        businessDayId: businessDayId, shiftId: shiftId, cashierId: cashierId,
+        diningType: DiningType.takeaway, items: [CartItem(menuItem: burger, quantity: 1)],
+        payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 500)],
+      );
+      await expectLater(orderController.cancelOrder(orderId: checkout.order.id,
+        cashierId: 1, reason: 'Manager attempt', commandId: 'manager-cancel'),
+        throwsStateError);
+      await expectLater(orderController.reviseOrder(orderId: checkout.order.id,
+        cashierId: 1, reason: 'Manager attempt', commandId: 'manager-revise',
+        newItems: [CartItem(menuItem: burger, quantity: 2)]), throwsStateError);
+      expect((await orderController.getOrder(checkout.order.id)).currentRevision, 1);
+    });
     test('Cashier can cancel confirmed order without a Manager PIN', () async {
       final checkout = await orderController.checkoutOrder(
         businessDayId: businessDayId,
