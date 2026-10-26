@@ -1,3 +1,4 @@
+import 'package:resturant_sys/core/orders/token_status.dart';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -83,6 +84,28 @@ void main() {
         cashierId: 1, reason: 'Manager attempt', commandId: 'manager-revise',
         newItems: [CartItem(menuItem: burger, quantity: 2)]), throwsStateError);
       expect((await orderController.getOrder(checkout.order.id)).currentRevision, 1);
+    });
+    test('Cashier records sequential fulfillment with actor and immutable timestamps', () async {
+      final checkout = await orderController.checkoutOrder(
+        businessDayId: businessDayId, shiftId: shiftId, cashierId: cashierId,
+        diningType: DiningType.takeaway, items: [CartItem(menuItem: burger, quantity: 1)],
+        payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 500)],
+      );
+      expect(await orderController.getOrderStatusEvents(checkout.order.id), isEmpty);
+      await expectLater(orderController.advanceOrderStatus(orderId: checkout.order.id,
+        cashierId: 1, expectedStatus: TokenStatus.preparing), throwsStateError);
+      expect(await orderController.advanceOrderStatus(orderId: checkout.order.id,
+        cashierId: cashierId, expectedStatus: TokenStatus.preparing), TokenStatus.ready);
+      await expectLater(orderController.advanceOrderStatus(orderId: checkout.order.id,
+        cashierId: cashierId, expectedStatus: TokenStatus.preparing), throwsStateError);
+      expect(await orderController.advanceOrderStatus(orderId: checkout.order.id,
+        cashierId: cashierId, expectedStatus: TokenStatus.ready), TokenStatus.delivered);
+      final events = await orderController.getOrderStatusEvents(checkout.order.id);
+      expect(events.map((event) => event.toStatus), [TokenStatus.ready, TokenStatus.delivered]);
+      expect(events.map((event) => event.cashierId), [cashierId, cashierId]);
+      expect(events.first.fromStatus, TokenStatus.preparing);
+      expect(events.first.recordedAt.isAfter(DateTime(2026, 1, 1)), isTrue);
+      expect((await orderController.getOrder(checkout.order.id)).grandTotal, 500);
     });
     test('Cashier can cancel confirmed order without a Manager PIN', () async {
       final checkout = await orderController.checkoutOrder(
