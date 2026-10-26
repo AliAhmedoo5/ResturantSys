@@ -7,8 +7,8 @@ import 'package:resturant_sys/widgets/supervisor/analytics_export_actions.dart';
 
 void main() {
   testWidgets('local export cancels cleanly and rejects session lock while directory picker is open', (tester) async {
-    final directory = await Directory.systemTemp.createTemp('analytics-actions-');
-    addTearDown(() => directory.delete(recursive: true));
+    final directory = Directory.systemTemp.createTempSync('analytics-actions-');
+    addTearDown(() => directory.deleteSync(recursive: true));
     var allowed = true;
     var picker = Completer<String?>();
     final snapshot = AnalyticsSnapshot(query: AnalyticsQuery(startDate: DateTime(2026, 10, 1), endDateExclusive: DateTime(2026, 10, 2)), generatedAt: DateTime.utc(2026, 10, 1), businessDayIds: [42], sections: [AnalyticsSection(family: AnalyticsFamily.sales, title: 'Sales')]);
@@ -37,3 +37,4 @@ void main() {
     expect(directory.listSync(), isEmpty);
   });
 }
+
