@@ -21,6 +21,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          flutter-version: '3.47.8'
           cache: true
 
       - name: Enable Windows Desktop Support
@@ -37,14 +38,15 @@ jobs:
 
       - name: Package Windows Release ZIP
         shell: pwsh
-        run: |
-          ./scripts/ci/verify-windows-bundle.ps1 -BundlePath build/windows/x64/runner/Release
-          New-Item -ItemType Directory -Force -Path dist
-          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath dist\resturant-pos-windows-x64.zip
+        run: ./scripts/ci/package-windows.ps1
+
+      - name: Verify extracted package startup
+        shell: pwsh
+        run: ./scripts/ci/smoke-windows-package.ps1
 
       - name: Upload Windows Artifact
         uses: actions/upload-artifact@v4
         with:
           name: resturant-pos-windows-x64
-          path: dist/resturant-pos-windows-x64.zip
+          path: dist/*
           if-no-files-found: error
