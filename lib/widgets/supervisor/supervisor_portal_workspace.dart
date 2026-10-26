@@ -26,6 +26,7 @@ import '../../core/database/pos_database_constants.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../../core/analytics/analytics_service.dart';
 import 'manager_analytics_workspace.dart';
+import 'analytics_export_actions.dart';
 
 enum SupervisorPortalTab {
   dashboard('Dashboard', Icons.insights_rounded),
@@ -888,6 +889,16 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
         return ManagerAnalyticsWorkspace(
           service: _analyticsService!,
           session: auth.session,
+          exportActionsBuilder: (context, snapshot, family) => AnalyticsExportActions(
+            snapshot: snapshot,
+            family: family,
+            canExport: () {
+              final actor = auth.session.currentStaff;
+              return actor != null && actor.isActive &&
+                  actor.canAccessSupervisorPortal &&
+                  actor.id == snapshot.generatedByStaffId;
+            },
+          ),
         );
       case SupervisorPortalTab.deliveryAreas:
         if (widget.orderController == null || widget.currentStaff == null) return const Center(child: Text('Delivery areas unavailable.'));
