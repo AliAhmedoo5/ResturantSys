@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:resturant_sys/core/analytics/analytics_models.dart';
 import 'package:resturant_sys/core/analytics/analytics_export_service.dart';
@@ -14,6 +16,22 @@ AnalyticsSnapshot fixture() => AnalyticsSnapshot(
 );
 
 void main() {
+  test('workbook includes every snapshot family, numeric paisa and missing coverage', () {
+    final bytes = AnalyticsExportService().workbook(fixture());
+    final archive = ZipDecoder().decodeBytes(bytes);
+    String xml(String path) => utf8.decode(archive.findFile(path)!.content as List<int>);
+    expect(xml('xl/workbook.xml'), contains('profitability'));
+    final sales = xml('xl/worksheets/sheet2.xml');
+    expect(sales, contains('<v>12345</v>'));
+    expect(sales, contains('<v>-125</v>'));
+    expect(sales, contains('paisa'));
+    expect(sales, contains('orders'));
+    expect(sales, contains('&apos;=HYPERLINK'));
+    expect(sales, isNot(contains('<f>')));
+    expect(xml('xl/worksheets/sheet3.xml'), contains('No event-time costing'));
+    expect(xml('xl/worksheets/sheet3.xml'), contains('missing'));
+    expect(xml('xl/worksheets/sheet1.xml'), contains('generated_by_staff_id'));
+  });
   test('CSV preserves selected displayed values, provenance, missing quality and filters safely', () {
     final csv = AnalyticsExportService().csv(fixture(), AnalyticsFamily.sales);
     expect(csv, contains('12345'));
@@ -31,3 +49,4 @@ void main() {
     expect(csv, isNot(contains('No event-time costing')));
   });
 }
+
