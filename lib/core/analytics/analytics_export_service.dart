@@ -1,9 +1,83 @@
+import 'dart:convert';
+import 'dart:io';
+import 'package:path/path.dart' as p;
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 import 'package:archive/archive.dart';
 
 import 'analytics_models.dart';
 
+enum AnalyticsExportFormat { csv, xlsx, pdf }
+
 /// Serializes the displayed immutable snapshot without querying operational data.
 class AnalyticsExportService {
+  Future<List<int>> pdf(AnalyticsSnapshot snapshot, AnalyticsFamily family) async {
+    final section = snapshot.section(family);
+    final document = pw.Document(title: 'Manager analytics - ${section.title}', author: 'Staff ${snapshot.generatedByStaffId ?? "unknown"}');
+    final lines = <String>[
+      ..._metadata(snapshot, family.name).map((r) => '${r[0]}: ${r[1] ?? "Unknown"}'),
+      ...section.notes.map((note) => 'Section note: $note'),
+      for (final metric in section.metrics) ...[
+        '${metric.label}: ${_pdfValue(metric.value, metric.unit)} [${metric.quality.name}]',
+        'Formula / explanation: ${metric.explanation}',
+        'Coverage: ${metric.sampleCount ?? "unknown"} / ${metric.populationCount ?? "unknown"}; change percent: ${metric.changePercent ?? "unavailable"}',
+      ],
+      'Source details (${section.rows.length} rows)',
+      for (final row in section.rows) ...[
+        '${row.sourceType} / ${row.sourceId ?? row.id} (row ${row.id})',
+        for (final col in section.columns) '${col.label}: ${_pdfValue(row.cells[col.key], col.unit)}',
+      ],
+    ];
+    // Small independent text blocks can flow across pages, even for long notes.
+    final blocks = <String>[];
+    for (final line in lines) {
+      for (var i = 0; i < line.length; i += 160) {
+        blocks.add(line.substring(i, (i + 160).clamp(0, line.length)));
+      }
+    }
+    document.addPage(pw.MultiPage(
+      pageFormat: PdfPageFormat.a4, maxPages: 100000,
+      header: (_) => pw.Text('Manager analytics / ${section.title}', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+      footer: (context) => pw.Text('Exploratory snapshot | Page ${context.pageNumber} of ${context.pagesCount}', style: const pw.TextStyle(fontSize: 8)),
+      build: (_) => [for (final block in blocks) pw.Padding(padding: const pw.EdgeInsets.only(bottom: 4), child: pw.Text(block, style: const pw.TextStyle(fontSize: 9)))],
+    ));
+    return document.save();
+  }
+
+  String _pdfValue(Object? value, AnalyticsUnit? unit) {
+    if (value == null) return 'Missing data';
+    if (unit == AnalyticsUnit.paisa && value is num) return 'PKR ${(value / 100).toStringAsFixed(2)}';
+    return '$value${unit == null ? "" : " ${unit.name}"}';
+  }
+
+  /// Writes only to a directory deliberately selected by the caller. No delivery.
+  Future<File> saveToDirectory(AnalyticsSnapshot snapshot, AnalyticsFamily family,
+      AnalyticsExportFormat format, String directory, {bool Function()? canWrite}) async {
+    final bytes = switch (format) {
+      AnalyticsExportFormat.csv => utf8.encode(csv(snapshot, family)),
+      AnalyticsExportFormat.xlsx => workbook(snapshot),
+      AnalyticsExportFormat.pdf => await pdf(snapshot, family),
+    };
+    if (canWrite != null && !canWrite()) throw StateError('Export authorization expired.');
+    if (!await Directory(directory).exists()) throw FileSystemException('Selected export directory is unavailable.', directory);
+    final base = 'manager-analytics-${family.name}-${DateTime.now().toUtc().microsecondsSinceEpoch}';
+    var suffix = 0;
+    var target = File(p.join(directory, '$base.${format.name}'));
+    while (await target.exists()) {
+      target = File(p.join(directory, '$base-${++suffix}.${format.name}'));
+    }
+    final partial = File('${target.path}.partial');
+    try {
+      if (canWrite != null && !canWrite()) throw StateError('Export authorization expired.');
+      await partial.writeAsBytes(bytes, flush: true);
+      if (canWrite != null && !canWrite()) throw StateError('Export authorization expired.');
+      return await partial.rename(target.path);
+    } catch (_) {
+      if (await partial.exists()) await partial.delete();
+      rethrow;
+    }
+  }
+
   List<int> workbook(AnalyticsSnapshot snapshot) {
     final sheets = <String, List<List<Object?>>>{
       'Metadata': _metadata(snapshot, 'all snapshot families'),
@@ -84,4 +158,5 @@ class AnalyticsExportService {
     return text.contains(RegExp('[,"\r\n]')) ? '"${text.replaceAll('"', '""')}"' : text;
   }
 }
+
 
