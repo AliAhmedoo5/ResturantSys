@@ -262,18 +262,11 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
     }
     final snapshot = _snapshot;
     return ListView(key: const ValueKey('analytics_body'),
-      padding: const EdgeInsets.all(24), children: [
-      const Text('PERFORMANCE / ANALYTICS', style: TextStyle(
-        color: StreetFoodMafiaColors.secondaryText, fontSize: 11,
-        fontWeight: FontWeight.w600, letterSpacing: 1.8)),
-      const SizedBox(height: 8),
-      const Text('Business intelligence', style: TextStyle(fontSize: 30,
+      padding: const EdgeInsets.all(20), children: [
+      const Text('Business intelligence', style: TextStyle(fontSize: 26,
         fontWeight: FontWeight.w700, letterSpacing: -0.8)),
-      const SizedBox(height: 4),
-      const Text('A clear view of your restaurant’s performance.',
-        style: TextStyle(color: StreetFoodMafiaColors.secondaryText)),
-      const SizedBox(height: 24),
-      Container(padding: const EdgeInsets.all(16),
+      const SizedBox(height: 16),
+      Container(padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(color: StreetFoodMafiaColors.darkNavy,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: StreetFoodMafiaColors.border)),
@@ -337,10 +330,12 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
 
   Widget _filterPanel() => ExpansionTile(
     key: const ValueKey('analytics_filters'), tilePadding: EdgeInsets.zero,
+    dense: true,
     leading: const Icon(Icons.tune_rounded, size: 18),
     title: const Text('Order cohort filters', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
     subtitle: Text(_query.cashierId == null && _query.shiftId == null && _query.diningType == null && _query.paymentMethod == null
-      ? 'All cashiers, shifts, Dining Types and payment methods' : 'Filters applied • inspect each report’s scope notes'),
+      ? 'All cashiers, shifts, Dining Types and payment methods' : 'Filters applied • inspect each report’s scope notes',
+      style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
     children: [Form(key: _filtersKey, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const Text('Applies to order-based measures only. Inventory, procurement, Khata, staff and cash ledgers retain their stated scope.',
         style: TextStyle(color: StreetFoodMafiaColors.secondaryText, fontSize: 12)),
@@ -386,8 +381,8 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
     final sections = snapshot.sections.where((s) => s.family == _family).toList();
     if (sections.isEmpty) return [_note('This report has no source dataset available in this snapshot.')];
     return [for (final section in sections) ...[
-      Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: Text(section.title,
-        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700))),
+      Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(section.title,
+        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),
       _metricGrid(section.metrics.take(4).toList()),
       if (section.family == AnalyticsFamily.overview)
         for (final sales in snapshot.sections.where((s) => s.family == AnalyticsFamily.sales))
@@ -435,11 +430,11 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
       AnalyticsUnit.minutes => Icons.schedule_rounded,
       _ => Icons.bar_chart_rounded,
     };
-    return Container(constraints: const BoxConstraints(minHeight: 210),
+    return Container(constraints: const BoxConstraints(minHeight: 160),
       decoration: BoxDecoration(color: StreetFoodMafiaColors.darkNavy,
         border: Border.all(color: StreetFoodMafiaColors.border),
         borderRadius: BorderRadius.circular(12)),
-      child: Padding(padding: const EdgeInsets.all(20),
+      child: Padding(padding: const EdgeInsets.all(16),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Expanded(child: Text(metric.label, style: const TextStyle(fontSize: 12,
@@ -447,13 +442,15 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
           const SizedBox(width: 8),
           Icon(icon, size: 17, color: StreetFoodMafiaColors.cartelYellow),
         ]),
-        const SizedBox(height: 18),
+        const SizedBox(height: 12),
         SelectableText(_format(metric.value, metric.unit),
           style: TextStyle(fontSize: available ? 28 : 22, height: 1.2,
             letterSpacing: -0.6, fontWeight: FontWeight.w700, color: StreetFoodMafiaColors.offWhite)),
-        const SizedBox(height: 12),
-        Text(quality, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
-          color: metric.quality == AnalyticsQuality.complete ? StreetFoodMafiaColors.secondaryText : StreetFoodMafiaColors.burntGold)),
+        if (metric.quality != AnalyticsQuality.complete) ...[
+          const SizedBox(height: 8),
+          Text(quality, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
+            color: StreetFoodMafiaColors.burntGold)),
+        ],
         const SizedBox(height: 8),
         Tooltip(message: metric.explanation, child: Text(metric.explanation,
           maxLines: 2, overflow: TextOverflow.ellipsis,

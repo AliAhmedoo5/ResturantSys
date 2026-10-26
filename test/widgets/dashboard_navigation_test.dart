@@ -61,7 +61,7 @@ void main() {
     final auth = (await tester.runAsync(() async {
       final db = await store.initialize();
       final people = await db.query('staff');
-      final manager = people.firstWhere((row) => row['role'] == 'MANAGER');
+      final manager = people.firstWhere((row) => StaffRole.fromCode(row['role'] as String).isManager);
       final cashier = people.firstWhere((row) => row['role'] == 'CASHIER');
       final service = AuthService(database: db)..session.login(Staff.fromMap(manager));
       await service.completeOnboarding();
