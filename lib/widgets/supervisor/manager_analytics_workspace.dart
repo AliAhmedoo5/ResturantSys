@@ -234,7 +234,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
         style: const TextStyle(color: StreetFoodMafiaColors.secondaryText, fontSize: 12)),
       if (snapshot != null) Text(
         '${_error != null ? 'STALE • last successful refresh' : 'Last successful refresh'}: '
-        '${DateFormat('dd MMM yyyy HH:mm:ss').format(snapshot.generatedAt)} • Business Days: '
+        '${DateFormat('dd MMM yyyy HH:mm:ss').format(snapshot.generatedAt.isUtc ? snapshot.generatedAt.add(const Duration(hours: 5)) : snapshot.generatedAt)} • Business Days: '
         '${snapshot.businessDayIds.isEmpty ? 'none in selection' : snapshot.businessDayIds.join(', ')}',
         style: TextStyle(fontSize: 12, color: _error != null ? StreetFoodMafiaColors.statusCanceled : StreetFoodMafiaColors.secondaryText)),
       const SizedBox(height: 8),
