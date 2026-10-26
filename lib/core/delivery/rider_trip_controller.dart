@@ -1,5 +1,4 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import '../auth/staff.dart';
 import '../auth/staff_role.dart';
 import '../database/pos_database_constants.dart';
 import '../orders/dining_type.dart';
@@ -9,6 +8,7 @@ import '../orders/token_status.dart';
 import '../shifts/cash_movement.dart';
 import '../shifts/shift.dart';
 import 'rider_trip.dart';
+import 'rider_assignee.dart';
 
 /// Controller managing Rider Trips, delivery dispatch, dispatch alerts,
 /// and cashier cash reconciliation at trip settlement.
@@ -69,7 +69,7 @@ class RiderTripController {
     if (staffRows.isEmpty) {
       throw StateError('Rider staff #$riderStaffId not found or inactive.');
     }
-    final riderStaff = Staff.fromMap(staffRows.first);
+    final riderStaff = RiderAssignee.fromMap(staffRows.first);
 
     return await database.transaction((txn) async {
       final now = dispatchedAt ?? DateTime.now();
@@ -696,14 +696,13 @@ class RiderTripController {
   }
 
   /// Retrieves staff eligible to be assigned as delivery riders.
-  Future<List<Staff>> getAvailableRiders() async {
+  Future<List<RiderAssignee>> getAvailableRiders() async {
     final rows = await database.rawQuery('''
-      SELECT s.*, d.name as department_name
+      SELECT s.id, s.name
       FROM ${PosDatabaseConstants.tableStaff} s
-      LEFT JOIN ${PosDatabaseConstants.tableDepartments} d ON s.department_id = d.id
       WHERE s.is_active = 1
       ORDER BY s.name ASC
     ''');
-    return rows.map((r) => Staff.fromMap(r)).toList();
+    return rows.map(RiderAssignee.fromMap).toList();
   }
 }
