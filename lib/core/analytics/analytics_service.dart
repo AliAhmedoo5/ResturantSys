@@ -92,7 +92,7 @@ class AnalyticsService {
 
   static String _dayScope(AnalyticsQuery q) => q.live ? "b.status='OPEN'" : '(${_localSql('b.opened_at', dateOnly: true)}>=? AND ${_localSql('b.opened_at', dateOnly: true)}<?)';
   static List<Object?> _dayArgs(AnalyticsQuery q) => q.live ? [] : [_sqlDate(q.startDate), _sqlDate(q.endDateExclusive)];
-  static String _orderScope(AnalyticsQuery q) => [if (q.cashierId != null) 'o.cashier_id=?', if (q.shiftId != null) 'o.shift_id=?', if (q.diningType != null) 'o.dining_type=?', if (q.paymentMethod != null) 'EXISTS(SELECT 1 FROM order_payments fp WHERE fp.order_id=o.id AND fp.payment_method=?)', '1=1'].join(' AND ');
+  static String _orderScope(AnalyticsQuery q) => [if (q.cashierId != null) 'o.cashier_id=?', if (q.shiftId != null) 'o.shift_id=?', if (q.diningType != null) 'o.dining_type=?', if (q.paymentMethod != null) 'o.id IN(SELECT fp.order_id FROM order_payments fp WHERE fp.payment_method=?)', '1=1'].join(' AND ');
   static List<Object?> _orderArgs(AnalyticsQuery q) => [if (q.cashierId != null) q.cashierId, if (q.shiftId != null) q.shiftId, if (q.diningType != null) q.diningType, if (q.paymentMethod != null) q.paymentMethod];
   static String _intervalScope(AnalyticsQuery q, String timestamp) => 'EXISTS(SELECT 1 FROM business_days b WHERE ${_dayScope(q)} AND ${_localSql(timestamp)}>=${_localSql('b.opened_at')} AND ${_localSql(timestamp)}<COALESCE(${_localSql('b.closed_at')},?))';
 }
