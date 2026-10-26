@@ -1,8 +1,10 @@
 # Manager analytics
 
-The Manager Portal's **Dashboard** is a read-only view of the local restaurant database. It covers live activity and historical Business Days. It requires an active Manager session; it does not give a Manager access to cashier operations.
+Open **Dashboard** directly from the main sidebar. The **Manager** destination contains staff, settings and administrative tools; its Dashboard tab also opens the same reporting workspace. Dashboard is a read-only view of the local restaurant database. It covers live activity and historical Business Days. It requires an active Manager session; it does not give a Manager access to cashier operations.
 
 ## Reading the dashboard
+
+The first four measures lead each report. Overview also includes the daily sales chart; additional measures and source tables follow below. Hover or long press a truncated metric explanation or a chart bar for the full definition or exact value. Expand **Measure definitions & scope** and **Reporting scope & methodology** for scope rules, comparison restrictions and source limitations. Missing-data states remain visible on the cards.
 
 Use **Live** for the active Business Day, including a day opened before midnight. Automatic refresh runs while the dashboard is visible; **Refresh** requests a new snapshot. The last successful refresh time describes the data currently displayed. Closing or locking the session clears reporting data from the screen.
 
