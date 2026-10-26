@@ -15,7 +15,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: Scaffold(body: AnalyticsExportActions(snapshot: snapshot, family: AnalyticsFamily.sales, canExport: () => allowed, pickDirectory: () => picker.future))));
     await tester.tap(find.text('CSV (this report)'));
     await tester.pump();
-    expect(tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'XLSX (all reports)')).onPressed, isNull);
+    expect(tester.widget<OutlinedButton>(find.ancestor(of: find.text('XLSX (all reports)'), matching: find.byWidgetPredicate((w) => w is OutlinedButton))).onPressed, isNull);
     picker.complete(null);
     await tester.pumpAndSettle();
     expect(find.textContaining('Could not'), findsNothing);
@@ -33,8 +33,9 @@ void main() {
     await tester.pump();
     picker.complete(null);
     await tester.pumpAndSettle();
-    expect(tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'CSV (this report)')).onPressed, isNotNull);
+    expect(tester.widget<OutlinedButton>(find.ancestor(of: find.text('CSV (this report)'), matching: find.byWidgetPredicate((w) => w is OutlinedButton))).onPressed, isNotNull);
     expect(directory.listSync(), isEmpty);
   });
 }
+
 
