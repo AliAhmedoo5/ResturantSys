@@ -99,7 +99,7 @@ All framework analysis/tests/builds run only in GitHub Actions. Use red -> green
 | --- | --- | --- |
 | A | Immutable reporting models and authorized analytics query service covering all 13 families, comparisons, quality/source evidence and focused calculation tests | Specification |
 | B | Manager Portal dashboard/explorer, live/history/filter/chart/detail behavior and widget tests against shared contract | Specification; integrates A |
-| C | Snapshot-based CSV/XLSX/PDF export with metadata and safe values; export tests; workspace buttons | A, B |
+| C | Snapshot-based CSV/XLSX/PDF export with metadata and safe values; export tests; workspace buttons | Shared models from A's first passing slice and B's export-action seam (available); complete query/UI integration remains D |
 | D | Integrated financial/UX verification, remote regression CI, two-axis code review and fixes; review-ready PR | A, B, C |
 
 Implementation branches merge into one `codex/manager-analytics` integration branch. Each implementation ticket uses an isolated worktree. GitHub issues track the graph; final PR references all tickets. Keep unrelated `docs/manual-manager-portal-testing.md` untouched.
