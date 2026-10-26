@@ -466,7 +466,7 @@ void main() {
       expect(find.text('Rs 50.00'), findsOneWidget);
     });
 
-    testWidgets('shows Reprint Tray button and opens ReprintTrayDialog when tapped', (tester) async {
+    testWidgets('cashier checkout exposes no printer or drawer workflow', (tester) async {
       tester.view.physicalSize = const Size(1920, 1080);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -492,14 +492,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const ValueKey('open_reprint_tray_button')), findsOneWidget);
-      expect(find.text('Reprint Tray'), findsOneWidget);
+      expect(find.byKey(const ValueKey('open_reprint_tray_button')), findsNothing);
+      expect(find.text('Reprint Tray'), findsNothing);
 
-      await tester.tap(find.byKey(const ValueKey('open_reprint_tray_button')));
-      await tester.pumpAndSettle();
-
-      expect(find.byType(ReprintTrayDialog), findsOneWidget);
-      expect(find.text('Hardware & Reprint Tray'), findsOneWidget);
     });
 
     testWidgets('renders primary thumbnail when image exists and falls back to placeholder with 0 images', (tester) async {
