@@ -30,21 +30,22 @@ class _AnalyticsExportActionsState extends State<AnalyticsExportActions> {
 
   Future<void> _export(AnalyticsExportFormat format) async {
     if (_busy || !widget.canExport()) return;
+    final canExport = widget.canExport;
     final snapshot = widget.snapshot;
     final family = widget.family;
     setState(() { _busy = true; _message = null; _failed = false; });
     try {
       final directory = await (widget.pickDirectory?.call() ?? getDirectoryPath());
-      if (directory == null || !mounted || !widget.canExport()) return;
+      if (directory == null || !mounted || !canExport()) return;
       final file = await AnalyticsExportService().saveToDirectory(
         snapshot, family, format, directory,
-        canWrite: () => mounted && widget.canExport(),
+        canWrite: () => mounted && canExport(),
       );
-      if (mounted && widget.canExport()) {
+      if (mounted && canExport()) {
         setState(() => _message = 'Saved ${format.name.toUpperCase()} to ${file.path}');
       }
     } catch (_) {
-      if (mounted && widget.canExport()) {
+      if (mounted && canExport()) {
         setState(() { _failed = true; _message = 'Could not save export. Choose a writable directory and retry.'; });
       }
     } finally {
@@ -76,3 +77,4 @@ class _AnalyticsExportActionsState extends State<AnalyticsExportActions> {
     ],
   );
 }
+
