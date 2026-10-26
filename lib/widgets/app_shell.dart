@@ -194,7 +194,7 @@ class _AppShellState extends State<AppShell> {
                   orderController: widget.orderController,
                   authService: widget.authService,
                 ),
-                Expanded(child: widget.child ?? _buildWorkspaceBody(context, staff)),
+                Expanded(child: widget.child ?? _buildSessionWorkspaces(context, staff)),
               ])),
             ]);
           }),
@@ -203,10 +203,26 @@ class _AppShellState extends State<AppShell> {
     );
   }
 
+  Widget _buildSessionWorkspaces(BuildContext context, Staff staff) {
+    if (staff.canAccessRegister) {
+      final showingRiders = _selectedWorkspace == AppWorkspaceTab.riderTrips && staff.canAccessRiderTrips;
+      // Keep the Cashier's unfinished cart mounted while assigning deliveries.
+      // Changing staff or locking the session disposes these workspaces.
+      return IndexedStack(key: ValueKey('cashier_workspaces_${staff.id}'),
+        index: showingRiders ? 1 : 0, children: [
+          ExcludeFocus(excluding: showingRiders,
+            child: TickerMode(enabled: !showingRiders, child: _buildRegisterWorkspace(staff))),
+          showingRiders ? _buildWorkspaceBody(context, staff) : const SizedBox.shrink(),
+        ]);
+    }
+    return _buildWorkspaceBody(context, staff);
+  }
+
   Widget _buildWorkspaceBody(BuildContext context, Staff staff) {
     // Gate the content as well as the navigation, including stale selections.
     if (_selectedWorkspace != AppWorkspaceTab.register &&
-        !staff.canAccessSupervisorPortal) {
+        !staff.canAccessSupervisorPortal &&
+        !(_selectedWorkspace == AppWorkspaceTab.riderTrips && staff.canAccessRiderTrips)) {
       return _buildRegisterWorkspace(staff);
     }
     if (_selectedWorkspace == AppWorkspaceTab.dashboard) {

@@ -5,6 +5,7 @@ import '../../core/delivery/rider_trip_controller.dart';
 import '../../core/orders/order.dart';
 import '../../core/orders/paisa_engine.dart';
 import '../../core/shifts/shift_and_cash_controller.dart';
+import '../../core/shifts/shift.dart';
 import '../../core/theme/theme.dart';
 import 'rider_trip_settlement_dialog.dart';
 
@@ -45,6 +46,23 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
   Staff? _selectedRider;
   final _tripNameController = TextEditingController();
   bool _isDispatching = false;
+  bool _loadingData = false;
+  String? _loadError;
+
+  ShiftAndCashController get _shifts => widget.shiftController ??
+      ShiftAndCashController(database: widget.controller.database);
+
+  Future<Shift> _requireOpenShift() async {
+    final day = await _shifts.getActiveBusinessDay();
+    final shift = await _shifts.getActiveShift();
+    if (day == null || shift == null || shift.businessDayId != day.id) {
+      throw StateError('Open a Business Day and Cashier shift before dispatch or settlement.');
+    }
+    if (widget.currentStaff.canAccessRegister && shift.staffId != widget.currentStaff.id) {
+      throw StateError('Only the Cashier operating the active shift can dispatch or settle deliveries.');
+    }
+    return shift;
+  }
 
   @override
   void initState() {
@@ -74,25 +92,24 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
   }
 
   Future<void> _loadData() async {
+    if (!mounted || _loadingData) return;
+    _loadingData = true;
     setState(() => _isLoading = true);
     try {
-      final activeDay = await widget.shiftController?.getActiveBusinessDay();
-      final activeShift = await widget.shiftController?.getActiveShift();
+      final activeDay = await _shifts.getActiveBusinessDay();
 
-      final pending = await widget.controller.getPendingDeliveryOrders(
-        shiftId: activeShift?.id,
-        businessDayId: activeDay?.id,
-      );
-      final active = await widget.controller.getActiveTrips(
-        shiftId: activeShift?.id,
-        businessDayId: activeDay?.id,
-      );
+      // Orders and in-flight trips survive cashier handovers within the day.
+      final pending = activeDay == null ? <Order>[] : await widget.controller.getPendingDeliveryOrders(
+        businessDayId: activeDay.id);
+      final active = activeDay == null ? <RiderTrip>[] : await widget.controller.getActiveTrips(
+        businessDayId: activeDay.id);
       final alerts = await widget.controller.getActiveAlerts();
       final riders = await widget.controller.getAvailableRiders();
 
       if (mounted) {
         setState(() {
           _pendingOrders = pending;
+          _selectedOrderIds.retainAll(pending.map((order) => order.id));
           _activeTrips = active;
           _activeAlerts = alerts;
           _availableRiders = riders;
@@ -108,10 +125,20 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
             _tripNameController.text = 'Trip #${active.length + 1} - ${_selectedRider!.name}';
           }
           _isLoading = false;
+          _loadError = null;
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() {
+        _isLoading = false;
+        _loadError = 'Could not load deliveries. Refresh to retry.';
+        _pendingOrders = [];
+        _activeTrips = [];
+        _activeAlerts = [];
+        _selectedOrderIds.clear();
+      });
+    } finally {
+      _loadingData = false;
     }
   }
 
@@ -131,8 +158,7 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
 
     setState(() => _isDispatching = true);
     try {
-      final activeDay = await widget.shiftController?.getActiveBusinessDay();
-      final activeShift = await widget.shiftController?.getActiveShift();
+      final activeShift = await _requireOpenShift();
 
       final tripName = _tripNameController.text.trim().isNotEmpty
           ? _tripNameController.text.trim()
@@ -140,8 +166,8 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
 
       await widget.controller.createRiderTrip(
         riderStaffId: _selectedRider!.id,
-        shiftId: activeShift?.id ?? 1,
-        businessDayId: activeDay?.id ?? 1,
+        shiftId: activeShift.id,
+        businessDayId: activeShift.businessDayId,
         tripName: tripName,
         orderIds: _selectedOrderIds.toList(),
       );
@@ -236,21 +262,25 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
   }
 
   Future<void> _openSettlementDialog(RiderTrip trip) async {
-    final activeShift = await widget.shiftController?.getActiveShift();
-    if (!mounted) return;
-
-    await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => RiderTripSettlementDialog(
-        trip: trip,
-        cashierStaffId: widget.currentStaff.id,
-        shiftId: activeShift?.id ?? 1,
-        controller: widget.controller,
-        onSettled: _loadData,
-      ),
-    );
-    await _loadData();
+    if (!widget.currentStaff.canAccessRegister) return;
+    try {
+      final activeShift = await _requireOpenShift();
+      if (!mounted) return;
+      await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => RiderTripSettlementDialog(
+          trip: trip,
+          cashierStaffId: widget.currentStaff.id,
+          shiftId: activeShift.id,
+          controller: widget.controller,
+          onSettled: _loadData,
+        ),
+      );
+      await _loadData();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
+    }
   }
 
   Future<void> _handleAcknowledgeAlert(int alertId) async {
@@ -263,6 +293,9 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.currentStaff.canAccessRiderTrips) {
+      return const Center(child: Text('An active Cashier or Manager session is required.'));
+    }
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator(color: StreetFoodMafiaColors.cartelYellow));
     }
@@ -273,6 +306,11 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (_loadError != null) MaterialBanner(
+            key: const ValueKey('rider_load_error'),
+            content: Text(_loadError!),
+            actions: [TextButton(onPressed: _loadData, child: const Text('Retry'))],
+          ),
           // 1. Dispatch Alerts Banner
           if (_activeAlerts.isNotEmpty) ...[
             _buildAlertsBanner(),
@@ -382,7 +420,7 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: StreetFoodMafiaColors.offWhite),
               ),
               Text(
-                '${_pendingOrders.length} ready',
+                '${_pendingOrders.length} waiting',
                 style: const TextStyle(fontSize: 13, color: StreetFoodMafiaColors.cartelYellow, fontWeight: FontWeight.w700),
               ),
             ],
@@ -576,6 +614,8 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: StreetFoodMafiaColors.offWhite),
               ),
               IconButton(
+                key: const ValueKey('rider_refresh'),
+                tooltip: 'Refresh deliveries',
                 icon: const Icon(Icons.refresh, color: StreetFoodMafiaColors.cartelYellow),
                 onPressed: _loadData,
               ),
@@ -656,7 +696,8 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
                                       backgroundColor: StreetFoodMafiaColors.statusReady,
                                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                                     ),
-                                    onPressed: () => _openSettlementDialog(trip),
+                                    onPressed: widget.currentStaff.canAccessRegister
+                                        ? () => _openSettlementDialog(trip) : null,
                                     child: const Text('Settle Trip', style: TextStyle(fontWeight: FontWeight.w800, color: Colors.white, fontSize: 13)),
                                   ),
                                 ],
