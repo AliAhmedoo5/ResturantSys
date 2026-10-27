@@ -574,6 +574,8 @@ class OrderAndCheckoutController {
   CartTotals calculateCartTotals({
     required List<CartItem> items,
     DiscountPreset? discount,
+    DiningType? diningType,
+    int? cashierId,
   }) {
     double subtotal = 0.0;
     double taxAmount = 0.0;
@@ -595,7 +597,7 @@ class OrderAndCheckoutController {
 
     double discountAmount = 0.0;
     if (discount != null) {
-      discountAmount = discount.calculateDiscount(subtotal);
+      discountAmount = discount.calculateDiscount(subtotal, items: items, diningMode: diningType?.code, cashierId: cashierId);
     }
 
     final grandTotal = (subtotal - discountAmount) < 0.0 ? 0.0 : (subtotal - discountAmount);
@@ -678,7 +680,23 @@ class OrderAndCheckoutController {
           AND s.status = 'OPEN' AND d.status = 'OPEN' AND st.is_active = 1
       """, [shiftId, businessDayId, cashierId]);
       if (activeSession.isEmpty) throw StateError('Checkout requires the cashier current open shift and business day.');
-      final totals = calculateCartTotals(items: items, discount: discount);
+      if (discount != null) {
+        final rows = await txn.query('discount_presets', where: 'id=?', whereArgs: [discount.id]);
+        if (rows.isEmpty) throw StateError('Discount no longer exists. Refresh your cart.');
+        final current = DiscountPreset.fromMap(rows.single);
+        if (jsonEncode(current.toMap()) != jsonEncode(discount.toMap())) {
+          throw StateError('Discount terms changed. Refresh your cart and review the new price.');
+        }
+        final subtotal = items.fold<double>(0, (sum, item) => sum + item.totalPrice);
+        if (!current.isActive || current.calculateDiscount(subtotal, items: items, diningMode: diningType.code, cashierId: cashierId, now: now) <= 0) {
+          throw StateError('Discount is not eligible for this order. Remove it and review payment.');
+        }
+        if (current.rules.dailyLimit != null) {
+          final used = await txn.rawQuery('SELECT COUNT(*) AS n FROM orders WHERE discount_id=? AND business_day_id=?', [current.id, businessDayId]);
+          if ((used.single['n'] as int) >= current.rules.dailyLimit!) throw StateError('Discount limit reached for this Business Day.');
+        }
+      }
+      final totals = calculateCartTotals(items: items, discount: discount, diningType: diningType, cashierId: cashierId);
       DeliveryArea? deliveryArea;
       if (diningType == DiningType.delivery) {
         if (delivery == null) throw const DeliveryCheckoutException('Select delivery details before payment. Your cart is unchanged.');
