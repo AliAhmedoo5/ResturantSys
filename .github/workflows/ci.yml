@@ -36,7 +36,7 @@ jobs:
         run: flutter test test/database/database_backup_service_test.dart test/database/database_restore_service_test.dart
 
       - name: Verify Windows PIN login latency
-        run: flutter test test/auth/pin_login_latency_test.dart --reporter expanded
+        run: flutter test test/auth/pin_login_latency_test.dart test/auth/pin_derivation_compatibility_test.dart test/auth/pin_hasher_test.dart test/security/urgent_protection_test.dart --reporter expanded
 
       - name: Verify release-mode Windows PIN latency
         if: success() || failure()

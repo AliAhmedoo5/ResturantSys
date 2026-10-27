@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:pointycastle/export.dart' as pc;
+import 'windows_pbkdf2.dart';
 
 /// Versioned, independently salted PBKDF2 verifiers. Legacy hashes are read only.
 abstract final class PinHasher {
@@ -15,6 +17,9 @@ abstract final class PinHasher {
   }
 
   static Uint8List _derive(String pin, Uint8List salt, int rounds) {
+    if (Platform.isWindows) {
+      return WindowsPbkdf2.derive(pin, salt, rounds);
+    }
     final derivator = pc.PBKDF2KeyDerivator(pc.HMac(pc.SHA256Digest(), 64))
       ..init(pc.Pbkdf2Parameters(salt, rounds, 32));
     return derivator.process(Uint8List.fromList(utf8.encode(pin)));
