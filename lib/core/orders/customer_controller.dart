@@ -1,5 +1,6 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../delivery/delivery_controller.dart';
+import '../auth/staff_role.dart';
 
 class Customer {
   Customer.fromMap(Map<String, Object?> row)
@@ -16,8 +17,8 @@ class CustomerController {
 
   static Future<void> requireRole(DatabaseExecutor db, int staffId, {bool manager = false}) async {
     final rows = await db.query('staff', where: 'id = ? AND is_active = 1 AND login_enabled = 1', whereArgs: [staffId]);
-    if (rows.isEmpty || (manager && rows.single['role'] != 'MANAGER') ||
-        (!manager && !['MANAGER', 'CASHIER'].contains(rows.single['role']))) {
+    final role = rows.isEmpty ? null : StaffRole.fromCode(rows.single['role'] as String);
+    if (role == null || (manager && role != StaffRole.manager)) {
       throw StateError('An active ${manager ? 'Manager' : 'POS staff member'} is required.');
     }
   }
