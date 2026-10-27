@@ -135,4 +135,52 @@ void main() {
     expect(report.metrics.firstWhere((m) => m.id == 'cogs').value, isNull);
     expect(report.metrics.firstWhere((m) => m.id == 'net_profit').value, isNull);
   });
+
+  test('quantity revisions retain original lots and consume additions at their new rate', () async {
+    final cat = await catalog.createCategory(name: 'Meals', displayOrder: 1, colorHex: '#FFFFFF');
+    final item = await catalog.createMenuItem(categoryId: cat.id, name: 'Meal', basePrice: 100);
+    final ingredient = await catalog.createRawIngredient(name: 'Portion', storageUnit: StorageUnit.count, currentStock: 20, costPerRecipeUnit: 20);
+    await catalog.setRecipeForMenuItem(menuItemId: item.id, items: [(rawIngredientId: ingredient.id, quantity: 1.0)]);
+    await catalog.toggleMenuItemActive(item.id, true);
+    final controller = OrderAndCheckoutController(database: db);
+    final result = await controller.checkoutOrder(businessDayId: 1, shiftId: 1, cashierId: 2,
+      diningType: DiningType.dineIn, items: [CartItem(menuItem: item, quantity: 2)],
+      payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 200)]);
+    await db.update('orders', {'token_status': 'CONFIRMED'}, where: 'id=?', whereArgs: [result.order.id]);
+    await db.update('raw_ingredients', {'cost_per_recipe_unit': 90}, where: 'id=?', whereArgs: [ingredient.id]);
+    await controller.reviseOrder(orderId: result.order.id, cashierId: 2, reason: 'Add one', commandId: 'add', newItems: [CartItem(menuItem: item, quantity: 3)]);
+    var report = (await analytics.load(live())).section(AnalyticsFamily.profitability);
+    expect(report.metrics.firstWhere((m) => m.id == 'cogs').value, 13000);
+    await controller.reviseOrder(orderId: result.order.id, cashierId: 2, reason: 'Return two', commandId: 'remove', newItems: [CartItem(menuItem: item)]);
+    report = (await analytics.load(live())).section(AnalyticsFamily.profitability);
+    expect(report.metrics.firstWhere((m) => m.id == 'cogs').value, 2000);
+    final returns = await db.query('order_cost_events', where: "kind='RETURN'", orderBy: 'id');
+    expect(returns.map((r) => r['cost_paisa']), [9000, 2000]);
+    await expectLater(db.update('order_cost_events', {'cost_paisa': 0}), throwsA(isA<DatabaseException>()));
+    await expectLater(db.delete('ingredient_cost_history'), throwsA(isA<DatabaseException>()));
+  });
+
+  test('category discounts reduce tax only on their eligible lines', () async {
+    final taxed = await catalog.createCategory(name: 'Taxed', displayOrder: 1, colorHex: '#FFFFFF');
+    final other = await catalog.createCategory(name: 'Other', displayOrder: 2, colorHex: '#FFFFFF');
+    final a = await catalog.createMenuItem(categoryId: taxed.id, name: 'Taxed meal', basePrice: 110, taxRate: 10);
+    final b = await catalog.createMenuItem(categoryId: other.id, name: 'Other meal', basePrice: 100);
+    final discount = DiscountPreset(id: 1, name: 'Other free', type: DiscountType.flat, value: 100, isActive: true,
+      rules: DiscountRules(categoryIds: [other.id]));
+    final totals = OrderAndCheckoutController(database: db).calculateCartTotals(items: [CartItem(menuItem: a), CartItem(menuItem: b)], discount: discount);
+    expect(totals.taxAmount, 10);
+    expect(totals.grandTotal, 110);
+  });
+
+  test('new sale with an unknown ingredient rate reports missing cost', () async {
+    final cat = await catalog.createCategory(name: 'Meals', displayOrder: 1, colorHex: '#FFFFFF');
+    final item = await catalog.createMenuItem(categoryId: cat.id, name: 'Meal', basePrice: 100);
+    final ingredient = await catalog.createRawIngredient(name: 'Unknown cost', storageUnit: StorageUnit.count);
+    await catalog.setRecipeForMenuItem(menuItemId: item.id, items: [(rawIngredientId: ingredient.id, quantity: 1.0)]);
+    await catalog.toggleMenuItemActive(item.id, true);
+    await OrderAndCheckoutController(database: db).checkoutOrder(businessDayId: 1, shiftId: 1, cashierId: 2,
+      diningType: DiningType.dineIn, items: [CartItem(menuItem: item)], payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 100)]);
+    expect((await db.query('order_cost_events')).single['cost_paisa'], isNull);
+    expect((await analytics.load(live())).section(AnalyticsFamily.profitability).metrics.firstWhere((m) => m.id == 'gross_profit').value, isNull);
+  });
 }

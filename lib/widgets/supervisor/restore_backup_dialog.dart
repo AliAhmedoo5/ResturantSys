@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 import '../../core/database/database_restore_service.dart';
 
 class RestoreBackupDialog extends StatefulWidget {
-  const RestoreBackupDialog({super.key, required this.service});
+  const RestoreBackupDialog({super.key, required this.service, this.pickArchive});
   final DatabaseRestoreService service;
+  final Future<String?> Function()? pickArchive;
   @override
   State<RestoreBackupDialog> createState() => _RestoreBackupDialogState();
 }
@@ -18,9 +19,10 @@ class _RestoreBackupDialogState extends State<RestoreBackupDialog> {
   Future<void> _select() async {
     setState(() { _busy = true; _error = null; });
     try {
-      final file = await openFile(acceptedTypeGroups: [const XTypeGroup(label: 'POS backup', extensions: ['zip'])]);
-      if (file == null) return;
-      final result = await widget.service.prepare(file.path);
+      final path = widget.pickArchive != null ? await widget.pickArchive!()
+        : (await openFile(acceptedTypeGroups: [const XTypeGroup(label: 'POS backup', extensions: ['zip'])]))?.path;
+      if (path == null) return;
+      final result = await widget.service.prepare(path);
       if (!mounted) { await result.discard(); return; }
       await _prepared?.discard();
       setState(() { _prepared = result; _confirmed = false; });

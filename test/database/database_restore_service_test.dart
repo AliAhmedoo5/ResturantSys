@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:archive/archive_io.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -80,5 +81,39 @@ void main() {
     await preview.discard();
     expect(await Directory(preview.directory).exists(), isFalse);
     expect(await File('${db.path}.restore-request.json').exists(), isFalse);
+  });
+
+  test('restart rolls back an interrupted database and media swap', () async {
+    final archive = await backup();
+    await db.update('system_settings', {'value': 'Keep current records'}, where: 'key=?', whereArgs: ['restaurant_name']);
+    await File('${media.path}/keep.jpg').writeAsBytes([9, 8, 7]);
+    final preview = await restores.prepare(archive);
+    await restores.schedule(preview);
+    final path = db.path;
+    await store.close();
+    final old = await Directory('${preview.directory}/original').create();
+    await File(path).rename('${old.path}/pos.db');
+    await Directory(media.path).rename('${old.path}/media');
+    await File('${preview.directory}/pos.db').copy(path);
+    await Directory(media.path).create();
+    await File('${preview.directory}/journal.json').writeAsString(jsonEncode({'phase': 'APPLYING', 'files': [''], 'had_media': true}));
+    expect(await DatabaseRestoreService.applyPending(databasePath: path), contains('rolled back'));
+    db = await store.initialize();
+    expect((await db.query('system_settings', where: 'key=?', whereArgs: ['restaurant_name'])).single['value'], 'Keep current records');
+    expect(await File('${media.path}/keep.jpg').readAsBytes(), [9, 8, 7]);
+  });
+
+  test('tampered staged database is rejected before touching live records and can be cancelled', () async {
+    final preview = await restores.prepare(await backup());
+    await restores.schedule(preview);
+    final staged = File('${preview.directory}/pos.db');
+    await staged.writeAsBytes([0], mode: FileMode.append);
+    final path = db.path;
+    await store.close();
+    await expectLater(DatabaseRestoreService.applyPending(databasePath: path), throwsStateError);
+    await DatabaseRestoreService.cancelPending(path);
+    db = await store.initialize();
+    expect(await db.query('staff'), isNotEmpty);
+    expect(await DatabaseRestoreService.applyPending(databasePath: path), isNull);
   });
 }
