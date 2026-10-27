@@ -38,6 +38,7 @@ class _DiscountPresetFormDialogState extends State<DiscountPresetFormDialog> {
   late DiscountType _selectedType;
   late bool _isActive;
   bool _isSaving = false;
+  bool _stackable = false;
   final _advanced = <String, TextEditingController>{};
   late Set<String> _modes;
   late Set<int> _categories, _deals, _cashiers;
@@ -54,6 +55,7 @@ class _DiscountPresetFormDialogState extends State<DiscountPresetFormDialog> {
     _selectedType = widget.preset?.type ?? DiscountType.percentage;
     _isActive = widget.preset?.isActive ?? true;
     final rules = widget.preset?.rules ?? const DiscountRules();
+    _stackable = rules.stackable;
     final values = <String, String>{
       'Minimum spend (Rs)': (rules.minimumSpendPaisa / 100).toStringAsFixed(2),
       'Maximum discount (Rs)': rules.maximumDiscountPaisa == null ? '' : (rules.maximumDiscountPaisa! / 100).toStringAsFixed(2),
@@ -130,7 +132,7 @@ class _DiscountPresetFormDialogState extends State<DiscountPresetFormDialog> {
     }
     final limit = read('Uses per Business Day');
     if (limit.isNotEmpty && int.tryParse(limit) == null) throw ArgumentError('Usage limit must be a whole number.');
-    final rules = DiscountRules(minimumSpendPaisa: money('Minimum spend (Rs)') ?? 0,
+    final rules = DiscountRules(stackable: _stackable, minimumSpendPaisa: money('Minimum spend (Rs)') ?? 0,
       maximumDiscountPaisa: money('Maximum discount (Rs)'), startsAt: date('Effective from'), endsAt: date('Effective until'),
       startMinute: minute('Daily start time'), endMinute: minute('Daily end time'), dailyLimit: limit.isEmpty ? null : int.parse(limit),
       diningModes: _modes.toList(), categoryIds: _categories.toList(), dealIds: _deals.toList(), cashierIds: _cashiers.toList());
@@ -152,6 +154,7 @@ class _DiscountPresetFormDialogState extends State<DiscountPresetFormDialog> {
           key: _formKey,
           child: ListView(
             children: [
+              SwitchListTile(title: const Text('Allow combining with other stackable discounts'), value: _stackable, onChanged: _isSaving ? null : (value) => setState(() => _stackable = value)),
               TextFormField(
                 key: const ValueKey('discount_name_field'),
                 controller: _nameController,

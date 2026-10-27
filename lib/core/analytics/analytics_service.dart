@@ -4,6 +4,7 @@ import 'package:sqflite_common/sqlite_api.dart';
 import '../auth/auth_service.dart';
 import '../auth/staff_role.dart';
 import '../orders/paisa_engine.dart';
+import '../inventory/stock_count_valuation.dart';
 import 'analytics_models.dart';
 
 part 'analytics_reports.dart';
@@ -50,6 +51,8 @@ class AnalyticsService {
     await read('payments', 'order_payments', 'SELECT x.* FROM order_payments x $joinedOrder', orderArgs);
     await read('items', 'order_items', 'SELECT x.id,x.order_id,x.menu_item_id,x.deal_id,x.name,x.quantity,x.unit_price,x.total_price,x.modifiers_json,x.deal_choices_json,x.bom_json FROM order_items x $joinedOrder', orderArgs);
     await read('revisions', 'order_revisions', 'SELECT x.id,x.order_id,x.revision_no,x.action,x.reason,x.cashier_id,x.created_at_utc,x.money_delta_paisa FROM order_revisions x $joinedOrder', orderArgs);
+    await read('cost_coverage', 'order_cost_coverage', 'SELECT x.* FROM order_cost_coverage x $joinedOrder', orderArgs);
+    await read('cost_events', 'order_cost_events', 'SELECT x.* FROM order_cost_events x $joinedOrder', orderArgs);
     // A physical drawer uses all orders in its shifts; order filters never alter it.
     await read('shifts', 'shifts', 'SELECT s.* FROM shifts s JOIN business_days b ON b.id=s.business_day_id WHERE $dayScope', dayArgs);
     await read('cash_payments', 'order_payments', "SELECT p.*,o.shift_id FROM order_payments p JOIN orders o ON o.id=p.order_id JOIN business_days b ON b.id=o.business_day_id WHERE $dayScope AND o.payment_status IN ('SETTLED','REFUND_PENDING','CANCELLED','REFUNDED')", dayArgs);
@@ -63,8 +66,10 @@ class AnalyticsService {
       await read('balances', 'inventory_movements', 'SELECT id,ingredient_id,balance_after,recorded_at FROM (SELECT m.*,ROW_NUMBER() OVER(PARTITION BY ingredient_id ORDER BY ${_localSql('m.recorded_at')} DESC,id DESC) AS evidence_rank FROM inventory_movements m WHERE ${_localSql('m.recorded_at')}<=?) WHERE evidence_rank=1', [_sqlTime(cutoff)]);
     }
     final interval = _intervalScope(query, 'x.created_at');
-    final intervalArgs = [...dayArgs, _sqlTime(_karachi(e.now.toIso8601String())!)];
+    final intervalArgs = [...dayArgs, _sqlTime(_karachi(e.now.toIso8601String())!.add(const Duration(seconds: 1)))];
     await read('purchases', 'mandi_procurements', 'SELECT x.id,x.raw_ingredient_id,x.traditional_unit,x.quantity,x.converted_quantity,x.total_cost,x.cost_per_recipe_unit,x.created_at FROM mandi_procurements x WHERE $interval', intervalArgs);
+    await read('physical_counts', 'stock_count_lines', 'SELECT x.*,c.status,c.reason,c.created_by,c.approved_by,c.posted_by,c.posted_at AS created_at FROM stock_count_lines x JOIN stock_counts c ON c.id=x.count_id WHERE ${_intervalScope(query, 'c.posted_at')} AND c.status=\'POSTED\'', intervalArgs);
+    e.rows['physical_counts'] = e.get('physical_counts').map((row) => <String, Object?>{...row, 'recorded_estimated_cost_paisa': row['estimated_cost_paisa'], 'estimated_cost_paisa': StockCountValuation.paisa(row)}).toList();
     await read('waste', 'kitchen_wastage', 'SELECT x.id,x.staff_id,x.raw_ingredient_id,x.quantity,x.cost_loss,x.reason,x.created_at FROM kitchen_wastage x WHERE $interval', intervalArgs);
     await read('vendor_events', 'vendor_transactions', 'SELECT x.id,x.vendor_id,x.shift_id,x.staff_id,x.type,x.amount,x.raw_ingredient_id,x.quantity,x.created_at FROM vendor_transactions x WHERE $interval', intervalArgs);
     await read('expense_entries', 'expense_entries', 'SELECT x.* FROM expense_entries x JOIN business_days b ON b.id=x.business_day_id WHERE $dayScope', dayArgs);

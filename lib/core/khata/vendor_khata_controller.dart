@@ -374,9 +374,9 @@ class VendorKhataController {
           unitSnapshot = ingredientRows.first['storage_unit'] as String?;
           await txn.rawUpdate('''
             UPDATE ${PosDatabaseConstants.tableRawIngredients}
-            SET current_stock = current_stock + ?
+            SET current_stock = current_stock + ?, cost_per_recipe_unit = ?
             WHERE id = ?;
-          ''', [quantity, rawIngredientId]);
+          ''', [quantity, amount / quantity, rawIngredientId]);
         }
       }
 

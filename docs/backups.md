@@ -41,11 +41,41 @@ database with SQLite, check schema version and integrity, and read saved records
 and media. They also exercise backup creation while the live WAL database is in
 use. These tests run through GitHub Actions.
 
-To inspect an archive without changing the live restaurant records, extract it
-into a separate directory and run SQLite's `PRAGMA integrity_check` and
-`PRAGMA foreign_key_check` against the extracted `pos.db`. A healthy database
-returns `ok` for integrity and no rows for foreign-key violations. Preserve the
-archive and current application data before any recovery operation. This feature
-creates backups; it does not replace the live database automatically. When
-recovering photos, map the archive's `catalog_media/` contents back to the
-application's `media/` directory while preserving relative paths.
+## Guided restoration
+
+Open **Manager Portal > Z-Reports & Backups > Restore from a backup ZIP**.
+Close all shifts and the Business Day first. Select the archive, review its
+schema version, order count and media count, and acknowledge replacement of
+current records. Canceling this preview does not change restaurant data.
+
+Validation checks ZIP paths, duplicate entries, SQLite integrity and foreign
+keys, supported schema versions (18 through the application's current version),
+an active Manager login, and referenced photo sizes/checksums. ZIP imports are
+limited to 512 MB compressed / 2 GB extracted and 100,000 entries. Links and
+paths outside the expected database/media layout are refused.
+
+PIN security uses a key in the original Windows user's credential store. The
+restore checks that the archive matches that key before scheduling replacement.
+A ZIP alone cannot recover PIN access on a different Windows installation;
+recover the original credential store first. The key is never exported in the ZIP.
+
+After confirmation, the application creates a safety ZIP of current database and
+media. A failed safety backup prevents scheduling. The dialog displays its path
+and offers **Close application to finish restore**. Reopen the POS to finish.
+Use the staff PINs from the restored backup afterward.
+
+Replacement happens before SQLite connections or background senders start. The
+application also holds an installation lock to prevent a second instance from
+opening during recovery. A durable journal retains original database files,
+WAL sidecars and media until replacement and migrations pass validation. A
+failed or interrupted swap restores those originals. Completed/failed requests,
+the original files, and safety ZIP remain available for investigation. Successful
+recovery adds a restore audit event and displays a startup result message.
+
+If startup validation fails before replacement, use **Cancel pending restore and
+open current records**, or resolve the error and retry. If a swap was interrupted,
+retry first to roll it back. The application refuses to bypass an unfinished swap.
+
+For independent inspection, extract an archive into a separate directory and
+check SQLite's `PRAGMA integrity_check` and `PRAGMA foreign_key_check`. Never
+extract over the live installation.

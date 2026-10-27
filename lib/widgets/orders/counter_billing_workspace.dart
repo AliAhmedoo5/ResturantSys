@@ -1,3 +1,4 @@
+import '../../core/catalog/discount_stack.dart';
 import '../../core/settings/keyboard_shortcut_controller.dart';
 import 'dart:convert';
 import 'customer_directory.dart';
@@ -97,7 +98,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
   // Active View State
   int? _selectedCategoryId; // null = Deals Tab
   DiningType _selectedDiningType = DiningType.dineIn;
-  DiscountPreset? _selectedDiscount;
+  final List<DiscountPreset> _selectedDiscounts = [];
 
   // Cart State
   final List<CartItem> _cartItems = [];
@@ -224,7 +225,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
     if (widget.orderController != null) {
       return widget.orderController!.calculateCartTotals(
         items: _cartItems,
-        discount: _selectedDiscount,
+        discounts: _selectedDiscounts,
         diningType: _selectedDiningType, cashierId: widget.currentStaff.id,
       );
     }
@@ -233,10 +234,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
     for (final item in _cartItems) {
       subtotal += item.totalPrice;
     }
-    double discountAmount = 0.0;
-    if (_selectedDiscount != null) {
-      discountAmount = _selectedDiscount!.calculateDiscount(subtotal, items: _cartItems, diningMode: _selectedDiningType.code, cashierId: widget.currentStaff.id);
-    }
+    final discountAmount = DiscountStack.amounts(items: _cartItems, discounts: _selectedDiscounts, diningMode: _selectedDiningType.code, cashierId: widget.currentStaff.id).values.fold<int>(0, (sum, n) => sum + n) / 100.0;
     final grandTotal = (subtotal - discountAmount) < 0.0 ? 0.0 : (subtotal - discountAmount);
     return CartTotals(
       subtotal: subtotal,
@@ -364,7 +362,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
     if (_cartItems.isEmpty) return;
     setState(() {
       _cartItems.clear();
-      _selectedDiscount = null;
+      _selectedDiscounts.clear();
       _deliveryDetails = null;
       _customer = null;
       _recalledHoldId = null;
@@ -395,7 +393,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
     label.dispose();
     if (confirmed != true || !mounted) return;
     await controller.holdCart(cashierId: widget.currentStaff.id, label: text, items: _cartItems,
-      diningType: _selectedDiningType, delivery: _deliveryDetails, customerId: _customer?.id, discountId: _selectedDiscount?.id, previousHoldId: _recalledHoldId);
+      diningType: _selectedDiningType, delivery: _deliveryDetails, customerId: _customer?.id, discountIds: _selectedDiscounts.map((d) => d.id).toList(), previousHoldId: _recalledHoldId);
     if (mounted) _clearCart();
   });
 
@@ -433,16 +431,18 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
       final rows = await controller.database.rawQuery('SELECT c.* FROM customers c WHERE c.id = (SELECT COALESCE(merged_into, id) FROM customers WHERE id = ?)', [customerId]);
       if (rows.isNotEmpty) customer = Customer.fromMap(rows.single);
     }
-    DiscountPreset? discount;
+    final selectedDiscounts = <DiscountPreset>[];
     final discounts = await CatalogAndRecipeController(database: controller.database).getDiscountPresets(activeOnly: true);
-    for (final current in discounts) { if (current.id == payload['discount_id']) discount = current; }
+    final savedIds = (payload['discount_ids'] as List?) ?? [if (payload['discount_id'] != null) payload['discount_id']];
+    for (final current in discounts) { if (savedIds.contains(current.id)) selectedDiscounts.add(current); }
+    if (selectedDiscounts.length > 1 && selectedDiscounts.any((d) => !d.rules.stackable)) selectedDiscounts.clear();
     final raw = payload['delivery'] as Map<String, dynamic>?;
     final delivery = raw == null ? null : DeliveryDetails(areaId: raw['area_id'] as int, quotedFeePaisa: raw['fee'] as int,
       phone: raw['phone'] as String, customerName: raw['name'] as String, fullAddress: raw['address'] as String,
       landmark: raw['landmark'] as String, notes: raw['notes'] as String);
     if (!mounted) return;
     setState(() { _cartItems.addAll(lines); _selectedDiningType = DiningType.fromCode(payload['dining_type'] as String);
-      _deliveryDetails = delivery; _selectedDiscount = discount; _customer = customer; _recalledHoldId = selected['id'] as int; });
+      _deliveryDetails = delivery; _selectedDiscounts..clear()..addAll(selectedDiscounts); _customer = customer; _recalledHoldId = selected['id'] as int; });
   });
 
   Future<void> _customers() => _draftAction(() async {
@@ -465,7 +465,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
     if (!mounted) return;
     setState(() {
       _customer = selection.customer;
-      if (lines != null) { _cartItems.addAll(lines); _selectedDiningType = diningType!; _selectedDiscount = null; _deliveryDetails = null; }
+      if (lines != null) { _cartItems.addAll(lines); _selectedDiningType = diningType!; _selectedDiscounts.clear(); _deliveryDetails = null; }
     });
   });
 
@@ -476,10 +476,11 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
     if (widget.catalogController != null) {
       final fresh = await widget.catalogController!.getDiscountPresets(activeOnly: true);
       if (!mounted) return;
-      final selected = _selectedDiscount;
-      final matching = selected == null ? <DiscountPreset>[] : fresh.where((d) => d.id == selected.id).toList();
-      final changed = selected != null && (matching.isEmpty || jsonEncode(matching.single.toMap()) != jsonEncode(selected.toMap()));
-      setState(() { _discounts = fresh; if (changed) _selectedDiscount = null; });
+      final changed = _selectedDiscounts.any((selected) {
+        final matching = fresh.where((d) => d.id == selected.id).toList();
+        return matching.isEmpty || jsonEncode(matching.single.toMap()) != jsonEncode(selected.toMap());
+      });
+      setState(() { _discounts = fresh; if (changed) _selectedDiscounts.clear(); });
       if (changed) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Discount terms changed. Review the refreshed discounts and total before payment.')));
         return;
@@ -525,7 +526,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
                 cashierId: widget.currentStaff.id,
                 diningType: _selectedDiningType,
                 items: List.of(_cartItems),
-                discount: _selectedDiscount,
+                discounts: _selectedDiscounts,
                 payments: tenders,
                 delivery: _deliveryDetails,
                 customerId: _customer?.id,
@@ -1388,10 +1389,10 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
                       'Discount: ',
                       style: WarmCounterTypography.caption.copyWith(fontWeight: FontWeight.bold),
                     ),
-                    ..._discounts.where((d) => d.id == _selectedDiscount?.id || d.calculateDiscount(
+                    ..._discounts.where((d) => _selectedDiscounts.any((selected) => selected.id == d.id) || d.calculateDiscount(
                       _cartItems.fold<double>(0, (sum, item) => sum + item.totalPrice), items: _cartItems,
                       diningMode: _selectedDiningType.code, cashierId: widget.currentStaff.id) > 0).map((d) {
-                      final isSelected = _selectedDiscount?.id == d.id;
+                      final isSelected = _selectedDiscounts.any((selected) => selected.id == d.id);
                       return Padding(
                         padding: const EdgeInsets.only(right: 6),
                         child: ChoiceChip(
@@ -1400,7 +1401,13 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
                               ? StreetFoodMafiaColors.textOnPrimary : StreetFoodMafiaColors.offWhite)),
                           selected: isSelected,
                           onSelected: (chosen) {
-                            setState(() => _selectedDiscount = chosen ? d : null);
+                            setState(() {
+                              if (!chosen) { _selectedDiscounts.removeWhere((selected) => selected.id == d.id); }
+                              else {
+                                if (!d.rules.stackable || _selectedDiscounts.any((selected) => !selected.rules.stackable)) _selectedDiscounts.clear();
+                                _selectedDiscounts.add(d);
+                              }
+                            });
                           },
                         ),
                       );
@@ -1424,7 +1431,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
                 _buildSummaryLine('Subtotal', 'Rs ${_currencyFormat.format(totals.subtotal)}'),
                 if (totals.discountAmount > 0)
                   _buildSummaryLine(
-                    'Discount (${_selectedDiscount?.name})',
+                    'Discount (${_selectedDiscounts.map((d) => d.name).join(' + ')})',
                     '-Rs ${_currencyFormat.format(totals.discountAmount)}',
                     isDiscount: true,
                   ),

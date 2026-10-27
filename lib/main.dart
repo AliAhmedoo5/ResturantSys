@@ -1,3 +1,4 @@
+import 'core/database/database_restore_service.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -13,6 +14,8 @@ import 'core/khata/vendor_khata_controller.dart';
 import 'core/theme/warm_counter_theme.dart';
 import 'widgets/app_shell.dart';
 
+RandomAccessFile? _applicationLock;
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -22,6 +25,37 @@ void main() async {
     databaseFactory = databaseFactoryFfi;
   }
 
+  if (_applicationLock == null) {
+    final lock = File('${PosDatabase.resolveDefaultDatabasePath()}.application-lock');
+    await lock.parent.create(recursive: true);
+    final handle = await lock.open(mode: FileMode.append);
+    try { await handle.lock(FileLock.exclusive); _applicationLock = handle; }
+    catch (_) {
+      await handle.close();
+      runApp(const MaterialApp(home: Scaffold(body: Center(child: Text('The POS is already open. Close the other application before opening or restoring restaurant records.')))));
+      return;
+    }
+  }
+  String? restoreMessage;
+  try {
+    restoreMessage = await DatabaseRestoreService.applyPending(databasePath: PosDatabase.resolveDefaultDatabasePath());
+  } catch (error) {
+    runApp(MaterialApp(home: Scaffold(body: Center(child: SizedBox(width: 640, child: Column(mainAxisSize: MainAxisSize.min, children: [
+      const Text('Backup restoration could not finish', style: TextStyle(fontSize: 24)),
+      const SizedBox(height: 16), SelectableText('$error'),
+      const Text('Original data and the safety backup are retained. Retry after resolving the reported problem.'),
+      FilledButton(onPressed: main, child: const Text('Retry restoration')),
+      Builder(builder: (context) => TextButton(onPressed: () async {
+        try {
+          await DatabaseRestoreService.cancelPending(PosDatabase.resolveDefaultDatabasePath());
+          main();
+        } catch (error) {
+          if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$error')));
+        }
+      }, child: const Text('Cancel pending restore and open current records'))),
+    ]))))));
+    return;
+  }
   final posDatabase = PosDatabase(seedDefaultStaff: false);
   final database = await posDatabase.initialize();
   ReportDeliveryService(database:database).start();
@@ -38,6 +72,7 @@ void main() async {
     shiftController: shiftController,
   );
   runApp(RestaurantPosApp(
+    startupMessage: restoreMessage,
     authService: authService,
     shiftController: shiftController,
     catalogController: catalogController,
@@ -51,6 +86,7 @@ void main() async {
 class RestaurantPosApp extends StatelessWidget {
   const RestaurantPosApp({
     super.key,
+    this.startupMessage,
     required this.authService,
     this.shiftController,
     this.catalogController,
@@ -59,6 +95,7 @@ class RestaurantPosApp extends StatelessWidget {
     this.vendorKhataController,
   });
 
+  final String? startupMessage;
   final AuthService authService;
   final ShiftAndCashController? shiftController;
   final CatalogAndRecipeController? catalogController;
@@ -74,6 +111,11 @@ class RestaurantPosApp extends StatelessWidget {
       theme: WarmCounterTheme.darkTheme,
       darkTheme: WarmCounterTheme.darkTheme,
       themeMode: ThemeMode.dark,
+      builder: (context, child) => Column(children: [
+        if (startupMessage != null) Material(color: Theme.of(context).colorScheme.primaryContainer,
+          child: SafeArea(bottom: false, child: Padding(padding: const EdgeInsets.all(12), child: Text(startupMessage!)))),
+        Expanded(child: child!),
+      ]),
       home: AppShell(
         session: authService.session,
         onAuthenticatePin: authService.authenticateWithPin,

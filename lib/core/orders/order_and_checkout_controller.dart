@@ -1,3 +1,5 @@
+import 'historical_costs.dart';
+import '../catalog/discount_stack.dart';
 import 'customer_controller.dart';
 import '../delivery/delivery_controller.dart';
 import 'paisa_engine.dart';
@@ -400,7 +402,7 @@ class OrderAndCheckoutController {
   }
 
   Future<int> holdCart({required int cashierId, required String label, required List<CartItem> items,
-    required DiningType diningType, DeliveryDetails? delivery, int? customerId, int? discountId, int? previousHoldId}) async {
+    required DiningType diningType, DeliveryDetails? delivery, int? customerId, int? discountId, List<int> discountIds = const [], int? previousHoldId}) async {
     return database.transaction((txn) async {
       await _requireActiveCashier(txn, cashierId);
       if (items.isEmpty || label.trim().isEmpty) throw ArgumentError('Enter a hold label and add items.');
@@ -410,7 +412,7 @@ class OrderAndCheckoutController {
       return txn.insert('held_carts', {'cashier_id': cashierId, 'label': label.trim(),
         'created_at': DateTime.now().toIso8601String(), 'payload': jsonEncode({
           'items': items.map(encodeDraftLine).toList(), 'dining_type': diningType.code,
-          'customer_id': customerId, 'discount_id': discountId,
+          'customer_id': customerId, 'discount_id': discountId, 'discount_ids': discountIds,
           'delivery': delivery == null ? null : {'area_id': delivery.areaId, 'fee': delivery.quotedFeePaisa,
             'phone': delivery.phone, 'name': delivery.customerName, 'address': delivery.fullAddress,
             'landmark': delivery.landmark, 'notes': delivery.notes}})});
@@ -574,31 +576,26 @@ class OrderAndCheckoutController {
   CartTotals calculateCartTotals({
     required List<CartItem> items,
     DiscountPreset? discount,
+    List<DiscountPreset> discounts = const [],
     DiningType? diningType,
     int? cashierId,
+    DateTime? now,
   }) {
-    double subtotal = 0.0;
-    double taxAmount = 0.0;
-
-    for (final item in items) {
-      subtotal += item.totalPrice;
-      if (item.menuItem != null) {
-        final mi = item.menuItem!;
-        if (mi.taxRate > 0) {
-          if (mi.isTaxInclusive) {
-            final net = item.totalPrice / (1.0 + (mi.taxRate / 100.0));
-            taxAmount += (item.totalPrice - net);
-          } else {
-            taxAmount += item.totalPrice * (mi.taxRate / 100.0);
-          }
-        }
+    final subtotal = items.fold<int>(0, (sum, item) => sum + PaisaEngine.rupeesToPaisa(item.totalPrice)) / 100.0;
+    final selected = [if (discount != null) discount, ...discounts];
+    final balances = <int>[];
+    final discountAmounts = DiscountStack.amounts(items: items, discounts: selected, diningMode: diningType?.code,
+      cashierId: cashierId, now: now, remainingLinePaisa: balances);
+    final discountAmount = discountAmounts.values.fold<int>(0, (sum, n) => sum + n) / 100.0;
+    var taxPaisa = 0;
+    for (var index = 0; index < items.length; index++) {
+      final menu = items[index].menuItem;
+      if (menu != null && menu.taxRate > 0) {
+        // Shelf prices include tax; discounts reduce only their eligible lines.
+        taxPaisa += (balances[index] * menu.taxRate / (100 + menu.taxRate)).round();
       }
     }
-
-    double discountAmount = 0.0;
-    if (discount != null) {
-      discountAmount = discount.calculateDiscount(subtotal, items: items, diningMode: diningType?.code, cashierId: cashierId);
-    }
+    final taxAmount = taxPaisa / 100.0;
 
     final grandTotal = (subtotal - discountAmount) < 0.0 ? 0.0 : (subtotal - discountAmount);
 
@@ -626,6 +623,7 @@ class OrderAndCheckoutController {
     required DiningType diningType,
     required List<CartItem> items,
     DiscountPreset? discount,
+    List<DiscountPreset> discounts = const [],
     required List<PaymentTender> payments,
     DeliveryDetails? delivery,
     String? commandId,
@@ -680,7 +678,9 @@ class OrderAndCheckoutController {
           AND s.status = 'OPEN' AND d.status = 'OPEN' AND st.is_active = 1
       """, [shiftId, businessDayId, cashierId]);
       if (activeSession.isEmpty) throw StateError('Checkout requires the cashier current open shift and business day.');
-      if (discount != null) {
+      final selectedDiscounts = [if (discount != null) discount, ...discounts]..sort((a, b) => a.id.compareTo(b.id));
+      final discountAmounts = DiscountStack.amounts(items: items, discounts: selectedDiscounts, diningMode: diningType.code, cashierId: cashierId, now: now);
+      for (final discount in selectedDiscounts) {
         final rows = await txn.query('discount_presets', where: 'id=?', whereArgs: [discount.id]);
         if (rows.isEmpty) throw StateError('Discount no longer exists. Refresh your cart.');
         final current = DiscountPreset.fromMap(rows.single);
@@ -692,11 +692,11 @@ class OrderAndCheckoutController {
           throw StateError('Discount is not eligible for this order. Remove it and review payment.');
         }
         if (current.rules.dailyLimit != null) {
-          final used = await txn.rawQuery('SELECT COUNT(*) AS n FROM orders WHERE discount_id=? AND business_day_id=?', [current.id, businessDayId]);
+          final used = await txn.rawQuery('SELECT COUNT(*) AS n FROM orders o WHERE business_day_id=? AND (discount_id=? OR EXISTS(SELECT 1 FROM order_discounts d WHERE d.order_id=o.id AND d.discount_id=?))', [businessDayId, current.id, current.id]);
           if ((used.single['n'] as int) >= current.rules.dailyLimit!) throw StateError('Discount limit reached for this Business Day.');
         }
       }
-      final totals = calculateCartTotals(items: items, discount: discount, diningType: diningType, cashierId: cashierId);
+      final totals = calculateCartTotals(items: items, discount: discount, discounts: discounts, diningType: diningType, cashierId: cashierId, now: now);
       DeliveryArea? deliveryArea;
       if (diningType == DiningType.delivery) {
         if (delivery == null) throw const DeliveryCheckoutException('Select delivery details before payment. Your cart is unchanged.');
@@ -782,7 +782,7 @@ class OrderAndCheckoutController {
           'dining_type': diningType.code,
           'subtotal': totals.subtotal,
           'discount_amount': totals.discountAmount,
-          'discount_id': discount?.id,
+          'discount_id': selectedDiscounts.isEmpty ? null : selectedDiscounts.first.id,
           'tax_amount': totals.taxAmount,
           'grand_total': grandTotal,
           'cash_rounding_paisa': cashRoundingPaisa,
@@ -798,6 +798,23 @@ class OrderAndCheckoutController {
         },
       );
 
+      for (final discount in selectedDiscounts) {
+        await txn.insert('order_discounts', {'order_id': orderId, 'discount_id': discount.id,
+          'sequence': (selectedDiscounts.map((d) => d.id).toList()..sort()).indexOf(discount.id),
+          'name_snapshot': discount.name, 'terms_json': jsonEncode(discount.toMap()), 'amount_paisa': discountAmounts[discount.id]});
+      }
+      await txn.insert('order_cost_coverage', {'order_id': orderId, 'policy': 'EVENT_ACQUISITION_RATE_V1', 'recorded_at': formattedNow});
+      final costQuantities = <int, double>{};
+      for (final item in items) {
+        for (final entry in (await _lineBom(item, txn)).entries) {
+          costQuantities[entry.key] = (costQuantities[entry.key] ?? 0) + entry.value;
+        }
+      }
+      if (diningType.requiresPackaging) {
+        final packaging = await _findPackagingIngredientId(txn);
+        if (packaging != null) costQuantities[packaging] = (costQuantities[packaging] ?? 0) + 1;
+      }
+      await HistoricalCosts.consume(txn, orderId, 0, costQuantities);
       if (cashRoundingPaisa != 0) {
         await txn.insert(PosDatabaseConstants.tableRoundingVarianceLedger, {
           'order_id': orderId, 'shift_id': shiftId, 'cash_rounding_paisa': cashRoundingPaisa,
@@ -909,7 +926,7 @@ class OrderAndCheckoutController {
         diningType: diningType,
         subtotal: totals.subtotal,
         discountAmount: totals.discountAmount,
-        discountId: discount?.id,
+        discountId: selectedDiscounts.isEmpty ? null : selectedDiscounts.first.id,
         taxAmount: totals.taxAmount,
         grandTotal: grandTotal,
         cashRoundingPaisa: cashRoundingPaisa,
@@ -1029,25 +1046,8 @@ class OrderAndCheckoutController {
     final deductions = <int, double>{};
 
     for (final item in items) {
-      if (item.menuItem != null) {
-        await _accumulateMenuItemDeductions(
-          menuItemId: item.menuItem!.id,
-          quantity: item.quantity,
-          selectedModifiers: item.selectedModifiers,
-          deductions: deductions,
-          executor: executor,
-        );
-      } else if (item.deal != null) {
-        // Decompose deal into customer-selected menu items
-        for (final choice in item.selectedDealChoices) {
-          await _accumulateMenuItemDeductions(
-            menuItemId: choice.menuItemId,
-            quantity: item.quantity,
-            selectedModifiers: item.selectedModifiers,
-            deductions: deductions,
-            executor: executor,
-          );
-        }
+      for (final entry in (await _lineBom(item, executor)).entries) {
+        deductions[entry.key] = (deductions[entry.key] ?? 0) + entry.value;
       }
     }
 
@@ -1316,6 +1316,7 @@ class OrderAndCheckoutController {
         }
       }
 
+      await HistoricalCosts.remove(txn, orderId, order.currentRevision + 1, reversals, restock: true);
       // Apply stock reversals: adds stock back
       for (final entry in reversals.entries) {
         await txn.rawUpdate('''
@@ -1596,6 +1597,7 @@ class OrderAndCheckoutController {
           ),
         });
 
+        await HistoricalCosts.remove(txn, orderId, nextRevisionNo, itemBom, restock: isUnstartedPrep);
         for (final entry in itemBom.entries) {
           final ingId = entry.key;
           final qty = entry.value;
@@ -1626,6 +1628,17 @@ class OrderAndCheckoutController {
               },
             );
           }
+        }
+      }
+
+      if (order.diningType.requiresPackaging) {
+        final packagingLots = await txn.rawQuery("SELECT ingredient_id,SUM(CASE WHEN kind='CONSUME' THEN quantity ELSE -quantity END) AS remaining FROM order_cost_events WHERE order_id=? GROUP BY ingredient_id", [orderId]);
+        for (final lot in packagingLots) {
+          final remaining = (lot['remaining'] as num).toDouble();
+          if (remaining <= 0) continue;
+          final ingredientId = lot['ingredient_id'] as int;
+          await HistoricalCosts.remove(txn, orderId, nextRevisionNo, {ingredientId: remaining}, restock: isUnstartedPrep);
+          if (isUnstartedPrep) await txn.rawUpdate('UPDATE raw_ingredients SET current_stock=current_stock+? WHERE id=?', [remaining, ingredientId]);
         }
       }
 
@@ -1857,9 +1870,10 @@ class OrderAndCheckoutController {
         'items': oldOrderItems.map((i) => i.toMap()).toList(),
       };
 
-      final totals = calculateCartTotals(
-        items: newItems,
-      );
+      final discountRows = await txn.query('order_discounts', where: 'order_id=?', whereArgs: [orderId], orderBy: 'sequence');
+      final originalDiscounts = discountRows.map((r) => DiscountPreset.fromMap(Map<String, Object?>.from(jsonDecode(r['terms_json'] as String) as Map))).toList();
+      final totals = calculateCartTotals(items: newItems, discounts: originalDiscounts,
+        diningType: order.diningType, cashierId: order.cashierId, now: order.createdAt);
 
       final oldTotalPaisa = PaisaEngine.rupeesToPaisa(order.grandTotal);
       final newTotalPaisa = PaisaEngine.rupeesToPaisa(totals.grandTotal);
@@ -1978,6 +1992,14 @@ class OrderAndCheckoutController {
         });
       }
 
+      final costAdded = <int, double>{}, costRemoved = <int, double>{};
+      for (final id in {...oldIngredientTotals.keys, ...newIngredientTotals.keys}) {
+        final delta = (newIngredientTotals[id] ?? 0) - (oldIngredientTotals[id] ?? 0);
+        if (delta > 0) costAdded[id] = delta;
+        if (delta < 0) costRemoved[id] = -delta;
+      }
+      await HistoricalCosts.consume(txn, orderId, nextRevisionNo, costAdded);
+      await HistoricalCosts.remove(txn, orderId, nextRevisionNo, costRemoved, restock: isUnstartedPrep);
       final allIngredientIds = {...oldIngredientTotals.keys, ...newIngredientTotals.keys};
       for (final ingId in allIngredientIds) {
         final oldQty = oldIngredientTotals[ingId] ?? 0.0;
@@ -2041,6 +2063,7 @@ class OrderAndCheckoutController {
         {
           'current_revision': nextRevisionNo,
           'subtotal': totals.subtotal,
+          'discount_amount': totals.discountAmount,
           'tax_amount': totals.taxAmount,
           'grand_total': totals.grandTotal,
           'payment_status': newPaymentStatus,

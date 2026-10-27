@@ -34,7 +34,7 @@ void main() {
 
   test('count requires Manager, approval, persists evidence and posts once', () async {
     final ingredient = await catalog.createRawIngredient(name: 'Flour', storageUnit: StorageUnit.kg,
-      currentStock: 10, costPerRecipeUnit: 0.2);
+      currentStock: 10, costPerRecipeUnit: 200);
     await expectLater(counts.start(managerId: 2, ingredientIds: [ingredient.id], reason: 'Weekly'), throwsStateError);
     final id = await counts.start(managerId: 1, ingredientIds: [ingredient.id], reason: 'Weekly');
     await expectLater(counts.submit(managerId: 1, id: id, quantities: {ingredient.id: -1}), throwsArgumentError);

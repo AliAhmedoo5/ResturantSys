@@ -129,6 +129,8 @@ class FakeOrderController implements OrderAndCheckoutController {
   CartTotals calculateCartTotals({
     required List<CartItem> items,
     DiscountPreset? discount,
+    List<DiscountPreset> discounts = const [],
+    DateTime? now,
     DiningType? diningType,
     int? cashierId,
   }) {
