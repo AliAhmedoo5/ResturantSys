@@ -140,6 +140,8 @@ void main() {
         openingBalance: 0.0,
       );
 
+      await khataController.setSuppliedItems(managerId: testSupervisorId,
+          vendorId: vendor.id, ingredientIds: {ingredientId});
       // Record credit delivery of 40 kg for Rs. 24,000 with slip number DS-8921
       final txn = await khataController.recordCreditDelivery(
         vendorId: vendor.id,
@@ -188,7 +190,7 @@ void main() {
         amount: 3500.0,
         paymentSource: VendorPaymentSource.paidFromActiveDrawer,
         shiftId: shift.id,
-        staffId: testCashierId,
+        staffId: testSupervisorId,
         referenceSlip: 'PAY-HD-01',
         notes: 'Paid cash from till to supplier driver',
       );

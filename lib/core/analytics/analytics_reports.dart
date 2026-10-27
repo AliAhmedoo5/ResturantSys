@@ -315,7 +315,7 @@ class _ReportBuilder {
       _metric('drawer_payments', 'Supplier drawer payments', _sum(payments.where((t) => t['type'] == 'PAYMENT_DRAWER'), 'amount'), explanation: 'Selected interval supplier settlements from drawer; these are not operating expenses.'),
       _metric('external_payments', 'Supplier external payments', _sum(payments.where((t) => t['type'] == 'PAYMENT_EXTERNAL'), 'amount'), explanation: 'Selected interval supplier settlements from external management funds.'),
       _metric('no_payments_in_range', 'Suppliers with no payments in range', vendors.where((v) => !paidIds.contains(v['id'])).length, unit: AnalyticsUnit.count, explanation: 'Existing suppliers with no selected interval settlement. Does not claim no lifetime payments.'),
-      _missing('overdue', 'Overdue payable', 'No invoice due dates or allocation ledger. Current positive payable cannot be called overdue.'),
+      _metric('overdue', 'Current overdue invoiced payable', _integers(e.get('invoice_balances').where((i) => i['due_date'] != null && (i['due_date'] as String).compareTo(_sqlDate(_karachi(e.now.toIso8601String())!)) < 0), 'due_paisa'), explanation: 'Current allocated invoice balances with known due dates. Undated legacy invoices and opening balances are excluded; this is not a historical aging snapshot.'),
       _missing('historical_payable', 'Reconstructed historical payable', 'Mutable opening balances and supplier cascade deletion limit historical reconstruction; current balances remain labeled current.'),
     ], [
       ...vendors.map((v) => _row('vendor_khata', v, {'kind': 'Current supplier', 'supplier_id': v['id'], 'name': _safeText(v['name']), 'opening_paisa': _money(v, 'opening_balance'), 'current_paisa': _money(v, 'current_balance'), 'payment_activity': paidIds.contains(v['id']) ? 'Payments in selected interval' : 'No payments in selected interval'})),
@@ -361,12 +361,25 @@ class _ReportBuilder {
     final metrics = <AnalyticsMetric>[
       _metric('recorded_outflow', 'Recorded drawer outflow', _sum(out, 'amount'), explanation: 'All selected-shift PAY_OUT rows; not automatically operating expense. $_globalBasis'),
       _metric('outflow_count', 'Drawer outflow events', out.length, unit: AnalyticsUnit.count, explanation: _globalBasis),
-      _missing('operating_expense', 'Accrued operating expense', 'No complete expense accrual/category ledger. Supplier inventory settlements, refunds, drops and advances cannot automatically become operating expense.'),
+      _metric('operating_expense', 'Recorded operating expense', _integers(e.get('expense_entries'), 'expense_delta_paisa'), explanation: 'Selected Business Day expense postings less reversals, across all funding sources. Legacy generic cash outflows are not inferred expenses.'),
     ];
     for (final entry in _group(out, 'category').entries) {
       metrics.add(_metric('category_${entry.key}', '${entry.key} drawer outflow', _sum(entry.value, 'amount'), explanation: 'Recorded PAY_OUT category/source only, not asserted operating expense.'));
     }
-    return _section(AnalyticsFamily.expenses, 'Expenses and outflows', metrics, out.map((m) => _row('cash_movements', m, {'shift_id': m['shift_id'], 'category': _safeText(m['category']), 'amount_paisa': _money(m, 'amount'), 'source': 'Shift drawer', 'classification': 'Recorded outflow; expense classification unverified', 'created_at': m['created_at']})).toList(), ['shift_id', 'category', 'amount_paisa', 'source', 'classification', 'created_at'], [_globalBasis, 'Category labels are source facts. No payee/department/approval/accrual history is invented, and no drawer outflow total is presented as profit expense.']);
+    return _section(AnalyticsFamily.expenses, 'Expenses and outflows', metrics, [
+      ...e.get('expense_entries').map((x) => _row('expense_entries', x, {
+        'kind': 'Expense ledger', 'business_day_id': x['business_day_id'],
+        'category': _safeText(x['category_snapshot']), 'description': _safeText(x['description']),
+        'payee': _safeText(x['payee']), 'amount_paisa': x['expense_delta_paisa'],
+        'source': x['source'], 'reversal_of': x['reversal_of'], 'correction_of': x['correction_of'],
+        'manager_id': x['manager_id'], 'reason': _safeText(x['reason']), 'created_at': x['created_at']})),
+      ...out.map((m) => _row('cash_movements', m, {'kind': 'Drawer outflow', 'shift_id': m['shift_id'],
+        'category': _safeText(m['category']), 'amount_paisa': _money(m, 'amount'),
+        'source': 'Shift drawer', 'classification': 'Cash movement; do not add to expense ledger totals',
+        'created_at': m['created_at']})),
+    ], ['kind', 'business_day_id', 'shift_id', 'category', 'description', 'payee', 'amount_paisa',
+      'source', 'reversal_of', 'correction_of', 'manager_id', 'reason', 'classification', 'created_at'],
+      [_globalBasis, 'Expense entries retain category snapshots. Cash movements reconcile physical funds and must not be added to expense entries. Legacy outflows are not inferred expenses.']);
   }
 
   AnalyticsSection _staff() {
@@ -377,8 +390,8 @@ class _ReportBuilder {
       _metric('login_enabled', 'Current login-enabled staff', staff.where((s) => s['login_enabled'] == 1).length, unit: AnalyticsUnit.count, explanation: _currentBasis),
       _metric('departments', 'Assigned departments', staff.map((s) => s['department_id']).toSet().length, unit: AnalyticsUnit.count, explanation: 'Distinct current assigned department IDs, not labor-cost allocations.'),
       _metric('job_roles', 'Assigned job roles', staff.where((s) => s['job_role_id'] != null).map((s) => s['job_role_id']).toSet().length, unit: AnalyticsUnit.count, explanation: 'Distinct current assigned job-role IDs.'),
-      _missing('salary_due', 'Salary due', 'No salary, accrual, salary payment, advance or attendance ledger is persisted.'),
-      _missing('labor_cost', 'Labor cost', 'No salary/accrual and period labor-cost allocation evidence.'),
+      e.get('payroll_balances').isEmpty ? _missing('salary_due', 'Current recorded salary due', 'No payroll has been posted; legacy staff salary liabilities are unknown.') : _metric('salary_due', 'Current recorded salary due', _integers(e.get('payroll_balances'), 'payable_paisa') - _integers(e.get('payroll_balances'), 'advance_paisa'), explanation: 'Current accrued payable less outstanding advances. No unposted salary is inferred.'),
+      _metric('labor_cost', 'Posted salary accruals', e.get('payroll_entries').fold<int>(0, (sum, p) => sum + (p['kind']=='ACCRUAL' || (p['kind']=='REVERSAL' && p['source']=='NONE' && p['advance_delta_paisa']==0) ? p['payable_delta_paisa'] as int : 0)), explanation: 'Salary accruals and their reversals posted in selected day intervals. Payments and advances never count as another expense; earned-period profit allocation remains separate.'),
       _missing('labor_productivity', 'Orders per labor hour', 'Cashier shift duration is not paid attendance or worked labor-hour evidence.', unit: AnalyticsUnit.decimal),
     ], staff.map((s) => _row('staff', s, {'staff_id': s['id'], 'name': _safeText(s['name']), 'department': s['department'], 'job_role': s['job_role'], 'role': s['role'], 'active': s['is_active'] == 1 ? 'Active' : 'Inactive', 'login': s['login_enabled'] == 1 ? 'Enabled' : 'Disabled', 'selected_orders': orders.where((o) => o['cashier_id'] == s['id']).length, 'selected_shifts': e.get('shifts').where((sh) => sh['staff_id'] == s['id']).length})).toList(), ['staff_id', 'name', 'department', 'job_role', 'role', 'active', 'login', 'selected_orders', 'selected_shifts'], [_currentBasis, 'Order activity uses selected order filters; shift activity is whole selected Business Days. Current role/department names are not historical snapshots. PIN hashes and credentials are never projected.']);
   }
@@ -444,10 +457,10 @@ class _ReportBuilder {
       AnalyticsFamily.menu: ['orders', 'order_items', 'menu_items', 'deals'],
       AnalyticsFamily.inventory: ['raw_ingredients', 'inventory_movements'],
       AnalyticsFamily.procurement: ['mandi_procurements'],
-      AnalyticsFamily.suppliers: ['vendor_khata', 'vendor_transactions'],
+      AnalyticsFamily.suppliers: ['vendor_khata', 'vendor_transactions', 'supplier_payment_allocations'],
       AnalyticsFamily.cash: ['shifts', 'cash_movements', 'order_payments'],
-      AnalyticsFamily.expenses: ['cash_movements'],
-      AnalyticsFamily.staff: ['staff'],
+      AnalyticsFamily.expenses: ['cash_movements', 'expense_entries'],
+      AnalyticsFamily.staff: ['staff', 'payroll_entries'],
       AnalyticsFamily.profitability: ['orders', 'kitchen_wastage', 'mandi_procurements'],
       AnalyticsFamily.audit: ['order_revisions', 'checkout_token_audit', 'report_runs', 'report_outbox'],
     };

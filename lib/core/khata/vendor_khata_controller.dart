@@ -5,6 +5,9 @@ import 'vendor.dart';
 import 'vendor_payment_source.dart';
 import 'vendor_statement.dart';
 import 'vendor_transaction.dart';
+import '../orders/customer_controller.dart';
+import '../orders/paisa_engine.dart';
+import '../finance/operations_controller.dart';
 
 /// Domain controller managing the supplier credit ledger (Vendor Khata),
 /// credit delivery stock intake, multi-source balance settlements,
@@ -17,6 +20,105 @@ class VendorKhataController {
 
   final Database database;
   final ShiftAndCashController? shiftController;
+
+  Future<List<Map<String, Object?>>> suppliedItems(int vendorId) => database.rawQuery('''
+    SELECT i.*, s.sku FROM supplier_items s JOIN raw_ingredients i ON i.id=s.ingredient_id
+    WHERE s.vendor_id=? AND s.active=1 ORDER BY i.name''', [vendorId]);
+
+  Future<void> setSuppliedItems({required int managerId, required int vendorId,
+      required Set<int> ingredientIds}) async {
+    await database.transaction((txn) async {
+      await CustomerController.requireRole(txn, managerId, manager: true);
+      if ((await txn.query('vendor_khata', where: 'id=? AND archived_at IS NULL', whereArgs: [vendorId])).isEmpty) {
+        throw StateError('Restore this supplier before editing supplied items.');
+      }
+      await txn.update('supplier_items', {'active': 0}, where: 'vendor_id=?', whereArgs: [vendorId]);
+      for (final id in ingredientIds) {
+        await txn.rawInsert('''INSERT INTO supplier_items(vendor_id,ingredient_id,active)
+          VALUES(?,?,1) ON CONFLICT(vendor_id,ingredient_id) DO UPDATE SET active=1''', [vendorId,id]);
+      }
+      await OperationsController.audit(txn, managerId, 'supplier', vendorId,
+          'SUPPLIED_ITEMS', {'ingredient_ids': ingredientIds.toList()});
+    });
+  }
+
+  Future<int> createSuppliedItem({required int managerId, required int vendorId,
+      required String name, required String unit}) async {
+    if (name.trim().isEmpty || !['g','kg','ml','count'].contains(unit)) throw ArgumentError('Enter a name and valid stock unit.');
+    return database.transaction((txn) async {
+      await CustomerController.requireRole(txn,managerId,manager:true);
+      if ((await txn.query('vendor_khata',where:'id=? AND archived_at IS NULL',whereArgs:[vendorId])).isEmpty) throw StateError('Supplier is unavailable.');
+      final existing = await txn.query('raw_ingredients',where:'name=? COLLATE NOCASE',whereArgs:[name.trim()]);
+      if (existing.isNotEmpty && existing.single['storage_unit'] != unit) throw StateError('An item with this name has a different stock unit.');
+      final id = existing.isEmpty ? await txn.insert('raw_ingredients',{'name':name.trim(),'storage_unit':unit,'created_at':_formatTimestamp(DateTime.now())}) : existing.single['id'] as int;
+      await txn.rawInsert('''INSERT INTO supplier_items(vendor_id,ingredient_id,active)
+        VALUES(?,?,1) ON CONFLICT(vendor_id,ingredient_id) DO UPDATE SET active=1''',[vendorId,id]);
+      await OperationsController.audit(txn,managerId,'supplier',vendorId,'ADD_SUPPLIED_ITEM',{'ingredient_id':id,'name':name.trim(),'unit':unit});
+      return id;
+    });
+  }
+
+  /// Includes fully paid invoices, preserving historical due dates and snapshots.
+  Future<List<Map<String,Object?>>> invoices(int vendorId) => database.rawQuery('''
+    SELECT t.*, COALESCE(t.amount_paisa,CAST(ROUND(t.amount*100) AS INTEGER))
+      - COALESCE((SELECT SUM(a.amount_paisa) FROM supplier_payment_allocations a WHERE a.invoice_id=t.id),0) AS due_paisa
+    FROM vendor_transactions t WHERE t.vendor_id=? AND t.type='PURCHASE_CREDIT'
+    ORDER BY COALESCE(t.due_date,substr(t.created_at,1,10)),t.id''', [vendorId]);
+
+  Future<void> _uniqueReference(DatabaseExecutor txn, int vendorId, String type,
+      String? reference, String? requestKey) async {
+    if (reference?.trim().isNotEmpty == true) {
+      final rows = await txn.query('vendor_transactions', columns: ['id'],
+          where: "vendor_id=? AND ${type == 'PURCHASE_CREDIT' ? "type='PURCHASE_CREDIT'" : "type IN ('PAYMENT_DRAWER','PAYMENT_EXTERNAL')"} AND reference_slip=?",
+          whereArgs: [vendorId,reference!.trim()], limit: 1);
+      if (rows.isNotEmpty) throw StateError('This supplier reference has already been posted.');
+    }
+    if (requestKey != null && requestKey.trim().isEmpty) throw ArgumentError('Request key cannot be blank.');
+  }
+
+  Future<void> _allocate(DatabaseExecutor txn, int vendorId, int paymentId,
+      int amount, Map<int,int>? allocations) async {
+    var remaining = amount;
+    final rows = await txn.rawQuery('''SELECT t.id,
+      COALESCE(t.amount_paisa,CAST(ROUND(t.amount*100) AS INTEGER)) - COALESCE(SUM(a.amount_paisa),0) due
+      FROM vendor_transactions t LEFT JOIN supplier_payment_allocations a ON a.invoice_id=t.id
+      WHERE t.vendor_id=? AND t.type='PURCHASE_CREDIT' GROUP BY t.id
+      ORDER BY COALESCE(t.due_date,substr(t.created_at,1,10)),t.id''', [vendorId]);
+    if (allocations != null) {
+      if (allocations.isEmpty || allocations.values.any((v) => v <= 0) ||
+          allocations.values.fold<int>(0,(a,b) => a+b) != amount) {
+        throw ArgumentError('Invoice allocations must exactly equal the payment.');
+      }
+      for (final entry in allocations.entries) {
+        final invoice = rows.where((r) => r['id'] == entry.key).firstOrNull;
+        if (invoice == null || entry.value > (invoice['due'] as int)) {
+          throw StateError('Allocation exceeds invoice due or belongs to another supplier.');
+        }
+        await txn.insert('supplier_payment_allocations', {'payment_id': paymentId,
+          'invoice_id': entry.key, 'amount_paisa': entry.value});
+      }
+      return;
+    }
+    // Opening payable has no invoice. Its allocation remains explicitly labeled.
+    final vendor = (await txn.query('vendor_khata', where:'id=?',whereArgs:[vendorId])).single;
+    final openingPaid = (await txn.rawQuery('''SELECT COALESCE(SUM(a.amount_paisa),0) paid
+      FROM supplier_payment_allocations a JOIN vendor_transactions t ON t.id=a.payment_id
+      WHERE t.vendor_id=? AND a.invoice_id IS NULL''',[vendorId])).single['paid'] as int;
+    final openingDue = PaisaEngine.rupeesToPaisa(vendor['opening_balance'] as num) - openingPaid;
+    if (openingDue > 0) {
+      final value = remaining < openingDue ? remaining : openingDue;
+      await txn.insert('supplier_payment_allocations', {'payment_id': paymentId, 'amount_paisa': value});
+      remaining -= value;
+    }
+    for (final row in rows) {
+      final due = row['due'] as int;
+      final value = remaining < due ? remaining : due;
+      if (value > 0) await txn.insert('supplier_payment_allocations', {'payment_id': paymentId,
+        'invoice_id': row['id'], 'amount_paisa': value});
+      remaining -= value;
+    }
+    if (remaining != 0) throw StateError('Payment cannot be reconciled to the supplier payable.');
+  }
 
   static String _formatTimestamp(DateTime dt) {
     String twoDigits(int n) => n.toString().padLeft(2, '0');
@@ -44,9 +146,10 @@ class VendorKhataController {
     if (trimmedPhone.isEmpty) {
       throw ArgumentError('Vendor phone cannot be empty.');
     }
-    if (openingBalance < 0) {
+    if (!openingBalance.isFinite || openingBalance < 0) {
       throw ArgumentError('Opening balance cannot be negative.');
     }
+    openingBalance = PaisaEngine.rupeesToPaisa(openingBalance) / 100;
 
     final now = DateTime.now();
     final formattedNow = _formatTimestamp(now);
@@ -93,9 +196,10 @@ class VendorKhataController {
     if (trimmedPhone.isEmpty) {
       throw ArgumentError('Vendor phone cannot be empty.');
     }
-    if (openingBalance != null && openingBalance < 0) {
+    if (openingBalance != null && (!openingBalance.isFinite || openingBalance < 0)) {
       throw ArgumentError('Opening balance cannot be negative.');
     }
+    if (openingBalance != null) openingBalance = PaisaEngine.rupeesToPaisa(openingBalance) / 100;
 
     final now = DateTime.now();
     final formattedNow = _formatTimestamp(now);
@@ -108,6 +212,12 @@ class VendorKhataController {
     final balanceDelta = openingBalance != null
         ? (openingBalance - existing.openingBalance)
         : 0.0;
+    if (openingBalance != null) {
+      final allocated = (await database.rawQuery('''SELECT COALESCE(SUM(a.amount_paisa),0) paid
+        FROM supplier_payment_allocations a JOIN vendor_transactions t ON t.id=a.payment_id
+        WHERE t.vendor_id=? AND a.invoice_id IS NULL''',[id])).single['paid'] as int;
+      if (PaisaEngine.rupeesToPaisa(openingBalance) < allocated) throw StateError('Opening payable cannot be reduced below its allocated payments.');
+    }
 
     await database.rawUpdate('''
       UPDATE ${PosDatabaseConstants.tableVendorKhata}
@@ -206,18 +316,31 @@ class VendorKhataController {
     String? notes,
     int? staffId,
     DateTime? createdAt,
+    DateTime? dueDate,
+    String? requestKey,
   }) async {
-    if (amount <= 0) {
+    if (!amount.isFinite || amount <= 0 || PaisaEngine.rupeesToPaisa(amount) <= 0) {
       throw ArgumentError('Credit delivery amount must be greater than zero.');
     }
-    if (quantity != null && quantity <= 0) {
+    if (quantity != null && (!quantity.isFinite || quantity <= 0)) {
       throw ArgumentError('Delivered quantity must be greater than zero.');
     }
 
     final effectiveDate = createdAt ?? DateTime.now();
     final formattedDate = _formatTimestamp(effectiveDate);
+    if ((rawIngredientId == null) != (quantity == null)) {
+      throw ArgumentError('Ingredient and received quantity must be provided together.');
+    }
+    if (dueDate != null && DateTime(dueDate.year,dueDate.month,dueDate.day)
+        .isBefore(DateTime(effectiveDate.year,effectiveDate.month,effectiveDate.day))) {
+      throw ArgumentError('Invoice due date cannot precede the invoice date.');
+    }
+    final amountPaisa = PaisaEngine.rupeesToPaisa(amount);
+    amount = amountPaisa / 100;
 
     return await database.transaction((txn) async {
+      if (staffId != null) await CustomerController.requireRole(txn, staffId, manager: true);
+      await _uniqueReference(txn,vendorId,'PURCHASE_CREDIT',referenceSlip,requestKey);
       // 1. Verify vendor exists
       final vendorRows = await txn.query(
         PosDatabaseConstants.tableVendorKhata,
@@ -235,14 +358,20 @@ class VendorKhataController {
 
       // 2. If raw ingredient is linked, update stock
       String? ingredientName;
+      String? unitSnapshot;
       if (rawIngredientId != null && quantity != null) {
+        final linked = await txn.query('supplier_items', where: 'vendor_id=? AND ingredient_id=? AND active=1',
+            whereArgs: [vendorId,rawIngredientId]);
+        if (linked.isEmpty) throw StateError('This ingredient is not in the supplier catalog.');
         final ingredientRows = await txn.query(
           PosDatabaseConstants.tableRawIngredients,
           where: 'id = ?',
           whereArgs: [rawIngredientId],
         );
+        if (ingredientRows.isEmpty) throw StateError('Ingredient does not exist.');
         if (ingredientRows.isNotEmpty) {
           ingredientName = ingredientRows.first['name'] as String?;
+          unitSnapshot = ingredientRows.first['storage_unit'] as String?;
           await txn.rawUpdate('''
             UPDATE ${PosDatabaseConstants.tableRawIngredients}
             SET current_stock = current_stock + ?
@@ -268,6 +397,11 @@ class VendorKhataController {
           'staff_id': staffId,
           'type': VendorTransactionType.purchaseCredit.dbValue,
           'amount': amount,
+          'amount_paisa': amountPaisa,
+          'due_date': dueDate == null ? null : _formatTimestamp(dueDate).substring(0,10),
+          'ingredient_name_snapshot': ingredientName,
+          'unit_snapshot': unitSnapshot,
+          'request_key': requestKey?.trim(),
           'reference_slip': referenceSlip?.trim(),
           'notes': notes?.trim(),
           'raw_ingredient_id': rawIngredientId,
@@ -287,6 +421,7 @@ class VendorKhataController {
         rawIngredientId: rawIngredientId,
         quantity: quantity,
         createdAt: effectiveDate,
+        dueDate: dueDate,
         vendorName: vendor.name,
         rawIngredientName: ingredientName,
       );
@@ -314,8 +449,10 @@ class VendorKhataController {
     String? referenceSlip,
     String? notes,
     DateTime? createdAt,
+    Map<int,int>? allocations,
+    String? requestKey,
   }) async {
-    if (amount <= 0) {
+    if (!amount.isFinite || amount <= 0 || PaisaEngine.rupeesToPaisa(amount) <= 0) {
       throw ArgumentError('Settlement payment amount must be greater than zero.');
     }
 
@@ -329,8 +466,11 @@ class VendorKhataController {
 
     final effectiveDate = createdAt ?? DateTime.now();
     final formattedDate = _formatTimestamp(effectiveDate);
+    final amountPaisa = PaisaEngine.rupeesToPaisa(amount);
+    amount = amountPaisa / 100;
 
     return await database.transaction((txn) async {
+      if (staffId != null) await CustomerController.requireRole(txn, staffId, manager: true);
       // 1. Verify vendor exists
       final vendorRows = await txn.query(
         PosDatabaseConstants.tableVendorKhata,
@@ -347,6 +487,10 @@ class VendorKhataController {
       final txnType = isDrawerPayment
           ? VendorTransactionType.paymentDrawer
           : VendorTransactionType.paymentExternal;
+      if (amountPaisa > PaisaEngine.rupeesToPaisa(vendor.currentBalance)) {
+        throw StateError('Payment exceeds supplier payable.');
+      }
+      await _uniqueReference(txn,vendorId,txnType.dbValue,referenceSlip,requestKey);
 
       // 2. If paid from active drawer, verify active shift and auto-generate CashMovement (Pay-Out)
       if (isDrawerPayment) {
@@ -403,11 +547,15 @@ class VendorKhataController {
           'staff_id': staffId,
           'type': txnType.dbValue,
           'amount': amount,
+          'amount_paisa': amountPaisa,
+          'request_key': requestKey?.trim(),
           'reference_slip': referenceSlip?.trim(),
           'notes': notes?.trim(),
           'created_at': formattedDate,
         },
       );
+
+      await _allocate(txn,vendorId,txnId,amountPaisa,allocations);
 
       return VendorTransaction(
         id: txnId,
@@ -440,7 +588,7 @@ class VendorKhataController {
       SELECT 
         vt.*,
         v.name AS vendor_name,
-        i.name AS raw_ingredient_name,
+        COALESCE(vt.ingredient_name_snapshot,i.name) AS raw_ingredient_name,
         st.name AS staff_name
       FROM ${PosDatabaseConstants.tableVendorTransactions} vt
       JOIN ${PosDatabaseConstants.tableVendorKhata} v ON vt.vendor_id = v.id
@@ -503,7 +651,7 @@ class VendorKhataController {
       SELECT 
         vt.*,
         v.name AS vendor_name,
-        i.name AS raw_ingredient_name,
+        COALESCE(vt.ingredient_name_snapshot,i.name) AS raw_ingredient_name,
         st.name AS staff_name
       FROM ${PosDatabaseConstants.tableVendorTransactions} vt
       JOIN ${PosDatabaseConstants.tableVendorKhata} v ON vt.vendor_id = v.id

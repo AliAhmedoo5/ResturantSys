@@ -14,6 +14,8 @@ import 'package:resturant_sys/core/theme/theme.dart';
 import 'credit_delivery_dialog.dart';
 import 'settlement_payment_dialog.dart';
 import 'vendor_form_dialog.dart';
+import '../supervisor/operations_workspace.dart';
+import '../../core/orders/paisa_engine.dart';
 
 /// Supervisor & Owner portal workspace managing the supplier credit ledger (Vendor Khata),
 /// credit stock intakes, multi-source payment settlements, and chronological statements of accounts.
@@ -350,25 +352,32 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
   }
 
   Future<void> _recordCreditDelivery() async {
-    if (_selectedVendor == null) return;
+    final vendor=_selectedVendor;
+    if (vendor == null) return;
+
+    final linked = widget.controller == null ? _rawIngredients :
+      (await widget.controller!.suppliedItems(vendor.id)).map(RawIngredient.fromMap).toList();
+    if (!mounted) return;
 
     final result = await CreditDeliveryDialog.show(
       context,
-      vendor: _selectedVendor!,
-      rawIngredients: _rawIngredients,
+      vendor: vendor,
+      rawIngredients: linked,
     );
     if (result == null) return;
 
     try {
       if (widget.controller != null) {
         await widget.controller!.recordCreditDelivery(
-          vendorId: _selectedVendor!.id,
+          vendorId: vendor.id,
           amount: result['amount'] as double,
           referenceSlip: result['reference_slip'] as String?,
           rawIngredientId: result['raw_ingredient_id'] as int?,
           quantity: result['quantity'] as double?,
           notes: result['notes'] as String?,
           staffId: widget.currentStaff?.id,
+          dueDate: result['due_date'] as DateTime?,
+          requestKey: 'delivery-${DateTime.now().microsecondsSinceEpoch}',
         );
       }
 
@@ -392,27 +401,98 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
     }
   }
 
+  Future<void> _supplierDetails() async {
+    final controller=widget.controller;
+    final vendor=_selectedVendor;
+    final manager=widget.currentStaff?.id;
+    if(controller==null || vendor==null || manager==null) return;
+    try {
+      var items=List<RawIngredient>.from(_rawIngredients);
+      final linked=await controller.suppliedItems(vendor.id);
+      final selected=linked.map((r)=>r['id'] as int).toSet();
+      final invoices=await controller.invoices(vendor.id);
+      final allocations=await controller.database.rawQuery('''SELECT a.*,t.reference_slip,t.created_at
+        FROM supplier_payment_allocations a JOIN vendor_transactions t ON t.id=a.payment_id
+        WHERE t.vendor_id=? ORDER BY a.id DESC''',[vendor.id]);
+      if(!mounted) return;
+      await showDialog<void>(context:context,builder:(dialogContext) {
+        bool saving=false;
+        String? error;
+        return StatefulBuilder(builder:(ctx,update)=>AlertDialog(
+          title:Text('${vendor.name}: catalog & invoices'),
+          content:SizedBox(width:680,child:SingleChildScrollView(child:Column(
+            mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+              const Text('Select the ingredients and packaging this supplier can provide. Quantities use the displayed stock unit.'),
+              for(final item in items) CheckboxListTile(title:Text('${item.name} (${item.storageUnit})'),
+                value:selected.contains(item.id),onChanged:vendor.isArchived || saving ? null : (value)=>update(() {
+                  if(value==true) {selected.add(item.id);} else {selected.remove(item.id);}
+                })),
+              TextButton.icon(icon:const Icon(Icons.add),label:const Text('Add new supplied product'),
+                onPressed:vendor.isArchived || saving ? null : () async {
+                  await showOperationForm(ctx,title:'Add supplied product',fields:const [
+                    OperationField('name','Product name'),OperationField('unit','Stock unit',initial:'count',
+                      options:{'g':'Grams','kg':'Kilograms','ml':'Milliliters','count':'Count / Pieces'})],save:(v) async {
+                    final id=await controller.createSuppliedItem(managerId:manager,vendorId:vendor.id,name:v['name']!,unit:v['unit']!);
+                    selected.add(id);
+                  });
+                  final rows=await controller.database.query('raw_ingredients',orderBy:'name');
+                  if(ctx.mounted) update(()=>items=rows.map(RawIngredient.fromMap).toList());
+                }),
+              const Divider(),const Text('Invoice balances'),
+              if(invoices.isEmpty) const Text('No invoices recorded.'),
+              for(final invoice in invoices) ListTile(
+                title:Text('#${invoice['id']} ${invoice['reference_slip'] ?? ''} • ${PaisaEngine.formatRupees(invoice['due_paisa'] as int)} due'),
+                subtitle:Text('Due date: ${invoice['due_date'] ?? 'Not specified'} • ${invoice['ingredient_name_snapshot'] ?? 'General shipment'}'
+                  '${invoice['due_date']!=null && (invoice['due_paisa'] as int)>0 && (invoice['due_date'] as String).compareTo(DateTime.now().toIso8601String().substring(0,10))<0 ? ' • OVERDUE' : ''}')),
+              const Divider(),const Text('Payment allocations'),
+              for(final allocation in allocations) ListTile(title:Text('Payment #${allocation['payment_id']} → ${allocation['invoice_id']==null ? 'Opening payable' : 'Invoice #${allocation['invoice_id']}'}: ${PaisaEngine.formatRupees(allocation['amount_paisa'] as int)}'),
+                subtitle:Text('${allocation['created_at']} • ${allocation['reference_slip'] ?? ''}')),
+              if(error!=null) Text(error!,style:TextStyle(color:Theme.of(ctx).colorScheme.error)),
+            ]))),
+          actions:[TextButton(onPressed:saving ? null : ()=>Navigator.pop(ctx),child:const Text('Close')),
+            FilledButton(onPressed:vendor.isArchived || saving ? null : () async {
+              update(()=>saving=true);
+              try {
+                await controller.setSuppliedItems(managerId:manager,vendorId:vendor.id,ingredientIds:selected);
+                if(ctx.mounted) Navigator.pop(ctx);
+              } catch(e) {if(ctx.mounted) update(() {error=e.toString();saving=false;});}
+            },child:const Text('Save supplied items'))],
+        ));
+      });
+      await _loadInitialData();
+    } catch(e) {
+      if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('Could not load supplier details: $e')));
+    }
+  }
+
   Future<void> _recordSettlementPayment() async {
-    if (_selectedVendor == null) return;
+    final vendor=_selectedVendor;
+    if (vendor == null) return;
+    final invoices = await widget.controller?.invoices(vendor.id) ?? <Map<String,Object?>>[];
+    if (!mounted) return;
 
     final result = await SettlementPaymentDialog.show(
       context,
-      vendor: _selectedVendor!,
+      vendor: vendor,
       activeShiftId: _activeShift?.id,
       activeStaffName: widget.currentStaff?.name,
+      invoices: invoices,
     );
     if (result == null) return;
 
     try {
       if (widget.controller != null) {
         await widget.controller!.recordSettlementPayment(
-          vendorId: _selectedVendor!.id,
+          vendorId: vendor.id,
           amount: result['amount'] as double,
           paymentSource: result['payment_source'] as VendorPaymentSource,
           shiftId: _activeShift?.id,
           staffId: widget.currentStaff?.id,
           referenceSlip: result['reference_slip'] as String?,
           notes: result['notes'] as String?,
+          requestKey: 'settlement-${DateTime.now().microsecondsSinceEpoch}',
+          allocations: result['invoice_id'] == null ? null :
+            {result['invoice_id'] as int: PaisaEngine.rupeesToPaisa(result['amount'] as double)},
         );
       }
 
@@ -906,6 +986,10 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                if (widget.controller != null) TextButton(
+                  onPressed: _supplierDetails,
+                  child: const Text('Supplied items & invoices'),
+                ),
                 ElevatedButton.icon(
                   key: const Key('log_credit_delivery_button'),
                   icon: const Icon(Icons.local_shipping_rounded, size: 18),

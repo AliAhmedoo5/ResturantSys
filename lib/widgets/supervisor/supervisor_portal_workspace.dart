@@ -26,6 +26,8 @@ import '../../core/database/database_backup_service.dart';
 import '../../core/database/pos_database_constants.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'manager_dashboard_workspace.dart';
+import '../../core/finance/operations_controller.dart';
+import 'operations_workspace.dart';
 
 enum SupervisorPortalTab {
   dashboard('Dashboard', Icons.insights_rounded),
@@ -34,7 +36,9 @@ enum SupervisorPortalTab {
   staff('Staff & Departments', Icons.badge_rounded),
   toggles('Feature Toggles', Icons.toggle_on_rounded),
   discrepancies('Discrepancy Review', Icons.assignment_late_rounded),
-  reports('Z-Reports & Backups', Icons.assessment_rounded);
+  reports('Z-Reports & Backups', Icons.assessment_rounded),
+  payroll('Payroll', Icons.payments_outlined),
+  expenses('Expenses', Icons.account_balance_wallet_outlined);
 
   const SupervisorPortalTab(this.label, this.icon);
   final String label;
@@ -885,6 +889,12 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
         return CustomerDirectory(controller: CustomerController(widget.orderController!.database), staffId: widget.currentStaff!.id, manager: true);
       case SupervisorPortalTab.staff:
         return _buildStaffAndDepartmentsView(context);
+      case SupervisorPortalTab.payroll:
+      case SupervisorPortalTab.expenses:
+        final db = widget.authService?.database ?? widget.shiftController?.database;
+        if (db == null || widget.currentStaff == null) return const Center(child: Text('Manager financial operations unavailable.'));
+        return OperationsWorkspace(key: ValueKey(_activeTab), controller: OperationsController(db),
+          managerId: widget.currentStaff!.id, payroll: _activeTab == SupervisorPortalTab.payroll);
       case SupervisorPortalTab.toggles:
         return _buildFeatureTogglesView(context);
       case SupervisorPortalTab.discrepancies:
