@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      test_paths:
+        description: 'Optional space-separated test paths; blank runs the complete suite'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   backup-windows:
@@ -67,11 +73,15 @@ jobs:
 
       - name: Run tests
         timeout-minutes: 30
+        shell: bash
         env:
+          TEST_PATHS: ${{ inputs.test_paths }}
           SYNTHETIC_Z_CLOSE_FIXTURE: ${{ runner.temp }}/synthetic-z-close-fixture
           SMTP_FIXTURE_DIRECTORY: ${{ runner.temp }}/smtp-fixture
           CAPTURE_DESKTOP: 'true'
-        run: flutter test --timeout 2m
+        run: |
+          read -r -a test_paths <<< "$TEST_PATHS"
+          flutter test --timeout 2m "${test_paths[@]}"
 
       - name: Upload desktop layout previews
         if: always()
