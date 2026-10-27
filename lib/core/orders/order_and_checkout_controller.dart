@@ -741,9 +741,11 @@ class OrderAndCheckoutController {
           customerId = (match['merged_into'] ?? match['id']) as int;
         }
       }
+      Map<String, Object?>? selectedCustomer;
       if (customerId != null) {
         final customers = await txn.query('customers', where: 'id = ? AND merged_into IS NULL', whereArgs: [customerId]);
         if (customers.isEmpty) throw StateError('Customer was merged. Select the current customer record.');
+        selectedCustomer = customers.single;
       }
       // 2. Commit Order Header
       final orderId = await txn.insert(
@@ -766,8 +768,8 @@ class OrderAndCheckoutController {
           'delivery_area_name_snapshot': deliveryArea?.name,
           'delivery_fee_paisa': deliveryFeePaisa,
           'delivery_address_snapshot': deliveryArea == null ? null : delivery!.addressSnapshot,
-          'customer_phone': deliveryArea == null ? null : DeliveryController.normalizePhone(delivery!.phone),
-          'customer_name': deliveryArea == null ? null : delivery!.customerName.trim(),
+          'customer_phone': deliveryArea == null ? selectedCustomer?['phone'] : DeliveryController.normalizePhone(delivery!.phone),
+          'customer_name': deliveryArea == null ? selectedCustomer?['name'] : delivery!.customerName.trim(),
           'payment_status': isCod ? 'COLLECTION_DUE' : 'SETTLED',
           'token_status': TokenStatus.preparing.code,
           'created_at': formattedNow,
@@ -893,8 +895,9 @@ class OrderAndCheckoutController {
         deliveryAreaName: deliveryArea?.name,
         deliveryFeePaisa: deliveryFeePaisa,
         deliveryAddress: deliveryArea == null ? null : delivery!.addressSnapshot,
-        customerPhone: deliveryArea == null ? null : DeliveryController.normalizePhone(delivery!.phone),
-        customerName: deliveryArea == null ? null : delivery!.customerName.trim(),
+        customerId: customerId,
+        customerPhone: deliveryArea == null ? selectedCustomer?['phone'] as String? : DeliveryController.normalizePhone(delivery!.phone),
+        customerName: deliveryArea == null ? selectedCustomer?['name'] as String? : delivery!.customerName.trim(),
         paymentStatus: isCod ? 'COLLECTION_DUE' : 'SETTLED',
         createdAt: now,
         items: createdOrderItems,

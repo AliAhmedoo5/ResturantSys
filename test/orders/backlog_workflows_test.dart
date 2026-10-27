@@ -86,15 +86,26 @@ void main() {
     final shift = await shifts.openShift(staffId: 2, openingFloat: 0);
     final hold = await orders.holdCart(cashierId: 2, label: 'Counter', items: [line], diningType: DiningType.dineIn);
     final customer = await customers.save(staffId: 2, name: 'Test Person', phone: '03001234567');
+    await expectLater(orders.checkoutOrder(businessDayId: day.id, shiftId: shift.id, cashierId: 2,
+      diningType: DiningType.dineIn, items: [line], customerId: -1, heldCartId: hold,
+      payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 100)]), throwsStateError);
+    expect(await orders.getHolds(2), hasLength(1));
     await orders.checkoutOrder(businessDayId: day.id, shiftId: shift.id, cashierId: 2,
       diningType: DiningType.dineIn, items: [line], customerId: customer.id, heldCartId: hold,
       payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 100)]);
     expect(await orders.getHolds(2), isEmpty);
     final history = await customers.history(customer.id);
     expect(history.length, 1);
+    await db.update('menu_items', {'base_price': 140}, where: 'id = ?', whereArgs: [line.menuItem!.id]);
     final repeat = await orders.repeatOrder(cashierId: 2, orderId: history.single['id'] as int);
     expect(repeat.single.menuItem!.id, line.menuItem!.id);
+    expect(repeat.single.unitPrice, 140);
     expect(await db.query('orders'), hasLength(1));
+    final target = await customers.save(staffId: 1, name: 'Canonical Person', phone: '03007654321');
+    final snapshot = await db.query('orders');
+    await customers.merge(managerId: 1, sourceId: customer.id, targetId: target.id, reason: 'Confirmed duplicate');
+    expect(await db.query('orders'), snapshot);
+    expect(await customers.history(target.id), hasLength(1));
   });
 
   test('normalized duplicate detection and audited transitive merges preserve phone aliases', () async {
