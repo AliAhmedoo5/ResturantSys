@@ -62,7 +62,7 @@ class _ReportBuilder {
       _metric('rounding', 'Cash rounding', _integers(valid, 'cash_rounding_paisa'), explanation: 'Signed stored cash rounding delta; $_orderBasis'),
       _metric('collected_tender', 'Collected tender', payments.fold<int>(0, (sum, p) => sum + _money(p, 'amount_tendered') - _money(p, 'change_returned')), explanation: 'Tender minus change, including negative explicit refunds; retained funds in SETTLED/REFUND_PENDING/CANCELLED/REFUNDED orders. Order Business Day cohort, not receipt-event date. ${e.query.paymentMethod == null ? 'All methods.' : 'Only ${e.query.paymentMethod} tender lines; full matching orders remain the sales cohort.'}'),
       _average('average_ticket', 'Average ticket', value, valid.length, AnalyticsUnit.paisa, 'Recorded eligible order value / eligible order count; denominator shown. $_orderBasis'),
-      _missing('recognized_revenue', 'Recognized revenue', 'Recorded value is available; a named recognition/allocation policy is required for tax-exclusive recognized revenue.'),
+      _metric('recognized_revenue', 'Tax-exclusive recognized revenue', _sum(valid, 'grand_total') - _sum(valid, 'tax_amount'), explanation: 'Recognized on confirmation including COD receivables and delivery fees, less stored tax carve-out; cancellations/revisions use current recorded totals.'),
       _metric('recorded_value_change', 'Change from preceding window', value - _sum(prior, 'grand_total'), explanation: partial ? 'Unavailable for incomplete open-day coverage.' : 'Absolute current minus preceding equal Business Day date-window recorded value.', unavailable: partial),
     ];
     final dimensions = <AnalyticsRow>[];

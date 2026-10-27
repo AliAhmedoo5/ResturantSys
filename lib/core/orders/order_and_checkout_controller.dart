@@ -579,30 +579,23 @@ class OrderAndCheckoutController {
     List<DiscountPreset> discounts = const [],
     DiningType? diningType,
     int? cashierId,
+    DateTime? now,
   }) {
-    double subtotal = 0.0;
-    double taxAmount = 0.0;
-
-    for (final item in items) {
-      subtotal += item.totalPrice;
-      if (item.menuItem != null) {
-        final mi = item.menuItem!;
-        if (mi.taxRate > 0) {
-          if (mi.isTaxInclusive) {
-            final net = item.totalPrice / (1.0 + (mi.taxRate / 100.0));
-            taxAmount += (item.totalPrice - net);
-          } else {
-            taxAmount += item.totalPrice * (mi.taxRate / 100.0);
-          }
-        }
+    final subtotal = items.fold<int>(0, (sum, item) => sum + PaisaEngine.rupeesToPaisa(item.totalPrice)) / 100.0;
+    final selected = [if (discount != null) discount, ...discounts];
+    final balances = <int>[];
+    final discountAmounts = DiscountStack.amounts(items: items, discounts: selected, diningMode: diningType?.code,
+      cashierId: cashierId, now: now, remainingLinePaisa: balances);
+    final discountAmount = discountAmounts.values.fold<int>(0, (sum, n) => sum + n) / 100.0;
+    var taxPaisa = 0;
+    for (var index = 0; index < items.length; index++) {
+      final menu = items[index].menuItem;
+      if (menu != null && menu.taxRate > 0) {
+        // Shelf prices include tax; discounts reduce only their eligible lines.
+        taxPaisa += (balances[index] * menu.taxRate / (100 + menu.taxRate)).round();
       }
     }
-
-    final selected = [if (discount != null) discount, ...discounts];
-    final discountAmounts = DiscountStack.amounts(items: items, discounts: selected, diningMode: diningType?.code, cashierId: cashierId);
-    final discountAmount = discountAmounts.values.fold<int>(0, (sum, n) => sum + n) / 100.0;
-    // Discount proportionally reduces the tax carve-out as well as shelf value.
-    if (subtotal > 0) taxAmount *= (subtotal - discountAmount) / subtotal;
+    final taxAmount = taxPaisa / 100.0;
 
     final grandTotal = (subtotal - discountAmount) < 0.0 ? 0.0 : (subtotal - discountAmount);
 
@@ -703,7 +696,7 @@ class OrderAndCheckoutController {
           if ((used.single['n'] as int) >= current.rules.dailyLimit!) throw StateError('Discount limit reached for this Business Day.');
         }
       }
-      final totals = calculateCartTotals(items: items, discount: discount, discounts: discounts, diningType: diningType, cashierId: cashierId);
+      final totals = calculateCartTotals(items: items, discount: discount, discounts: discounts, diningType: diningType, cashierId: cashierId, now: now);
       DeliveryArea? deliveryArea;
       if (diningType == DiningType.delivery) {
         if (delivery == null) throw const DeliveryCheckoutException('Select delivery details before payment. Your cart is unchanged.');
@@ -1323,6 +1316,7 @@ class OrderAndCheckoutController {
         }
       }
 
+      await HistoricalCosts.remove(txn, orderId, order.currentRevision + 1, reversals, restock: true);
       // Apply stock reversals: adds stock back
       for (final entry in reversals.entries) {
         await txn.rawUpdate('''
@@ -1876,9 +1870,10 @@ class OrderAndCheckoutController {
         'items': oldOrderItems.map((i) => i.toMap()).toList(),
       };
 
-      final totals = calculateCartTotals(
-        items: newItems,
-      );
+      final discountRows = await txn.query('order_discounts', where: 'order_id=?', whereArgs: [orderId], orderBy: 'sequence');
+      final originalDiscounts = discountRows.map((r) => DiscountPreset.fromMap(Map<String, Object?>.from(jsonDecode(r['terms_json'] as String) as Map))).toList();
+      final totals = calculateCartTotals(items: newItems, discounts: originalDiscounts,
+        diningType: order.diningType, cashierId: order.cashierId, now: order.createdAt);
 
       final oldTotalPaisa = PaisaEngine.rupeesToPaisa(order.grandTotal);
       final newTotalPaisa = PaisaEngine.rupeesToPaisa(totals.grandTotal);
@@ -2068,6 +2063,7 @@ class OrderAndCheckoutController {
         {
           'current_revision': nextRevisionNo,
           'subtotal': totals.subtotal,
+          'discount_amount': totals.discountAmount,
           'tax_amount': totals.taxAmount,
           'grand_total': totals.grandTotal,
           'payment_status': newPaymentStatus,

@@ -435,6 +435,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
     final discounts = await CatalogAndRecipeController(database: controller.database).getDiscountPresets(activeOnly: true);
     final savedIds = (payload['discount_ids'] as List?) ?? [if (payload['discount_id'] != null) payload['discount_id']];
     for (final current in discounts) { if (savedIds.contains(current.id)) selectedDiscounts.add(current); }
+    if (selectedDiscounts.length > 1 && selectedDiscounts.any((d) => !d.rules.stackable)) selectedDiscounts.clear();
     final raw = payload['delivery'] as Map<String, dynamic>?;
     final delivery = raw == null ? null : DeliveryDetails(areaId: raw['area_id'] as int, quotedFeePaisa: raw['fee'] as int,
       phone: raw['phone'] as String, customerName: raw['name'] as String, fullAddress: raw['address'] as String,

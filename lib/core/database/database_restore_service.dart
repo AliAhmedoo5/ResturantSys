@@ -90,6 +90,15 @@ class DatabaseRestoreService {
     return backup.localBackupPath!;
   }
 
+  static Future<void> cancelPending(String databasePath) async {
+    final request = File('$databasePath.restore-request.json');
+    if (!await request.exists()) return;
+    final data = jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+    final journal = File(p.join(data['directory'] as String, 'journal.json'));
+    if (await journal.exists()) throw StateError('Retry recovery first so an interrupted swap can be rolled back.');
+    await request.rename('${request.path}.cancelled-${DateTime.now().microsecondsSinceEpoch}');
+  }
+
   /// Called only before opening SQLite. A durable journal rolls an interrupted
   /// swap back on the next launch. Originals and safety ZIP are retained.
   static Future<String?> applyPending({required String databasePath}) async {
@@ -167,6 +176,7 @@ class DatabaseRestoreService {
 }
 
 Future<PreparedRestore> _extractAndValidate(String archivePath, String directory) async {
+  if (await File(archivePath).length() > 512 * 1024 * 1024) throw const FormatException('Backup ZIP exceeds the 512 MB import limit.');
   final bytes = await File(archivePath).readAsBytes();
   final archive = ZipDecoder().decodeBytes(bytes, verify: true);
   final names = <String>{};

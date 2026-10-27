@@ -6,7 +6,7 @@ import 'discount_preset.dart';
 /// Every participating preset must explicitly permit stacking.
 class DiscountStack {
   static Map<int, int> amounts({required List<CartItem> items, required List<DiscountPreset> discounts,
-      String? diningMode, int? cashierId, DateTime? now}) {
+      String? diningMode, int? cashierId, DateTime? now, List<int>? remainingLinePaisa}) {
     if (discounts.map((d) => d.id).toSet().length != discounts.length) throw ArgumentError('A discount can be selected only once.');
     if (discounts.length > 1 && discounts.any((d) => !d.rules.stackable)) throw StateError('These discounts cannot be combined.');
     final ordered = [...discounts]..sort((a, b) => a.id.compareTo(b.id));
@@ -33,6 +33,7 @@ class DiscountStack {
         basis -= balances[i]; balances[i] -= share; left -= share;
       }
     }
+    remainingLinePaisa?.addAll(balances);
     return result;
   }
 }

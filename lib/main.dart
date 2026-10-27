@@ -14,6 +14,8 @@ import 'core/khata/vendor_khata_controller.dart';
 import 'core/theme/warm_counter_theme.dart';
 import 'widgets/app_shell.dart';
 
+RandomAccessFile? _applicationLock;
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -23,6 +25,17 @@ void main() async {
     databaseFactory = databaseFactoryFfi;
   }
 
+  if (_applicationLock == null) {
+    final lock = File('${PosDatabase.resolveDefaultDatabasePath()}.application-lock');
+    await lock.parent.create(recursive: true);
+    final handle = await lock.open(mode: FileMode.append);
+    try { await handle.lock(FileLock.exclusive); _applicationLock = handle; }
+    catch (_) {
+      await handle.close();
+      runApp(const MaterialApp(home: Scaffold(body: Center(child: Text('The POS is already open. Close the other application before opening or restoring restaurant records.')))));
+      return;
+    }
+  }
   String? restoreMessage;
   try {
     restoreMessage = await DatabaseRestoreService.applyPending(databasePath: PosDatabase.resolveDefaultDatabasePath());
@@ -32,6 +45,14 @@ void main() async {
       const SizedBox(height: 16), SelectableText('$error'),
       const Text('Original data and the safety backup are retained. Retry after resolving the reported problem.'),
       FilledButton(onPressed: main, child: const Text('Retry restoration')),
+      Builder(builder: (context) => TextButton(onPressed: () async {
+        try {
+          await DatabaseRestoreService.cancelPending(PosDatabase.resolveDefaultDatabasePath());
+          main();
+        } catch (error) {
+          if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$error')));
+        }
+      }, child: const Text('Cancel pending restore and open current records'))),
     ]))))));
     return;
   }
