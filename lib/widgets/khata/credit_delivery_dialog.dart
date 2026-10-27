@@ -41,6 +41,7 @@ class _CreditDeliveryDialogState extends State<CreditDeliveryDialog> {
   final _slipController = TextEditingController();
   final _quantityController = TextEditingController();
   final _notesController = TextEditingController();
+  final _dueController = TextEditingController();
 
   int? _selectedIngredientId;
 
@@ -50,6 +51,7 @@ class _CreditDeliveryDialogState extends State<CreditDeliveryDialog> {
     _slipController.dispose();
     _quantityController.dispose();
     _notesController.dispose();
+    _dueController.dispose();
     super.dispose();
   }
 
@@ -63,6 +65,7 @@ class _CreditDeliveryDialogState extends State<CreditDeliveryDialog> {
 
     Navigator.of(context).pop({
       'amount': amount,
+      'due_date': _dueController.text.trim().isEmpty ? null : DateTime.parse(_dueController.text.trim()),
       'reference_slip': _slipController.text.trim().isNotEmpty
           ? _slipController.text.trim()
           : null,
@@ -203,6 +206,19 @@ class _CreditDeliveryDialogState extends State<CreditDeliveryDialog> {
                 ),
                 const SizedBox(height: WarmCounterSpacing.space16),
 
+                TextFormField(
+                  key: const Key('credit_due_date_field'), controller: _dueController,
+                  decoration: const InputDecoration(labelText: 'Invoice due date (YYYY-MM-DD, optional)', border: OutlineInputBorder()),
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return null;
+                    final date = DateTime.tryParse(v.trim());
+                    if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(v.trim()) || date == null || date.toIso8601String().substring(0,10) != v.trim()) return 'Enter a valid date as YYYY-MM-DD';
+                    final now=DateTime.now();
+                    if (date.isBefore(DateTime(now.year,now.month,now.day))) return 'Due date cannot precede invoice date';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: WarmCounterSpacing.space16),
                 // Optional Linked Raw Ingredient
                 if (widget.rawIngredients.isNotEmpty) ...[
                   DropdownButtonFormField<int?>(

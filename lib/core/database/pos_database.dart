@@ -3,6 +3,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:resturant_sys/core/auth/pin_hasher.dart';
 import 'pos_database_constants.dart';
+import 'operations_schema.dart';
 import '../delivery/delivery_controller.dart';
 
 /// Embedded SQLite database manager for the Restaurant POS system.
@@ -127,6 +128,7 @@ class PosDatabase {
     await _upgradeToVersion16(db);
     await _upgradeToVersion17(db);
     await _upgradeToVersion18(db);
+    await createOperationsSchema(db);
   }
 
   Future<void> _createOperationalAccountingTables(DatabaseExecutor executor) async {
@@ -443,6 +445,7 @@ class PosDatabase {
     if (oldVersion < 16) await _upgradeToVersion16(db);
     if (oldVersion < 17) await _upgradeToVersion17(db);
     if (oldVersion < 18) await _upgradeToVersion18(db);
+    if (oldVersion < 19) await createOperationsSchema(db);
   }
 
   Future<void> _upgradeToVersion18(DatabaseExecutor db) async {

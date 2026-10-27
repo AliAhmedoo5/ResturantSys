@@ -12,17 +12,20 @@ class SettlementPaymentDialog extends StatefulWidget {
     required this.vendor,
     this.activeShiftId,
     this.activeStaffName,
+    this.invoices = const [],
   });
 
   final Vendor vendor;
   final int? activeShiftId;
   final String? activeStaffName;
+  final List<Map<String,Object?>> invoices;
 
   static Future<Map<String, dynamic>?> show(
     BuildContext context, {
     required Vendor vendor,
     int? activeShiftId,
     String? activeStaffName,
+    List<Map<String,Object?>> invoices = const [],
   }) {
     return showDialog<Map<String, dynamic>>(
       context: context,
@@ -31,6 +34,7 @@ class SettlementPaymentDialog extends StatefulWidget {
         vendor: vendor,
         activeShiftId: activeShiftId,
         activeStaffName: activeStaffName,
+        invoices: invoices,
       ),
     );
   }
@@ -46,6 +50,7 @@ class _SettlementPaymentDialogState extends State<SettlementPaymentDialog> {
   final _notesController = TextEditingController();
 
   late VendorPaymentSource _paymentSource;
+  int? _invoiceId;
 
   bool get hasActiveShift => widget.activeShiftId != null;
 
@@ -78,6 +83,7 @@ class _SettlementPaymentDialogState extends State<SettlementPaymentDialog> {
 
     Navigator.of(context).pop({
       'amount': amount,
+      'invoice_id': _invoiceId,
       'payment_source': _paymentSource,
       'reference_slip': _slipController.text.trim().isNotEmpty
           ? _slipController.text.trim()
@@ -264,6 +270,17 @@ class _SettlementPaymentDialogState extends State<SettlementPaymentDialog> {
                 ),
                 const SizedBox(height: WarmCounterSpacing.space16),
 
+                if (widget.invoices.isNotEmpty) ...[
+                  DropdownButtonFormField<int>(
+                    decoration: const InputDecoration(labelText: 'Allocate payment', border: OutlineInputBorder()),
+                    items: [const DropdownMenuItem(value: 0, child: Text('Opening payable, then earliest due invoices')),
+                      for (final invoice in widget.invoices) if ((invoice['due_paisa'] as int) > 0)
+                        DropdownMenuItem(value: invoice['id'] as int, child: Text('Invoice #${invoice['id']} • Due Rs. ${((invoice['due_paisa'] as int)/100).toStringAsFixed(2)}'))],
+                    initialValue: 0, isExpanded: true,
+                    onChanged: (v) => setState(() => _invoiceId = v == 0 ? null : v),
+                  ),
+                  const SizedBox(height: WarmCounterSpacing.space16),
+                ],
                 // Payment Amount
                 TextFormField(
                   key: const Key('settlement_amount_field'),
@@ -286,6 +303,11 @@ class _SettlementPaymentDialogState extends State<SettlementPaymentDialog> {
                     final val = double.tryParse(value);
                     if (val == null || val <= 0) {
                       return 'Amount must be greater than zero';
+                    }
+                    if (!val.isFinite || val > widget.vendor.currentBalance) return 'Payment exceeds supplier payable';
+                    if (_invoiceId != null) {
+                      final invoice = widget.invoices.singleWhere((i) => i['id']==_invoiceId);
+                      if ((val*100).round() > (invoice['due_paisa'] as int)) return 'Payment exceeds selected invoice due';
                     }
                     return null;
                   },
