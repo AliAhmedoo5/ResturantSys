@@ -48,6 +48,7 @@ class _CustomerDirectoryState extends State<CustomerDirectory> {
     final phone = TextEditingController(text: customer?.phone ?? '');
     final notes = TextEditingController(text: customer?.notes ?? '');
     String? error;
+    Customer? savedCustomer;
     bool saving = false;
     if (!mounted) return;
     await showDialog<void>(context: context, barrierDismissible: false, builder: (context) => StatefulBuilder(builder: (context, update) => AlertDialog(
@@ -61,13 +62,14 @@ class _CustomerDirectoryState extends State<CustomerDirectory> {
         FilledButton(onPressed: saving ? null : () async {
           update(() => saving = true);
           try {
-            await widget.controller.save(staffId: widget.staffId, id: customer?.id,
+            savedCustomer = await widget.controller.save(staffId: widget.staffId, id: customer?.id,
               name: name.text, phone: phone.text, notes: notes.text);
             if (context.mounted) Navigator.pop(context);
           } catch (e) { if (context.mounted) update(() { saving = false; error = e.toString(); }); }
         }, child: const Text('Save'))])));
     name.dispose(); phone.dispose(); notes.dispose();
     await _load();
+    if (savedCustomer != null && mounted) await _select(savedCustomer!);
   }
   Future<void> _merge() async {
     final source = _selected;

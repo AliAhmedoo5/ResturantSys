@@ -31,7 +31,10 @@ class DeliveryController {
   Future<List<CustomerAddress>> lookupAddresses(String phone) async {
     final normalized = normalizePhone(phone);
     if (normalized.length < 3) return [];
-    final rows = await database.query('customer_addresses', where: 'customer_phone LIKE ?', whereArgs: ['$normalized%'],
+    final rows = await database.query('customer_addresses', where: '''customer_phone LIKE ? OR customer_phone IN (
+      SELECT alias.phone FROM customers alias JOIN customers matched
+        ON COALESCE(alias.merged_into, alias.id) = COALESCE(matched.merged_into, matched.id)
+      WHERE matched.phone = ?)''', whereArgs: ['$normalized%', normalized],
       orderBy: 'is_default DESC, updated_at DESC, id DESC', limit: 30);
     return rows.map(CustomerAddress.fromMap).toList();
   }

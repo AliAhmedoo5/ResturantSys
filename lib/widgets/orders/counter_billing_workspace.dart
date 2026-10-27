@@ -385,7 +385,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
     final controller = widget.orderController;
     if (controller == null) return;
     if (_cartItems.isNotEmpty) throw StateError('Hold or clear the current cart before recalling another.');
-    final holds = await controller.getHolds(widget.currentStaff.id);
+    final holds = List<Map<String, Object?>>.of(await controller.getHolds(widget.currentStaff.id));
     if (!mounted) return;
     final selected = await showDialog<Map<String, Object?>>(context: context, builder: (context) => StatefulBuilder(builder: (context, update) => AlertDialog(
       title: const Text('Recall held cart'), content: SizedBox(width: 460, height: 360,
