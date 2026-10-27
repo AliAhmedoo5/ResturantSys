@@ -1,3 +1,4 @@
+import 'core/database/database_restore_service.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -22,6 +23,18 @@ void main() async {
     databaseFactory = databaseFactoryFfi;
   }
 
+  String? restoreMessage;
+  try {
+    restoreMessage = await DatabaseRestoreService.applyPending(databasePath: PosDatabase.resolveDefaultDatabasePath());
+  } catch (error) {
+    runApp(MaterialApp(home: Scaffold(body: Center(child: SizedBox(width: 640, child: Column(mainAxisSize: MainAxisSize.min, children: [
+      const Text('Backup restoration could not finish', style: TextStyle(fontSize: 24)),
+      const SizedBox(height: 16), SelectableText('$error'),
+      const Text('Original data and the safety backup are retained. Retry after resolving the reported problem.'),
+      FilledButton(onPressed: main, child: const Text('Retry restoration')),
+    ]))))));
+    return;
+  }
   final posDatabase = PosDatabase(seedDefaultStaff: false);
   final database = await posDatabase.initialize();
   ReportDeliveryService(database:database).start();
@@ -38,6 +51,7 @@ void main() async {
     shiftController: shiftController,
   );
   runApp(RestaurantPosApp(
+    startupMessage: restoreMessage,
     authService: authService,
     shiftController: shiftController,
     catalogController: catalogController,
@@ -51,6 +65,7 @@ void main() async {
 class RestaurantPosApp extends StatelessWidget {
   const RestaurantPosApp({
     super.key,
+    this.startupMessage,
     required this.authService,
     this.shiftController,
     this.catalogController,
@@ -59,6 +74,7 @@ class RestaurantPosApp extends StatelessWidget {
     this.vendorKhataController,
   });
 
+  final String? startupMessage;
   final AuthService authService;
   final ShiftAndCashController? shiftController;
   final CatalogAndRecipeController? catalogController;
@@ -74,6 +90,11 @@ class RestaurantPosApp extends StatelessWidget {
       theme: WarmCounterTheme.darkTheme,
       darkTheme: WarmCounterTheme.darkTheme,
       themeMode: ThemeMode.dark,
+      builder: (context, child) => Column(children: [
+        if (startupMessage != null) Material(color: Theme.of(context).colorScheme.primaryContainer,
+          child: SafeArea(bottom: false, child: Padding(padding: const EdgeInsets.all(12), child: Text(startupMessage!)))),
+        Expanded(child: child!),
+      ]),
       home: AppShell(
         session: authService.session,
         onAuthenticatePin: authService.authenticateWithPin,

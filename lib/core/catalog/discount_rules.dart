@@ -1,12 +1,13 @@
 import '../orders/cart_item.dart';
 
-/// Empty lists mean unrestricted. A checkout selects one non-stacking preset.
+/// Empty lists mean unrestricted. Stacking requires explicit opt-in on every selected preset.
 class DiscountRules {
-  const DiscountRules({this.minimumSpendPaisa = 0, this.maximumDiscountPaisa,
+  const DiscountRules({this.stackable = false, this.minimumSpendPaisa = 0, this.maximumDiscountPaisa,
     this.startsAt, this.endsAt, this.startMinute, this.endMinute,
     this.diningModes = const [], this.categoryIds = const [], this.dealIds = const [],
     this.cashierIds = const [], this.dailyLimit});
 
+  final bool stackable;
   final int minimumSpendPaisa;
   final int? maximumDiscountPaisa;
   final DateTime? startsAt;
@@ -46,13 +47,14 @@ class DiscountRules {
     (item.menuItem != null && categoryIds.contains(item.menuItem!.categoryId)) ||
     (item.deal != null && dealIds.contains(item.deal!.id));
 
-  Map<String, Object?> toMap() => {'minimum_spend_paisa': minimumSpendPaisa,
+  Map<String, Object?> toMap() => {'stackable': stackable, 'minimum_spend_paisa': minimumSpendPaisa,
     'maximum_discount_paisa': maximumDiscountPaisa, 'starts_at': startsAt?.toIso8601String(),
     'ends_at': endsAt?.toIso8601String(), 'start_minute': startMinute, 'end_minute': endMinute,
     'dining_modes': diningModes, 'category_ids': categoryIds, 'deal_ids': dealIds,
     'cashier_ids': cashierIds, 'daily_limit': dailyLimit};
 
   factory DiscountRules.fromMap(Map<String, dynamic> map) => DiscountRules(
+    stackable: map['stackable'] == true,
     minimumSpendPaisa: (map['minimum_spend_paisa'] as num?)?.toInt() ?? 0,
     maximumDiscountPaisa: (map['maximum_discount_paisa'] as num?)?.toInt(),
     startsAt: map['starts_at'] == null ? null : DateTime.parse(map['starts_at'] as String),

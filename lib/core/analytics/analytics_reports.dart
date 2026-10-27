@@ -267,6 +267,11 @@ class _ReportBuilder {
     final balances = {for (final b in e.get('balances')) b['ingredient_id']: b};
     final rows = <AnalyticsRow>[
       ...ingredients.map((i) => _row('raw_ingredients', i, {'kind': 'Current position', 'ingredient_id': i['id'], 'name': _safeText(i['name']), 'unit': i['storage_unit'], 'current_stock': i['current_stock'], 'threshold': i['low_stock_threshold'], 'as_of_balance': balances[i['id']]?['balance_after'], 'balance_evidence_at': balances[i['id']]?['recorded_at'], 'status': (i['current_stock'] as num) < 0 ? 'Negative' : (i['current_stock'] as num) <= (i['low_stock_threshold'] as num) ? 'Low' : 'Within threshold'})),
+      ...e.get('physical_counts').map((c) => AnalyticsRow(id: 'count-${c['count_id']}-${c['ingredient_id']}', sourceType: 'stock_count_lines', sourceId: '${c['count_id']}:${c['ingredient_id']}', cells: {
+        'kind': 'Physical count', 'count_id': c['count_id'], 'ingredient_id': c['ingredient_id'], 'unit': c['unit'],
+        'expected': c['expected'], 'counted': c['counted'], 'variance': c['variance'], 'estimated_cost_paisa': c['estimated_cost_paisa'],
+        'movement_id': c['movement_id'], 'snapshot_sequence': c['snapshot_sequence'], 'status': c['status'],
+        'created_by': c['created_by'], 'approved_by': c['approved_by'], 'posted_by': c['posted_by'], 'reason': _safeText(c['reason']), 'recorded_at': c['created_at']})),
       ...e.get('inventory').map((m) => _row('inventory_movements', m, {'kind': 'Movement', 'ingredient_id': m['ingredient_id'], 'quantity_delta': m['quantity_delta'], 'balance_after': m['balance_after'], 'recorded_at': m['recorded_at']})),
       ...e.get('waste').map((w) => _row('kitchen_wastage', w, {'kind': 'Recorded wastage', 'ingredient_id': w['raw_ingredient_id'], 'quantity': w['quantity'], 'loss_paisa': _money(w, 'cost_loss'), 'recorded_at': w['created_at']})),
     ];
@@ -289,8 +294,9 @@ class _ReportBuilder {
       _coverage('as_of_coverage', 'As-of balance evidence coverage', balances.length, ingredients.length, 'Latest recorded balance_after no later than last selected close/refresh. No evidence means unknown, not opening balance zero.'),
       _coverage('bom_coverage', 'Sold-line BOM quantity coverage', bomCovered, soldItems.length, 'Valid sold lines with readable quantity snapshot. Quantity evidence is not event-time costing.'),
       _missing('stock_valuation', 'Historical stock valuation', 'No historical cost layers. Current unit cost cannot rewrite past valuation.'),
-      _missing('physical_variance', 'Physical count variance', 'No persisted physical count snapshot with ledger reference.', unit: AnalyticsUnit.decimal),
-    ], rows, ['kind', 'ingredient_id', 'name', 'unit', 'current_stock', 'threshold', 'as_of_balance', 'balance_evidence_at', 'quantity_delta', 'balance_after', 'quantity', 'loss_paisa', 'status', 'recorded_at'], [_currentBasis, 'Movement/BOM/waste rows have separate scopes. Never sum quantities across grams, liters or count units.', 'Movement history begins with v14 capture; cause/source attribution and physical counts are incomplete. As-of is recorded balance evidence, not an invented beginning balance.']);
+      _metric('physical_variance', 'Posted physical count lines', e.get('physical_counts').length, unit: AnalyticsUnit.count, explanation: 'Posted observations in selected Business Day intervals. Inspect per-ingredient variances below; incompatible units are never totaled.'),
+      _metric('physical_variance_cost', 'Estimated physical variance value', _integers(e.get('physical_counts'), 'estimated_cost_paisa'), explanation: 'Signed event-time count estimates; unknown rates prevent a complete total.', unavailable: e.get('physical_counts').any((c) => c['estimated_cost_paisa'] == null)),
+    ], rows, ['kind', 'ingredient_id', 'name', 'unit', 'current_stock', 'threshold', 'as_of_balance', 'balance_evidence_at', 'quantity_delta', 'balance_after', 'quantity', 'loss_paisa', 'count_id', 'expected', 'counted', 'variance', 'estimated_cost_paisa', 'movement_id', 'snapshot_sequence', 'created_by', 'approved_by', 'posted_by', 'reason', 'status', 'recorded_at'], [_currentBasis, 'Movement/BOM/waste rows have separate scopes. Never sum quantities across grams, liters or count units.', 'Movement history begins with v14 capture; posted physical counts retain observation, approval and movement evidence. A zero-variance count has no adjusting movement. As-of is recorded balance evidence, not an invented beginning balance.']);
   }
 
   AnalyticsSection _procurement() {
@@ -397,14 +403,36 @@ class _ReportBuilder {
   }
 
   AnalyticsSection _profitability() {
+    final coverage = e.get('cost_coverage').map((c) => c['order_id']).toSet();
+    final events = e.get('cost_events');
+    final covered = orders.where((o) => coverage.contains(o['id'])).length;
+    final complete = orders.isNotEmpty && covered == orders.length && events.every((c) => c['cost_paisa'] != null);
+    final cogs = events.fold<int>(0, (sum, c) => sum + (c['kind'] == 'COOKED_WASTE' ? 0 : (c['kind'] == 'RETURN' ? -1 : 1) * ((c['cost_paisa'] as int?) ?? 0)));
+    // Accrual at confirmation: include COD receivables; cancellation reduces the
+    // stored total to zero. Delivery fees are earned with the order; tax is excluded.
+    final revenue = _sum(valid, 'grand_total') - _sum(valid, 'tax_amount');
+    final gross = revenue - cogs;
+    final expenses = _integers(e.get('expense_entries'), 'expense_delta_paisa');
+    final labor = e.get('payroll_entries').fold<int>(0, (sum, p) => sum + (p['kind'] == 'ACCRUAL' || (p['kind'] == 'REVERSAL' && p['source'] == 'NONE' && p['advance_delta_paisa'] == 0) ? p['payable_delta_paisa'] as int : 0));
+    final rawWaste = _sum(e.get('waste').where((w) => w['reason'] != 'WASTED_COOKED'), 'cost_loss');
+    final variance = _integers(e.get('physical_counts'), 'estimated_cost_paisa');
+    final netAvailable = complete && !e.query.hasOrderFilters && !e.absent.contains('expense_entries') && !e.absent.contains('payroll_entries') &&
+      e.get('physical_counts').every((c) => c['estimated_cost_paisa'] != null);
+    const policy = 'Recognition at order confirmation, including COD receivables and delivery fees, less stored tax carve-out. Cancellations/revisions use current order totals. Cost uses immutable event-time acquisition rates, with original-rate raw returns; cooked losses remain in consumed cost. Missing pre-upgrade orders/rates withhold complete profit.';
     return _section(AnalyticsFamily.profitability, 'Profitability and costing', [
       _metric('recorded_value', 'Recorded order value', _sum(valid, 'grand_total'), explanation: _orderBasis),
-      _metric('waste_loss', 'Recorded waste loss', _sum(e.get('waste'), 'cost_loss'), explanation: 'Stored event cost_loss, normalized per record. Not automatically additional COGS for already-consumed food. $_intervalBasis', previous: _sum(e.get('previous_waste'), 'cost_loss')),
-      _metric('purchase_spend', 'Recorded Mandi purchase spend', _sum(e.get('purchases'), 'total_cost'), explanation: 'Purchases are inventory acquisition spend, not realized COGS; do not subtract as sales ingredient cost.'),
-      _missing('cogs', 'Historical realized COGS', 'BOM stores quantities but no event-time ingredient/packaging cost layers. Current cost cannot establish historical COGS.'),
-      AnalyticsMetric(id: 'gross_profit', label: 'Actual gross profit', unit: AnalyticsUnit.paisa, explanation: 'Cannot calculate reliably without recognized tax-exclusive revenue policy and event-time realized ingredient/packaging cost coverage.', quality: AnalyticsQuality.missing, sampleCount: 0, populationCount: soldItems.length),
-      _missing('net_profit', 'Net operating result', 'Cannot calculate reliably without historical COGS, expense accruals, labor and period allocations. Purchase spend is not a substitute.'),
-    ], e.get('waste').map((w) => _row('kitchen_wastage', w, {'ingredient_id': w['raw_ingredient_id'], 'quantity': w['quantity'], 'recorded_loss_paisa': _money(w, 'cost_loss'), 'reason': _safeText(w['reason']), 'created_at': w['created_at']})).toList(), ['ingredient_id', 'quantity', 'recorded_loss_paisa', 'reason', 'created_at'], ['Recorded inputs are available; unavailable profit is null with a reason, never false zero.', 'No current-price historical margin estimate is presented as actual accounting profit.']);
+      _metric('recognized_revenue', 'Tax-exclusive recognized revenue', revenue, explanation: policy),
+      _coverage('cost_coverage', 'Historical cost capture coverage', covered, orders.length, 'Orders with event-time cost capture. Unknown ingredient rates are separately disclosed in cost rows.'),
+      _metric('waste_loss', 'Recorded waste loss', _sum(e.get('waste'), 'cost_loss'), explanation: 'Includes cooked loss already included in consumed cost; never subtract it twice.', previous: _sum(e.get('previous_waste'), 'cost_loss')),
+      _metric('purchase_spend', 'Recorded Mandi purchase spend', _sum(e.get('purchases'), 'total_cost'), explanation: 'Inventory acquisition spend; not sales COGS.'),
+      _metric('cogs', 'Historical realized COGS', cogs, explanation: policy, unavailable: !complete),
+      _metric('gross_profit', 'Actual gross profit', gross, explanation: policy, unavailable: !complete),
+      _metric('net_profit', 'Recorded net operating result', gross - expenses - labor - rawWaste + variance,
+        explanation: 'Gross profit less posted operating expenses, salary accruals and raw waste, plus signed posted count valuation. Posting-period allocation; unposted liabilities and legacy generic drawer outflows are not inferred. Available only for whole Business Days with complete cost evidence.', unavailable: !netAvailable),
+    ], [
+      ...events.map((c) => _row('order_cost_events', c, {'kind': c['kind'], 'order_id': c['order_id'], 'ingredient_id': c['ingredient_id'], 'revision': c['revision'], 'quantity': c['quantity'], 'unit_cost_rupees': c['unit_cost_rupees'], 'cost_paisa': c['cost_paisa'], 'source_event_id': c['source_event_id'], 'created_at': c['recorded_at']})),
+      ...e.get('waste').map((w) => _row('kitchen_wastage', w, {'kind': 'Waste evidence', 'ingredient_id': w['raw_ingredient_id'], 'quantity': w['quantity'], 'recorded_loss_paisa': _money(w, 'cost_loss'), 'reason': _safeText(w['reason']), 'created_at': w['created_at']})),
+    ], ['kind', 'order_id', 'ingredient_id', 'revision', 'quantity', 'unit_cost_rupees', 'cost_paisa', 'source_event_id', 'recorded_loss_paisa', 'reason', 'created_at'], [policy, 'Unknown costs remain null. Current purchase rates never rewrite earlier cost events. No invented pre-upgrade profit.', 'Recorded net result uses posting periods; it does not assert that all expenses or earned salary have been entered. Order filters withhold net result because overhead cannot be allocated reliably.']);
   }
 
   AnalyticsSection _audit() {
@@ -461,7 +489,7 @@ class _ReportBuilder {
       AnalyticsFamily.cash: ['shifts', 'cash_movements', 'order_payments'],
       AnalyticsFamily.expenses: ['cash_movements', 'expense_entries'],
       AnalyticsFamily.staff: ['staff', 'payroll_entries'],
-      AnalyticsFamily.profitability: ['orders', 'kitchen_wastage', 'mandi_procurements'],
+      AnalyticsFamily.profitability: ['orders', 'order_cost_coverage', 'order_cost_events', 'kitchen_wastage', 'expense_entries', 'payroll_entries', 'stock_count_lines'],
       AnalyticsFamily.audit: ['order_revisions', 'checkout_token_audit', 'report_runs', 'report_outbox'],
     };
     final absent = (sources[family] ?? const <String>[]).where(e.absent.contains).toList();

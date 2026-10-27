@@ -1,3 +1,5 @@
+import 'restore_backup_dialog.dart';
+import '../../core/database/database_restore_service.dart';
 import '../orders/customer_directory.dart';
 import '../../core/orders/customer_controller.dart';
 import '../../core/delivery/delivery_controller.dart';
@@ -1898,6 +1900,14 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                       minimumSize: const Size(0, WarmCounterSpacing.touchTargetMin),
                     ),
                     onPressed: _triggerInstantBackup,
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    key: const ValueKey('restore_backup_btn'),
+                    icon: const Icon(Icons.restore), label: const Text('Restore from a backup ZIP'),
+                    onPressed: widget.authService == null ? null : () => showDialog<void>(
+                      context: context, barrierDismissible: false,
+                      builder: (_) => RestoreBackupDialog(service: DatabaseRestoreService(auth: widget.authService!))),
                   ),
                 ],
                 ),
