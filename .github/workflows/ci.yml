@@ -38,6 +38,15 @@ jobs:
       - name: Verify Windows PIN login latency
         run: flutter test test/auth/pin_login_latency_test.dart --reporter expanded
 
+      - name: Verify release-mode Windows PIN latency
+        if: success() || failure()
+        shell: pwsh
+        run: |
+          dart compile exe scripts/ci/benchmark-pin.dart -o "$env:RUNNER_TEMP/pin-benchmark.exe"
+          if ($LASTEXITCODE -ne 0) { throw 'PIN benchmark compilation failed.' }
+          & "$env:RUNNER_TEMP/pin-benchmark.exe"
+          if ($LASTEXITCODE -ne 0) { throw 'Release PIN benchmark failed.' }
+
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 35
