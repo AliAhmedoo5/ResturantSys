@@ -17,7 +17,7 @@ class StatusOrders implements OrderAndCheckoutController {
     grandTotal: 500, paymentStatus: 'SETTLED', createdAt: DateTime(2026));
   int? actor;
   @override
-  CartTotals calculateCartTotals({required List<CartItem> items, DiscountPreset? discount}) =>
+  CartTotals calculateCartTotals({required List<CartItem> items, DiscountPreset? discount, DiningType? diningType, int? cashierId}) =>
     const CartTotals(subtotal: 0, discountAmount: 0, taxAmount: 0, grandTotal: 0);
   @override
   Future<List<Order>> getOrders({int? businessDayId, int? shiftId, int? limit}) async => [order];

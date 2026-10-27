@@ -1,3 +1,8 @@
+import '../../core/catalog/discount_rules.dart';
+import '../../core/inventory/stock_count_controller.dart';
+import '../../core/settings/keyboard_shortcut_controller.dart';
+import 'dialogs/stock_counts_dialog.dart';
+import 'dialogs/keyboard_shortcuts_dialog.dart';
 import 'dialogs/deal_form_dialog.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -71,6 +76,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
   List<Modifier> _modifiers = [];
   List<ModifierGroup> _modifierGroups = [];
   List<DiscountPreset> _discounts = [];
+  List<Map<String, Object?>> _discountCashiers = [];
   bool _cashierVoidEnabled = true;
 
   // Filter states
@@ -121,6 +127,8 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
     final modifiers = await widget.controller!.getModifiers();
     final groups = await widget.controller!.getModifierGroups();
     final discounts = await widget.controller!.getDiscountPresets();
+    final cashiers = widget.managerId == null ? <Map<String, Object?>>[]
+      : await widget.controller!.getDiscountCashiers(managerId: widget.managerId!);
 
     if (mounted) {
       setState(() {
@@ -132,6 +140,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
         _modifiers = modifiers;
         _modifierGroups = groups;
         _discounts = discounts;
+        _discountCashiers = cashiers;
         _isLoading = false;
       });
     }
@@ -697,14 +706,12 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
     showDialog<void>(
       context: context,
       builder: (ctx) => DiscountPresetFormDialog(
-        onSave: ({required name, required type, required value, required bool isActive}) async {
+        categories: _categories, deals: _deals, cashiers: _discountCashiers,
+        onSave: ({required name, required type, required value, required bool isActive, required DiscountRules rules}) async {
           if (widget.controller != null) {
-            await widget.controller!.createDiscountPreset(
-              name: name,
-              type: type,
-              value: value,
-              isActive: isActive,
-            );
+            if (widget.managerId == null) throw StateError('Manager session required.');
+            await widget.controller!.saveManagedDiscount(managerId: widget.managerId!, create: true,
+              preset: DiscountPreset(id: 0, name: name, type: type, value: value, isActive: isActive, rules: rules));
             await _loadAllCatalogData();
           } else {
             setState(() {
@@ -714,6 +721,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                 type: type,
                 value: value,
                 isActive: isActive,
+                rules: rules,
               ));
             });
           }
@@ -726,15 +734,18 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
     showDialog<void>(
       context: context,
       builder: (ctx) => DiscountPresetFormDialog(
+        categories: _categories, deals: _deals, cashiers: _discountCashiers,
         preset: preset,
-        onSave: ({required name, required type, required value, required bool isActive}) async {
+        onSave: ({required name, required type, required value, required bool isActive, required DiscountRules rules}) async {
           if (widget.controller != null) {
-            await widget.controller!.updateDiscountPreset(
+            if (widget.managerId == null) throw StateError('Manager session required.');
+            await widget.controller!.saveManagedDiscount(managerId: widget.managerId!, preset:
               preset.copyWith(
                 name: name,
                 type: type,
                 value: value,
                 isActive: isActive,
+                rules: rules,
               ),
             );
             await _loadAllCatalogData();
@@ -747,6 +758,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                   type: type,
                   value: value,
                   isActive: isActive,
+                rules: rules,
                 );
               }
             });
@@ -775,7 +787,8 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
 
     if (confirmed == true) {
       if (widget.controller != null) {
-        await widget.controller!.deleteDiscountPreset(preset.id);
+        if (widget.managerId == null) throw StateError('Manager session required.');
+        await widget.controller!.deleteManagedDiscount(managerId: widget.managerId!, id: preset.id);
         await _loadAllCatalogData();
       } else {
         setState(() {
@@ -887,6 +900,10 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
             'Operational Feature Toggles & Settings',
             style: WarmCounterTypography.pageHeading.copyWith(fontSize: 18),
           ),
+          ListTile(leading: const Icon(Icons.keyboard), title: const Text('Configure keyboard shortcuts'),
+            subtitle: const Text('Cashier register · conflicts, preview and restore defaults'),
+            onTap: widget.controller == null || widget.managerId == null ? null : () => showDialog<void>(context: context,
+              builder: (_) => KeyboardShortcutsDialog(controller: KeyboardShortcutController(widget.controller!.database), managerId: widget.managerId!))),
           const SizedBox(height: WarmCounterSpacing.space16),
           Card(
             color: WarmCounterColors.lightCardBackground,
@@ -1329,6 +1346,12 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
           ),
           const SizedBox(height: WarmCounterSpacing.space16),
 
+          OutlinedButton.icon(icon: const Icon(Icons.fact_check_outlined), label: const Text('Physical stock counts'),
+            onPressed: widget.controller == null || widget.managerId == null ? null : () async {
+              await showDialog<void>(context: context, builder: (_) => StockCountsDialog(
+                controller: StockCountController(widget.controller!.database), managerId: widget.managerId!));
+              if (mounted) await _loadAllCatalogData();
+            }),
           // Low-stock toggle chip
           FilterChip(
             key: const ValueKey('low_stock_filter_chip'),

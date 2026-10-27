@@ -1,3 +1,6 @@
+import 'dart:convert';
+import '../orders/cart_item.dart';
+import 'discount_rules.dart';
 /// Type of promotional or pre-approved discount applied at checkout.
 enum DiscountType {
   percentage('PERCENTAGE', 'Percentage (%)'),
@@ -27,6 +30,7 @@ class DiscountPreset {
     required this.value,
     required this.isActive,
     this.createdAt,
+    this.rules = const DiscountRules(),
   });
 
   final int id;
@@ -35,22 +39,28 @@ class DiscountPreset {
   final double value;
   final bool isActive;
   final DateTime? createdAt;
+  final DiscountRules rules;
 
   /// Calculates the rupee discount amount against a given subtotal.
   /// Never exceeds the subtotal itself.
-  double calculateDiscount(double subtotal) {
-    if (subtotal <= 0 || value <= 0) return 0.0;
-    if (type == DiscountType.percentage) {
-      final amount = subtotal * (value / 100.0);
-      return amount > subtotal ? subtotal : amount;
-    } else {
-      return value > subtotal ? subtotal : value;
-    }
+  double calculateDiscount(double subtotal, {List<CartItem>? items, String? diningMode, int? cashierId, DateTime? now}) {
+    if (!isActive || !subtotal.isFinite || !value.isFinite || subtotal <= 0 || value <= 0) return 0;
+    final subtotalPaisa = (subtotal * 100).round();
+    if (!rules.eligible(subtotalPaisa: subtotalPaisa, now: now ?? DateTime.now(), diningMode: diningMode, cashierId: cashierId)) return 0;
+    final eligiblePaisa = items == null
+      ? (rules.categoryIds.isEmpty && rules.dealIds.isEmpty ? subtotalPaisa : 0)
+      : items.where(rules.includes).fold<int>(0, (sum, item) => sum + (item.totalPrice * 100).round());
+    final basisPoints = (value * 100).round();
+    var amount = type == DiscountType.percentage ? (eligiblePaisa * basisPoints + 5000) ~/ 10000 : (value * 100).round();
+    if (amount > eligiblePaisa) amount = eligiblePaisa;
+    if (rules.maximumDiscountPaisa != null && amount > rules.maximumDiscountPaisa!) amount = rules.maximumDiscountPaisa!;
+    return amount / 100.0;
   }
 
   factory DiscountPreset.fromMap(Map<String, Object?> map) {
     return DiscountPreset(
       id: map['id'] as int,
+      rules: DiscountRules.fromMap(jsonDecode(map['rules_json'] as String? ?? '{}') as Map<String, dynamic>),
       name: map['name'] as String,
       type: DiscountType.fromCode(map['type'] as String),
       value: (map['value'] as num).toDouble(),
@@ -64,6 +74,7 @@ class DiscountPreset {
   Map<String, Object?> toMap() {
     return {
       'id': id,
+      'rules_json': jsonEncode(rules.toMap()),
       'name': name,
       'type': type.code,
       'value': value,
@@ -79,9 +90,11 @@ class DiscountPreset {
     double? value,
     bool? isActive,
     DateTime? createdAt,
+    DiscountRules? rules,
   }) {
     return DiscountPreset(
       id: id ?? this.id,
+      rules: rules ?? this.rules,
       name: name ?? this.name,
       type: type ?? this.type,
       value: value ?? this.value,

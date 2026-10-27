@@ -1,3 +1,4 @@
+import '../settings/managed_configuration.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../database/pos_database_constants.dart';
 import 'catalog_media_service.dart';
@@ -632,6 +633,41 @@ class CatalogAndRecipeController {
     );
     return preset;
   }
+
+  Future<List<Map<String, Object?>>> getDiscountCashiers({required int managerId}) async {
+    await requireManager(database, managerId);
+    return database.query('staff', columns: ['id', 'name'], where: "role='CASHIER' AND is_active=1 AND login_enabled=1");
+  }
+
+  Future<void> saveManagedDiscount({required int managerId, required DiscountPreset preset, bool create = false}) => database.transaction((txn) async {
+    await requireManager(txn, managerId);
+    preset.rules.validate();
+    if (preset.name.trim().isEmpty || !preset.value.isFinite || preset.value <= 0 ||
+        (preset.type == DiscountType.percentage && preset.value > 100)) throw ArgumentError('Enter valid discount terms.');
+    final old = create ? <Map<String, Object?>>[] : await txn.query('discount_presets', where: 'id=?', whereArgs: [preset.id]);
+    if (!create && old.isEmpty) throw StateError('Discount no longer exists.');
+    final values = preset.toMap()..remove('id');
+    values['created_at'] = old.isEmpty ? _formatTimestamp(DateTime.now()) : old.single['created_at'];
+    if (create) {
+      await txn.insert('discount_presets', values);
+    } else {
+      await txn.update('discount_presets', values, where: 'id=?', whereArgs: [preset.id]);
+    }
+    await auditConfiguration(txn, managerId, 'DISCOUNT', old, values);
+  });
+
+  Future<void> deleteManagedDiscount({required int managerId, required int id}) => database.transaction((txn) async {
+    await requireManager(txn, managerId);
+    final old = await txn.query('discount_presets', where: 'id=?', whereArgs: [id]);
+    if (old.isEmpty) throw StateError('Discount no longer exists.');
+    final used = await txn.query('orders', columns: ['id'], where: 'discount_id=?', whereArgs: [id], limit: 1);
+    if (used.isNotEmpty) {
+      await txn.update('discount_presets', {'is_active': 0}, where: 'id=?', whereArgs: [id]);
+    } else {
+      await txn.delete('discount_presets', where: 'id=?', whereArgs: [id]);
+    }
+    await auditConfiguration(txn, managerId, 'DISCOUNT_DELETE', old, {'id': id, 'archived': used.isNotEmpty});
+  });
 
   Future<void> deleteDiscountPreset(int id) async {
     await database.delete(

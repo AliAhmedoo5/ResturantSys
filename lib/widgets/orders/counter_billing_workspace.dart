@@ -1,3 +1,4 @@
+import '../../core/settings/keyboard_shortcut_controller.dart';
 import 'dart:convert';
 import 'customer_directory.dart';
 import '../../core/orders/customer_controller.dart';
@@ -35,6 +36,7 @@ class CounterBillingWorkspace extends StatefulWidget {
   const CounterBillingWorkspace({
     super.key,
     this.orderController,
+    this.shortcutController,
     this.catalogController,
     this.mediaService,
     this.authService,
@@ -54,6 +56,7 @@ class CounterBillingWorkspace extends StatefulWidget {
   });
 
   final OrderAndCheckoutController? orderController;
+  final KeyboardShortcutController? shortcutController;
   final CatalogAndRecipeController? catalogController;
   final CatalogMediaService? mediaService;
   final AuthService? authService;
@@ -86,6 +89,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
   Map<int, String> _menuItemImages = {};
   Map<int, String> _dealImages = {};
   bool _isLoading = true;
+  Map<String, String> _shortcutKeys = Map.of(KeyboardShortcutController.defaults);
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocus = FocusNode();
   String _searchQuery = '';
@@ -117,6 +121,19 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
   @override
   void initState() {
     super.initState();
+    final db = widget.initialCategories != null || widget.initialMenuItems != null || widget.initialDeals != null
+      ? null : widget.catalogController?.database ?? widget.orderController?.database;
+    final shortcuts = widget.shortcutController ?? (db == null ? null : KeyboardShortcutController(db));
+    if (shortcuts != null) {
+      shortcuts.load().then((keys) {
+        if (mounted) setState(() => _shortcutKeys = keys);
+      }).catchError((Object error) {
+        if (mounted) {
+          setState(() => _shortcutKeys = {});
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Keyboard shortcuts unavailable: $error')));
+        }
+      });
+    }
     _searchFocus.addListener(() { if (mounted) setState(() {}); });
     if (widget.initialMenuItemImages != null) {
       _menuItemImages = Map.from(widget.initialMenuItemImages!);
@@ -208,6 +225,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
       return widget.orderController!.calculateCartTotals(
         items: _cartItems,
         discount: _selectedDiscount,
+        diningType: _selectedDiningType, cashierId: widget.currentStaff.id,
       );
     }
 
@@ -217,7 +235,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
     }
     double discountAmount = 0.0;
     if (_selectedDiscount != null) {
-      discountAmount = _selectedDiscount!.calculateDiscount(subtotal);
+      discountAmount = _selectedDiscount!.calculateDiscount(subtotal, items: _cartItems, diningMode: _selectedDiningType.code, cashierId: widget.currentStaff.id);
     }
     final grandTotal = (subtotal - discountAmount) < 0.0 ? 0.0 : (subtotal - discountAmount);
     return CartTotals(
@@ -455,6 +473,18 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
     if (_cartItems.isEmpty || _checkoutOpen || _draftBusy) return;
     _checkoutOpen = true;
     try {
+    if (widget.catalogController != null) {
+      final fresh = await widget.catalogController!.getDiscountPresets(activeOnly: true);
+      if (!mounted) return;
+      final selected = _selectedDiscount;
+      final matching = selected == null ? <DiscountPreset>[] : fresh.where((d) => d.id == selected.id).toList();
+      final changed = selected != null && (matching.isEmpty || jsonEncode(matching.single.toMap()) != jsonEncode(selected.toMap()));
+      setState(() { _discounts = fresh; if (changed) _selectedDiscount = null; });
+      if (changed) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Discount terms changed. Review the refreshed discounts and total before payment.')));
+        return;
+      }
+    }
     if (_selectedDiningType == DiningType.delivery) {
       if (widget.orderController == null) return;
       final details = await showDialog<DeliveryDetails>(context: context, builder: (_) => DeliveryDetailsDialog(
@@ -559,36 +589,26 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
   // ---------------------------------------------------------------------------
 
   Map<ShortcutActivator, VoidCallback> _buildKeyboardBindings() {
-    final bindings = <ShortcutActivator, VoidCallback>{
-      if (!_searchFocus.hasFocus)
-        const SingleActivator(LogicalKeyboardKey.space): () => _openTenderCheckout(),
-      if (!_searchFocus.hasFocus)
-        const SingleActivator(LogicalKeyboardKey.numpadEnter): () => _openTenderCheckout(),
-      const SingleActivator(LogicalKeyboardKey.escape): () {
-        if (_searchFocus.hasFocus) { _searchFocus.unfocus(); } else { _clearCart(); }
-      },
+    final callbacks = <String, VoidCallback>{
+      'checkout': () => _openTenderCheckout(), 'checkoutAlternate': () => _openTenderCheckout(),
+      'clear': _clearCart, 'hold': () => _hold(), 'recall': () => _recall(),
+      'customers': () => _customers(), 'search': () => _searchFocus.requestFocus(),
+      for (var i = 0; i < _categories.length && i < 12; i++)
+        'category${i + 1}': () => setState(() => _selectedCategoryId = _categories[i].id),
     };
-
-    // F1 to F12 for category switching
-    final fKeys = [
-      LogicalKeyboardKey.f1,
-      LogicalKeyboardKey.f2,
-      LogicalKeyboardKey.f3,
-      LogicalKeyboardKey.f4,
-      LogicalKeyboardKey.f5,
-      LogicalKeyboardKey.f6,
-      LogicalKeyboardKey.f7,
-      LogicalKeyboardKey.f8,
-      LogicalKeyboardKey.f9,
-      LogicalKeyboardKey.f10,
-      LogicalKeyboardKey.f11,
-      LogicalKeyboardKey.f12,
-    ];
-
-    for (int i = 0; i < fKeys.length && i < _categories.length; i++) {
-      final catId = _categories[i].id;
-      bindings[SingleActivator(fKeys[i])] = () {
-        setState(() => _selectedCategoryId = catId);
+    final bindings = <ShortcutActivator, VoidCallback>{};
+    for (final entry in _shortcutKeys.entries) {
+      if (entry.value.isEmpty || !callbacks.containsKey(entry.key)) continue;
+      final label = entry.value.replaceFirst('Shift+', '');
+      final key = label == 'Space' ? LogicalKeyboardKey.space
+        : label == 'Escape' ? LogicalKeyboardKey.escape
+        : label == 'Numpad Enter' ? LogicalKeyboardKey.numpadEnter
+        : LogicalKeyboardKey.findKeyByKeyId(LogicalKeyboardKey.f1.keyId + int.parse(label.substring(1)) - 1)!;
+      bindings[SingleActivator(key, shift: entry.value.startsWith('Shift+'), includeRepeats: false)] = () {
+        final focusedContext = FocusManager.instance.primaryFocus?.context;
+        final typing = focusedContext?.widget is EditableText || focusedContext?.findAncestorWidgetOfExactType<EditableText>() != null;
+        if (_draftBusy || typing || ModalRoute.of(context)?.isCurrent != true || !widget.currentStaff.role.isCashier || !widget.currentStaff.isActive || !widget.currentStaff.loginEnabled) return;
+        callbacks[entry.key]!();
       };
     }
 
@@ -720,7 +740,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
             if (widget.orderController != null) _buildReviseOrderButton(),
             if (widget.orderController != null) _buildVoidOrderButton(),
             Text(
-              '[Space / Numpad Enter] Checkout | [Esc] Clear',
+              'Checkout: ${_shortcutKeys['checkout'] ?? ''} | Clear: ${_shortcutKeys['clear'] ?? ''}',
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.end,
               style: WarmCounterTypography.caption.copyWith(
@@ -993,7 +1013,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
           ..._categories.asMap().entries.map((entry) {
             final index = entry.key;
             final cat = entry.value;
-            final fKey = index < 12 ? 'F${index + 1}' : '';
+            final fKey = _shortcutKeys['category${index + 1}'] ?? '';
             final label = fKey.isNotEmpty ? '$fKey: ${cat.name}' : cat.name;
 
             return _buildTabChip(
@@ -1315,7 +1335,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
                 if (_cartItems.isNotEmpty)
                   IconButton(
                     icon: const Icon(Icons.delete_sweep_outlined, size: 22),
-                    tooltip: 'Clear Cart [Esc]',
+                    tooltip: 'Clear Cart [${_shortcutKeys['clear'] ?? ''}]',
                     onPressed: _clearCart,
                   ),
               ],
@@ -1368,7 +1388,9 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
                       'Discount: ',
                       style: WarmCounterTypography.caption.copyWith(fontWeight: FontWeight.bold),
                     ),
-                    ..._discounts.map((d) {
+                    ..._discounts.where((d) => d.id == _selectedDiscount?.id || d.calculateDiscount(
+                      _cartItems.fold<double>(0, (sum, item) => sum + item.totalPrice), items: _cartItems,
+                      diningMode: _selectedDiningType.code, cashierId: widget.currentStaff.id) > 0).map((d) {
                       final isSelected = _selectedDiscount?.id == d.id;
                       return Padding(
                         padding: const EdgeInsets.only(right: 6),
@@ -1437,8 +1459,8 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
                 ElevatedButton.icon(
                   key: const ValueKey('proceed_to_tender_button'),
                   icon: const Icon(Icons.point_of_sale_outlined, size: 24),
-                  label: const Text(
-                    'Charge [Space]',
+                  label: Text(
+                    'Charge [${_shortcutKeys['checkout'] ?? ''}]',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   onPressed: _cartItems.isEmpty ? null : _openTenderCheckout,
