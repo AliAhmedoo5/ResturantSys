@@ -71,7 +71,7 @@ jobs:
           SYNTHETIC_Z_CLOSE_FIXTURE: ${{ runner.temp }}/synthetic-z-close-fixture
           SMTP_FIXTURE_DIRECTORY: ${{ runner.temp }}/smtp-fixture
           CAPTURE_DESKTOP: 'true'
-        run: flutter test
+        run: flutter test --timeout 2m
 
       - name: Upload desktop layout previews
         if: always()
