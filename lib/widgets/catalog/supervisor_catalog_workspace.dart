@@ -590,7 +590,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
         menuItems: _allMenuItems,
         rawIngredients: _rawIngredients,
         groups: _modifierGroups,
-        onSave: ({menuItemId, groupId, required name, required priceDelta, rawIngredientId, required ingredientQtyDelta, required bool isActive, required DiscountRules rules}) async {
+        onSave: ({menuItemId, groupId, required name, required priceDelta, rawIngredientId, required ingredientQtyDelta, required bool isActive}) async {
           if (widget.controller != null) {
             await widget.controller!.createModifier(
               menuItemId: menuItemId,
@@ -629,7 +629,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
         menuItems: _allMenuItems,
         rawIngredients: _rawIngredients,
         groups: _modifierGroups,
-        onSave: ({menuItemId, groupId, required name, required priceDelta, rawIngredientId, required ingredientQtyDelta, required bool isActive, required DiscountRules rules}) async {
+        onSave: ({menuItemId, groupId, required name, required priceDelta, rawIngredientId, required ingredientQtyDelta, required bool isActive}) async {
           if (widget.controller != null) {
             await widget.controller!.updateModifier(
               modifier.copyWith(

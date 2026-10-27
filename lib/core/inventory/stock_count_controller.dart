@@ -96,8 +96,10 @@ class StockCountController {
     (await txn.rawQuery('SELECT COALESCE(MAX(id),0) AS seq FROM inventory_movements WHERE ingredient_id=?', [ingredientId])).single['seq'] as int;
 
   Future<void> _fresh(DatabaseExecutor txn, Map<String, Object?> row) async {
-    if (await _sequence(txn, row['ingredient_id'] as int) != row['snapshot_sequence']) {
-      throw StateError('Stock moved after the snapshot. Start a new count and recount this selection.');
+    final live = await txn.query('raw_ingredients', columns: ['storage_unit'], where: 'id=?', whereArgs: [row['ingredient_id']]);
+    if (live.isEmpty || live.single['storage_unit'] != row['unit'] ||
+        await _sequence(txn, row['ingredient_id'] as int) != row['snapshot_sequence']) {
+      throw StateError('Stock or its storage unit changed after the snapshot. Start a new count and recount this selection.');
     }
   }
 

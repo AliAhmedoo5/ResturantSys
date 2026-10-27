@@ -68,6 +68,14 @@ void main() {
     expect((await counts.lines(1, fresh)).single['movement_id'], isNull);
   });
 
+  test('changing storage unit invalidates a count even without a balance movement', () async {
+    final ingredient = await catalog.createRawIngredient(name: 'Flour', storageUnit: StorageUnit.kg, currentStock: 10);
+    final id = await counts.start(managerId: 1, ingredientIds: [ingredient.id], reason: 'Shelf');
+    await db.update('raw_ingredients', {'storage_unit': 'g'}, where: 'id=?', whereArgs: [ingredient.id]);
+    await expectLater(counts.submit(managerId: 1, id: id, quantities: {ingredient.id: 8}), throwsStateError);
+    expect((await catalog.getRawIngredient(ingredient.id)).currentStock, 10);
+  });
+
   test('scoped discount uses integer paisa, min spend, cap, dates, overnight window and role', () {
     final lines = [CartItem(menuItem: const MenuItem(id: 1, categoryId: 1, name: 'Burger', basePrice: 100.05)),
       CartItem(menuItem: const MenuItem(id: 2, categoryId: 2, name: 'Drink', basePrice: 100))];
