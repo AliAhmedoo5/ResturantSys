@@ -129,6 +129,8 @@ class FakeOrderController implements OrderAndCheckoutController {
   CartTotals calculateCartTotals({
     required List<CartItem> items,
     DiscountPreset? discount,
+    DiningType? diningType,
+    int? cashierId,
   }) {
     return const CartTotals(
       subtotal: 0.0,

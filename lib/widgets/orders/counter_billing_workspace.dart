@@ -121,7 +121,8 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
   @override
   void initState() {
     super.initState();
-    final db = widget.orderController?.database ?? widget.catalogController?.database;
+    final db = widget.initialCategories != null || widget.initialMenuItems != null || widget.initialDeals != null
+      ? null : widget.catalogController?.database ?? widget.orderController?.database;
     final shortcuts = widget.shortcutController ?? (db == null ? null : KeyboardShortcutController(db));
     if (shortcuts != null) {
       shortcuts.load().then((keys) {
@@ -1458,7 +1459,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
                 ElevatedButton.icon(
                   key: const ValueKey('proceed_to_tender_button'),
                   icon: const Icon(Icons.point_of_sale_outlined, size: 24),
-                  label: const Text(
+                  label: Text(
                     'Charge [${_shortcutKeys['checkout'] ?? ''}]',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),

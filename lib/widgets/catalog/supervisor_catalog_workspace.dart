@@ -900,7 +900,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
             style: WarmCounterTypography.pageHeading.copyWith(fontSize: 18),
           ),
           ListTile(leading: const Icon(Icons.keyboard), title: const Text('Configure keyboard shortcuts'),
-            subtitle: const Text('Cashier register · conflicts, preview and restore defaults'),
+            subtitle: const Text('Cashier register Â· conflicts, preview and restore defaults'),
             onTap: widget.controller == null || widget.managerId == null ? null : () => showDialog<void>(context: context,
               builder: (_) => KeyboardShortcutsDialog(controller: KeyboardShortcutController(widget.controller!.database), managerId: widget.managerId!))),
           const SizedBox(height: WarmCounterSpacing.space16),

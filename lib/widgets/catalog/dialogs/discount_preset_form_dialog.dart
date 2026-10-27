@@ -200,7 +200,7 @@ class _DiscountPresetFormDialogState extends State<DiscountPresetFormDialog> {
                 },
               ),
               const SizedBox(height: WarmCounterSpacing.space16),
-              const Text('Advanced eligibility · one preset per order'),
+              const Text('Advanced eligibility Â· one preset per order'),
               if (_rulesError != null) Text(_rulesError!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
               for (final entry in _advanced.entries) Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: TextFormField(
                 controller: entry.value, decoration: InputDecoration(labelText: entry.key,
