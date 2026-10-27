@@ -634,6 +634,11 @@ class CatalogAndRecipeController {
     return preset;
   }
 
+  Future<List<Map<String, Object?>>> getDiscountCashiers({required int managerId}) async {
+    await requireManager(database, managerId);
+    return database.query('staff', columns: ['id', 'name'], where: "role='CASHIER' AND is_active=1 AND login_enabled=1");
+  }
+
   Future<void> saveManagedDiscount({required int managerId, required DiscountPreset preset, bool create = false}) => database.transaction((txn) async {
     await requireManager(txn, managerId);
     preset.rules.validate();

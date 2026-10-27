@@ -127,7 +127,8 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
     final modifiers = await widget.controller!.getModifiers();
     final groups = await widget.controller!.getModifierGroups();
     final discounts = await widget.controller!.getDiscountPresets();
-    final cashiers = await widget.controller!.database.query('staff', columns: ['id', 'name'], where: "role='CASHIER' AND is_active=1 AND login_enabled=1");
+    final cashiers = widget.managerId == null ? <Map<String, Object?>>[]
+      : await widget.controller!.getDiscountCashiers(managerId: widget.managerId!);
 
     if (mounted) {
       setState(() {

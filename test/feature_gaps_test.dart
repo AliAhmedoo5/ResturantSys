@@ -99,6 +99,8 @@ void main() {
     final category = await catalog.createCategory(name: 'Meals', displayOrder: 1, colorHex: '#FFFFFF');
     final menu = await catalog.createMenuItem(categoryId: category.id, name: 'Meal', basePrice: 100);
     await publishFixtures(catalog);
+    expect((await catalog.getDiscountCashiers(managerId: 1)).map((row) => row['id']), contains(2));
+    await expectLater(catalog.getDiscountCashiers(managerId: 2), throwsStateError);
     final preset = DiscountPreset(id: 0, name: 'Lunch', type: DiscountType.flat, value: 10, isActive: true,
       rules: DiscountRules(categoryIds: [category.id], dailyLimit: 1));
     await expectLater(catalog.saveManagedDiscount(managerId: 2, preset: preset, create: true), throwsStateError);
