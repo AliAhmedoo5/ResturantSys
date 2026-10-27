@@ -124,6 +124,7 @@ class PosDatabase {
     await _upgradeToVersion14(db);
     await _upgradeToVersion15(db);
     await _upgradeToVersion16(db);
+    await _upgradeToVersion17(db);
   }
 
   Future<void> _createOperationalAccountingTables(DatabaseExecutor executor) async {
@@ -438,6 +439,26 @@ class PosDatabase {
     if (oldVersion < 14) await _upgradeToVersion14(db);
     if (oldVersion < 15) await _upgradeToVersion15(db);
     if (oldVersion < 16) await _upgradeToVersion16(db);
+    if (oldVersion < 17) await _upgradeToVersion17(db);
+  }
+
+  Future<void> _upgradeToVersion17(DatabaseExecutor db) async {
+    await db.execute('ALTER TABLE vendor_khata ADD COLUMN archived_at TEXT');
+    // This guard also protects existing ON DELETE CASCADE foreign keys.
+    await db.execute('''CREATE TRIGGER vendor_financial_history_delete_guard
+      BEFORE DELETE ON vendor_khata
+      WHEN OLD.opening_balance != 0 OR OLD.current_balance != 0
+        OR EXISTS (SELECT 1 FROM vendor_transactions WHERE vendor_id = OLD.id)
+      BEGIN SELECT RAISE(ABORT, 'Archive suppliers with financial history'); END''');
+    await db.execute('ALTER TABLE staff ADD COLUMN pin_fingerprint TEXT');
+    await db.execute('''CREATE UNIQUE INDEX staff_pin_fingerprint_unique
+      ON staff(pin_fingerprint) WHERE pin_fingerprint IS NOT NULL''');
+    await db.execute('''CREATE TABLE auth_security_state (
+      scope TEXT PRIMARY KEY,
+      failures INTEGER NOT NULL DEFAULT 0,
+      locked_until INTEGER NOT NULL DEFAULT 0,
+      key_check TEXT
+    )''');
   }
 
   Future<void> _upgradeToVersion16(DatabaseExecutor db) async {

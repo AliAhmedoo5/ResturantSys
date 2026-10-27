@@ -9,6 +9,7 @@ class Vendor {
     required this.currentBalance,
     required this.createdAt,
     required this.updatedAt,
+    this.archivedAt,
   });
 
   final int id;
@@ -19,6 +20,8 @@ class Vendor {
   final double currentBalance;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final DateTime? archivedAt;
+  bool get isArchived => archivedAt != null;
 
   bool get hasOutstandingPayable => currentBalance > 0.001;
 
@@ -32,6 +35,7 @@ class Vendor {
       currentBalance: (map['current_balance'] as num?)?.toDouble() ?? 0.0,
       createdAt: DateTime.parse(map['created_at'] as String),
       updatedAt: DateTime.parse(map['updated_at'] as String),
+      archivedAt: DateTime.tryParse(map['archived_at'] as String? ?? ''),
     );
   }
 
@@ -45,6 +49,7 @@ class Vendor {
       'current_balance': currentBalance,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
+      'archived_at': archivedAt?.toIso8601String(),
     };
   }
 
@@ -67,6 +72,7 @@ class Vendor {
       currentBalance: currentBalance ?? this.currentBalance,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      archivedAt: archivedAt,
     );
   }
 }

@@ -17,3 +17,5 @@ jobs:
           cache: true
       - run: flutter pub get
       - run: flutter test test/security/urgent_protection_test.dart
+      - run: flutter analyze --no-fatal-infos
+      - run: flutter test test/auth test/khata test/database/pos_vendor_khata_schema_test.dart test/widgets/vendor_khata_workspace_test.dart test/widgets/pin_lock_screen_test.dart test/procurement

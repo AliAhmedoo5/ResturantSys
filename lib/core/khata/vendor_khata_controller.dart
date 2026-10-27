@@ -132,25 +132,40 @@ class VendorKhataController {
     return vendor!;
   }
 
-  /// Deletes a vendor and cascades to delete all associated ledger transactions.
+  /// Permanently removes only unused suppliers; archives financial history.
   Future<void> deleteVendor(int id) async {
-    final deletedCount = await database.delete(
-      PosDatabaseConstants.tableVendorKhata,
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-    if (deletedCount == 0) {
-      throw StateError('Vendor with ID #$id does not exist.');
-    }
+    await database.transaction((txn) async {
+      final rows = await txn.query('vendor_khata', where: 'id = ?', whereArgs: [id]);
+      if (rows.isEmpty) throw StateError('Vendor with ID #$id does not exist.');
+      final history = await txn.query('vendor_transactions', columns: ['id'],
+          where: 'vendor_id = ?', whereArgs: [id], limit: 1);
+      final vendor = Vendor.fromMap(rows.first);
+      if (history.isNotEmpty || vendor.openingBalance != 0 || vendor.currentBalance != 0) {
+        final now = _formatTimestamp(DateTime.now());
+        await txn.update('vendor_khata', {'archived_at': now, 'updated_at': now},
+            where: 'id = ?', whereArgs: [id]);
+      } else {
+        await txn.delete('vendor_khata', where: 'id = ?', whereArgs: [id]);
+      }
+    });
+  }
+
+  Future<void> setVendorArchived(int id, bool archived) async {
+    final now = _formatTimestamp(DateTime.now());
+    final count = await database.update('vendor_khata',
+        {'archived_at': archived ? now : null, 'updated_at': now},
+        where: 'id = ?', whereArgs: [id]);
+    if (count == 0) throw StateError('Vendor with ID #$id does not exist.');
   }
 
   /// Retrieves all vendors with an optional name/supplied ingredients search filter.
-  Future<List<Vendor>> getVendors({String? searchQuery}) async {
+  Future<List<Vendor>> getVendors({String? searchQuery, bool includeArchived = false}) async {
     final query = searchQuery?.trim();
     if (query != null && query.isNotEmpty) {
       final rows = await database.rawQuery('''
         SELECT * FROM ${PosDatabaseConstants.tableVendorKhata}
-        WHERE name LIKE ? OR supplied_ingredients LIKE ?
+        WHERE (name LIKE ? OR supplied_ingredients LIKE ?)
+          ${includeArchived ? '' : 'AND archived_at IS NULL'}
         ORDER BY name ASC;
       ''', ['%$query%', '%$query%']);
       return rows.map((r) => Vendor.fromMap(r)).toList();
@@ -158,6 +173,7 @@ class VendorKhataController {
 
     final rows = await database.query(
       PosDatabaseConstants.tableVendorKhata,
+      where: includeArchived ? null : 'archived_at IS NULL',
       orderBy: 'name ASC',
     );
     return rows.map((r) => Vendor.fromMap(r)).toList();
@@ -212,6 +228,10 @@ class VendorKhataController {
         throw StateError('Vendor with ID #$vendorId not found.');
       }
       final vendor = Vendor.fromMap(vendorRows.first);
+
+      if (vendor.isArchived) {
+        throw StateError('Restore this supplier before recording a new delivery.');
+      }
 
       // 2. If raw ingredient is linked, update stock
       String? ingredientName;

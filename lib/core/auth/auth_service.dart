@@ -1,8 +1,13 @@
+import 'dart:convert';
+import 'dart:isolate';
+
+import 'package:crypto/crypto.dart';
 import 'package:sqflite_common/sqlite_api.dart';
 import 'package:resturant_sys/core/database/pos_database_constants.dart';
 import 'department.dart';
 import 'job_role.dart';
 import 'pin_hasher.dart';
+import 'pin_key_store.dart';
 import 'session_state.dart';
 import 'staff.dart';
 import 'staff_role.dart';
@@ -12,26 +17,118 @@ class AuthService {
   AuthService({
     required this.database,
     SessionState? session,
-  }) : session = session ?? SessionState();
+    this.keyStore = const PinKeyStore(),
+    DateTime Function()? clock,
+  }) : session = session ?? SessionState(), clock = clock ?? DateTime.now;
 
   final Database database;
   final SessionState session;
+  final PinKeyStore keyStore;
+  final DateTime Function() clock;
+
+  static Future<String> _hash(String pin) => Isolate.run(() => PinHasher.hashPin(pin));
+  static Future<bool> _verify(String pin, String hash) =>
+      Isolate.run(() => PinHasher.verifyPin(pin, hash));
+
+  static String _fingerprint(String pin, String key) =>
+      Hmac(sha256, base64Url.decode(key)).convert(utf8.encode(pin)).toString();
+
+  // Called inside the same transaction as credential reads/writes, serializing
+  // first-use initialization across service instances and app processes.
+  Future<String> _key(DatabaseExecutor txn) async {
+    var key = await keyStore.read(database.path);
+    final rows = await txn.query('auth_security_state', where: 'scope = ?', whereArgs: ['key']);
+    if (key == null) {
+      if (rows.isNotEmpty) {
+        throw StateError('PIN security key is unavailable. Recover the original Windows credential store.');
+      }
+      key = base64Url.encode(PinHasher.randomBytes(32));
+      await keyStore.write(database.path, key);
+    }
+    final check = _fingerprint('restaurant-pin-key-v1', key);
+    if (rows.isEmpty) {
+      await txn.insert('auth_security_state', {'scope': 'key', 'key_check': check});
+    } else if (!PinHasher.constantTimeEquals(rows.first['key_check'] as String, check)) {
+      throw StateError('PIN security key does not match this database.');
+    }
+    return key;
+  }
+
+  Future<List<String>> _scopes(DatabaseExecutor txn, {int? staffId}) async {
+    final shifts = await txn.query('shifts', columns: ['id'], where: "status = 'OPEN'");
+    return ['device', if (staffId != null) 'staff:$staffId',
+      for (final shift in shifts) 'drawer:${shift['id']}'];
+  }
+
+  Future<bool> _locked(DatabaseExecutor txn, List<String> scopes) async {
+    for (final scope in scopes) {
+      final rows = await txn.query('auth_security_state', where: 'scope = ?', whereArgs: [scope]);
+      if (rows.isNotEmpty && (rows.first['locked_until'] as int) > clock().millisecondsSinceEpoch) return true;
+    }
+    return false;
+  }
+
+  Future<void> _failed(DatabaseExecutor txn, List<String> scopes) async {
+    final now = clock().millisecondsSinceEpoch;
+    for (final scope in scopes) {
+      final rows = await txn.query('auth_security_state', where: 'scope = ?', whereArgs: [scope]);
+      final previous = rows.isEmpty ? null : rows.first;
+      final expired = previous != null && (previous['locked_until'] as int) > 0 &&
+          (previous['locked_until'] as int) <= now;
+      final failures = (expired ? 0 : (previous?['failures'] as int? ?? 0)) + 1;
+      await txn.insert('auth_security_state', {
+        'scope': scope, 'failures': failures,
+        'locked_until': failures >= 5 ? now + const Duration(minutes: 1).inMilliseconds : 0,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+  }
+
+  Future<void> _clearFailures(DatabaseExecutor txn, List<String> scopes) async {
+    for (final scope in scopes) {
+      await txn.delete('auth_security_state', where: 'scope = ?', whereArgs: [scope]);
+    }
+  }
+
+  Future<Map<String, Object?>> _credentialValues(String pin, {int? excludingStaffId}) =>
+      database.transaction((txn) => _credentialValuesIn(txn, pin, excludingStaffId: excludingStaffId));
+
+  Future<Map<String, Object?>> _credentialValuesIn(DatabaseExecutor txn, String pin,
+      {int? excludingStaffId}) async {
+        final key = await _key(txn);
+        final fingerprint = _fingerprint(pin, key);
+        final rows = await txn.query('staff', where: 'id != ?', whereArgs: [excludingStaffId ?? -1]);
+        for (final row in rows) {
+          final existingFingerprint = row['pin_fingerprint'] as String?;
+          final hash = row['pin_hash'] as String;
+          final duplicate = existingFingerprint != null
+              ? PinHasher.constantTimeEquals(existingFingerprint, fingerprint)
+              : await _verify(pin, hash);
+          if (duplicate) throw StateError('This PIN is already assigned to another staff member.');
+        }
+        return {'pin_hash': await _hash(pin),
+          'pin_fingerprint': fingerprint};
+      }
 
   static final RegExp _pinFormatRegex = RegExp(r'^\d{4,8}$');
   static final RegExp _cashierPinRegex = RegExp(r'^\d{4}$');
   static final RegExp _managerPinRegex = RegExp(r'^\d{4,8}$');
 
-  /// Authenticates a staff member by checking a 4–8 digit numeric PIN against stored SHA-256 hashes.
+  /// Verifies a PIN with durable device/drawer throttling and lazy legacy upgrade.
   ///
   /// Returns the authenticated [Staff] with associated department metadata, or `null` if invalid.
-  Future<Staff?> authenticateWithPin(String pin) async {
+  Future<Staff?> authenticateWithPin(String pin) => _authenticate(pin);
+
+  Future<Staff?> _authenticate(String pin, {bool managerOnly = false}) =>
+      database.transaction((txn) async {
+    final scopes = await _scopes(txn);
+    if (await _locked(txn, scopes)) return null;
     if (!_pinFormatRegex.hasMatch(pin)) {
+      await _failed(txn, scopes);
       return null;
     }
-
-    final hashedPin = PinHasher.hashPin(pin);
-
-    final results = await database.rawQuery('''
+    final key = await _key(txn);
+    final fingerprint = _fingerprint(pin, key);
+    final results = await txn.rawQuery('''
       SELECT 
         s.job_role_id,
         s.login_enabled,
@@ -48,30 +145,36 @@ class AuthService {
       LEFT JOIN job_roles j ON s.job_role_id = j.id
       LEFT JOIN ${PosDatabaseConstants.tableDepartments} d 
         ON s.department_id = d.id
-      WHERE s.pin_hash = ? AND s.is_active = 1 AND s.login_enabled = 1
-      LIMIT 1;
-    ''', [hashedPin]);
-
-    if (results.isEmpty) {
-      return null;
+      WHERE (s.pin_fingerprint = ? OR s.pin_fingerprint IS NULL)
+        AND s.is_active = 1 AND s.login_enabled = 1;
+    ''', [fingerprint]);
+    for (final row in results) {
+      if (!StaffRole.isInteractiveCode(row['role'] as String)) continue;
+      final hash = row['pin_hash'] as String;
+      if (!await _verify(pin, hash)) continue;
+      final staff = Staff.fromMap(row, departmentName: row['department_name'] as String?);
+      final userScopes = await _scopes(txn, staffId: staff.id);
+      if (await _locked(txn, userScopes)) return null;
+      if (managerOnly && !staff.canAuthorizeOverrides) {
+        await _failed(txn, userScopes);
+        return null;
+      }
+      final verifier = PinHasher.isLegacy(hash)
+          ? await _hash(pin) : hash;
+      await txn.update('staff', {'pin_hash': verifier, 'pin_fingerprint': fingerprint},
+          where: 'id = ?', whereArgs: [staff.id]);
+      await _clearFailures(txn, userScopes);
+      return Staff.fromMap({...row, 'pin_hash': verifier},
+          departmentName: row['department_name'] as String?);
     }
-
-    final row = results.first;
-    if (!StaffRole.isInteractiveCode(row['role'] as String)) {
-      return null;
-    }
-    final staff = Staff.fromMap(
-      row,
-      departmentName: row['department_name'] as String?,
-    );
-
-    return staff;
-  }
+    await _failed(txn, scopes);
+    return null;
+  });
 
   /// Authenticates a staff member specifically verifying Supervisor or Owner authorization
   /// without modifying the active session (preserving the active cashier's login).
   Future<Staff?> authenticateSupervisorPin(String pin) async {
-    final staff = await authenticateWithPin(pin);
+    final staff = await _authenticate(pin, managerOnly: true);
     if (staff != null && staff.canVoidOrders) {
       return staff;
     }
@@ -97,7 +200,10 @@ class AuthService {
       return false;
     }
 
-    final staffResults = await database.query(
+    return database.transaction((txn) async {
+    final scopes = await _scopes(txn, staffId: staffId);
+    if (await _locked(txn, scopes)) return false;
+    final staffResults = await txn.query(
       PosDatabaseConstants.tableStaff,
       where: 'id = ? AND is_active = 1',
       whereArgs: [staffId],
@@ -109,19 +215,24 @@ class AuthService {
     }
 
     final currentHash = staffResults.first['pin_hash'] as String;
-    if (!PinHasher.verifyPin(oldPin, currentHash)) {
+    if (!await _verify(oldPin, currentHash)) {
+      await _failed(txn, scopes);
       return false;
     }
 
-    final newHash = PinHasher.hashPin(newPin);
-    final count = await database.update(
+    final role = StaffRole.fromCode(staffResults.first['role'] as String);
+    if (role == StaffRole.cashier && !_cashierPinRegex.hasMatch(newPin)) return false;
+    final values = await _credentialValuesIn(txn, newPin, excludingStaffId: staffId);
+    final count = await txn.update(
       PosDatabaseConstants.tableStaff,
-      {'pin_hash': newHash},
+      values,
       where: 'id = ?',
       whereArgs: [staffId],
     );
 
+    await _clearFailures(txn, scopes);
     return count > 0;
+    });
   }
 
   // ===========================================================================
@@ -242,19 +353,11 @@ class AuthService {
     }
     final departmentName = deptRows.first['name'] as String;
 
-    final hashedPin = loginEnabled ? PinHasher.hashPin(pin) : 'NO_LOGIN_${DateTime.now().microsecondsSinceEpoch}';
+    final credentials = loginEnabled ? await _credentialValues(pin)
+        : <String, Object?>{'pin_hash': 'NO_LOGIN_${DateTime.now().microsecondsSinceEpoch}', 'pin_fingerprint': null};
+    final hashedPin = credentials['pin_hash'] as String;
 
     await _validateJobRole(jobRoleId);
-    // Verify unique PIN
-    final existingPinRows = await database.query(
-      PosDatabaseConstants.tableStaff,
-      where: 'pin_hash = ?',
-      whereArgs: [hashedPin],
-      limit: 1,
-    );
-    if (existingPinRows.isNotEmpty) {
-      throw StateError('This PIN is already assigned to another staff member.');
-    }
 
     final now = _formatTimestamp(DateTime.now());
     final id = await database.insert(
@@ -265,6 +368,7 @@ class AuthService {
         'name': trimmedName,
         'department_id': departmentId,
         'pin_hash': hashedPin,
+        'pin_fingerprint': credentials['pin_fingerprint'],
         'role': role.code,
         'is_active': 1,
         'created_at': now,
@@ -312,22 +416,11 @@ class AuthService {
       }
     }
 
-    final newHash = PinHasher.hashPin(newPin);
-
-    // Ensure PIN is not already in use by someone else
-    final conflictRows = await database.query(
-      PosDatabaseConstants.tableStaff,
-      where: 'pin_hash = ? AND id != ?',
-      whereArgs: [newHash, staffId],
-      limit: 1,
-    );
-    if (conflictRows.isNotEmpty) {
-      throw StateError('This PIN is already in use by another staff member.');
-    }
+    final credentials = await _credentialValues(newPin, excludingStaffId: staffId);
 
     final count = await database.update(
       PosDatabaseConstants.tableStaff,
-      {'pin_hash': newHash},
+      credentials,
       where: 'id = ?',
       whereArgs: [staffId],
     );
@@ -435,17 +528,7 @@ class AuthService {
           throw ArgumentError('Cashier PIN must be exactly 4 numeric digits.');
         }
       }
-      final newHash = PinHasher.hashPin(newPin);
-      final conflictRows = await database.query(
-        PosDatabaseConstants.tableStaff,
-        where: 'pin_hash = ? AND id != ?',
-        whereArgs: [newHash, staffId],
-        limit: 1,
-      );
-      if (conflictRows.isNotEmpty) {
-        throw StateError('This PIN is already in use by another staff member.');
-      }
-      updateValues['pin_hash'] = newHash;
+      updateValues.addAll(await _credentialValues(newPin, excludingStaffId: staffId));
     }
 
     await database.update(

@@ -90,6 +90,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
       if (widget.controller != null) {
         vendors = await widget.controller!.getVendors(
           searchQuery: _searchController.text,
+          includeArchived: true,
         );
       } else {
         final query = _searchController.text.trim().toLowerCase();
@@ -275,10 +276,11 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete Supplier?'),
+        title: const Text('Remove Supplier?'),
         content: Text(
-          'Are you sure you want to delete "${vendor.name}" and all historical Khata ledger transactions? '
-          'This action cannot be undone.',
+          'Remove "${vendor.name}"? Suppliers with a balance or financial history '
+          'will be archived. Their Khata statements and settlements remain available. '
+          'Only unused suppliers are permanently deleted.',
         ),
         actions: [
           TextButton(
@@ -291,7 +293,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
               foregroundColor: Colors.white,
             ),
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Delete'),
+            child: const Text('Remove'),
           ),
         ],
       ),
@@ -303,7 +305,12 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
       if (widget.controller != null) {
         await widget.controller!.deleteVendor(vendor.id);
       } else {
-        _allVendors.removeWhere((v) => v.id == vendor.id);
+        final hasHistory = _statement?.vendor.id == vendor.id && _statement!.entries.isNotEmpty;
+        if (hasHistory || vendor.openingBalance != 0 || vendor.currentBalance != 0) {
+          await _setArchived(vendor, true);
+        } else {
+          _allVendors.removeWhere((v) => v.id == vendor.id);
+        }
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -321,6 +328,24 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
           backgroundColor: WarmCounterColors.lightDestructive,
         ),
       );
+    }
+  }
+
+  Future<void> _setArchived(Vendor vendor, bool archived) async {
+    try {
+      if (widget.controller != null) {
+        await widget.controller!.setVendorArchived(vendor.id, archived);
+      } else {
+        final index = _allVendors.indexWhere((v) => v.id == vendor.id);
+        if (index >= 0) {
+          _allVendors[index] = Vendor.fromMap({...vendor.toMap(),
+            'archived_at': archived ? DateTime.now().toIso8601String() : null});
+        }
+      }
+      await _loadInitialData();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not update supplier: $error')));
     }
   }
 
@@ -654,7 +679,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
                                           borderRadius: BorderRadius.circular(4),
                                         ),
                                         child: Text(
-                                          vendor.hasOutstandingPayable ? 'Payable' : 'Clear',
+                                          vendor.isArchived ? 'Archived' : vendor.hasOutstandingPayable ? 'Payable' : 'Clear',
                                           style: WarmCounterTypography.caption.copyWith(
                                             fontSize: 10,
                                             fontWeight: FontWeight.w600,
@@ -678,9 +703,15 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
                                         _editVendor(vendor);
                                       } else if (val == 'delete') {
                                         _deleteVendor(vendor);
+                                      } else if (val == 'archive') {
+                                        _setArchived(vendor, !vendor.isArchived);
                                       }
                                     },
                                     itemBuilder: (ctx) => [
+                                      PopupMenuItem(
+                                        value: 'archive',
+                                        child: Text(vendor.isArchived ? 'Restore supplier' : 'Archive supplier'),
+                                      ),
                                       const PopupMenuItem(
                                         value: 'edit',
                                         child: Row(
@@ -698,7 +729,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
                                             Icon(Icons.delete_outline,
                                                 size: 16, color: WarmCounterColors.lightDestructive),
                                             SizedBox(width: 8),
-                                            Text('Delete',
+                                            Text('Remove',
                                                 style: TextStyle(
                                                     color: WarmCounterColors.lightDestructive)),
                                           ],
@@ -884,7 +915,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
                     foregroundColor: WarmCounterColors.lightTextOnPrimary,
                     minimumSize: const Size(180, 48),
                   ),
-                  onPressed: _recordCreditDelivery,
+                  onPressed: vendor.isArchived ? null : _recordCreditDelivery,
                 ),
                 const SizedBox(height: WarmCounterSpacing.space8),
                 OutlinedButton.icon(

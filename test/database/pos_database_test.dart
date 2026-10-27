@@ -104,7 +104,7 @@ void main() {
       expect(roles, containsAll(['SUPERVISOR', 'CASHIER']));
 
       for (final s in staffMembers) {
-        expect((s['pin_hash'] as String).length, equals(64));
+        expect(s['pin_hash'], startsWith(r'pbkdf2-sha256$600000$'));
         expect(s['is_active'], equals(1));
       }
       await seededPosDb.close();
