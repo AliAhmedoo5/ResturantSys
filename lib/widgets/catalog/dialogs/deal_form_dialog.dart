@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/catalog/menu_item.dart';
 import '../../../core/orders/deal.dart';
+import '../../../core/orders/deal_item.dart';
 import '../../../core/orders/order_and_checkout_controller.dart';
 
 class DealFormDialog extends StatefulWidget {
@@ -15,7 +16,8 @@ class DealFormDialog extends StatefulWidget {
 }
 
 class _Slot {
-  _Slot(String name) : name = TextEditingController(text: name);
+  _Slot(String name, {this.id}) : name = TextEditingController(text: name);
+  final int? id;
   final TextEditingController name;
   final Map<int, TextEditingController> choices = {};
   int? defaultId;
@@ -33,8 +35,8 @@ class _DealFormDialogState extends State<DealFormDialog> {
   @override
   void initState() {
     super.initState();
-    for (final item in widget.deal?.items ?? []) {
-      final slot = _Slot(item.groupName);
+    for (final item in widget.deal?.items ?? <DealItem>[]) {
+      final slot = _Slot(item.groupName, id: item.id);
       for (final option in item.options) {
         slot.choices[option.menuItemId] = TextEditingController(text: option.upgradePrice.toStringAsFixed(2));
         if (option.isDefault) slot.defaultId = option.menuItemId;
@@ -67,7 +69,7 @@ class _DealFormDialogState extends State<DealFormDialog> {
     try {
       await widget.controller.saveDeal(managerId: widget.managerId, id: widget.deal?.id,
         name: _name.text, basePrice: double.parse(_price.text), isActive: _active,
-        items: _slots.map((s) => DealItemDraft(groupName: s.name.text, options: s.choices.entries.map((e) =>
+        items: _slots.map((s) => DealItemDraft(id: s.id, groupName: s.name.text, options: s.choices.entries.map((e) =>
           DealOptionDraft(menuItemId: e.key, isDefault: e.key == s.defaultId,
             upgradePrice: double.parse(e.value.text))).toList())).toList());
       if (mounted) Navigator.pop(context, true);

@@ -446,9 +446,11 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
       if (widget.orderController == null) return;
       final details = await showDialog<DeliveryDetails>(context: context, builder: (_) => DeliveryDetailsDialog(
         controller: DeliveryController(database: widget.orderController!.database),
-        foodTotalPaisa: PaisaEngine.rupeesToPaisa(_cartTotals.grandTotal), initial: _deliveryDetails));
+        foodTotalPaisa: PaisaEngine.rupeesToPaisa(_cartTotals.grandTotal), initial: _deliveryDetails,
+        customerPhone: _customer?.phone, customerName: _customer?.name));
       if (details == null || !mounted) return;
       _deliveryDetails = details;
+      if (_customer != null && DeliveryController.normalizePhone(details.phone) != _customer!.phone) _customer = null;
     } else {
       _deliveryDetails = null;
       final proceed = await showDialog<bool>(
@@ -589,8 +591,8 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
     }
 
     return CallbackShortcuts(
-      bindings: _buildKeyboardBindings(),
-      child: Focus(
+      bindings: _draftBusy ? const <ShortcutActivator, VoidCallback>{} : _buildKeyboardBindings(),
+      child: AbsorbPointer(absorbing: _draftBusy, child: Focus(
         autofocus: true,
         child: LayoutBuilder(builder: (context, constraints) {
           final cartWidth = (constraints.maxWidth * 0.32).clamp(300.0, 360.0);
@@ -657,7 +659,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
           ],
           );
         }),
-      ),
+      )),
     );
   }
 

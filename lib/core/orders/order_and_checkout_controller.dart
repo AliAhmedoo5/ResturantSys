@@ -67,6 +67,7 @@ class RefundResult {
 /// Draft definition when creating or configuring a deal item slot.
 class DealItemDraft {
   const DealItemDraft({
+    this.id,
     required this.groupName,
     this.categoryId,
     this.defaultMenuItemId,
@@ -76,6 +77,7 @@ class DealItemDraft {
   });
 
   final String groupName;
+  final int? id;
   final int? categoryId;
   final int? defaultMenuItemId;
   final bool isUpgradeable;
@@ -316,12 +318,28 @@ class OrderAndCheckoutController {
       } else {
         if (await txn.update('deals', values, where: 'id = ?', whereArgs: [id]) != 1) throw StateError('Deal no longer exists.');
         dealId = id;
-        await txn.delete('deal_items', where: 'deal_id = ?', whereArgs: [id]);
+      }
+      final existingSlots = await txn.query('deal_items', where: 'deal_id = ?', whereArgs: [dealId]);
+      final existingIds = existingSlots.map((row) => row['id'] as int).toSet();
+      final retainedIds = items.where((slot) => slot.id != null).map((slot) => slot.id!).toSet();
+      if (!existingIds.containsAll(retainedIds) || items.where((slot) => slot.id != null).length != retainedIds.length) {
+        throw StateError('Deal components changed. Reopen the deal editor.');
+      }
+      for (final removed in existingIds.difference(retainedIds)) {
+        await txn.delete('deal_items', where: 'id = ?', whereArgs: [removed]);
       }
       for (final slot in items) {
-        final slotId = await txn.insert('deal_items', {'deal_id': dealId, 'group_name': slot.groupName.trim(),
+        final slotValues = {'deal_id': dealId, 'group_name': slot.groupName.trim(), 'category_id': null,
           'default_menu_item_id': slot.options.singleWhere((o) => o.isDefault).menuItemId,
-          'is_upgradeable': slot.options.any((o) => o.upgradePrice > 0) ? 1 : 0, 'upgrade_price': 0});
+          'is_upgradeable': slot.options.any((o) => o.upgradePrice > 0) ? 1 : 0, 'upgrade_price': 0};
+        final int slotId;
+        if (slot.id == null) {
+          slotId = await txn.insert('deal_items', slotValues);
+        } else {
+          slotId = slot.id!;
+          await txn.update('deal_items', slotValues, where: 'id = ?', whereArgs: [slotId]);
+          await txn.delete('deal_item_options', where: 'deal_item_id = ?', whereArgs: [slotId]);
+        }
         for (final option in slot.options) {
           await txn.insert('deal_item_options', {'deal_item_id': slotId, 'menu_item_id': option.menuItemId,
             'is_default': option.isDefault ? 1 : 0, 'upgrade_price': option.upgradePrice});

@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 import '../../core/delivery/delivery_controller.dart';
 
 class DeliveryDetailsDialog extends StatefulWidget {
-  const DeliveryDetailsDialog({super.key, required this.controller, required this.foodTotalPaisa, this.initial});
+  const DeliveryDetailsDialog({super.key, required this.controller, required this.foodTotalPaisa, this.initial,
+    this.customerPhone, this.customerName});
   final DeliveryController controller;
   final int foodTotalPaisa;
   final DeliveryDetails? initial;
+  final String? customerPhone, customerName;
   @override
   State<DeliveryDetailsDialog> createState() => _DeliveryDetailsDialogState();
 }
@@ -22,7 +24,7 @@ class _DeliveryDetailsDialogState extends State<DeliveryDetailsDialog> {
   @override
   void initState() {
     super.initState(); final initial = widget.initial;
-    _phone = TextEditingController(text: initial?.phone); _name = TextEditingController(text: initial?.customerName);
+    _phone = TextEditingController(text: initial?.phone ?? widget.customerPhone); _name = TextEditingController(text: initial?.customerName ?? widget.customerName);
     _address = TextEditingController(text: initial?.fullAddress); _landmark = TextEditingController(text: initial?.landmark);
     _notes = TextEditingController(text: initial?.notes); _areaId = initial?.areaId;
     _load();
@@ -32,8 +34,9 @@ class _DeliveryDetailsDialogState extends State<DeliveryDetailsDialog> {
   Future<void> _load() async {
     try {
       final areas = await widget.controller.getAreas(activeOnly: true);
+      final matches = _phone.text.isEmpty ? <CustomerAddress>[] : await widget.controller.lookupAddresses(_phone.text);
       if (!mounted) return;
-      setState(() { _areas = areas; _loading = false; if (!areas.any((a) => a.id == _areaId)) _areaId = null; });
+      setState(() { _areas = areas; _matches = matches; _loading = false; if (!areas.any((a) => a.id == _areaId)) _areaId = null; });
     } catch (e) { if (mounted) setState(() { _error = '$e'; _loading = false; }); }
   }
   Future<void> _lookup(String phone) async {
