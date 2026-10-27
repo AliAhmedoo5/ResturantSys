@@ -59,8 +59,10 @@ void main() {
 
   testWidgets('Manager configures a deal with a selectable component and default', (tester) async {
     final controller = _Deals();
-    await tester.pumpWidget(MaterialApp(home: Scaffold(body: DealFormDialog(controller: controller, managerId: 1,
-      menuItems: const [MenuItem(id: 4, categoryId: 1, name: 'Burger', basePrice: 100)]))));
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: Builder(builder: (context) => TextButton(
+      onPressed: () => showDialog<bool>(context: context, builder: (_) => DealFormDialog(controller: controller, managerId: 1,
+        menuItems: const [MenuItem(id: 4, categoryId: 1, name: 'Burger', basePrice: 100)])), child: const Text('Open deals'))))));
+    await tester.tap(find.text('Open deals')); await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextFormField, 'Deal name'), 'Lunch');
     await tester.tap(find.text('Add component')); await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextFormField, 'Component name'), 'Main');

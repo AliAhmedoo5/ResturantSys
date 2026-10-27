@@ -9,6 +9,7 @@ import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
 import 'package:resturant_sys/core/orders/cart_item.dart';
 import 'package:resturant_sys/core/orders/dining_type.dart';
 import 'package:resturant_sys/core/orders/payment_method.dart';
+import 'package:resturant_sys/core/delivery/delivery_controller.dart';
 import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
 import 'order_and_checkout_controller_test.dart' show publishFixtures;
 
@@ -119,5 +120,33 @@ void main() {
     expect((await customers.search('+923001234567')).single.id, third.id);
     expect(await db.query('customer_merges'), hasLength(2));
     await expectLater(db.delete('customer_merges'), throwsA(isA<DatabaseException>()));
+  });
+
+  test('v17 upgrade links closed legacy orders without changing their snapshots', () async {
+    final line = await item();
+    final shifts = ShiftAndCashController(database: db);
+    final day = await shifts.openBusinessDay(openedByStaffId: 1);
+    final shift = await shifts.openShift(staffId: 2, openingFloat: 0);
+    final area = await DeliveryController(database: db).saveArea(staffId: 1, name: 'Garden', code: 'G', deliveryFeePaisa: 0);
+    await orders.checkoutOrder(businessDayId: day.id, shiftId: shift.id, cashierId: 2, diningType: DiningType.delivery,
+      items: [line], delivery: DeliveryDetails(areaId: area.id, quotedFeePaisa: 0, phone: '+92 300 1234567', customerName: 'Legacy Person', fullAddress: 'House 7'),
+      payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 100)]);
+    // Restore the exact pre-directory schema shape and exercise real onUpgrade.
+    await db.execute('DROP INDEX orders_customer');
+    await db.execute('ALTER TABLE orders DROP COLUMN customer_id');
+    await db.execute('DROP TABLE customer_order_links');
+    await db.execute('DROP TABLE customer_merges');
+    await db.execute('DROP TABLE customers');
+    await db.execute('DROP TABLE held_carts');
+    await db.update('business_days', {'status': 'CLOSED'}, where: 'id = ?', whereArgs: [day.id]);
+    final original = (await db.query('orders')).single;
+    await db.execute('PRAGMA user_version = 17');
+    await pos.close(); db = await pos.initialize();
+    customers = CustomerController(db);
+    final customer = (await customers.search('03001234567')).single;
+    expect(await customers.history(customer.id), hasLength(1));
+    final after = Map<String, Object?>.from((await db.query('orders')).single)..remove('customer_id');
+    expect(after, original);
+    expect(await db.rawQuery('PRAGMA foreign_key_check'), isEmpty);
   });
 }

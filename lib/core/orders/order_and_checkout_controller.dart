@@ -747,6 +747,10 @@ class OrderAndCheckoutController {
         if (customers.isEmpty) throw StateError('Customer was merged. Select the current customer record.');
         selectedCustomer = customers.single;
       }
+      final customerPhoneSnapshot = deliveryArea != null ? DeliveryController.normalizePhone(delivery!.phone)
+        : (selectedCustomer == null ? null : selectedCustomer['phone'] as String?);
+      final customerNameSnapshot = deliveryArea != null ? delivery!.customerName.trim()
+        : (selectedCustomer == null ? null : selectedCustomer['name'] as String?);
       // 2. Commit Order Header
       final orderId = await txn.insert(
         PosDatabaseConstants.tableOrders,
@@ -768,8 +772,8 @@ class OrderAndCheckoutController {
           'delivery_area_name_snapshot': deliveryArea?.name,
           'delivery_fee_paisa': deliveryFeePaisa,
           'delivery_address_snapshot': deliveryArea == null ? null : delivery!.addressSnapshot,
-          'customer_phone': deliveryArea == null ? selectedCustomer?['phone'] : DeliveryController.normalizePhone(delivery!.phone),
-          'customer_name': deliveryArea == null ? selectedCustomer?['name'] : delivery!.customerName.trim(),
+          'customer_phone': customerPhoneSnapshot,
+          'customer_name': customerNameSnapshot,
           'payment_status': isCod ? 'COLLECTION_DUE' : 'SETTLED',
           'token_status': TokenStatus.preparing.code,
           'created_at': formattedNow,
@@ -896,8 +900,8 @@ class OrderAndCheckoutController {
         deliveryFeePaisa: deliveryFeePaisa,
         deliveryAddress: deliveryArea == null ? null : delivery!.addressSnapshot,
         customerId: customerId,
-        customerPhone: deliveryArea == null ? selectedCustomer?['phone'] as String? : DeliveryController.normalizePhone(delivery!.phone),
-        customerName: deliveryArea == null ? selectedCustomer?['name'] as String? : delivery!.customerName.trim(),
+        customerPhone: customerPhoneSnapshot,
+        customerName: customerNameSnapshot,
         paymentStatus: isCod ? 'COLLECTION_DUE' : 'SETTLED',
         createdAt: now,
         items: createdOrderItems,

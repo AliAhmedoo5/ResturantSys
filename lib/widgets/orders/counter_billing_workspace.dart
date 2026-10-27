@@ -387,12 +387,25 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
     if (_cartItems.isNotEmpty) throw StateError('Hold or clear the current cart before recalling another.');
     final holds = await controller.getHolds(widget.currentStaff.id);
     if (!mounted) return;
-    final selected = await showDialog<Map<String, Object?>>(context: context, builder: (context) => AlertDialog(
+    final selected = await showDialog<Map<String, Object?>>(context: context, builder: (context) => StatefulBuilder(builder: (context, update) => AlertDialog(
       title: const Text('Recall held cart'), content: SizedBox(width: 460, height: 360,
         child: holds.isEmpty ? const Center(child: Text('No held carts.')) : ListView(children: [
           for (final hold in holds) ListTile(title: Text(hold['label'] as String), subtitle: Text(hold['created_at'] as String),
-            onTap: () => Navigator.pop(context, hold)),
-        ])), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))]));
+            onTap: () => Navigator.pop(context, hold), trailing: IconButton(tooltip: 'Discard hold', icon: const Icon(Icons.delete_outline),
+              onPressed: () async {
+                final confirmed = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
+                  title: const Text('Discard held cart?'), content: Text(hold['label'] as String),
+                  actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Keep')),
+                    FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Discard'))]));
+                if (confirmed != true) return;
+                try {
+                  await controller.removeHold(widget.currentStaff.id, hold['id'] as int);
+                  if (context.mounted) update(() => holds.remove(hold));
+                } catch (e) {
+                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+                }
+              })),
+        ])), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))])));
     if (selected == null || !mounted) return;
     final payload = jsonDecode(selected['payload'] as String) as Map<String, dynamic>;
     final lines = await controller.restoreDraftLines(payload['items'] as List<dynamic>);
