@@ -64,3 +64,8 @@ creator, approver, poster, snapshot sequence and adjusting movement reference.
 Zero-variance observations have no adjusting movement. Quantity totals never
 combine incompatible ingredient units. Missing count valuation withholds a
 complete financial variance total.
+
+Version-20 kilogram count estimates used an erroneous extra factor of 1,000.
+Reports normalize those legacy values to the recorded storage-unit rate while
+retaining the original recorded estimate and valuation policy beside them.
+New counts use the storage-unit rate directly.

@@ -1,6 +1,11 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 Future<void> createHistoricalCostSchema(DatabaseExecutor db) async {
+  final countColumns = await db.rawQuery('PRAGMA table_info(stock_count_lines)');
+  if (!countColumns.any((c) => c['name'] == 'valuation_policy')) {
+    await db.execute("ALTER TABLE stock_count_lines ADD COLUMN valuation_policy TEXT NOT NULL DEFAULT 'LEGACY_GRAM_RATE'");
+  }
+  await db.execute("CREATE TRIGGER IF NOT EXISTS count_valuation_policy_no_update BEFORE UPDATE OF valuation_policy ON stock_count_lines WHEN (SELECT status FROM stock_counts WHERE id=OLD.count_id)!='DRAFT' BEGIN SELECT RAISE(ABORT,'Count valuation evidence is immutable'); END");
   await db.execute('''CREATE TABLE IF NOT EXISTS ingredient_cost_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT, ingredient_id INTEGER NOT NULL REFERENCES raw_ingredients(id),
     unit_cost_rupees REAL NOT NULL, recorded_at TEXT NOT NULL)''');

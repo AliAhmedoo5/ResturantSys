@@ -1,3 +1,6 @@
+import 'package:resturant_sys/core/procurement/procurement_and_wastage_controller.dart';
+import 'package:resturant_sys/core/procurement/desi_unit.dart';
+import 'package:resturant_sys/core/inventory/stock_count_valuation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:resturant_sys/core/analytics/analytics_models.dart';
@@ -183,4 +186,20 @@ void main() {
     expect((await db.query('order_cost_events')).single['cost_paisa'], isNull);
     expect((await analytics.load(live())).section(AnalyticsFamily.profitability).metrics.firstWhere((m) => m.id == 'gross_profit').value, isNull);
   });
+  test('kg purchase rate values a physical count in the same unit', () async {
+    final ingredient = await catalog.createRawIngredient(name: 'Flour', storageUnit: StorageUnit.kg);
+    await ProcurementAndWastageController(database: db).recordMandiPurchase(rawIngredientId: ingredient.id,
+      unit: DesiUnit.bori, quantity: 1, totalCost: 10000);
+    final counts = StockCountController(db);
+    final id = await counts.start(managerId: 1, ingredientIds: [ingredient.id], reason: 'Count sacks');
+    await counts.submit(managerId: 1, id: id, quantities: {ingredient.id: 49});
+    await counts.review(managerId: 1, id: id, approve: true);
+    await counts.post(managerId: 1, id: id);
+    final line = (await counts.lines(1, id)).single;
+    expect(line['estimated_cost_paisa'], -20000);
+    final report = (await analytics.load(live())).section(AnalyticsFamily.inventory);
+    expect(report.rows.singleWhere((r) => r.cells['kind'] == 'Physical count').cells['estimated_cost_paisa'], -20000);
+    expect(StockCountValuation.paisa({'unit': 'kg', 'valuation_policy': 'LEGACY_GRAM_RATE', 'estimated_cost_paisa': -20000000}), -20000);
+  });
+
 }

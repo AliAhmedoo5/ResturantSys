@@ -4,6 +4,7 @@ import 'package:sqflite_common/sqlite_api.dart';
 import '../auth/auth_service.dart';
 import '../auth/staff_role.dart';
 import '../orders/paisa_engine.dart';
+import '../inventory/stock_count_valuation.dart';
 import 'analytics_models.dart';
 
 part 'analytics_reports.dart';
@@ -68,6 +69,7 @@ class AnalyticsService {
     final intervalArgs = [...dayArgs, _sqlTime(_karachi(e.now.toIso8601String())!.add(const Duration(seconds: 1)))];
     await read('purchases', 'mandi_procurements', 'SELECT x.id,x.raw_ingredient_id,x.traditional_unit,x.quantity,x.converted_quantity,x.total_cost,x.cost_per_recipe_unit,x.created_at FROM mandi_procurements x WHERE $interval', intervalArgs);
     await read('physical_counts', 'stock_count_lines', 'SELECT x.*,c.status,c.reason,c.created_by,c.approved_by,c.posted_by,c.posted_at AS created_at FROM stock_count_lines x JOIN stock_counts c ON c.id=x.count_id WHERE ${_intervalScope(query, 'c.posted_at')} AND c.status=\'POSTED\'', intervalArgs);
+    e.rows['physical_counts'] = e.get('physical_counts').map((row) => <String, Object?>{...row, 'recorded_estimated_cost_paisa': row['estimated_cost_paisa'], 'estimated_cost_paisa': StockCountValuation.paisa(row)}).toList();
     await read('waste', 'kitchen_wastage', 'SELECT x.id,x.staff_id,x.raw_ingredient_id,x.quantity,x.cost_loss,x.reason,x.created_at FROM kitchen_wastage x WHERE $interval', intervalArgs);
     await read('vendor_events', 'vendor_transactions', 'SELECT x.id,x.vendor_id,x.shift_id,x.staff_id,x.type,x.amount,x.raw_ingredient_id,x.quantity,x.created_at FROM vendor_transactions x WHERE $interval', intervalArgs);
     await read('expense_entries', 'expense_entries', 'SELECT x.* FROM expense_entries x JOIN business_days b ON b.id=x.business_day_id WHERE $dayScope', dayArgs);

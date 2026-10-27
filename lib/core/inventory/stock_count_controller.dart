@@ -1,3 +1,4 @@
+import 'stock_count_valuation.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../settings/managed_configuration.dart';
 
@@ -21,8 +22,9 @@ class StockCountController {
 
   Future<List<Map<String, Object?>>> lines(int managerId, int id) async {
     await requireManager(database, managerId);
-    return database.rawQuery('''SELECT l.*, r.name FROM stock_count_lines l
+    final rows = await database.rawQuery('''SELECT l.*, r.name FROM stock_count_lines l
       JOIN raw_ingredients r ON r.id=l.ingredient_id WHERE count_id=? ORDER BY r.name''', [id]);
+    return rows.map((row) => <String, Object?>{...row, 'recorded_estimated_cost_paisa': row['estimated_cost_paisa'], 'estimated_cost_paisa': StockCountValuation.paisa(row)}).toList();
   }
 
   Future<int> start({required int managerId, required List<int> ingredientIds, required String reason}) =>
@@ -58,10 +60,10 @@ class StockCountController {
       final variance = quantity - (row['expected'] as num).toDouble();
       final ingredient = (await txn.query('raw_ingredients', where: 'id=?', whereArgs: [ingredientId])).single;
       final cost = (ingredient['cost_per_recipe_unit'] as num?)?.toDouble();
-      // Recipe cost is per gram for kg storage; preserve unknown cost as null.
-      final costFactor = row['unit'] == 'kg' ? 1000 : 1;
+      // Procurement and recipe quantities use the ingredient storage unit.
       await txn.update('stock_count_lines', {'counted': quantity, 'variance': variance,
-        'estimated_cost_paisa': cost == null || cost <= 0 ? null : (variance * costFactor * cost * 100).round()},
+        'valuation_policy': 'STORAGE_UNIT_RATE_V1',
+        'estimated_cost_paisa': cost == null || cost <= 0 ? null : (variance * cost * 100).round()},
         where: 'count_id=? AND ingredient_id=?', whereArgs: [id, ingredientId]);
     }
     await txn.update('stock_counts', {'status': 'SUBMITTED', 'submitted_by': managerId, 'submitted_at': DateTime.now().toIso8601String()}, where: 'id=?', whereArgs: [id]);
