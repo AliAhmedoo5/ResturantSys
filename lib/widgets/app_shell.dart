@@ -230,6 +230,7 @@ class _AppShellState extends State<AppShell> {
     }
     if (_selectedWorkspace == AppWorkspaceTab.catalog && widget.catalogController != null) {
       return SupervisorCatalogWorkspace(
+        managerId: staff.id,
         controller: widget.catalogController!,
         orderController: widget.orderController,
         procurementController: widget.procurementController,

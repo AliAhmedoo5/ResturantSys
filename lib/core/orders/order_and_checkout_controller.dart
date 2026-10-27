@@ -1,3 +1,4 @@
+import 'customer_controller.dart';
 import '../delivery/delivery_controller.dart';
 import 'paisa_engine.dart';
 import 'dart:convert';
@@ -66,6 +67,7 @@ class RefundResult {
 /// Draft definition when creating or configuring a deal item slot.
 class DealItemDraft {
   const DealItemDraft({
+    this.id,
     required this.groupName,
     this.categoryId,
     this.defaultMenuItemId,
@@ -75,6 +77,7 @@ class DealItemDraft {
   });
 
   final String groupName;
+  final int? id;
   final int? categoryId;
   final int? defaultMenuItemId;
   final bool isUpgradeable;
@@ -290,6 +293,154 @@ class OrderAndCheckoutController {
     });
   }
 
+  /// Atomic edit preserves the deal identity and committed order snapshots.
+  Future<void> saveDeal({required int managerId, int? id, required String name,
+    required double basePrice, required bool isActive, required List<DealItemDraft> items}) async {
+    await database.transaction((txn) async {
+      await CustomerController.requireRole(txn, managerId, manager: true);
+      if (name.trim().isEmpty || !basePrice.isFinite || basePrice < 0 ||
+          (basePrice * 100 - (basePrice * 100).round()).abs() > 0.000001) {
+        throw ArgumentError('Enter a name and non-negative price with at most two decimal places.');
+      }
+      for (final slot in items) {
+        if (slot.groupName.trim().isEmpty || slot.options.isEmpty ||
+            slot.options.map((o) => o.menuItemId).toSet().length != slot.options.length ||
+            slot.options.where((o) => o.isDefault).length != 1 ||
+            slot.options.any((o) => !o.upgradePrice.isFinite || o.upgradePrice < 0 ||
+              (o.upgradePrice * 100 - (o.upgradePrice * 100).round()).abs() > 0.000001)) {
+          throw ArgumentError('Each component needs a name, unique choices, one default and valid upgrade prices.');
+        }
+      }
+      final values = {'name': name.trim(), 'base_price': basePrice, 'is_active': isActive ? 1 : 0};
+      final int dealId;
+      if (id == null) {
+        dealId = await txn.insert('deals', {...values, 'created_at': _formatTimestamp(DateTime.now())});
+      } else {
+        if (await txn.update('deals', values, where: 'id = ?', whereArgs: [id]) != 1) throw StateError('Deal no longer exists.');
+        dealId = id;
+      }
+      final existingSlots = await txn.query('deal_items', where: 'deal_id = ?', whereArgs: [dealId]);
+      final existingIds = existingSlots.map((row) => row['id'] as int).toSet();
+      final retainedIds = items.where((slot) => slot.id != null).map((slot) => slot.id!).toSet();
+      if (!existingIds.containsAll(retainedIds) || items.where((slot) => slot.id != null).length != retainedIds.length) {
+        throw StateError('Deal components changed. Reopen the deal editor.');
+      }
+      for (final removed in existingIds.difference(retainedIds)) {
+        await txn.delete('deal_items', where: 'id = ?', whereArgs: [removed]);
+      }
+      for (final slot in items) {
+        final slotValues = {'deal_id': dealId, 'group_name': slot.groupName.trim(), 'category_id': null,
+          'default_menu_item_id': slot.options.singleWhere((o) => o.isDefault).menuItemId,
+          'is_upgradeable': slot.options.any((o) => o.upgradePrice > 0) ? 1 : 0, 'upgrade_price': 0};
+        final int slotId;
+        if (slot.id == null) {
+          slotId = await txn.insert('deal_items', slotValues);
+        } else {
+          slotId = slot.id!;
+          await txn.update('deal_items', slotValues, where: 'id = ?', whereArgs: [slotId]);
+          await txn.delete('deal_item_options', where: 'deal_item_id = ?', whereArgs: [slotId]);
+        }
+        for (final option in slot.options) {
+          await txn.insert('deal_item_options', {'deal_item_id': slotId, 'menu_item_id': option.menuItemId,
+            'is_default': option.isDefault ? 1 : 0, 'upgrade_price': option.upgradePrice});
+        }
+      }
+      if (isActive) await validateDealRecipe(dealId, executor: txn);
+    });
+  }
+
+  Map<String, Object?> encodeDraftLine(CartItem item) => {
+    'menu_item_id': item.menuItem?.id, 'deal_id': item.deal?.id, 'quantity': item.quantity,
+    'modifiers': item.selectedModifiers.map((m) => m.id).toList(),
+    'choices': item.selectedDealChoices.map((c) => c.toJson()).toList(),
+  };
+
+  /// Rehydrate with today's catalog; no historical price or tender is trusted.
+  Future<List<CartItem>> restoreDraftLines(List<dynamic> lines) async {
+    final catalog = CatalogAndRecipeController(database: database);
+    final menu = {for (final item in await catalog.getMenuItems(activeOnly: true)) item.id: item};
+    final deals = {for (final deal in await getDeals(activeOnly: true)) deal.id: deal};
+    final modifiers = {for (final m in await catalog.getModifiers(activeOnly: true)) m.id: m};
+    final restored = <CartItem>[];
+    for (final raw in lines) {
+      final row = Map<String, dynamic>.from(raw as Map);
+      final menuId = row['menu_item_id'] as int?;
+      final dealId = row['deal_id'] as int?;
+      if ((menuId == null) == (dealId == null) || (menuId != null && !menu.containsKey(menuId)) ||
+          (dealId != null && !deals.containsKey(dealId))) throw StateError('An item is unavailable. Choose a replacement in a new cart.');
+      final selected = <Modifier>[];
+      for (final id in row['modifiers'] as List<dynamic>) {
+        final modifier = modifiers[id];
+        if (modifier == null) throw StateError('A modifier is unavailable. Choose a replacement.');
+        selected.add(modifier);
+      }
+      final choices = <SelectedDealChoice>[];
+      for (final rawChoice in row['choices'] as List<dynamic>) {
+        final choice = SelectedDealChoice.fromJson(Map<String, dynamic>.from(rawChoice as Map));
+        final matching = deals[dealId]?.items.where((s) => s.id == choice.dealItemId).toList() ?? [];
+        if (matching.length != 1 || !menu.containsKey(choice.menuItemId)) throw StateError('This deal changed; choose its components again.');
+        final slot = matching.single;
+        final options = slot.options.where((o) => o.menuItemId == choice.menuItemId).toList();
+        if (options.isEmpty && slot.defaultMenuItemId != choice.menuItemId &&
+            !(slot.options.isEmpty && slot.categoryId == menu[choice.menuItemId]!.categoryId)) {
+          throw StateError('This deal changed; choose a replacement.');
+        }
+        choices.add(SelectedDealChoice(dealItemId: slot.id, groupName: slot.groupName,
+          menuItemId: choice.menuItemId, menuItemName: menu[choice.menuItemId]!.name,
+          upgradePrice: options.isNotEmpty ? options.single.upgradePrice :
+            (slot.isUpgradeable && choice.menuItemId != slot.defaultMenuItemId ? slot.upgradePrice : 0)));
+      }
+      final item = CartItem(menuItem: menu[menuId], deal: deals[dealId], quantity: row['quantity'] as int,
+        selectedModifiers: selected, selectedDealChoices: choices);
+      await _validateCartItem(item, database);
+      restored.add(item);
+    }
+    if (restored.isEmpty) throw StateError('The saved cart has no items.');
+    return restored;
+  }
+
+  Future<int> holdCart({required int cashierId, required String label, required List<CartItem> items,
+    required DiningType diningType, DeliveryDetails? delivery, int? customerId, int? discountId, int? previousHoldId}) async {
+    return database.transaction((txn) async {
+      await _requireActiveCashier(txn, cashierId);
+      if (items.isEmpty || label.trim().isEmpty) throw ArgumentError('Enter a hold label and add items.');
+      if (previousHoldId != null) {
+        await txn.delete('held_carts', where: 'id = ? AND cashier_id = ?', whereArgs: [previousHoldId, cashierId]);
+      }
+      return txn.insert('held_carts', {'cashier_id': cashierId, 'label': label.trim(),
+        'created_at': DateTime.now().toIso8601String(), 'payload': jsonEncode({
+          'items': items.map(encodeDraftLine).toList(), 'dining_type': diningType.code,
+          'customer_id': customerId, 'discount_id': discountId,
+          'delivery': delivery == null ? null : {'area_id': delivery.areaId, 'fee': delivery.quotedFeePaisa,
+            'phone': delivery.phone, 'name': delivery.customerName, 'address': delivery.fullAddress,
+            'landmark': delivery.landmark, 'notes': delivery.notes}})});
+    });
+  }
+
+  Future<List<Map<String, Object?>>> getHolds(int cashierId) async {
+    await _requireActiveCashier(database, cashierId);
+    return database.query('held_carts', where: 'cashier_id = ?', whereArgs: [cashierId], orderBy: 'id DESC');
+  }
+
+  Future<void> removeHold(int cashierId, int id) async {
+    await database.transaction((txn) async {
+      await _requireActiveCashier(txn, cashierId);
+      if (await txn.delete('held_carts', where: 'id = ? AND cashier_id = ?', whereArgs: [id, cashierId]) != 1) {
+        throw StateError('Hold no longer exists.');
+      }
+    });
+  }
+
+  Future<List<CartItem>> repeatOrder({required int cashierId, required int orderId}) async {
+    await _requireActiveCashier(database, cashierId);
+    final order = await getOrder(orderId);
+    if (order.isCancelled || order.isVoided) throw StateError('Cancelled orders cannot be repeated.');
+    return restoreDraftLines(order.items.map((item) => {
+      'menu_item_id': item.menuItemId, 'deal_id': item.dealId, 'quantity': item.quantity,
+      'modifiers': item.decodedModifiers.map((m) => m['id']).toList(), 'choices': item.decodedDealChoices,
+    }).toList());
+  }
+
   Future<List<Deal>> getDeals({bool? activeOnly}) async {
     String? where;
     if (activeOnly == true) {
@@ -476,6 +627,8 @@ class OrderAndCheckoutController {
     required List<PaymentTender> payments,
     DeliveryDetails? delivery,
     String? commandId,
+    int? customerId,
+    int? heldCartId,
   }) async {
     if (commandId != null && commandId.trim().isEmpty) throw ArgumentError('Checkout command ID must not be blank.');
     // Hard-block Manager credentials from initiating checkout or tenders (ADR-0009)
@@ -570,11 +723,40 @@ class OrderAndCheckoutController {
       // 1. Daily Sequential Token
       final tokenNumber = await getNextTokenNumber(businessDayId, txn);
 
+      if (heldCartId != null && await txn.delete('held_carts', where: 'id = ? AND cashier_id = ?',
+          whereArgs: [heldCartId, cashierId]) != 1) {
+        throw StateError('Held cart was already checked out or removed.');
+      }
+      if (customerId == null && delivery != null) {
+        final phone = DeliveryController.normalizePhone(delivery.phone);
+        final matches = await txn.query('customers', where: 'phone = ?', whereArgs: [phone]);
+        if (matches.isEmpty) {
+          customerId = await txn.insert('customers', {'name': delivery.customerName.trim().isEmpty ? phone : delivery.customerName.trim(),
+            'phone': phone, 'created_at': formattedNow});
+        } else {
+          final match = matches.single;
+          if (delivery.customerName.trim().isNotEmpty && match['name'] != delivery.customerName.trim()) {
+            throw StateError('This phone belongs to a saved customer. Confirm the identity in Customers before checkout.');
+          }
+          customerId = (match['merged_into'] ?? match['id']) as int;
+        }
+      }
+      Map<String, Object?>? selectedCustomer;
+      if (customerId != null) {
+        final customers = await txn.query('customers', where: 'id = ? AND merged_into IS NULL', whereArgs: [customerId]);
+        if (customers.isEmpty) throw StateError('Customer was merged. Select the current customer record.');
+        selectedCustomer = customers.single;
+      }
+      final customerPhoneSnapshot = deliveryArea != null ? DeliveryController.normalizePhone(delivery!.phone)
+        : (selectedCustomer == null ? null : selectedCustomer['phone'] as String?);
+      final customerNameSnapshot = deliveryArea != null ? delivery!.customerName.trim()
+        : (selectedCustomer == null ? null : selectedCustomer['name'] as String?);
       // 2. Commit Order Header
       final orderId = await txn.insert(
         PosDatabaseConstants.tableOrders,
         {
           'checkout_command_id': commandId,
+          'customer_id': customerId,
           'business_day_id': businessDayId,
           'shift_id': shiftId,
           'cashier_id': cashierId,
@@ -590,8 +772,8 @@ class OrderAndCheckoutController {
           'delivery_area_name_snapshot': deliveryArea?.name,
           'delivery_fee_paisa': deliveryFeePaisa,
           'delivery_address_snapshot': deliveryArea == null ? null : delivery!.addressSnapshot,
-          'customer_phone': deliveryArea == null ? null : DeliveryController.normalizePhone(delivery!.phone),
-          'customer_name': deliveryArea == null ? null : delivery!.customerName.trim(),
+          'customer_phone': customerPhoneSnapshot,
+          'customer_name': customerNameSnapshot,
           'payment_status': isCod ? 'COLLECTION_DUE' : 'SETTLED',
           'token_status': TokenStatus.preparing.code,
           'created_at': formattedNow,
@@ -717,8 +899,9 @@ class OrderAndCheckoutController {
         deliveryAreaName: deliveryArea?.name,
         deliveryFeePaisa: deliveryFeePaisa,
         deliveryAddress: deliveryArea == null ? null : delivery!.addressSnapshot,
-        customerPhone: deliveryArea == null ? null : DeliveryController.normalizePhone(delivery!.phone),
-        customerName: deliveryArea == null ? null : delivery!.customerName.trim(),
+        customerId: customerId,
+        customerPhone: customerPhoneSnapshot,
+        customerName: customerNameSnapshot,
         paymentStatus: isCod ? 'COLLECTION_DUE' : 'SETTLED',
         createdAt: now,
         items: createdOrderItems,

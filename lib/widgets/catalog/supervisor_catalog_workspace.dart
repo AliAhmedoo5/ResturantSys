@@ -1,3 +1,4 @@
+import 'dialogs/deal_form_dialog.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -33,6 +34,7 @@ class SupervisorCatalogWorkspace extends StatefulWidget {
     super.key,
     this.controller,
     this.orderController,
+    this.managerId,
     this.procurementController,
     this.initialCategories,
     this.initialMenuItems,
@@ -45,6 +47,7 @@ class SupervisorCatalogWorkspace extends StatefulWidget {
 
   final CatalogAndRecipeController? controller;
   final OrderAndCheckoutController? orderController;
+  final int? managerId;
   final ProcurementAndWastageController? procurementController;
   final List<MenuCategory>? initialCategories;
   final List<MenuItem>? initialMenuItems;
@@ -813,7 +816,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                 Tab(key: ValueKey('tab_modifiers'), text: 'Modifiers'),
                 Tab(key: ValueKey('tab_discounts'), text: 'Pre-Approved Discounts'),
                 Tab(key: ValueKey('tab_settings'), text: 'Settings & Toggles'),
-                Tab(key: ValueKey('tab_deal_photos'), text: 'Deal Photos'),
+                Tab(key: ValueKey('tab_deal_photos'), text: 'Deals'),
               ],
             ),
           ),
@@ -836,15 +839,22 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
   }
 
   Widget _buildDealPhotosTab() {
-    if (_deals.isEmpty) return const Center(child: Text('No deals available.'));
-    return ListView.builder(
+    return Column(children: [
+      Padding(padding: const EdgeInsets.all(16), child: Row(children: [
+        Expanded(child: Text('Deals & selectable components', style: Theme.of(context).textTheme.titleLarge)),
+        FilledButton.icon(onPressed: widget.managerId == null ? null : () => _editDeal(),
+          icon: const Icon(Icons.add), label: const Text('Create Deal')),
+      ])),
+      if (_deals.isEmpty) const Expanded(child: Center(child: Text('No deals available. Create your first deal.')))
+      else Expanded(child: ListView.builder(
       padding: const EdgeInsets.all(WarmCounterSpacing.space16),
       itemCount: _deals.length,
       itemBuilder: (context, index) {
         final deal = _deals[index];
         return ListTile(
           title: Text(deal.name),
-          subtitle: const Text('One optional picture'),
+          subtitle: Text('Rs ${deal.basePrice.toStringAsFixed(2)} | ${deal.items.length} components | ${deal.isActive ? 'Active' : 'Draft'}'),
+          onTap: widget.managerId == null ? null : () => _editDeal(deal),
           trailing: IconButton(
             key: ValueKey('deal_photo_${deal.id}'),
             tooltip: 'Change picture',
@@ -855,7 +865,16 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
           ),
         );
       },
-    );
+    )),
+    ]);
+  }
+
+  Future<void> _editDeal([Deal? deal]) async {
+    final controller = widget.orderController ?? (widget.controller == null ? null : OrderAndCheckoutController(database: widget.controller!.database));
+    if (controller == null || widget.managerId == null) return;
+    final saved = await showDialog<bool>(context: context, barrierDismissible: false, builder: (_) => DealFormDialog(
+      controller: controller, managerId: widget.managerId!, menuItems: _allMenuItems, deal: deal));
+    if (saved == true && mounted) await _loadAllCatalogData();
   }
 
   Widget _buildSettingsTab() {

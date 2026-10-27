@@ -29,12 +29,14 @@ class Order {
     this.deliveryAddress,
     this.customerPhone,
     this.customerName,
+    this.customerId,
     this.deliveryFeePaisa = 0,
     this.cashRoundingPaisa = 0,
     this.hasCancellationRevision = false,
   });
 
   final int? deliveryAreaId;
+  final int? customerId;
   final int deliveryFeePaisa, cashRoundingPaisa;
   final String? deliveryAreaName, deliveryAddress, customerPhone, customerName;
   final int id;
@@ -82,6 +84,7 @@ class Order {
       cashRoundingPaisa: map['cash_rounding_paisa'] as int? ?? 0,
       customerPhone: map['customer_phone'] as String?,
       customerName: map['customer_name'] as String?,
+      customerId: map['customer_id'] as int?,
       businessDayId: map['business_day_id'] as int,
       shiftId: map['shift_id'] as int,
       cashierId: map['cashier_id'] as int,
