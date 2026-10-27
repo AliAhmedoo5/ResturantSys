@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'customer_directory.dart';
+import '../../core/orders/customer_controller.dart';
 import '../../core/delivery/delivery_controller.dart';
 import '../../core/orders/paisa_engine.dart';
 import '../delivery/delivery_details_dialog.dart';
@@ -98,6 +101,9 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
   DeliveryDetails? _deliveryDetails;
   bool _checkoutOpen = false;
   bool _ordersOpen = false;
+  Customer? _customer;
+  int? _recalledHoldId;
+  bool _draftBusy = false;
 
   @override
   void dispose() {
@@ -342,6 +348,8 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
       _cartItems.clear();
       _selectedDiscount = null;
       _deliveryDetails = null;
+      _customer = null;
+      _recalledHoldId = null;
     });
   }
 
@@ -349,8 +357,89 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
   // Checkout Execution
   // ---------------------------------------------------------------------------
 
+  Future<void> _draftAction(Future<void> Function() action) async {
+    if (_draftBusy || _checkoutOpen) return;
+    setState(() => _draftBusy = true);
+    try { await action(); }
+    catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()))); }
+    finally { if (mounted) setState(() => _draftBusy = false); }
+  }
+
+  Future<void> _hold() => _draftAction(() async {
+    final controller = widget.orderController;
+    if (controller == null || _cartItems.isEmpty) return;
+    final label = TextEditingController(text: _customer?.name ?? 'Cart ${DateFormat('HH:mm').format(DateTime.now())}');
+    final confirmed = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
+      title: const Text('Hold cart'), content: TextField(controller: label, decoration: const InputDecoration(labelText: 'Label')),
+      actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+        FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Save hold'))]));
+    final text = label.text;
+    label.dispose();
+    if (confirmed != true || !mounted) return;
+    await controller.holdCart(cashierId: widget.currentStaff.id, label: text, items: _cartItems,
+      diningType: _selectedDiningType, delivery: _deliveryDetails, customerId: _customer?.id, discountId: _selectedDiscount?.id, previousHoldId: _recalledHoldId);
+    if (mounted) _clearCart();
+  });
+
+  Future<void> _recall() => _draftAction(() async {
+    final controller = widget.orderController;
+    if (controller == null) return;
+    if (_cartItems.isNotEmpty) throw StateError('Hold or clear the current cart before recalling another.');
+    final holds = await controller.getHolds(widget.currentStaff.id);
+    if (!mounted) return;
+    final selected = await showDialog<Map<String, Object?>>(context: context, builder: (context) => AlertDialog(
+      title: const Text('Recall held cart'), content: SizedBox(width: 460, height: 360,
+        child: holds.isEmpty ? const Center(child: Text('No held carts.')) : ListView(children: [
+          for (final hold in holds) ListTile(title: Text(hold['label'] as String), subtitle: Text(hold['created_at'] as String),
+            onTap: () => Navigator.pop(context, hold)),
+        ])), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))]));
+    if (selected == null || !mounted) return;
+    final payload = jsonDecode(selected['payload'] as String) as Map<String, dynamic>;
+    final lines = await controller.restoreDraftLines(payload['items'] as List<dynamic>);
+    Customer? customer;
+    final customerId = payload['customer_id'] as int?;
+    if (customerId != null) {
+      final rows = await controller.database.rawQuery('SELECT c.* FROM customers c WHERE c.id = (SELECT COALESCE(merged_into, id) FROM customers WHERE id = ?)', [customerId]);
+      if (rows.isNotEmpty) customer = Customer.fromMap(rows.single);
+    }
+    DiscountPreset? discount;
+    final discounts = await CatalogAndRecipeController(database: controller.database).getDiscountPresets(activeOnly: true);
+    for (final current in discounts) { if (current.id == payload['discount_id']) discount = current; }
+    final raw = payload['delivery'] as Map<String, dynamic>?;
+    final delivery = raw == null ? null : DeliveryDetails(areaId: raw['area_id'] as int, quotedFeePaisa: raw['fee'] as int,
+      phone: raw['phone'] as String, customerName: raw['name'] as String, fullAddress: raw['address'] as String,
+      landmark: raw['landmark'] as String, notes: raw['notes'] as String);
+    if (!mounted) return;
+    setState(() { _cartItems.addAll(lines); _selectedDiningType = DiningType.fromCode(payload['dining_type'] as String);
+      _deliveryDetails = delivery; _selectedDiscount = discount; _customer = customer; _recalledHoldId = selected['id'] as int; });
+  });
+
+  Future<void> _customers() => _draftAction(() async {
+    final controller = widget.orderController;
+    if (controller == null) return;
+    final selection = await showDialog<CustomerSelection>(context: context, builder: (context) => Dialog(
+      child: SizedBox(width: 900, height: 620, child: Column(children: [
+        Row(children: [const Expanded(child: Padding(padding: EdgeInsets.all(16), child: Text('Customer Directory'))),
+          IconButton(tooltip: 'Close', onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close))]),
+        Expanded(child: CustomerDirectory(controller: CustomerController(controller.database), staffId: widget.currentStaff.id)),
+      ]))));
+    if (selection == null || !mounted) return;
+    List<CartItem>? lines;
+    DiningType? diningType;
+    if (selection.repeatOrderId != null) {
+      if (_cartItems.isNotEmpty) throw StateError('Hold or clear the current cart before repeating an order.');
+      lines = await controller.repeatOrder(cashierId: widget.currentStaff.id, orderId: selection.repeatOrderId!);
+      diningType = (await controller.getOrder(selection.repeatOrderId!)).diningType;
+    }
+    if (!mounted) return;
+    setState(() {
+      _customer = selection.customer;
+      if (lines != null) { _cartItems.addAll(lines); _selectedDiningType = diningType!; _selectedDiscount = null; _deliveryDetails = null; }
+    });
+  });
+
   Future<void> _openTenderCheckout() async {
-    if (_cartItems.isEmpty || _checkoutOpen) return;
+    if (_cartItems.isEmpty || _checkoutOpen || _draftBusy) return;
     _checkoutOpen = true;
     try {
     if (_selectedDiningType == DiningType.delivery) {
@@ -394,6 +483,8 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
                 discount: _selectedDiscount,
                 payments: tenders,
                 delivery: _deliveryDetails,
+                customerId: _customer?.id,
+                heldCartId: _recalledHoldId,
               );
 
               if (mounted) {
@@ -1216,6 +1307,14 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
             ),
           ),
 
+          if (widget.orderController != null) Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Wrap(spacing: 4, children: [
+            TextButton.icon(onPressed: _draftBusy || _cartItems.isEmpty ? null : _hold,
+              icon: const Icon(Icons.pause_circle_outline), label: const Text('Hold')),
+            TextButton.icon(onPressed: _draftBusy ? null : _recall,
+              icon: const Icon(Icons.restore), label: const Text('Recall')),
+            TextButton.icon(onPressed: _draftBusy ? null : _customers,
+              icon: const Icon(Icons.people_outline), label: Text(_customer?.name ?? 'Customers')),
+          ])),
           // Cart Items List
           Expanded(
             child: _cartItems.isEmpty

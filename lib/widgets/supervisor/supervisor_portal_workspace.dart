@@ -1,3 +1,5 @@
+import '../orders/customer_directory.dart';
+import '../../core/orders/customer_controller.dart';
 import '../../core/delivery/delivery_controller.dart';
 import '../delivery/delivery_areas_workspace.dart';
 import 'package:flutter/material.dart';
@@ -28,6 +30,7 @@ import 'manager_dashboard_workspace.dart';
 enum SupervisorPortalTab {
   dashboard('Dashboard', Icons.insights_rounded),
   deliveryAreas('Delivery Areas', Icons.delivery_dining),
+  customers('Customers', Icons.people_outline),
   staff('Staff & Departments', Icons.badge_rounded),
   toggles('Feature Toggles', Icons.toggle_on_rounded),
   discrepancies('Discrepancy Review', Icons.assignment_late_rounded),
@@ -877,6 +880,9 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
       case SupervisorPortalTab.deliveryAreas:
         if (widget.orderController == null || widget.currentStaff == null) return const Center(child: Text('Delivery areas unavailable.'));
         return DeliveryAreasWorkspace(controller: DeliveryController(database: widget.orderController!.database), staffId: widget.currentStaff!.id);
+      case SupervisorPortalTab.customers:
+        if (widget.orderController == null || widget.currentStaff == null) return const Center(child: Text('Customers unavailable.'));
+        return CustomerDirectory(controller: CustomerController(widget.orderController!.database), staffId: widget.currentStaff!.id, manager: true);
       case SupervisorPortalTab.staff:
         return _buildStaffAndDepartmentsView(context);
       case SupervisorPortalTab.toggles:

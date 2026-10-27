@@ -3,6 +3,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:resturant_sys/core/auth/pin_hasher.dart';
 import 'pos_database_constants.dart';
+import '../delivery/delivery_controller.dart';
 
 /// Embedded SQLite database manager for the Restaurant POS system.
 ///
@@ -125,6 +126,7 @@ class PosDatabase {
     await _upgradeToVersion15(db);
     await _upgradeToVersion16(db);
     await _upgradeToVersion17(db);
+    await _upgradeToVersion18(db);
   }
 
   Future<void> _createOperationalAccountingTables(DatabaseExecutor executor) async {
@@ -440,6 +442,45 @@ class PosDatabase {
     if (oldVersion < 15) await _upgradeToVersion15(db);
     if (oldVersion < 16) await _upgradeToVersion16(db);
     if (oldVersion < 17) await _upgradeToVersion17(db);
+    if (oldVersion < 18) await _upgradeToVersion18(db);
+  }
+
+  Future<void> _upgradeToVersion18(DatabaseExecutor db) async {
+    await db.execute('''CREATE TABLE IF NOT EXISTS customers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
+      phone TEXT NOT NULL UNIQUE, notes TEXT NOT NULL DEFAULT '',
+      merged_into INTEGER REFERENCES customers(id), created_at TEXT NOT NULL)''');
+    await db.execute('''CREATE TABLE IF NOT EXISTS customer_merges (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, source_id INTEGER NOT NULL REFERENCES customers(id),
+      target_id INTEGER NOT NULL REFERENCES customers(id), manager_id INTEGER NOT NULL REFERENCES staff(id),
+      reason TEXT NOT NULL, created_at TEXT NOT NULL)''');
+    for (final operation in ['UPDATE', 'DELETE']) {
+      await db.execute("CREATE TRIGGER IF NOT EXISTS customer_merges_no_$operation BEFORE $operation ON customer_merges BEGIN SELECT RAISE(ABORT,'Customer merge history is immutable'); END");
+    }
+    await db.execute('''CREATE TABLE IF NOT EXISTS held_carts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, cashier_id INTEGER NOT NULL REFERENCES staff(id),
+      label TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL)''');
+    final columns = await db.rawQuery('PRAGMA table_info(orders)');
+    if (!columns.any((c) => c['name'] == 'customer_id')) {
+      await db.execute('ALTER TABLE orders ADD COLUMN customer_id INTEGER REFERENCES customers(id)');
+    }
+    await db.execute('CREATE INDEX IF NOT EXISTS orders_customer ON orders(customer_id, id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS held_carts_cashier ON held_carts(cashier_id, id)');
+    await db.execute('''CREATE TABLE IF NOT EXISTS customer_order_links (
+      order_id INTEGER PRIMARY KEY REFERENCES orders(id),
+      customer_id INTEGER NOT NULL REFERENCES customers(id))''');
+    // Closed-day orders cannot be updated. Link legacy snapshots separately.
+    final legacyOrders = await db.query('orders', where: 'customer_phone IS NOT NULL', orderBy: 'id');
+    for (final order in legacyOrders) {
+      final phone = DeliveryController.normalizePhone(order['customer_phone'] as String);
+      if (phone.length < 7) continue;
+      final existing = await db.query('customers', where: 'phone = ?', whereArgs: [phone]);
+      final id = existing.isEmpty ? await db.insert('customers', {
+        'name': (order['customer_name'] as String?)?.trim().isNotEmpty == true ? order['customer_name'] : phone,
+        'phone': phone, 'created_at': order['created_at'],
+      }) : existing.single['id'] as int;
+      await db.insert('customer_order_links', {'order_id': order['id'], 'customer_id': id}, conflictAlgorithm: ConflictAlgorithm.ignore);
+    }
   }
 
   Future<void> _upgradeToVersion17(DatabaseExecutor db) async {
