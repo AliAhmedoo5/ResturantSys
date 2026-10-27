@@ -23,7 +23,7 @@ void main() {
     operations=OperationsController(db);
     khata=VendorKhataController(database:db);
     shifts=ShiftAndCashController(database:db);
-    manager=(await db.query('staff',where:"role='MANAGER'")).first['id'] as int;
+    manager=(await db.query('staff',where:"role IN ('SUPERVISOR','MANAGER','OWNER')")).first['id'] as int;
     cashier=(await db.query('staff',where:"role='CASHIER'")).first['id'] as int;
     employee=await db.insert('staff',{'name':'Kitchen helper','department_id':1,
       'pin_hash':'no-login-helper','role':'CASHIER','login_enabled':0,'created_at':'2026-10-01'});

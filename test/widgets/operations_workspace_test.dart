@@ -12,10 +12,10 @@ void main() {
   late OperationsController controller;
   late int manager;
   setUp(() async {
-    store=PosDatabase(factory:databaseFactoryFfi,customPath:inMemoryDatabasePath);
+    store=PosDatabase(factory:databaseFactoryFfiNoIsolate,customPath:inMemoryDatabasePath);
     final db=await store.initialize();
     controller=OperationsController(db);
-    manager=(await db.query('staff',where:"role='MANAGER'")).first['id'] as int;
+    manager=(await db.query('staff',where:"role IN ('SUPERVISOR','MANAGER','OWNER')")).first['id'] as int;
     await ShiftAndCashController(database:db).openBusinessDay(openedByStaffId:manager);
   });
   tearDown(() async {await store.close();});

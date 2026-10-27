@@ -34,11 +34,11 @@ enum SupervisorPortalTab {
   deliveryAreas('Delivery Areas', Icons.delivery_dining),
   customers('Customers', Icons.people_outline),
   staff('Staff & Departments', Icons.badge_rounded),
-  payroll('Payroll', Icons.payments_outlined),
-  expenses('Expenses', Icons.account_balance_wallet_outlined),
   toggles('Feature Toggles', Icons.toggle_on_rounded),
   discrepancies('Discrepancy Review', Icons.assignment_late_rounded),
-  reports('Z-Reports & Backups', Icons.assessment_rounded);
+  reports('Z-Reports & Backups', Icons.assessment_rounded),
+  payroll('Payroll', Icons.payments_outlined),
+  expenses('Expenses', Icons.account_balance_wallet_outlined);
 
   const SupervisorPortalTab(this.label, this.icon);
   final String label;
