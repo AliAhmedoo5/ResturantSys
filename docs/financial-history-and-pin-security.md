@@ -15,7 +15,9 @@ available for unused suppliers that management wants to keep.
 
 New PIN verifiers use PBKDF2-HMAC-SHA256 with 600,000 iterations, a random
 16-byte salt, and a 32-byte verifier. The work factor and salt are included in
-the stored versioned value. Authentication performs slow derivation in a
+the stored versioned value. The work factor follows the
+[OWASP PBKDF2-HMAC-SHA256 guidance](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html#pbkdf2).
+Authentication performs slow derivation in a
 background isolate. Existing SHA-256 credentials remain usable and are replaced
 with PBKDF2 only after successful verification; plaintext PINs are never migrated
 or stored. Existing credentials not yet used retain their legacy verifier until
@@ -38,7 +40,8 @@ counters protect that path. Identified-account PIN changes and rejected
 Cashier PINs used for Manager approval also record a staff counter. Concurrent
 attempts serialize through SQLite transactions. A correct PIN does not bypass
 an unexpired lock. Successful verification after expiry clears applicable
-counters. Clock rollback cannot expire a lock early.
+counters. Manager approval has a separate counter that ordinary Cashier login
+cannot clear. Clock rollback cannot expire a lock early.
 
 PIN uniqueness checks cover registration, profile PIN edits, Manager resets,
 and self-service PIN changes. A unique fingerprint index protects concurrent
