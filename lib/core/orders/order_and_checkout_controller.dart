@@ -678,7 +678,7 @@ class OrderAndCheckoutController {
           AND s.status = 'OPEN' AND d.status = 'OPEN' AND st.is_active = 1
       """, [shiftId, businessDayId, cashierId]);
       if (activeSession.isEmpty) throw StateError('Checkout requires the cashier current open shift and business day.');
-      final selectedDiscounts = [if (discount != null) discount, ...discounts];
+      final selectedDiscounts = [if (discount != null) discount, ...discounts]..sort((a, b) => a.id.compareTo(b.id));
       final discountAmounts = DiscountStack.amounts(items: items, discounts: selectedDiscounts, diningMode: diningType.code, cashierId: cashierId, now: now);
       for (final discount in selectedDiscounts) {
         final rows = await txn.query('discount_presets', where: 'id=?', whereArgs: [discount.id]);
@@ -926,7 +926,7 @@ class OrderAndCheckoutController {
         diningType: diningType,
         subtotal: totals.subtotal,
         discountAmount: totals.discountAmount,
-        discountId: discount?.id,
+        discountId: selectedDiscounts.isEmpty ? null : selectedDiscounts.first.id,
         taxAmount: totals.taxAmount,
         grandTotal: grandTotal,
         cashRoundingPaisa: cashRoundingPaisa,

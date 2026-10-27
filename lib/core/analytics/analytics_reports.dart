@@ -406,7 +406,7 @@ class _ReportBuilder {
     final coverage = e.get('cost_coverage').map((c) => c['order_id']).toSet();
     final events = e.get('cost_events');
     final covered = orders.where((o) => coverage.contains(o['id'])).length;
-    final complete = orders.isNotEmpty && covered == orders.length && events.every((c) => c['cost_paisa'] != null);
+    final complete = e.get('days').isNotEmpty && covered == orders.length && events.every((c) => c['cost_paisa'] != null);
     final cogs = events.fold<int>(0, (sum, c) => sum + (c['kind'] == 'COOKED_WASTE' ? 0 : (c['kind'] == 'RETURN' ? -1 : 1) * ((c['cost_paisa'] as int?) ?? 0)));
     // Accrual at confirmation: include COD receivables; cancellation reduces the
     // stored total to zero. Delivery fees are earned with the order; tax is excluded.
@@ -417,7 +417,8 @@ class _ReportBuilder {
     final rawWaste = _sum(e.get('waste').where((w) => w['reason'] != 'WASTED_COOKED'), 'cost_loss');
     final variance = _integers(e.get('physical_counts'), 'estimated_cost_paisa');
     final netAvailable = complete && !e.query.hasOrderFilters && !e.absent.contains('expense_entries') && !e.absent.contains('payroll_entries') &&
-      e.get('physical_counts').every((c) => c['estimated_cost_paisa'] != null);
+      e.get('physical_counts').every((c) => c['estimated_cost_paisa'] != null) &&
+      e.get('waste').where((w) => w['reason'] != 'WASTED_COOKED').every((w) => _money(w, 'cost_loss') > 0);
     const policy = 'Recognition at order confirmation, including COD receivables and delivery fees, less stored tax carve-out. Cancellations/revisions use current order totals. Cost uses immutable event-time acquisition rates, with original-rate raw returns; cooked losses remain in consumed cost. Missing pre-upgrade orders/rates withhold complete profit.';
     return _section(AnalyticsFamily.profitability, 'Profitability and costing', [
       _metric('recorded_value', 'Recorded order value', _sum(valid, 'grand_total'), explanation: _orderBasis),
@@ -425,10 +426,10 @@ class _ReportBuilder {
       _coverage('cost_coverage', 'Historical cost capture coverage', covered, orders.length, 'Orders with event-time cost capture. Unknown ingredient rates are separately disclosed in cost rows.'),
       _metric('waste_loss', 'Recorded waste loss', _sum(e.get('waste'), 'cost_loss'), explanation: 'Includes cooked loss already included in consumed cost; never subtract it twice.', previous: _sum(e.get('previous_waste'), 'cost_loss')),
       _metric('purchase_spend', 'Recorded Mandi purchase spend', _sum(e.get('purchases'), 'total_cost'), explanation: 'Inventory acquisition spend; not sales COGS.'),
-      _metric('cogs', 'Historical realized COGS', cogs, explanation: policy, unavailable: !complete),
-      _metric('gross_profit', 'Actual gross profit', gross, explanation: policy, unavailable: !complete),
+      _metric('cogs', 'Historical realized COGS', cogs, explanation: policy, unavailable: !complete, unavailableQuality: AnalyticsQuality.missing),
+      _metric('gross_profit', 'Actual gross profit', gross, explanation: policy, unavailable: !complete, unavailableQuality: AnalyticsQuality.missing),
       _metric('net_profit', 'Recorded net operating result', gross - expenses - labor - rawWaste + variance,
-        explanation: 'Gross profit less posted operating expenses, salary accruals and raw waste, plus signed posted count valuation. Posting-period allocation; unposted liabilities and legacy generic drawer outflows are not inferred. Available only for whole Business Days with complete cost evidence.', unavailable: !netAvailable),
+        explanation: 'Gross profit less posted operating expenses, salary accruals and raw waste, plus signed posted count valuation. Posting-period allocation; unposted liabilities and legacy generic drawer outflows are not inferred. Available only for whole Business Days with complete cost evidence.', unavailable: !netAvailable, unavailableQuality: AnalyticsQuality.missing),
     ], [
       ...events.map((c) => _row('order_cost_events', c, {'kind': c['kind'], 'order_id': c['order_id'], 'ingredient_id': c['ingredient_id'], 'revision': c['revision'], 'quantity': c['quantity'], 'unit_cost_rupees': c['unit_cost_rupees'], 'cost_paisa': c['cost_paisa'], 'source_event_id': c['source_event_id'], 'created_at': c['recorded_at']})),
       ...e.get('waste').map((w) => _row('kitchen_wastage', w, {'kind': 'Waste evidence', 'ingredient_id': w['raw_ingredient_id'], 'quantity': w['quantity'], 'recorded_loss_paisa': _money(w, 'cost_loss'), 'reason': _safeText(w['reason']), 'created_at': w['created_at']})),
@@ -457,10 +458,10 @@ class _ReportBuilder {
     ], rows, ['kind', 'business_day_id', 'order_id', 'shift_id', 'ingredient_id', 'token', 'revision', 'action', 'reason', 'staff_id', 'delta_paisa', 'hash', 'channel', 'status', 'attempts', 'stock_at_checkout', 'created_at'], ['Order revisions/tokens/rounding/checkout alerts use filtered order cohort. Report runs/outbox use whole selected Business Days. Delivery audit uses selected actual intervals.', 'Immutable Z-report provenance is shown; this explorer never rewrites snapshots. Sensitive payloads, errors, recipients, credentials and raw customer contact fields are excluded.']);
   }
 
-  AnalyticsMetric _metric(String id, String label, num value, {AnalyticsUnit unit = AnalyticsUnit.paisa, String explanation = _orderBasis, num? previous, bool unavailable = false}) {
+  AnalyticsMetric _metric(String id, String label, num value, {AnalyticsUnit unit = AnalyticsUnit.paisa, String explanation = _orderBasis, num? previous, bool unavailable = false, AnalyticsQuality unavailableQuality = AnalyticsQuality.notApplicable}) {
     final difference = !partial && !unavailable && previous != null ? value - previous : null;
     return AnalyticsMetric(id: id, label: label, value: unavailable ? null : value, unit: unit, explanation: explanation,
-      quality: unavailable ? AnalyticsQuality.notApplicable : AnalyticsQuality.complete,
+      quality: unavailable ? unavailableQuality : AnalyticsQuality.complete,
       changeAbsolute: difference,
       changePercent: difference != null && previous != null && previous != 0 ? difference / previous.abs() * 100 : null);
   }

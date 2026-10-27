@@ -32,7 +32,7 @@ class HistoricalCosts {
         final rate = (lot['unit_cost_rupees'] as num?)?.toDouble();
         // Exhausting a lot releases its exact remaining paisa, avoiding drift.
         final cost = rate == null ? null : (take - available).abs() < 0.00000001
-          ? (lot['cost_paisa'] as int) - (lot['removed_cost'] as num).toInt() : (take * rate * 100).round();
+          ? (lot['cost_paisa'] as int) - (lot['removed_cost'] as num).toInt() : math.min((lot['cost_paisa'] as int) - (lot['removed_cost'] as num).toInt(), (take * rate * 100).round());
         await txn.insert('order_cost_events', {'order_id': orderId, 'ingredient_id': entry.key,
           'revision': revision, 'kind': restock ? 'RETURN' : 'COOKED_WASTE', 'quantity': take,
           'unit_cost_rupees': rate, 'cost_paisa': cost, 'source_event_id': lot['id'],

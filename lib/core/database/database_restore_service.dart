@@ -111,6 +111,11 @@ class DatabaseRestoreService {
     final old = Directory(p.join(stage.path, 'original'));
     final live = File(databasePath);
     final staged = File(p.join(stage.path, 'pos.db'));
+    Future<void> writeJournal(Map<String, Object?> state) async {
+      final temporary = File('${journal.path}.partial');
+      await temporary.writeAsString(jsonEncode(state), flush: true);
+      await temporary.rename(journal.path);
+    }
     Future<void> rollback(Map<String, dynamic> state) async {
       for (final suffix in ['', '-wal', '-shm']) {
         final saved = File(p.join(old.path, 'pos.db$suffix'));
@@ -146,7 +151,7 @@ class DatabaseRestoreService {
     await old.create();
     final state = <String, Object?>{'phase': 'APPLYING', 'had_media': await media.exists(),
       'files': [for (final suffix in ['', '-wal', '-shm']) if (await File('$databasePath$suffix').exists()) suffix]};
-    await journal.writeAsString(jsonEncode(state), flush: true);
+    await writeJournal(state);
     try {
       for (final suffix in state['files'] as List<String>) {
         await File('$databasePath$suffix').rename(p.join(old.path, 'pos.db$suffix'));
@@ -164,7 +169,7 @@ class DatabaseRestoreService {
           'kind': 'RESTORE_APPLIED', 'before_json': '{}', 'after_json': jsonEncode(data), 'created_at': DateTime.now().toIso8601String()});
       } finally { await restored.close(); }
       state['phase'] = 'APPLIED';
-      await journal.writeAsString(jsonEncode(state), flush: true);
+      await writeJournal(state);
     } catch (_) {
       await rollback(state);
       await request.rename('${request.path}.failed-${DateTime.now().microsecondsSinceEpoch}');
@@ -185,6 +190,8 @@ Future<PreparedRestore> _extractAndValidate(String archivePath, String directory
     final name = entry.name.replaceAll('\\', '/');
     final normalized = p.posix.normalize(name);
     if (p.posix.isAbsolute(name) || name.contains(':') || name.split('/').contains('..') ||
+        name.split('/').where((part) => part.isNotEmpty).any((part) =>
+          part.endsWith('.') || part.endsWith(' ') || RegExp(r'^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)', caseSensitive: false).hasMatch(part)) ||
         !names.add(normalized.toLowerCase()) ||
         (normalized != 'pos.db' && normalized != 'catalog_media' && !normalized.startsWith('catalog_media/'))) {
       throw const FormatException('Invalid, duplicate or unsafe backup archive path.');
