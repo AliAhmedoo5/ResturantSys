@@ -443,6 +443,8 @@ class PosDatabase {
   }
 
   Future<void> _upgradeToVersion17(DatabaseExecutor db) async {
+    // Some legacy recovery databases contain only the core operational tables.
+    await _createVendorKhataTables(db);
     final vendorColumns = await db.rawQuery('PRAGMA table_info(vendor_khata)');
     if (!vendorColumns.any((column) => column['name'] == 'archived_at')) {
       await db.execute('ALTER TABLE vendor_khata ADD COLUMN archived_at TEXT');
