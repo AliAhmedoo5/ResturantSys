@@ -3,12 +3,13 @@ import 'package:resturant_sys/core/auth/pin_hasher.dart';
 
 void main() {
   group('PinHasher Tests', () {
-    test('hashes 4-digit PIN deterministically', () {
+    test('hashes the same PIN with independent random salts', () {
       final hash1 = PinHasher.hashPin('1234');
       final hash2 = PinHasher.hashPin('1234');
 
-      expect(hash1, equals(hash2));
-      expect(hash1.length, equals(64)); // 256 bits = 64 hex characters
+      expect(hash1, isNot(equals(hash2)));
+      expect(hash1, startsWith(r'pbkdf2-sha256$600000$'));
+      expect(PinHasher.verifyPin('1234', hash1), isTrue);
     });
 
     test('generates different hashes for different PINs', () {

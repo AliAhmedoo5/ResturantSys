@@ -90,7 +90,7 @@ void main() {
       }
       await tester.pumpAndSettle();
 
-      expect(find.text('Invalid PIN. Please try again.'), findsOneWidget);
+      expect(find.text('PIN rejected. After five failed attempts, wait one minute.'), findsOneWidget);
     });
 
     testWidgets('supports physical keyboard input for digits and backspace', (tester) async {

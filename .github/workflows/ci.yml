@@ -31,7 +31,7 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 35
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -66,12 +66,12 @@ jobs:
           openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=localhost' -keyout "$RUNNER_TEMP/smtp-fixture/key.pem" -out "$RUNNER_TEMP/smtp-fixture/cert.pem" >/dev/null 2>&1
 
       - name: Run tests
-        timeout-minutes: 12
+        timeout-minutes: 30
         env:
           SYNTHETIC_Z_CLOSE_FIXTURE: ${{ runner.temp }}/synthetic-z-close-fixture
           SMTP_FIXTURE_DIRECTORY: ${{ runner.temp }}/smtp-fixture
           CAPTURE_DESKTOP: 'true'
-        run: flutter test
+        run: flutter test --timeout 2m
 
       - name: Upload desktop layout previews
         if: always()

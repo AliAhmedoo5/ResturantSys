@@ -92,7 +92,7 @@ class _PinLockScreenState extends State<PinLockScreen> {
         setState(() {
           _enteredPin = '';
           _isAuthenticating = false;
-          _errorMessage = 'Invalid PIN. Please try again.';
+          _errorMessage = 'PIN rejected. After five failed attempts, wait one minute.';
         });
       } else {
         setState(() {

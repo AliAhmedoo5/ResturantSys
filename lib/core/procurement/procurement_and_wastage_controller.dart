@@ -1,7 +1,5 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:resturant_sys/core/auth/auth_service.dart';
-import 'package:resturant_sys/core/auth/pin_hasher.dart';
-import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/catalog/raw_ingredient.dart';
 import 'package:resturant_sys/core/database/pos_database_constants.dart';
 import 'desi_unit.dart';
@@ -162,26 +160,8 @@ class ProcurementAndWastageController {
     }
 
     // 1. Authenticate Staff PIN
-    Staff? staff;
-    if (authService != null) {
-      staff = await authService!.authenticateWithPin(staffPin);
-    } else {
-      final pinHash = PinHasher.hashPin(staffPin);
-      final staffRows = await database.rawQuery('''
-        SELECT s.*, d.name AS department_name
-        FROM ${PosDatabaseConstants.tableStaff} s
-        LEFT JOIN ${PosDatabaseConstants.tableDepartments} d ON s.department_id = d.id
-        WHERE s.pin_hash = ? AND s.is_active = 1 AND s.login_enabled = 1
-        LIMIT 1;
-      ''', [pinHash]);
-
-      if (staffRows.isNotEmpty) {
-        staff = Staff.fromMap(
-          staffRows.first,
-          departmentName: staffRows.first['department_name'] as String?,
-        );
-      }
-    }
+    final staff = await (authService ?? AuthService(database: database))
+        .authenticateWithPin(staffPin);
 
     if (staff == null) {
       throw ArgumentError('Invalid or unauthorized staff PIN.');
