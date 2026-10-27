@@ -22,8 +22,18 @@ void main() {
     store = PosDatabase(
       factory: databaseFactoryFfi,
       customPath: '${directory.path}/pos.db',
+      seedDefaultStaff: false,
     );
     db = await store.initialize();
+    // Historical fixture credentials exercise migration without repeatedly
+    // deriving slow verifiers during unrelated supplier test setup.
+    for (final fixture in [('Manager', 'SUPERVISOR', '1234', 3), ('Cashier', 'CASHIER', '1111', 1)]) {
+      await db.insert('staff', {
+        'name': fixture.$1, 'role': fixture.$2, 'department_id': fixture.$4,
+        'pin_hash': sha256.convert(utf8.encode('resturant_pos_pin_salt_v1:${fixture.$3}')).toString(),
+        'is_active': 1, 'created_at': '2026-10-27 12:00:00',
+      });
+    }
   });
 
   tearDown(() async {
@@ -141,6 +151,15 @@ void main() {
     expect(await auth.authenticateSupervisorPin('1234'), isNull);
   });
 
+  test('successful cashier logins cannot erase manager approval failures', () async {
+    final auth = AuthService(database: db);
+    for (var i = 0; i < 5; i++) {
+      expect(await auth.authenticateWithPin('1111'), isNotNull);
+      expect(await auth.authenticateSupervisorPin('9999'), isNull);
+    }
+    expect(await auth.authenticateSupervisorPin('1234'), isNull);
+  });
+
   test('missing OS key fails closed for an initialized database', () async {
     final auth = AuthService(database: db);
     expect(await auth.authenticateWithPin('1234'), isNotNull);
@@ -152,5 +171,28 @@ void main() {
     expect(PinHasher.verifyPin('1234', r'pbkdf2-sha256$999999999$bad$bad'), isFalse);
     expect(PinHasher.verifyPin('1234', r'pbkdf2-sha256$600000$bad$bad'), isFalse);
     expect(PinHasher.verifyPin('1234', 'NO_LOGIN_123'), isFalse);
+  });
+
+  test('v16 migration preserves existing ledger and legacy credentials', () async {
+    final khata = VendorKhataController(database: db);
+    final supplier = await khata.createVendor(name: 'Migrated', phone: '1');
+    await khata.recordCreditDelivery(vendorId: supplier.id, amount: 350);
+    final legacy = sha256.convert(utf8.encode('resturant_pos_pin_salt_v1:1234')).toString();
+    await db.update('staff', {'pin_hash': legacy}, where: "role = 'SUPERVISOR'");
+    // Remove exactly the v17 additions to reconstruct the previous schema.
+    await db.execute('DROP TRIGGER vendor_financial_history_delete_guard');
+    await db.execute('DROP INDEX staff_pin_fingerprint_unique');
+    await db.execute('ALTER TABLE vendor_khata DROP COLUMN archived_at');
+    await db.execute('ALTER TABLE staff DROP COLUMN pin_fingerprint');
+    await db.execute('DROP TABLE auth_security_state');
+    await db.execute('PRAGMA user_version = 16');
+    await store.close();
+    db = await store.initialize();
+    final migrated = VendorKhataController(database: db);
+    expect((await migrated.getVendorStatement(supplier.id)).currentBalance, 350);
+    expect(await AuthService(database: db).authenticateWithPin('1234'), isNotNull);
+    await migrated.deleteVendor(supplier.id);
+    expect((await migrated.getVendorById(supplier.id))!.isArchived, isTrue);
+    expect(await db.rawQuery('PRAGMA foreign_key_check'), isEmpty);
   });
 }

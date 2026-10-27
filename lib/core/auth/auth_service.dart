@@ -120,7 +120,7 @@ class AuthService {
 
   Future<Staff?> _authenticate(String pin, {bool managerOnly = false}) =>
       database.transaction((txn) async {
-    final scopes = await _scopes(txn);
+    final scopes = [...await _scopes(txn), if (managerOnly) 'manager-approval'];
     if (await _locked(txn, scopes)) return null;
     if (!_pinFormatRegex.hasMatch(pin)) {
       await _failed(txn, scopes);
@@ -153,7 +153,8 @@ class AuthService {
       final hash = row['pin_hash'] as String;
       if (!await _verify(pin, hash)) continue;
       final staff = Staff.fromMap(row, departmentName: row['department_name'] as String?);
-      final userScopes = await _scopes(txn, staffId: staff.id);
+      final userScopes = [...await _scopes(txn, staffId: staff.id),
+        if (managerOnly) 'manager-approval'];
       if (await _locked(txn, userScopes)) return null;
       if (managerOnly && !staff.canAuthorizeOverrides) {
         await _failed(txn, userScopes);

@@ -332,6 +332,30 @@ void main() {
       expect(find.text('Credit Delivery'), findsWidgets);
       expect(find.byKey(const Key('log_credit_delivery_button')), findsOneWidget);
       expect(find.byKey(const Key('settle_payment_button')), findsOneWidget);
+
+      // Archived suppliers retain statements and settlement access, but cannot
+      // receive new deliveries until restored.
+      await tester.tap(find.descendant(
+        of: find.byKey(Key('vendor_tile_${v1.id}')),
+        matching: find.byType(PopupMenuButton<String>),
+      ));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Archive supplier'));
+      await tester.pumpAndSettle();
+      expect(find.text('Archived'), findsOneWidget);
+      expect(find.text('BILL-100'), findsOneWidget);
+      expect(tester.widget<ElevatedButton>(find.byKey(const Key('log_credit_delivery_button'))).onPressed, isNull);
+      expect(tester.widget<OutlinedButton>(find.byKey(const Key('settle_payment_button'))).onPressed, isNotNull);
+
+      await tester.tap(find.descendant(
+        of: find.byKey(Key('vendor_tile_${v1.id}')),
+        matching: find.byType(PopupMenuButton<String>),
+      ));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Restore supplier'));
+      await tester.pumpAndSettle();
+      expect(find.text('Archived'), findsNothing);
+      expect(tester.widget<ElevatedButton>(find.byKey(const Key('log_credit_delivery_button'))).onPressed, isNotNull);
     });
   });
 }
