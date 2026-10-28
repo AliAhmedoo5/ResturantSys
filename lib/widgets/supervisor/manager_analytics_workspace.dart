@@ -384,9 +384,10 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
           icon: const Icon(Icons.tune_rounded, size: 18), label: const Text('Filters')),
         if (!compact && constraints.maxWidth >= 600)
           SizedBox(width: constraints.maxWidth, child: Wrap(spacing: 10, runSpacing: 10, children: _quickFilterFields())),
-        if (constraints.maxWidth < 600) ExpansionTile(tilePadding: EdgeInsets.zero,
+        if (constraints.maxWidth < 600) Material(color: Colors.transparent,
+          child: ExpansionTile(tilePadding: EdgeInsets.zero,
           title: const Text('Quick filters', style: TextStyle(fontSize: 13)),
-          children: [Wrap(spacing: 10, runSpacing: 10, children: _quickFilterFields())]),
+          children: [Wrap(spacing: 10, runSpacing: 10, children: _quickFilterFields())])),
       ]);
       })),
       const SizedBox(height: 12),
