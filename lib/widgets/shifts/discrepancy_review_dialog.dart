@@ -215,9 +215,6 @@ class _DiscrepancyReviewDialogState extends State<DiscrepancyReviewDialog> {
                                   decoration: InputDecoration(
                                     hintText: 'Enter root-cause explanation (e.g. accepted bad note, drawer recount)',
                                     errorText: _notesError,
-                                    filled: true,
-                                    fillColor: Colors.white,
-                                    border: const OutlineInputBorder(),
                                   ),
                                 ),
                                 const SizedBox(height: 10),

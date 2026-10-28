@@ -106,13 +106,18 @@ void main() {
       for (var attempt = 0; attempt < 400; attempt++) {
         await Future<void>.delayed(const Duration(milliseconds: 10));
         await tester.pump();
-        if (find.text('CSV (this report)').evaluate().isNotEmpty) break;
+        if (find.byKey(const ValueKey('analytics_export_menu')).evaluate().isNotEmpty) break;
       }
     });
     await tester.pumpAndSettle();
-    expect(find.text('Business intelligence'), findsOneWidget);
+    expect(find.text('Business overview'), findsOneWidget);
+    expect(find.byKey(const ValueKey('analytics_export_menu')), findsOneWidget);
+    expect(find.text('PKR 30,000.00'), findsWidgets);
+    await tester.tap(find.byKey(const ValueKey('analytics_export_menu')));
+    await tester.pumpAndSettle();
     expect(find.text('CSV (this report)'), findsOneWidget);
-    expect(find.text('PKR 30,000.00'), findsOneWidget);
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
     expect(find.text('Analytics unavailable'), findsNothing);
     expect(tester.takeException(), isNull);
     if (Platform.environment['CAPTURE_DESKTOP'] == 'true') {
@@ -123,7 +128,7 @@ void main() {
         for (var attempt = 0; attempt < 400; attempt++) {
           await Future<void>.delayed(const Duration(milliseconds: 10));
           await tester.pump();
-          if (find.text('CSV (this report)').evaluate().isNotEmpty) break;
+          if (find.byKey(const ValueKey('analytics_export_menu')).evaluate().isNotEmpty) break;
         }
       });
       await tester.pumpAndSettle();
