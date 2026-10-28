@@ -12,6 +12,7 @@ import '../../core/orders/dining_type.dart';
 import '../../core/orders/payment_method.dart';
 import '../../core/theme/theme.dart';
 import 'business_overview_panel.dart';
+import 'report_visualizations.dart';
 
 const _familyLabels = <AnalyticsFamily, String>{
   AnalyticsFamily.overview: 'Overview',
@@ -322,6 +323,26 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
     });
   }
 
+  void _showChartSources(AnalyticsSection section, String title, List<AnalyticsRow> rows) {
+    final snapshot = _snapshot;
+    if (snapshot == null || !_authorized || rows.isEmpty) return;
+    _dismissSource();
+    final projection = AnalyticsSection(family: section.family, title: title,
+      columns: section.columns, rows: rows);
+    final route = DialogRoute<void>(context: context, builder: (context) {
+      if (!mounted || !_authorized || !identical(_snapshot, snapshot)) return const SizedBox.shrink();
+      return AlertDialog(title: Text(title),
+        content: SizedBox(width: 900, height: 480, child: SingleChildScrollView(
+          child: _SourceTable(section: projection, title: 'Chart source records',
+            onShowSource: (row) => _showSource(section, row)))),
+        actions: [TextButton(onPressed: _dismissSource, child: const Text('Close'))]);
+    });
+    _sourceRoute = route;
+    Navigator.of(context, rootNavigator: true).push(route).whenComplete(() {
+      if (identical(_sourceRoute, route)) _sourceRoute = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!_authorized) {
@@ -502,6 +523,9 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
             _SalesTrend(rows: sales.rows),
       if (section.family == AnalyticsFamily.sales && section.rows.any((r) => r.cells['business_date'] != null && r.cells['recorded_value_paisa'] is num))
         _SalesTrend(rows: section.rows),
+      if (section.family != AnalyticsFamily.overview && section.family != AnalyticsFamily.sales)
+        ReportVisualizations(key: ValueKey('analytics_visuals_${section.family.name}'),
+          section: section, onInspect: (title, rows) => _showChartSources(section, title, rows)),
       if (section.metrics.length > 4) ...[
         const Padding(padding: EdgeInsets.only(top: 24, bottom: 12),
           child: Text('Additional measures', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600))),
