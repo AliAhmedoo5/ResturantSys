@@ -244,10 +244,38 @@ void main() {
       await tester.pumpAndSettle();
 
       final notesField = find.byKey(const ValueKey('resolution_notes_input'));
+      final confirmBtn = find.byKey(const ValueKey('confirm_resolve_button'));
+      await tester.tap(confirmBtn);
+      await tester.pumpAndSettle();
+      expect(find.text('Resolution audit notes are mandatory.'), findsOneWidget);
+      expect(resolvedShiftId, isNull);
+
       await tester.enterText(notesField, 'Cashier dropped 250 rs change under desk, recovered.');
       await tester.pump();
 
-      final confirmBtn = find.byKey(const ValueKey('confirm_resolve_button'));
+      final editable = tester.widget<EditableText>(find.descendant(
+        of: notesField,
+        matching: find.byType(EditableText),
+      ));
+      final decorator = tester.widget<InputDecorator>(find.descendant(
+        of: notesField,
+        matching: find.byType(InputDecorator),
+      ));
+      final fill = decorator.decoration.fillColor!;
+      double contrast(Color foreground) {
+        final foregroundLuminance = foreground.computeLuminance();
+        final backgroundLuminance = fill.computeLuminance();
+        final lighter = foregroundLuminance > backgroundLuminance
+            ? foregroundLuminance : backgroundLuminance;
+        final darker = foregroundLuminance < backgroundLuminance
+            ? foregroundLuminance : backgroundLuminance;
+        return (lighter + 0.05) / (darker + 0.05);
+      }
+      expect(contrast(editable.style.color!), greaterThanOrEqualTo(4.5),
+          reason: 'Investigation notes must remain readable on their fill.');
+      expect(contrast(editable.cursorColor), greaterThanOrEqualTo(3),
+          reason: 'The editing cursor must be visible on the notes field.');
+
       await tester.tap(confirmBtn);
       await tester.pumpAndSettle();
 
