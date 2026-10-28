@@ -24,8 +24,9 @@ void main() {
     await tester.runAsync(() async {
       await tester.tap(find.text('CSV (this report)'));
       for (var attempt = 0; attempt < 100; attempt++) {
-        if ((await directory.list().toList()).whereType<File>().isNotEmpty) break;
         await Future<void>.delayed(const Duration(milliseconds: 10));
+        await tester.pump();
+        if (find.textContaining('Saved CSV').evaluate().isNotEmpty) break;
       }
     });
     await tester.pumpAndSettle();

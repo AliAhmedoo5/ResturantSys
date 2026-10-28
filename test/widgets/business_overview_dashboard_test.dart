@@ -127,6 +127,21 @@ void main() {
     await tester.tap(find.text('Ayesha').last);
     await tester.pumpAndSettle();
     expect(requested!.cashierId, 7);
+    await tester.tap(find.byKey(const ValueKey('analytics_shift_picker')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Shift #9 · OPEN').last);
+    await tester.pumpAndSettle();
+    expect(requested!.shiftId, 9);
+    await tester.tap(find.byKey(const ValueKey('analytics_dining_picker')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Takeaway').last);
+    await tester.pumpAndSettle();
+    expect(requested!.diningType, 'TAKEAWAY');
+    await tester.tap(find.byKey(const ValueKey('analytics_payment_picker')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cash').last);
+    await tester.pumpAndSettle();
+    expect(requested!.paymentMethod, 'CASH');
     await tester.tap(find.text('Review shifts'));
     await tester.pumpAndSettle();
     expect(find.text('Cash and shifts'), findsOneWidget);
@@ -140,6 +155,35 @@ void main() {
     expect(requested!.live, isFalse);
     expect(requested!.endDateExclusive.difference(requested!.startDate).inDays, 7);
     expect(requested!.cashierId, 7);
+    expect(requested!.shiftId, 9);
+    expect(requested!.diningType, 'TAKEAWAY');
+    expect(requested!.paymentMethod, 'CASH');
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('Business Day source details open and cost warnings drill into Profitability', (tester) async {
+    tester.view.physicalSize = const Size(1366, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(MaterialApp(theme: WarmCounterTheme.darkTheme,
+      home: Scaffold(body: ManagerAnalyticsWorkspace(service: SnapshotService(
+        onLoad: (query) async => overviewFixture(query))))));
+    await tester.pumpAndSettle();
+    final scrollable = find.descendant(of: find.byKey(const ValueKey('analytics_body')),
+      matching: find.byType(Scrollable)).first;
+    await tester.scrollUntilVisible(find.text('business_days #4'), 180, scrollable: scrollable);
+    await tester.tap(find.text('business_days #4'));
+    await tester.pumpAndSettle();
+    expect(find.text('Source IDs: 4'), findsOneWidget);
+    await tester.tap(find.text('Close'));
+    await tester.pumpAndSettle();
+    await tester.drag(scrollable, const Offset(0, 1000));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Review cost data'));
+    await tester.tap(find.text('Review cost data'));
+    await tester.pumpAndSettle();
+    expect(find.text('Profitability and costing'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 }
