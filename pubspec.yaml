@@ -35,3 +35,9 @@ flutter:
   assets:
     - assets/brand/crunch-cartel-icon.png
     - assets/brand/crunch-cartel-wordmark.png
+    - assets/fonts/knewave/OFL.txt
+  fonts:
+    - family: Knewave
+      fonts:
+        - asset: assets/fonts/knewave/Knewave-Regular.ttf
+          weight: 400

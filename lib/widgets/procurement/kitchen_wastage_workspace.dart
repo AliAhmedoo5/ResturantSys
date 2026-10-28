@@ -293,7 +293,7 @@ class _KitchenWastageWorkspaceState extends State<KitchenWastageWorkspace> {
                       children: [
                         Text(
                           'Kitchen Wastage Log',
-                          style: WarmCounterTypography.pageHeading.copyWith(fontSize: 20),
+                          style: WarmCounterTypography.brandHeading.copyWith(fontSize: 20),
                         ),
                         const Text(
                           'Immediate stock deduction and financial food-cost loss audit',

@@ -67,7 +67,7 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
                 showBrand ? title : selectedWorkspace?.label ?? 'Register',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: WarmCounterTypography.pageHeading.copyWith(fontSize: 18),
+                style: WarmCounterTypography.brandHeading.copyWith(fontSize: 20),
               ),
             ),
             if (staff == null)
