@@ -7,7 +7,8 @@ import '../../core/analytics/analytics_models.dart';
 class ReportChartPoint {
   ReportChartPoint(this.label, num? value, {List<AnalyticsRow> rows = const [],
     this.explanation = '', this.quality = AnalyticsQuality.complete})
-      : value = value != null && value.isFinite ? value : null,
+      : value = quality != AnalyticsQuality.missing && quality != AnalyticsQuality.notApplicable &&
+          value != null && value.isFinite ? value : null,
         rows = List.unmodifiable(rows);
   final String label, explanation;
   final num? value;
@@ -137,7 +138,8 @@ class _Charts {
       charts.add(ReportChartData(id: 'bom_$unit', title: 'Recorded BOM quantities ($unit)',
         unit: AnalyticsUnit.decimal, quantityUnit: unit,
         scope: 'Selected sold-line snapshots · $unit only; quantity evidence is not cost evidence',
-        note: 'Ingredients without a known current base unit remain in source detail. Units are never combined.',
+        note: 'Grouped by current ingredient base unit; historical unit changes are not reconstructed. '
+          'Ingredients without a known unit remain in source detail. Units are never combined.',
         points: _rank([for (final entry in quantities.entries)
           point(byIngredient[entry.key]?.cells['name']?.toString() ?? 'Ingredient #${entry.key}',
             entry.value, 'quantity')])));

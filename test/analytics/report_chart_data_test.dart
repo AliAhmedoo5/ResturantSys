@@ -145,5 +145,6 @@ void main() {
     expect(ReportChartPoint('Invalid', double.infinity).value, isNull);
     expect(ReportChartPoint('Invalid', double.nan).value, isNull);
     expect(ReportChartPoint('Zero', 0).value, 0);
+    expect(ReportChartPoint('Missing', 123, quality: AnalyticsQuality.missing).value, isNull);
   });
 }

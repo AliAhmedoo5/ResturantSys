@@ -113,7 +113,8 @@ class _ChartCardState extends State<_ChartCard> {
   Widget _point(ReportChartData chart, ReportChartPoint point, int index,
       double scale, double span, double origin) {
     final value = point.value;
-    final formatted = value == null ? 'Unavailable' : switch (chart.unit) {
+    final formatted = value == null ? (point.quality == AnalyticsQuality.notApplicable
+      ? 'Not applicable' : 'Unavailable') : switch (chart.unit) {
       AnalyticsUnit.paisa => 'PKR ${NumberFormat('#,##0.00').format(value / 100)}',
       AnalyticsUnit.percent => '${NumberFormat('#,##0.0').format(value)}%',
       _ => '${NumberFormat('#,##0.########').format(value)}${chart.quantityUnit == null ? '' : ' ${chart.quantityUnit}'}',
