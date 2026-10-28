@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:intl/intl.dart';
@@ -7,7 +5,7 @@ import 'package:intl/intl.dart';
 import '../../core/analytics/analytics_models.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/auth/session_state.dart';
-import '../../core/auth/staff_role.dart';
+import '../../core/analytics/manager_report_controller.dart';
 import '../../core/orders/dining_type.dart';
 import '../../core/orders/payment_method.dart';
 import '../../core/theme/theme.dart';
@@ -57,17 +55,16 @@ class ManagerAnalyticsWorkspace extends StatefulWidget {
 
 class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
     with WidgetsBindingObserver {
-  late AnalyticsQuery _query;
-  AnalyticsSnapshot? _snapshot;
+  late final ManagerReportController _reports;
+  AnalyticsQuery get _query => _reports.query;
+  AnalyticsSnapshot? get _snapshot => _reports.snapshot;
+  bool get _busy => _reports.busy;
+  String? get _error => _reports.error;
+  bool get _authorized => _reports.authorized;
+  AnalyticsSnapshot? _sourceSnapshot;
   DialogRoute<void>? _sourceRoute;
   AnalyticsFamily _family = AnalyticsFamily.overview;
-  Timer? _timer;
-  bool _busy = false;
-  bool _queued = false;
-  bool _visible = true;
   bool _filtersExpanded = false;
-  String? _error;
-  int _revision = 0;
   String _preset = 'live';
   final _filtersKey = GlobalKey<FormState>();
   final _cashier = TextEditingController();
@@ -78,95 +75,45 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
   DateTime get _now => widget.clock?.call() ??
       DateTime.now().toUtc().add(const Duration(hours: 5));
   DateTime get _today => DateTime(_now.year, _now.month, _now.day);
-  bool get _authorized {
-    if (widget.session == null) return true; // Service still authorizes every read.
-    final staff = widget.session!.currentStaff;
-    return staff != null && staff.role == StaffRole.manager &&
-        staff.isActive && staff.loginEnabled;
-  }
-
   @override
   void initState() {
     super.initState();
-    _query = AnalyticsQuery(startDate: _today,
-      endDateExclusive: _today.add(const Duration(days: 1)), live: true);
+    _reports = ManagerReportController(service: widget.service, session: widget.session,
+      query: AnalyticsQuery(startDate: _today,
+        endDateExclusive: _today.add(const Duration(days: 1)), live: true),
+      refreshInterval: widget.refreshInterval);
+    _reports.addListener(_reportsChanged);
     WidgetsBinding.instance.addObserver(this);
-    widget.session?.addListener(_sessionChanged);
-    _startTimer();
     _load();
+  }
+
+  void _reportsChanged() {
+    if (!identical(_sourceSnapshot, _snapshot)) {
+      _dismissSource();
+      _sourceSnapshot = _snapshot;
+    }
+    setState(() {});
   }
 
   @override
   void didUpdateWidget(covariant ManagerAnalyticsWorkspace oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.session != widget.session) {
-      oldWidget.session?.removeListener(_sessionChanged);
-      widget.session?.addListener(_sessionChanged);
+    if (oldWidget.service != widget.service || oldWidget.session != widget.session ||
+        oldWidget.refreshInterval != widget.refreshInterval) {
+      _reports.configure(service: widget.service, session: widget.session,
+        refreshInterval: widget.refreshInterval);
     }
-    if (oldWidget.service != widget.service || oldWidget.session != widget.session) {
-      _sessionChanged();
-    }
-    if (oldWidget.refreshInterval != widget.refreshInterval) _startTimer();
-  }
-
-  void _startTimer() {
-    _timer?.cancel();
-    if (!_authorized || !_visible || !_query.live) return;
-    _timer = Timer.periodic(widget.refreshInterval, (_) => _load());
-  }
-
-  void _sessionChanged() {
-    _dismissSource();
-    _revision++;
-    _queued = false;
-    setState(() { _snapshot = null; _error = null; });
-    _startTimer();
-    if (_authorized) _load();
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    _visible = state == AppLifecycleState.resumed;
-    _startTimer();
-    if (_visible && _authorized && _query.live) _load();
-  }
+  void didChangeAppLifecycleState(AppLifecycleState state) =>
+      _reports.setVisible(state == AppLifecycleState.resumed);
 
-  Future<void> _load() async {
-    if (!_authorized || !_visible) return;
-    if (_busy) { _queued = true; return; }
-    final revision = _revision;
-    final query = _query;
-    setState(() { _busy = true; _error = null; });
-    try {
-      final snapshot = await widget.service.load(query);
-      if (mounted && revision == _revision && _authorized) {
-        _dismissSource();
-        setState(() => _snapshot = snapshot);
-      }
-    } catch (_) {
-      if (mounted && revision == _revision && _authorized) {
-        _dismissSource();
-        setState(() {
-          // The service may reject a persisted role change before the session
-          // notifier knows about it. Never retain financial data after rejection.
-          _snapshot = null;
-          _error = 'Unable to load analytics. Check your Manager session and retry.';
-        });
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _busy = false);
-        if (_queued) { _queued = false; _load(); }
-      }
-    }
-  }
+  Future<void> _load() => _reports.refresh();
 
   void _changeQuery(AnalyticsQuery query) {
     _dismissSource();
-    _revision++;
-    setState(() { _query = query; _snapshot = null; _error = null; });
-    _startTimer();
-    _load();
+    _reports.changeQuery(query);
   }
 
   AnalyticsQuery _withDates(DateTime start, DateTime end, {required bool live}) =>
@@ -269,9 +216,8 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
   @override
   void dispose() {
     _dismissSource();
-    _revision++;
-    _timer?.cancel();
-    widget.session?.removeListener(_sessionChanged);
+    _reports.removeListener(_reportsChanged);
+    _reports.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _cashier.dispose();
     _shift.dispose();
