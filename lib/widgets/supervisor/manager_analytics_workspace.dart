@@ -227,7 +227,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
       SizedBox(width: compact ? 130 : 190, child: DropdownButtonFormField<int>(
         key: const ValueKey('analytics_cashier_picker'), value: _query.cashierId,
         isExpanded: true, decoration: decoration('Cashier'),
-        items: [const DropdownMenuItem<int>(child: Text('All cashiers')),
+        items: [DropdownMenuItem<int>(child: Text(compact ? 'All' : 'All cashiers')),
           for (final entry in cashiers.entries) DropdownMenuItem(value: entry.key,
             child: Text(entry.value, maxLines: 1, overflow: TextOverflow.ellipsis))],
         onChanged: (value) {
@@ -238,7 +238,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
       SizedBox(width: compact ? 130 : 200, child: DropdownButtonFormField<int>(
         key: const ValueKey('analytics_shift_picker'), value: _query.shiftId,
         isExpanded: true, decoration: decoration('Shift'),
-        items: [const DropdownMenuItem<int>(child: Text('All shifts')),
+        items: [DropdownMenuItem<int>(child: Text(compact ? 'All' : 'All shifts')),
           for (final entry in shifts.entries) DropdownMenuItem(value: entry.key,
             child: Text(entry.value, maxLines: 1, overflow: TextOverflow.ellipsis))],
         onChanged: (value) {
@@ -249,14 +249,14 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
       SizedBox(width: compact ? 145 : 180, child: DropdownButtonFormField<String>(
         key: const ValueKey('analytics_dining_picker'), value: _query.diningType,
         isExpanded: true, decoration: decoration('Dining Type'),
-        items: [const DropdownMenuItem<String>(child: Text('All dining types')),
+        items: [DropdownMenuItem<String>(child: Text(compact ? 'All' : 'All dining types')),
           for (final type in DiningType.values) DropdownMenuItem(value: type.code, child: Text(type.displayName))],
         onChanged: (value) { setState(() => _dining = value); _changeQuery(_query.copyWith(diningType: value)); },
       )),
       SizedBox(width: compact ? 140 : 180, child: DropdownButtonFormField<String>(
         key: const ValueKey('analytics_payment_picker'), value: _query.paymentMethod,
         isExpanded: true, decoration: decoration('Payment method'),
-        items: [const DropdownMenuItem<String>(child: Text('All payments')),
+        items: [DropdownMenuItem<String>(child: Text(compact ? 'All' : 'All payments')),
           for (final method in PaymentMethod.values.where((m) => m != PaymentMethod.split))
             DropdownMenuItem(value: method.code, child: Text(method.displayName))],
         onChanged: (value) { setState(() => _payment = value); _changeQuery(_query.copyWith(paymentMethod: value)); },
@@ -368,7 +368,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
           key: const ValueKey('analytics_period'), value: _preset, isExpanded: true,
           decoration: const InputDecoration(labelText: 'Business Day period', isDense: true, border: OutlineInputBorder()),
           items: const [
-            DropdownMenuItem(value: 'live', child: Text('Live • active day')),
+            DropdownMenuItem(value: 'live', child: Text('Active day')),
             DropdownMenuItem(value: 'today', child: Text('Today')),
             DropdownMenuItem(value: 'yesterday', child: Text('Previous day')),
             DropdownMenuItem(value: 'week', child: Text('Last 7 dates')),
@@ -786,7 +786,9 @@ class _SourceTableState extends State<_SourceTable> {
         Expanded(child: Text(widget.title, style: const TextStyle(fontWeight: FontWeight.w700))),
         Text('${rows.length} records', style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
       ])),
-      SingleChildScrollView(scrollDirection: Axis.horizontal, child: DataTable(
+      LayoutBuilder(builder: (context, constraints) =>
+      SingleChildScrollView(scrollDirection: Axis.horizontal,
+        child: ConstrainedBox(constraints: BoxConstraints(minWidth: constraints.maxWidth), child: DataTable(
         sortColumnIndex: _sortColumn, sortAscending: _ascending,
         columns: [for (var i = 0; i < section.columns.length; i++) DataColumn(
           label: Text(section.columns[i].label), numeric: section.columns[i].unit != null,
@@ -796,7 +798,7 @@ class _SourceTableState extends State<_SourceTable> {
           for (final column in section.columns) DataCell(_cell(row, column)),
           DataCell(TextButton(onPressed: () => widget.onShowSource(row), child: Text(_sourceLabel(row)))),
         ])],
-      )),
+      )))),
       Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: Wrap(alignment: WrapAlignment.end,
         crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, children: [
           Text('${start + 1}–$end of ${rows.length} source rows'),
