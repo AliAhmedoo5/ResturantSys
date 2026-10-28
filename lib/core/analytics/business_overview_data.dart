@@ -32,7 +32,7 @@ class BusinessOverviewData {
     }
     final profit = _metric(AnalyticsFamily.overview, 'gross_profit');
     if (profit != null && profit.value == null && profit.quality == AnalyticsQuality.missing) {
-      alerts.add(OverviewAttention('Gross profit unavailable', 'Required cost data is missing',
+      alerts.add(const OverviewAttention('Gross profit unavailable', 'Required cost data is missing',
         'Review cost data', AnalyticsFamily.profitability, OverviewAttentionKind.profitCoverage));
     }
     final negative = _metric(AnalyticsFamily.overview, 'negative_stock');
