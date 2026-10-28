@@ -407,7 +407,7 @@ class _ReportBuilder {
     final events = e.get('cost_events');
     final covered = orders.where((o) => coverage.contains(o['id'])).length;
     final complete = e.get('days').isNotEmpty && covered == orders.length && events.every((c) => c['cost_paisa'] != null);
-    final cogs = events.fold<int>(0, (sum, c) => sum + (c['kind'] == 'COOKED_WASTE' ? 0 : (c['kind'] == 'RETURN' ? -1 : 1) * ((c['cost_paisa'] as int?) ?? 0)));
+    final cogs = events.fold<int>(0, (sum, c) => sum + orderCostSign(c['kind']) * ((c['cost_paisa'] as int?) ?? 0));
     // Accrual at confirmation: include COD receivables; cancellation reduces the
     // stored total to zero. Delivery fees are earned with the order; tax is excluded.
     final revenue = _sum(valid, 'grand_total') - _sum(valid, 'tax_amount');
