@@ -2,9 +2,21 @@ import 'package:flutter/material.dart';
 
 /// Typography hierarchy and text styles for the Warm Counter theme.
 ///
-/// Standardizes on Inter with Segoe UI and sans-serif fallbacks, incorporating
-/// tabular figures for zero-jitter currency and quantity alignment.
+/// Uses Knewave for branded screen titles, and Inter with system fallbacks for
+/// operational text and tabular currency/quantity alignment.
 abstract final class WarmCounterTypography {
+  /// Painted display type for screen titles and brand messages only.
+  static const String brandFontFamily = 'Knewave';
+
+  static const TextStyle brandHeading = TextStyle(
+    fontFamily: brandFontFamily,
+    fontFamilyFallback: fontFallbacks,
+    fontSize: 22,
+    fontWeight: FontWeight.w400,
+    height: 1.3,
+    letterSpacing: 0.1,
+  );
+
   /// Primary font family.
   static const String fontFamily = 'Inter';
 

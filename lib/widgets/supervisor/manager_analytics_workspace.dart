@@ -356,7 +356,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
         crossAxisAlignment: WrapCrossAlignment.center, children: [
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(_family == AnalyticsFamily.overview ? 'Business overview' : _familyLabels[_family]!,
-            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -0.8)),
+            style: WarmCounterTypography.brandHeading.copyWith(fontSize: 28)),
           const SizedBox(height: 4),
           Text(_query.live ? 'Active Business Day${_activeDate(snapshot)}' : 'Business Day reporting · Historical exploration',
             style: const TextStyle(color: StreetFoodMafiaColors.secondaryText, fontSize: 13)),

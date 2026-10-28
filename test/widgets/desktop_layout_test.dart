@@ -97,6 +97,9 @@ void main() {
       icons.addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'));
       await icons.load();
     }
+    final brand = FontLoader(WarmCounterTypography.brandFontFamily);
+    brand.addFont(rootBundle.load('assets/fonts/knewave/Knewave-Regular.ttf'));
+    await brand.load();
   });
 
   for (final viewport in [

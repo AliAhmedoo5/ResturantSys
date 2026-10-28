@@ -73,6 +73,9 @@ void main() {
       icons.addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'));
       await icons.load();
     }
+    final brand = FontLoader(WarmCounterTypography.brandFontFamily);
+    brand.addFont(rootBundle.load('assets/fonts/knewave/Knewave-Regular.ttf'));
+    await brand.load();
   });
 
   testWidgets('Manager can explore reports and distinguish missing profit from zero', (tester) async {

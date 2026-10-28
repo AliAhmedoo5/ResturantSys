@@ -288,7 +288,7 @@ class _QuickMandiPurchaseWorkspaceState extends State<QuickMandiPurchaseWorkspac
                       children: [
                         Text(
                           'Quick Desi Mandi Purchase',
-                          style: WarmCounterTypography.pageHeading.copyWith(fontSize: 20),
+                          style: WarmCounterTypography.brandHeading.copyWith(fontSize: 20),
                         ),
                         const Text(
                           'Bulk stock intake with traditional Pakistani wholesale units',
