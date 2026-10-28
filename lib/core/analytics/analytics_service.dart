@@ -8,6 +8,7 @@ import '../inventory/stock_count_valuation.dart';
 import 'analytics_models.dart';
 
 part 'analytics_reports.dart';
+part 'customer_report_details.dart';
 typedef _Record = Map<String, Object?>;
 
 /// Consistent, authorized reads. Computation runs after releasing SQLite.
@@ -15,6 +16,10 @@ class AnalyticsService {
   AnalyticsService({required this.database, required this.authService});
   final Database database;
   final AuthService authService;
+
+  /// Contact information is loaded separately from masked analytics/exports.
+  Future<List<CustomerReportProfile>> loadCustomerDetails(AnalyticsQuery query) =>
+      _CustomerInformationReader(this).load(query);
 
   Future<AnalyticsSnapshot> load(AnalyticsQuery query) async {
     final actor = authService.session.currentStaff;

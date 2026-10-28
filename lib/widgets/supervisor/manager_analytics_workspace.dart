@@ -13,6 +13,7 @@ import '../../core/orders/payment_method.dart';
 import '../../core/theme/theme.dart';
 import 'business_overview_panel.dart';
 import 'report_visualizations.dart';
+import 'customer_information_panel.dart';
 
 const _familyLabels = <AnalyticsFamily, String>{
   AnalyticsFamily.overview: 'Overview',
@@ -517,6 +518,9 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
       Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(section.title,
         style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),
       _metricGrid(section.metrics.take(4).toList()),
+      if (section.family == AnalyticsFamily.customers)
+        CustomerInformationPanel(key: const ValueKey('customer_information'), snapshotToken: snapshot,
+          load: () => widget.service.loadCustomerDetails(snapshot.query)),
       if (section.family == AnalyticsFamily.overview)
         for (final sales in snapshot.sections.where((s) => s.family == AnalyticsFamily.sales))
           if (sales.rows.any((r) => r.cells['business_date'] != null && r.cells['recorded_value_paisa'] is num))
