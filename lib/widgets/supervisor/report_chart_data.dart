@@ -104,10 +104,10 @@ class _Charts {
       metrics('profit_components', 'Revenue, cost and operating result',
         ['recognized_revenue', 'cogs', 'gross_profit', 'net_profit'], AnalyticsUnit.paisa,
         'Selected Business Days · overlapping measures, never add these bars together'),
-      dated('cost_dates', 'Realized COGS postings by date',
+      dated('cost_dates', 'Recorded COGS postings by date',
         source('order_cost_events').where((r) => r.cells['kind'] != 'COOKED_WASTE').toList(),
         'cost_paisa', 'created_at',
-        'Event posting dates · returns subtract cost; cooked wastage is already in consumed cost',
+        'Selected order cohort · cost-event posting dates in Asia/Karachi; returns subtract cost',
         signedReturns: true),
     ],
     AnalyticsFamily.audit => [
@@ -212,6 +212,8 @@ class _Charts {
     final dates = groups.keys.toList()..sort();
     return ReportChartData(id: id, title: title, scope: scope, unit: AnalyticsUnit.paisa,
       note: '${undated == 0 ? '' : '$undated undated entries excluded; retained in source detail. '}'
+        '${signedReturns ? 'Recorded postings may cover only part of the selected order cohort. '
+          'Cooked wastage is already in consumed cost; pre-upgrade cost history is not inferred. ' : ''}'
         'Dates with unknown amounts remain unavailable. No missing-date zeros are invented.',
       points: [for (final date in dates) point(date, groups[date]!, valueKey, signedReturns: signedReturns)]);
   }

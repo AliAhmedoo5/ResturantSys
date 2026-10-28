@@ -170,4 +170,61 @@ void main() {
     expect(find.text('PKR 0.00'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  for (final family in [AnalyticsFamily.inventory, AnalyticsFamily.profitability]) {
+    testWidgets('${family.name} charts distinguish current units and incomplete cost evidence', (tester) async {
+      tester.view.physicalSize = const Size(1366, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final section = family == AnalyticsFamily.inventory
+        ? AnalyticsSection(family: family, title: 'Inventory', rows: [
+            evidence('raw_ingredients', '1', {'kind': 'Current position', 'ingredient_id': 1,
+              'name': 'Synthetic flour', 'unit': 'g', 'current_stock': 4200, 'status': 'Within threshold'}),
+            evidence('raw_ingredients', '2', {'kind': 'Current position', 'ingredient_id': 2,
+              'name': 'Synthetic oil', 'unit': 'ml', 'current_stock': 250, 'status': 'Low'}),
+            evidence('order_items', '3', {'kind': 'BOM quantity snapshot', 'ingredient_id': '1', 'quantity': 800}),
+            evidence('order_items', '4', {'kind': 'BOM quantity snapshot', 'ingredient_id': '2', 'quantity': 120}),
+          ])
+        : AnalyticsSection(family: family, title: 'Profitability', metrics: const [
+            AnalyticsMetric(id: 'recognized_revenue', label: 'Tax-exclusive recognized revenue', value: 500000,
+              unit: AnalyticsUnit.paisa, explanation: 'Recorded eligible orders'),
+            AnalyticsMetric(id: 'cogs', label: 'Historical realized COGS', unit: AnalyticsUnit.paisa,
+              quality: AnalyticsQuality.missing, explanation: 'Some historical cost evidence is missing'),
+            AnalyticsMetric(id: 'gross_profit', label: 'Actual gross profit', unit: AnalyticsUnit.paisa,
+              quality: AnalyticsQuality.missing, explanation: 'Some historical cost evidence is missing'),
+            AnalyticsMetric(id: 'net_profit', label: 'Recorded net operating result', unit: AnalyticsUnit.paisa,
+              quality: AnalyticsQuality.notApplicable, explanation: 'Overhead cannot be allocated to filtered orders'),
+          ], rows: [
+            evidence('order_cost_events', '1', {'kind': 'CONSUME', 'cost_paisa': 150000, 'created_at': '2026-10-27 12:00:00'}),
+            evidence('order_cost_events', '2', {'kind': 'RETURN', 'cost_paisa': 10000, 'created_at': '2026-10-27 13:00:00'}),
+            evidence('order_cost_events', '3', {'kind': 'CONSUME', 'cost_paisa': null, 'created_at': '2026-10-28 12:00:00'}),
+          ]);
+      await tester.pumpWidget(MaterialApp(theme: WarmCounterTheme.darkTheme, home: Scaffold(
+        body: RepaintBoundary(key: const ValueKey('chart_scope_preview'),
+          child: SingleChildScrollView(padding: const EdgeInsets.all(20),
+            child: ReportVisualizations(section: section, onInspect: (_, __) {}))))));
+      await tester.pumpAndSettle();
+      if (family == AnalyticsFamily.inventory) {
+        expect(find.text('4,200 g'), findsOneWidget);
+        expect(find.text('250 ml'), findsOneWidget);
+        expect(find.text('Recorded BOM quantities (g)'), findsOneWidget);
+      } else {
+        expect(find.text('Unavailable'), findsNWidgets(3));
+        expect(find.text('Not applicable'), findsOneWidget);
+        expect(find.text('PKR 0.00'), findsNothing);
+      }
+      expect(tester.takeException(), isNull);
+      if (Platform.environment['CAPTURE_DESKTOP'] == 'true') {
+        final boundary = tester.renderObject<RenderRepaintBoundary>(find.byKey(const ValueKey('chart_scope_preview')));
+        await tester.runAsync(() async {
+          final image = await boundary.toImage();
+          final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+          final directory = await Directory('build/desktop-previews').create(recursive: true);
+          await File('${directory.path}/${family.name}-visuals-1366.png').writeAsBytes(bytes!.buffer.asUint8List());
+          image.dispose();
+        });
+      }
+    });
+  }
 }
