@@ -14,6 +14,8 @@ import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
 import 'package:resturant_sys/widgets/catalog/supervisor_catalog_workspace.dart';
 
 class _Catalog implements CatalogAndRecipeController {
+  @override
+  Future<List<Deal>> getDeals({bool? activeOnly}) async => [];
   bool active = true;
   Completer<List<MenuCategory>>? reload;
   bool rejectToggle = false;
@@ -50,8 +52,6 @@ class _Catalog implements CatalogAndRecipeController {
 class _Orders implements OrderAndCheckoutController {
   @override
   Future<bool> isCashierVoidEnabled() async => true;
-  @override
-  Future<List<Deal>> getDeals({bool? activeOnly}) async => [];
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

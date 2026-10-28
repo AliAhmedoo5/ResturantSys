@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:resturant_sys/core/analytics/analytics_models.dart';
-import 'package:resturant_sys/widgets/supervisor/report_chart_data.dart';
 
 AnalyticsRow row(String source, String id, Map<String, Object?> cells) =>
   AnalyticsRow(id: id, sourceType: source, sourceId: id, cells: cells);

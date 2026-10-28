@@ -119,7 +119,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
     }
 
     setState(() => _isLoading = true);
-    final deals = await (widget.orderController ?? OrderAndCheckoutController(database: widget.controller!.database)).getDeals();
+    final deals = await widget.controller!.getDeals();
     final categories = await widget.controller!.getCategories();
     final allItems = await widget.controller!.getMenuItems();
     final items = allItems.where((item) => _menuItemCategoryFilter == null || item.categoryId == _menuItemCategoryFilter).toList();
@@ -883,7 +883,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
   }
 
   Future<void> _editDeal([Deal? deal]) async {
-    final controller = widget.orderController ?? (widget.controller == null ? null : OrderAndCheckoutController(database: widget.controller!.database));
+    final controller = widget.controller;
     if (controller == null || widget.managerId == null) return;
     final saved = await showDialog<bool>(context: context, barrierDismissible: false, builder: (_) => DealFormDialog(
       controller: controller, managerId: widget.managerId!, menuItems: _allMenuItems, deal: deal));

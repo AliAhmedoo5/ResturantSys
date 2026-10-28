@@ -41,17 +41,17 @@ void main() {
   test('Manager creates and atomically edits selectable deal components', () async {
     final line = await item();
     final slots = [DealItemDraft(groupName: 'Main', options: [DealOptionDraft(menuItemId: line.menuItem!.id, isDefault: true)])];
-    await orders.saveDeal(managerId: 1, name: 'Lunch', basePrice: 90, isActive: true, items: slots);
-    final deal = (await orders.getDeals()).single;
-    await orders.saveDeal(managerId: 1, id: deal.id, name: 'Lunch revised', basePrice: 95, isActive: true,
+    await catalog.saveDeal(managerId: 1, name: 'Lunch', basePrice: 90, isActive: true, items: slots);
+    final deal = (await catalog.getDeals()).single;
+    await catalog.saveDeal(managerId: 1, id: deal.id, name: 'Lunch revised', basePrice: 95, isActive: true,
       items: [DealItemDraft(id: deal.items.single.id, groupName: 'Main', options: slots.single.options)]);
-    expect((await orders.getDeal(deal.id)).basePrice, 95);
-    expect((await orders.getDeal(deal.id)).items.single.options.single.menuItemId, line.menuItem!.id);
-    expect((await orders.getDeal(deal.id)).items.single.id, deal.items.single.id);
-    await expectLater(orders.saveDeal(managerId: 1, id: deal.id, name: 'Invalid', basePrice: 1,
+    expect((await catalog.getDeal(deal.id)).basePrice, 95);
+    expect((await catalog.getDeal(deal.id)).items.single.options.single.menuItemId, line.menuItem!.id);
+    expect((await catalog.getDeal(deal.id)).items.single.id, deal.items.single.id);
+    await expectLater(catalog.saveDeal(managerId: 1, id: deal.id, name: 'Invalid', basePrice: 1,
       isActive: true, items: []), throwsStateError);
-    expect((await orders.getDeal(deal.id)).name, 'Lunch revised');
-    await expectLater(orders.saveDeal(managerId: 2, name: 'Forbidden', basePrice: 1, isActive: false, items: []), throwsStateError);
+    expect((await catalog.getDeal(deal.id)).name, 'Lunch revised');
+    await expectLater(catalog.saveDeal(managerId: 2, name: 'Forbidden', basePrice: 1, isActive: false, items: []), throwsStateError);
   });
 
   test('multiple holds survive reopening without tokens, payments or stock movement', () async {

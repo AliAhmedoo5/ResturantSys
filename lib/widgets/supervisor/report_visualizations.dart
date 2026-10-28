@@ -5,7 +5,6 @@ import 'package:intl/intl.dart';
 
 import '../../core/analytics/analytics_models.dart';
 import '../../core/theme/theme.dart';
-import 'report_chart_data.dart';
 
 class ReportVisualizations extends StatelessWidget {
   const ReportVisualizations({super.key, required this.section, required this.onInspect});
@@ -14,7 +13,7 @@ class ReportVisualizations extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final charts = buildReportCharts(section);
+    final charts = section.charts;
     return Padding(padding: const EdgeInsets.symmetric(vertical: 18),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         const Row(children: [

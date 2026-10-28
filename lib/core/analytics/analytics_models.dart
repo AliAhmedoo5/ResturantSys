@@ -1,3 +1,8 @@
+import 'package:intl/intl.dart';
+
+part 'report_chart_projection.dart';
+part 'business_overview_data.dart';
+
 enum AnalyticsFamily { overview, sales, orders, delivery, customers, menu, inventory, procurement, suppliers, cash, expenses, staff, profitability, audit }
 enum AnalyticsUnit { count, paisa, percent, decimal, minutes }
 enum AnalyticsQuality { complete, estimated, missing, notApplicable }
@@ -28,6 +33,7 @@ class AnalyticsRow {
 
 class AnalyticsSection {
   AnalyticsSection({required this.family, required this.title, List<AnalyticsMetric> metrics = const [], List<AnalyticsColumn> columns = const [], List<AnalyticsRow> rows = const [], List<String> notes = const []}) : metrics = List.unmodifiable(metrics), columns = List.unmodifiable(columns), rows = List.unmodifiable(rows), notes = List.unmodifiable(notes);
+  late final List<ReportChartData> charts = List.unmodifiable(_buildReportCharts(this));
   final AnalyticsFamily family;
   final String title;
   final List<AnalyticsMetric> metrics;
@@ -57,6 +63,7 @@ class AnalyticsQuery {
 
 class AnalyticsSnapshot {
   AnalyticsSnapshot({required this.query, required this.generatedAt, required List<AnalyticsSection> sections, required List<int> businessDayIds, List<String> notes = const [], this.generatedByStaffId}) : sections = List.unmodifiable(sections), businessDayIds = List.unmodifiable(businessDayIds), notes = List.unmodifiable(notes);
+  late final BusinessOverviewData overview = BusinessOverviewData(this);
   final AnalyticsQuery query;
   final DateTime generatedAt;
   final int? generatedByStaffId;
@@ -65,3 +72,7 @@ class AnalyticsSnapshot {
   final List<String> notes;
   AnalyticsSection section(AnalyticsFamily family) => sections.firstWhere((section) => section.family == family);
 }
+
+/// Cooked wastage is already consumed; raw returns reverse original-rate COGS.
+/// Used by report totals and dated chart postings alike.
+int orderCostSign(Object? kind) => kind == 'COOKED_WASTE' ? 0 : kind == 'RETURN' ? -1 : 1;
