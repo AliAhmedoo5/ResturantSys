@@ -42,6 +42,7 @@ class _ManagerDashboardWorkspaceState extends State<ManagerDashboardWorkspace> {
       session: auth.session,
       exportActionsBuilder: (context, snapshot, family) => AnalyticsExportActions(
         snapshot: snapshot, family: family,
+        compact: true,
         canExport: () {
           final actor = auth.session.currentStaff;
           return actor != null && actor.isActive && actor.canAccessSupervisorPortal &&

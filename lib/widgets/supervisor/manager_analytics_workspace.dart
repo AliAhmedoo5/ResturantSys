@@ -11,6 +11,7 @@ import '../../core/auth/staff_role.dart';
 import '../../core/orders/dining_type.dart';
 import '../../core/orders/payment_method.dart';
 import '../../core/theme/theme.dart';
+import 'business_overview_panel.dart';
 
 const _familyLabels = <AnalyticsFamily, String>{
   AnalyticsFamily.overview: 'Overview',
@@ -197,6 +198,69 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
       diningType: _dining, paymentMethod: _payment));
   }
 
+  void _selectReport(AnalyticsFamily family) {
+    _dismissSource();
+    setState(() => _family = family);
+  }
+
+  List<AnalyticsRow> _rows(AnalyticsFamily family) => _snapshot?.sections
+      .where((section) => section.family == family)
+      .expand((section) => section.rows).toList() ?? [];
+
+  Widget _quickFilters() {
+    final cashiers = <int, String>{
+      for (final row in _rows(AnalyticsFamily.staff))
+        if (row.cells['role'] == 'CASHIER' && row.cells['staff_id'] is int)
+          row.cells['staff_id'] as int: row.cells['name']?.toString() ?? 'Cashier #${row.cells['staff_id']}',
+    };
+    final shifts = <int, String>{
+      for (final row in _rows(AnalyticsFamily.cash))
+        if (row.cells['kind'] == 'Shift reconciliation' && row.cells['shift_id'] is int)
+          row.cells['shift_id'] as int: 'Shift #${row.cells['shift_id']} · ${row.cells['status']}',
+    };
+    if (_query.cashierId != null) cashiers.putIfAbsent(_query.cashierId!, () => 'Cashier #${_query.cashierId}');
+    if (_query.shiftId != null) shifts.putIfAbsent(_query.shiftId!, () => 'Shift #${_query.shiftId}');
+    InputDecoration decoration(String label) => InputDecoration(labelText: label,
+      isDense: true, border: const OutlineInputBorder());
+    return Wrap(spacing: 10, runSpacing: 10, children: [
+      SizedBox(width: 190, child: DropdownButtonFormField<int>(
+        key: const ValueKey('analytics_cashier_picker'), value: _query.cashierId,
+        isExpanded: true, decoration: decoration('Cashier'),
+        items: [const DropdownMenuItem<int>(child: Text('All cashiers')),
+          for (final entry in cashiers.entries) DropdownMenuItem(value: entry.key, child: Text(entry.value))],
+        onChanged: (value) {
+          _cashier.text = value?.toString() ?? '';
+          _changeQuery(_query.copyWith(cashierId: value));
+        },
+      )),
+      SizedBox(width: 200, child: DropdownButtonFormField<int>(
+        key: const ValueKey('analytics_shift_picker'), value: _query.shiftId,
+        isExpanded: true, decoration: decoration('Shift'),
+        items: [const DropdownMenuItem<int>(child: Text('All shifts')),
+          for (final entry in shifts.entries) DropdownMenuItem(value: entry.key, child: Text(entry.value))],
+        onChanged: (value) {
+          _shift.text = value?.toString() ?? '';
+          _changeQuery(_query.copyWith(shiftId: value));
+        },
+      )),
+      SizedBox(width: 180, child: DropdownButtonFormField<String>(
+        key: const ValueKey('analytics_dining_picker'), value: _query.diningType,
+        isExpanded: true, decoration: decoration('Dining Type'),
+        items: [const DropdownMenuItem<String>(child: Text('All dining types')),
+          for (final type in DiningType.values) DropdownMenuItem(value: type.code, child: Text(type.displayName))],
+        onChanged: (value) { setState(() => _dining = value); _changeQuery(_query.copyWith(diningType: value)); },
+      )),
+      SizedBox(width: 180, child: DropdownButtonFormField<String>(
+        key: const ValueKey('analytics_payment_picker'), value: _query.paymentMethod,
+        isExpanded: true, decoration: decoration('Payment method'),
+        items: [const DropdownMenuItem<String>(child: Text('All payments')),
+          for (final method in PaymentMethod.values.where((m) => m != PaymentMethod.split))
+            DropdownMenuItem(value: method.code, child: Text(method.displayName))],
+        onChanged: (value) { setState(() => _payment = value); _changeQuery(_query.copyWith(paymentMethod: value)); },
+      )),
+    ]);
+  }
+
   @override
   void dispose() {
     _dismissSource();
@@ -263,22 +327,35 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
     final snapshot = _snapshot;
     return ListView(key: const ValueKey('analytics_body'),
       padding: const EdgeInsets.all(20), children: [
-      const Text('Business intelligence', style: TextStyle(fontSize: 26,
-        fontWeight: FontWeight.w700, letterSpacing: -0.8)),
-      const SizedBox(height: 16),
+      Wrap(alignment: WrapAlignment.spaceBetween, runSpacing: 10,
+        crossAxisAlignment: WrapCrossAlignment.center, children: [
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(_family == AnalyticsFamily.overview ? 'Business overview' : _familyLabels[_family]!,
+            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -0.8)),
+          const SizedBox(height: 4),
+          Text(_query.live ? 'Active Business Day · Local business intelligence' : 'Business Day reporting · Historical exploration',
+            style: const TextStyle(color: StreetFoodMafiaColors.secondaryText, fontSize: 13)),
+        ]),
+        Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(_error != null ? Icons.error_outline : _query.live ? Icons.circle : Icons.history,
+            size: 10, color: _error != null ? StreetFoodMafiaColors.statusCanceled : StreetFoodMafiaColors.statusReady),
+          const SizedBox(width: 7),
+          Text('${_query.live ? 'Live' : 'Historical'}${snapshot == null ? '' : ' · updated ${DateFormat('HH:mm').format(snapshot.generatedAt.isUtc ? snapshot.generatedAt.add(const Duration(hours: 5)) : snapshot.generatedAt)}'}',
+            style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
+        ]),
+      ]),
+      const SizedBox(height: 18),
       Container(padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(color: StreetFoodMafiaColors.darkNavy,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: StreetFoodMafiaColors.border)),
-        child:
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Wrap(spacing: 12, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
         SizedBox(width: 205, child: DropdownButtonFormField<AnalyticsFamily>(
           key: const ValueKey('analytics_family'), value: _family, isExpanded: true,
           decoration: const InputDecoration(labelText: 'Report', isDense: true, border: OutlineInputBorder()),
           items: _familyLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
-          onChanged: (family) {
-            if (family != null) { _dismissSource(); setState(() => _family = family); }
-          },
+          onChanged: (family) { if (family != null) _selectReport(family); },
         )),
         SizedBox(width: 190, child: DropdownButtonFormField<String>(
           key: const ValueKey('analytics_period'), value: _preset, isExpanded: true,
@@ -297,6 +374,9 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
           label: Text(_busy ? 'Refreshing…' : 'Refresh')),
         if (snapshot != null && _error == null && !_busy && widget.exportActionsBuilder != null)
           widget.exportActionsBuilder!(context, snapshot, _family),
+      ]),
+      const SizedBox(height: 12),
+      _quickFilters(),
       ])),
       const SizedBox(height: 12),
       Text('${_query.live ? 'LIVE • refreshes every ${widget.refreshInterval.inSeconds}s' : 'Historical exploration'}'
@@ -317,7 +397,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
         if (snapshot == null && !_busy && _error == null) const Text('No analytics snapshot available.'),
         if (snapshot != null) ...[
           if (snapshot.businessDayIds.isEmpty) _note('No Business Days match this selection. Current-state datasets may still be available.'),
-          ..._report(snapshot),
+          if (_family == AnalyticsFamily.overview) _overview(snapshot) else ..._report(snapshot),
           ExpansionTile(tilePadding: EdgeInsets.zero,
             title: const Text('Reporting scope & methodology', style: TextStyle(fontSize: 13)),
             children: [
@@ -370,6 +450,24 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
     ]))],
   );
 
+  Widget _overview(AnalyticsSnapshot snapshot) {
+    final sections = snapshot.sections.where((s) => s.family == AnalyticsFamily.overview).toList();
+    final sales = snapshot.sections.where((s) => s.family == AnalyticsFamily.sales).toList();
+    final overview = sections.isEmpty ? null : sections.first;
+    return BusinessOverviewPanel(snapshot: snapshot,
+      metricGrid: (metrics, columns) => _metricGrid(metrics, preferredColumns: columns),
+      salesChart: _SalesTrend(rows: sales.expand((s) => s.rows).toList(),
+        onChangePeriod: () => _selectPreset('week'),
+        onExploreSales: () => _selectReport(AnalyticsFamily.sales)),
+      dayDetails: overview == null || overview.rows.isEmpty
+        ? _note('No Business Day details match this selection.')
+        : _SourceTable(key: ValueKey('overview_days_${snapshot.generatedAt.toIso8601String()}'),
+            title: 'Business Day details', section: overview,
+            onShowSource: (row) => _showSource(overview, row)),
+      onReport: _selectReport,
+    );
+  }
+
   Widget _idInput(TextEditingController controller, String label, String key) => SizedBox(width: 135,
     child: TextFormField(key: ValueKey(key), controller: controller, keyboardType: TextInputType.number,
       decoration: InputDecoration(labelText: label, hintText: 'All', border: const OutlineInputBorder(), isDense: true),
@@ -408,8 +506,8 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
     ]];
   }
 
-  Widget _metricGrid(List<AnalyticsMetric> metrics) => LayoutBuilder(builder: (context, constraints) {
-    final columns = constraints.maxWidth >= 1000 ? 4 : constraints.maxWidth >= 680 ? 2 : 1;
+  Widget _metricGrid(List<AnalyticsMetric> metrics, {int preferredColumns = 4}) => LayoutBuilder(builder: (context, constraints) {
+    final columns = constraints.maxWidth >= 1000 ? preferredColumns : constraints.maxWidth >= 680 ? 2 : 1;
     final width = (constraints.maxWidth - (columns - 1) * 16) / columns;
     return Wrap(spacing: 16, runSpacing: 16, children: [
       for (final metric in metrics) SizedBox(width: width, child: _metricCard(metric)),
@@ -424,27 +522,37 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
       AnalyticsQuality.notApplicable => 'Not applicable',
     };
     final available = metric.value != null;
-    final icon = switch (metric.unit) {
+    final icon = switch (metric.id) {
+      'recorded_value' => Icons.monetization_on_outlined,
+      'orders' => Icons.receipt_long_outlined,
+      'average_ticket' => Icons.bar_chart_rounded,
+      'negative_stock' => Icons.inventory_2_outlined,
+      'expected_drawer' => Icons.point_of_sale_rounded,
+      _ => switch (metric.unit) {
       AnalyticsUnit.paisa => Icons.account_balance_wallet_outlined,
       AnalyticsUnit.percent => Icons.percent_rounded,
       AnalyticsUnit.minutes => Icons.schedule_rounded,
       _ => Icons.bar_chart_rounded,
+      },
     };
-    return Container(constraints: const BoxConstraints(minHeight: 160),
+    return Container(constraints: const BoxConstraints(minHeight: 134),
       decoration: BoxDecoration(color: StreetFoodMafiaColors.darkNavy,
         border: Border.all(color: StreetFoodMafiaColors.border),
         borderRadius: BorderRadius.circular(12)),
       child: Padding(padding: const EdgeInsets.all(16),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Icon(icon, size: 22, color: StreetFoodMafiaColors.cartelYellow),
+          const SizedBox(width: 10),
           Expanded(child: Text(metric.label, style: const TextStyle(fontSize: 12,
             fontWeight: FontWeight.w600, color: StreetFoodMafiaColors.secondaryText))),
           const SizedBox(width: 8),
-          Icon(icon, size: 17, color: StreetFoodMafiaColors.cartelYellow),
+          Tooltip(message: metric.explanation, child: const Icon(Icons.info_outline,
+            size: 16, color: StreetFoodMafiaColors.secondaryText)),
         ]),
         const SizedBox(height: 12),
         SelectableText(_format(metric.value, metric.unit),
-          style: TextStyle(fontSize: available ? 28 : 22, height: 1.2,
+          style: TextStyle(fontSize: available ? 25 : 22, height: 1.2,
             letterSpacing: -0.6, fontWeight: FontWeight.w700, color: StreetFoodMafiaColors.offWhite)),
         if (metric.quality != AnalyticsQuality.complete) ...[
           const SizedBox(height: 8),
@@ -481,8 +589,9 @@ String _format(Object? value, AnalyticsUnit? unit) {
 }
 
 class _SalesTrend extends StatelessWidget {
-  const _SalesTrend({required this.rows});
+  const _SalesTrend({required this.rows, this.onChangePeriod, this.onExploreSales});
   final List<AnalyticsRow> rows;
+  final VoidCallback? onChangePeriod, onExploreSales;
 
   @override
   Widget build(BuildContext context) {
@@ -491,17 +600,25 @@ class _SalesTrend extends StatelessWidget {
       final value = (row.cells['recorded_value_paisa'] as num).toDouble();
       return value > max ? value : max;
     });
-    return Container(margin: const EdgeInsets.only(top: 20),
+    return Container(
       decoration: BoxDecoration(color: StreetFoodMafiaColors.darkNavy,
         borderRadius: BorderRadius.circular(12), border: Border.all(color: StreetFoodMafiaColors.border)),
-      child: Padding(padding: const EdgeInsets.all(20),
+      child: Padding(padding: const EdgeInsets.all(18),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('Sales performance', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+        Wrap(spacing: 12, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+          const Icon(Icons.bar_chart_rounded, color: StreetFoodMafiaColors.cartelYellow, size: 23),
+          const Text('Sales performance', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+          if (onExploreSales != null) TextButton(onPressed: onExploreSales, child: const Text('Explore sales')),
+        ]),
         const SizedBox(height: 4),
         const Text('Recorded order value (PKR) • by Business Day opening date',
           style: TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
         const SizedBox(height: 24),
-        LayoutBuilder(builder: (context, constraints) {
+        if (daily.isEmpty) const Padding(padding: EdgeInsets.symmetric(vertical: 18),
+          child: Text('No sales data for this selection. Try another Business Day period.',
+            style: TextStyle(color: StreetFoodMafiaColors.secondaryText)))
+        else if (daily.length == 1) _singleDay(daily.single)
+        else LayoutBuilder(builder: (context, constraints) {
           final minimumWidth = daily.length * 56.0;
           final plotWidth = (constraints.maxWidth - 64).clamp(minimumWidth, double.infinity).toDouble();
           return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -539,7 +656,41 @@ class _SalesTrend extends StatelessWidget {
         const SizedBox(height: 12),
         const Text('Daily totals include Collection Due. Hover or long press for exact values. Explore Sales for source records.',
           style: TextStyle(fontSize: 11, color: StreetFoodMafiaColors.secondaryText)),
+        if (daily.length <= 1 && onChangePeriod != null) ...[
+          const SizedBox(height: 14),
+          Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(
+            color: StreetFoodMafiaColors.cardSurface, borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: StreetFoodMafiaColors.border)),
+            child: Wrap(spacing: 12, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+              const Icon(Icons.info_outline, size: 20, color: StreetFoodMafiaColors.secondaryText),
+              const Text('Select multiple Business Days to see a trend', style: TextStyle(fontSize: 12)),
+              OutlinedButton.icon(onPressed: onChangePeriod, icon: const Icon(Icons.arrow_forward, size: 16),
+                label: const Text('Change period')),
+            ])),
+        ],
       ])));
+  }
+
+  Widget _singleDay(AnalyticsRow row) {
+    final value = row.cells['recorded_value_paisa'] as num;
+    final amount = _format(value, AnalyticsUnit.paisa);
+    return Semantics(label: '${row.cells['business_date']}: $amount, ${row.cells['orders']} orders',
+      child: Padding(padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Text(_chartDate(row.cells['business_date'].toString()), style: const TextStyle(fontSize: 12)),
+            const Spacer(),
+            Text(amount, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          ]),
+          const SizedBox(height: 12),
+          Tooltip(message: '$amount · ${row.cells['orders']} orders',
+            child: ClipRRect(borderRadius: BorderRadius.circular(5),
+              child: LinearProgressIndicator(minHeight: 24, value: value > 0 ? 1 : 0,
+                color: StreetFoodMafiaColors.cartelYellow, backgroundColor: StreetFoodMafiaColors.cardSurface))),
+          const SizedBox(height: 8),
+          Text('${row.cells['orders']} eligible orders',
+            style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
+        ])));
   }
 
   String _chartDate(String value) {
@@ -549,8 +700,10 @@ class _SalesTrend extends StatelessWidget {
 }
 
 class _SourceTable extends StatefulWidget {
-  const _SourceTable({super.key, required this.section, required this.onShowSource});
+  const _SourceTable({super.key, required this.section, required this.onShowSource,
+    this.title = 'Source detail • table alternative'});
   final AnalyticsSection section;
+  final String title;
   final void Function(AnalyticsRow) onShowSource;
   @override
   State<_SourceTable> createState() => _SourceTableState();
@@ -579,7 +732,13 @@ class _SourceTableState extends State<_SourceTable> {
     final start = _page * _pageSize;
     final end = (start + _pageSize).clamp(0, rows.length).toInt();
     return Card(margin: EdgeInsets.zero, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      const Padding(padding: EdgeInsets.all(12), child: Text('Source detail • table alternative', style: TextStyle(fontWeight: FontWeight.w700))),
+      Padding(padding: const EdgeInsets.all(12), child: Row(children: [
+        if (widget.title == 'Business Day details') ...[
+          const Icon(Icons.calendar_month_outlined, size: 20), const SizedBox(width: 10),
+        ],
+        Expanded(child: Text(widget.title, style: const TextStyle(fontWeight: FontWeight.w700))),
+        Text('${rows.length} records', style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
+      ])),
       SingleChildScrollView(scrollDirection: Axis.horizontal, child: DataTable(
         sortColumnIndex: _sortColumn, sortAscending: _ascending,
         columns: [for (var i = 0; i < section.columns.length; i++) DataColumn(
@@ -587,7 +746,7 @@ class _SourceTableState extends State<_SourceTable> {
           onSort: (index, ascending) => setState(() { _sortColumn = index; _ascending = ascending; _page = 0; }),
         ), const DataColumn(label: Text('Source'))],
         rows: [for (final row in rows.sublist(start, end)) DataRow(cells: [
-          for (final column in section.columns) DataCell(Text(_format(row.cells[column.key], column.unit))),
+          for (final column in section.columns) DataCell(_cell(row, column)),
           DataCell(TextButton(onPressed: () => widget.onShowSource(row), child: Text(_sourceLabel(row)))),
         ])],
       )),
@@ -598,6 +757,27 @@ class _SourceTableState extends State<_SourceTable> {
           IconButton(tooltip: 'Next page', onPressed: end >= rows.length ? null : () => setState(() => _page++), icon: const Icon(Icons.chevron_right)),
         ])),
     ]));
+  }
+
+  Widget _cell(AnalyticsRow row, AnalyticsColumn column) {
+    final value = row.cells[column.key];
+    if (row.sourceType == 'business_days' && column.key == 'status') {
+      final open = value == 'OPEN';
+      final color = open ? StreetFoodMafiaColors.statusReady : StreetFoodMafiaColors.secondaryText;
+      return Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        decoration: BoxDecoration(color: StreetFoodMafiaColors.cardSurface, borderRadius: BorderRadius.circular(16)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(open ? Icons.circle : Icons.lock_outline, size: 10, color: color),
+          const SizedBox(width: 6), Text(open ? 'Open' : 'Closed', style: TextStyle(color: color, fontSize: 12)),
+        ]));
+    }
+    if (row.sourceType == 'business_days' && ['business_date', 'opened_at', 'closed_at'].contains(column.key)) {
+      final date = DateTime.tryParse(value?.toString() ?? '');
+      final local = date?.isUtc == true ? date!.add(const Duration(hours: 5)) : date;
+      return Text(local == null ? '—' : DateFormat(column.key == 'business_date'
+        ? 'dd MMM yyyy' : 'dd MMM, HH:mm').format(local));
+    }
+    return Text(_format(value, column.unit));
   }
 }
 

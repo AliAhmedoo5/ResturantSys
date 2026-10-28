@@ -12,12 +12,14 @@ class AnalyticsExportActions extends StatefulWidget {
     required this.family,
     required this.canExport,
     this.pickDirectory,
+    this.compact = false,
   });
 
   final AnalyticsSnapshot snapshot;
   final AnalyticsFamily family;
   final bool Function() canExport;
   final Future<String?> Function()? pickDirectory;
+  final bool compact;
 
   @override
   State<AnalyticsExportActions> createState() => _AnalyticsExportActionsState();
@@ -58,6 +60,22 @@ class _AnalyticsExportActionsState extends State<AnalyticsExportActions> {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+        if (widget.compact) PopupMenuButton<AnalyticsExportFormat>(
+          key: const ValueKey('analytics_export_menu'),
+          enabled: !_busy && widget.canExport(),
+          tooltip: 'Export displayed snapshot',
+          onSelected: _export,
+          itemBuilder: (_) => const [
+            PopupMenuItem(value: AnalyticsExportFormat.csv, child: Text('CSV (this report)')),
+            PopupMenuItem(value: AnalyticsExportFormat.xlsx, child: Text('XLSX (all reports)')),
+            PopupMenuItem(value: AnalyticsExportFormat.pdf, child: Text('PDF (this report)')),
+          ],
+          child: const Padding(padding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.file_download_outlined, size: 18), SizedBox(width: 8),
+              Text('Export'), SizedBox(width: 8), Icon(Icons.expand_more, size: 18),
+            ])),
+        ) else
         for (final entry in const {
           AnalyticsExportFormat.csv: 'CSV (this report)',
           AnalyticsExportFormat.xlsx: 'XLSX (all reports)',
