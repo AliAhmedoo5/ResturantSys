@@ -7,8 +7,8 @@ import 'package:resturant_sys/widgets/supervisor/analytics_export_actions.dart';
 
 void main() {
   testWidgets('Compact export menu saves the displayed report as CSV', (tester) async {
-    final directory = await Directory.systemTemp.createTemp('dashboard-export-');
-    addTearDown(() => directory.delete(recursive: true));
+    final directory = Directory.systemTemp.createTempSync('dashboard-export-');
+    addTearDown(() => directory.deleteSync(recursive: true));
     final snapshot = AnalyticsSnapshot(query: AnalyticsQuery(startDate: DateTime(2026, 10, 26),
       endDateExclusive: DateTime(2026, 10, 27)), generatedAt: DateTime.utc(2026, 10, 26),
       businessDayIds: [4], sections: [AnalyticsSection(family: AnalyticsFamily.overview, title: 'Overview',
@@ -30,8 +30,8 @@ void main() {
       }
     });
     await tester.pumpAndSettle();
-    final file = (await directory.list().toList()).whereType<File>().single;
-    expect(await file.readAsString(), contains('415000'));
+    final file = directory.listSync().whereType<File>().single;
+    expect(file.readAsStringSync(), contains('415000'));
     expect(find.textContaining('Saved CSV'), findsOneWidget);
   });
 
