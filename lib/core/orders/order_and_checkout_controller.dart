@@ -13,8 +13,6 @@ import '../auth/staff_role.dart';
 import '../database/pos_database_constants.dart';
 import 'cart_item.dart';
 import 'deal.dart';
-import 'deal_item.dart';
-import 'deal_item_option.dart';
 import 'dining_type.dart';
 import 'order.dart';
 import 'order_item.dart';
@@ -26,6 +24,8 @@ import '../shifts/cash_movement.dart';
 import 'payment_method.dart';
 import 'token_status.dart';
 import 'order_status_event.dart';
+
+export '../catalog/deal_draft.dart';
 
 /// Immutable daily token allocation or lifecycle audit event.
 class CheckoutTokenEvent {
@@ -64,40 +64,6 @@ class RefundResult {
   final DateTime recordedAt;
 
   bool get isCashPayout => cashMovementId != null;
-}
-
-/// Draft definition when creating or configuring a deal item slot.
-class DealItemDraft {
-  const DealItemDraft({
-    this.id,
-    required this.groupName,
-    this.categoryId,
-    this.defaultMenuItemId,
-    this.isUpgradeable = false,
-    this.upgradePrice = 0.0,
-    this.options = const [],
-  });
-
-  final String groupName;
-  final int? id;
-  final int? categoryId;
-  final int? defaultMenuItemId;
-  final bool isUpgradeable;
-  final double upgradePrice;
-  final List<DealOptionDraft> options;
-}
-
-/// Draft definition of an option inside a deal item slot.
-class DealOptionDraft {
-  const DealOptionDraft({
-    required this.menuItemId,
-    this.isDefault = false,
-    this.upgradePrice = 0.0,
-  });
-
-  final int menuItemId;
-  final bool isDefault;
-  final double upgradePrice;
 }
 
 /// Payment tender tendered by customer during checkout.
@@ -158,12 +124,13 @@ class CheckoutResult {
   final List<LowStockWarning> lowStockWarnings;
 }
 
-/// Domain controller managing Deals, Cart calculations, Atomic Order checkout,
+/// Domain controller managing Cart calculations, Atomic Order checkout,
 /// Daily sequential Tokens, and Soft BOM inventory deductions.
 class OrderAndCheckoutController {
   OrderAndCheckoutController({required this.database});
 
   final Database database;
+  late final _catalog = CatalogAndRecipeController(database: database);
 
   static String _formatTimestamp(DateTime dt) {
     String twoDigits(int n) => n.toString().padLeft(2, '0');
@@ -216,140 +183,15 @@ class OrderAndCheckoutController {
   // DEALS MANAGEMENT
   // ===========================================================================
 
-  Future<Deal> createDeal({
-    required String name,
-    required double basePrice,
-    bool isActive = true,
-    List<DealItemDraft> items = const [],
-  }) async {
-    final now = _formatTimestamp(DateTime.now());
+  // Compatibility for existing Order callers; catalog owns Deal definitions.
+  Future<Deal> createDeal({required String name, required double basePrice,
+    bool isActive = true, List<DealItemDraft> items = const []}) =>
+      _catalog.createDeal(name: name, basePrice: basePrice, isActive: isActive, items: items);
 
-    return await database.transaction((txn) async {
-      final dealId = await txn.insert(
-        PosDatabaseConstants.tableDeals,
-        {
-          'name': name.trim(),
-          'base_price': basePrice,
-          'is_active': isActive ? 1 : 0,
-          'created_at': now,
-        },
-      );
-
-      final createdDealItems = <DealItem>[];
-
-      for (final itemDraft in items) {
-        final itemId = await txn.insert(
-          PosDatabaseConstants.tableDealItems,
-          {
-            'deal_id': dealId,
-            'group_name': itemDraft.groupName.trim(),
-            'category_id': itemDraft.categoryId,
-            'default_menu_item_id': itemDraft.defaultMenuItemId,
-            'is_upgradeable': itemDraft.isUpgradeable ? 1 : 0,
-            'upgrade_price': itemDraft.upgradePrice,
-          },
-        );
-
-        final createdOptions = <DealItemOption>[];
-        for (final optDraft in itemDraft.options) {
-          final optId = await txn.insert(
-            PosDatabaseConstants.tableDealItemOptions,
-            {
-              'deal_item_id': itemId,
-              'menu_item_id': optDraft.menuItemId,
-              'is_default': optDraft.isDefault ? 1 : 0,
-              'upgrade_price': optDraft.upgradePrice,
-            },
-          );
-
-          createdOptions.add(DealItemOption(
-            id: optId,
-            dealItemId: itemId,
-            menuItemId: optDraft.menuItemId,
-            isDefault: optDraft.isDefault,
-            upgradePrice: optDraft.upgradePrice,
-          ));
-        }
-
-        createdDealItems.add(DealItem(
-          id: itemId,
-          dealId: dealId,
-          groupName: itemDraft.groupName.trim(),
-          categoryId: itemDraft.categoryId,
-          defaultMenuItemId: itemDraft.defaultMenuItemId,
-          isUpgradeable: itemDraft.isUpgradeable,
-          upgradePrice: itemDraft.upgradePrice,
-          options: createdOptions,
-        ));
-      }
-
-      if (isActive) await validateDealRecipe(dealId, executor: txn);
-      return Deal(
-        id: dealId,
-        name: name.trim(),
-        basePrice: basePrice,
-        isActive: isActive,
-        createdAt: DateTime.parse(now),
-        items: createdDealItems,
-      );
-    });
-  }
-
-  /// Atomic edit preserves the deal identity and committed order snapshots.
   Future<void> saveDeal({required int managerId, int? id, required String name,
-    required double basePrice, required bool isActive, required List<DealItemDraft> items}) async {
-    await database.transaction((txn) async {
-      await CustomerController.requireRole(txn, managerId, manager: true);
-      if (name.trim().isEmpty || !basePrice.isFinite || basePrice < 0 ||
-          (basePrice * 100 - (basePrice * 100).round()).abs() > 0.000001) {
-        throw ArgumentError('Enter a name and non-negative price with at most two decimal places.');
-      }
-      for (final slot in items) {
-        if (slot.groupName.trim().isEmpty || slot.options.isEmpty ||
-            slot.options.map((o) => o.menuItemId).toSet().length != slot.options.length ||
-            slot.options.where((o) => o.isDefault).length != 1 ||
-            slot.options.any((o) => !o.upgradePrice.isFinite || o.upgradePrice < 0 ||
-              (o.upgradePrice * 100 - (o.upgradePrice * 100).round()).abs() > 0.000001)) {
-          throw ArgumentError('Each component needs a name, unique choices, one default and valid upgrade prices.');
-        }
-      }
-      final values = {'name': name.trim(), 'base_price': basePrice, 'is_active': isActive ? 1 : 0};
-      final int dealId;
-      if (id == null) {
-        dealId = await txn.insert('deals', {...values, 'created_at': _formatTimestamp(DateTime.now())});
-      } else {
-        if (await txn.update('deals', values, where: 'id = ?', whereArgs: [id]) != 1) throw StateError('Deal no longer exists.');
-        dealId = id;
-      }
-      final existingSlots = await txn.query('deal_items', where: 'deal_id = ?', whereArgs: [dealId]);
-      final existingIds = existingSlots.map((row) => row['id'] as int).toSet();
-      final retainedIds = items.where((slot) => slot.id != null).map((slot) => slot.id!).toSet();
-      if (!existingIds.containsAll(retainedIds) || items.where((slot) => slot.id != null).length != retainedIds.length) {
-        throw StateError('Deal components changed. Reopen the deal editor.');
-      }
-      for (final removed in existingIds.difference(retainedIds)) {
-        await txn.delete('deal_items', where: 'id = ?', whereArgs: [removed]);
-      }
-      for (final slot in items) {
-        final slotValues = {'deal_id': dealId, 'group_name': slot.groupName.trim(), 'category_id': null,
-          'default_menu_item_id': slot.options.singleWhere((o) => o.isDefault).menuItemId,
-          'is_upgradeable': slot.options.any((o) => o.upgradePrice > 0) ? 1 : 0, 'upgrade_price': 0};
-        final int slotId;
-        if (slot.id == null) {
-          slotId = await txn.insert('deal_items', slotValues);
-        } else {
-          slotId = slot.id!;
-          await txn.update('deal_items', slotValues, where: 'id = ?', whereArgs: [slotId]);
-          await txn.delete('deal_item_options', where: 'deal_item_id = ?', whereArgs: [slotId]);
-        }
-        for (final option in slot.options) {
-          await txn.insert('deal_item_options', {'deal_item_id': slotId, 'menu_item_id': option.menuItemId,
-            'is_default': option.isDefault ? 1 : 0, 'upgrade_price': option.upgradePrice});
-        }
-      }
-      if (isActive) await validateDealRecipe(dealId, executor: txn);
-    });
-  }
+    required double basePrice, required bool isActive, required List<DealItemDraft> items}) =>
+      _catalog.saveDeal(managerId: managerId, id: id, name: name, basePrice: basePrice,
+        isActive: isActive, items: items);
 
   Map<String, Object?> encodeDraftLine(CartItem item) => {
     'menu_item_id': item.menuItem?.id, 'deal_id': item.deal?.id, 'quantity': item.quantity,
@@ -443,105 +285,16 @@ class OrderAndCheckoutController {
     }).toList());
   }
 
-  Future<List<Deal>> getDeals({bool? activeOnly}) async {
-    String? where;
-    if (activeOnly == true) {
-      where = 'is_active = 1';
-    }
+  Future<List<Deal>> getDeals({bool? activeOnly}) => _catalog.getDeals(activeOnly: activeOnly);
 
-    final dealRows = await database.query(
-      PosDatabaseConstants.tableDeals,
-      where: where,
-      orderBy: 'name ASC',
-    );
+  Future<void> validateDealRecipe(int dealId, {DatabaseExecutor? executor}) =>
+      _catalog.validateDealRecipe(dealId, executor: executor);
 
-    final deals = <Deal>[];
-    for (final row in dealRows) {
-      final dealId = row['id'] as int;
-      if (activeOnly == true) {
-        try { await validateDealRecipe(dealId); } on StateError { continue; }
-      }
-      final dealItems = await _getDealItemsForDeal(dealId, database);
-      deals.add(Deal.fromMap(row, items: dealItems));
-    }
-    return deals;
-  }
+  Future<void> toggleDealActive(int id, bool active) => _catalog.toggleDealActive(id, active);
 
-  Future<void> validateDealRecipe(int dealId, {DatabaseExecutor? executor}) async {
-    final db = executor ?? database;
-    final slots = await _getDealItemsForDeal(dealId, db);
-    if (slots.isEmpty) throw StateError('A published deal must contain at least one component.');
-    final catalog = CatalogAndRecipeController(database: database);
-    for (final slot in slots) {
-      final ids = {if (slot.defaultMenuItemId != null) slot.defaultMenuItemId!, ...slot.options.map((option) => option.menuItemId)};
-      if (slot.categoryId != null) {
-        final candidates = await db.query('menu_items', where: 'category_id = ? AND is_active = 1', whereArgs: [slot.categoryId]);
-        ids.addAll(candidates.map((row) => row['id'] as int));
-      }
-      if (ids.isEmpty) throw StateError('Every deal component needs a recipe-backed menu item.');
-      for (final id in ids) {
-        final rows = await db.query('menu_items', where: 'id = ? AND is_active = 1', whereArgs: [id]);
-        if (rows.isEmpty) throw StateError('Deal components must be active menu items.');
-        await catalog.validateRecipe(id, executor: db);
-      }
-    }
-  }
+  Future<Deal> getDeal(int id) => _catalog.getDeal(id);
 
-  Future<void> toggleDealActive(int id, bool active) async {
-    await database.transaction((txn) async {
-      if (active) await validateDealRecipe(id, executor: txn);
-      await txn.update('deals', {'is_active': active ? 1 : 0}, where: 'id = ?', whereArgs: [id]);
-    });
-  }
-
-  Future<Deal> getDeal(int id) async {
-    final dealRows = await database.query(
-      PosDatabaseConstants.tableDeals,
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-
-    if (dealRows.isEmpty) {
-      throw StateError('Deal with id $id not found.');
-    }
-
-    final dealItems = await _getDealItemsForDeal(id, database);
-    return Deal.fromMap(dealRows.first, items: dealItems);
-  }
-
-  Future<List<DealItem>> _getDealItemsForDeal(int dealId, DatabaseExecutor executor) async {
-    final itemRows = await executor.rawQuery('''
-      SELECT di.*, mi.name as default_menu_item_name
-      FROM ${PosDatabaseConstants.tableDealItems} di
-      LEFT JOIN ${PosDatabaseConstants.tableMenuItems} mi ON di.default_menu_item_id = mi.id
-      WHERE di.deal_id = ?
-      ORDER BY di.id ASC;
-    ''', [dealId]);
-
-    final items = <DealItem>[];
-    for (final row in itemRows) {
-      final itemId = row['id'] as int;
-      final optRows = await executor.rawQuery('''
-        SELECT dio.*, mi.name as menu_item_name
-        FROM ${PosDatabaseConstants.tableDealItemOptions} dio
-        JOIN ${PosDatabaseConstants.tableMenuItems} mi ON dio.menu_item_id = mi.id
-        WHERE dio.deal_item_id = ?
-        ORDER BY dio.id ASC;
-      ''', [itemId]);
-
-      final options = optRows.map((o) => DealItemOption.fromMap(o)).toList();
-      items.add(DealItem.fromMap(row, options: options));
-    }
-    return items;
-  }
-
-  Future<void> deleteDeal(int id) async {
-    await database.delete(
-      PosDatabaseConstants.tableDeals,
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-  }
+  Future<void> deleteDeal(int id) => _catalog.deleteDeal(id);
 
   // ===========================================================================
   // TOKEN NUMBER GENERATION
@@ -974,23 +727,8 @@ class OrderAndCheckoutController {
       if (item.selectedDealChoices.isNotEmpty) throw StateError('Menu items cannot contain deal choices.');
       componentIds.add(item.menuItem!.id);
     } else {
-      final deals = await txn.query('deals', where: 'id = ? AND is_active = 1', whereArgs: [item.deal!.id]);
-      if (deals.isEmpty) throw StateError('This deal is no longer active.');
-      await validateDealRecipe(item.deal!.id, executor: txn);
-      final slots = await _getDealItemsForDeal(item.deal!.id, txn);
-      if (item.selectedDealChoices.length != slots.length || item.selectedDealChoices.map((c) => c.dealItemId).toSet().length != slots.length) throw StateError('Select exactly one option for each deal component.');
-      for (final slot in slots) {
-        final choices = item.selectedDealChoices.where((c) => c.dealItemId == slot.id);
-        if (choices.length != 1) throw StateError('Missing deal component.');
-        final choice = choices.single;
-        final allowed = {if (slot.defaultMenuItemId != null) slot.defaultMenuItemId!, ...slot.options.map((o) => o.menuItemId)};
-        if (slot.categoryId != null && slot.options.isEmpty) {
-          final rows = await txn.query('menu_items', where: 'category_id = ? AND is_active = 1', whereArgs: [slot.categoryId]);
-          allowed.addAll(rows.map((r) => r['id'] as int));
-        }
-        if (!allowed.contains(choice.menuItemId)) throw StateError('This menu item is not an allowed deal choice.');
-        componentIds.add(choice.menuItemId);
-      }
+      componentIds.addAll(await catalog.validateDealSelection(item.deal!.id,
+        item.selectedDealChoices, executor: txn));
     }
     final canonical = <Modifier>[];
     for (final supplied in item.selectedModifiers) {

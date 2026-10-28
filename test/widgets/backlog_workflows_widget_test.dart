@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:resturant_sys/core/catalog/menu_item.dart';
 import 'package:resturant_sys/core/orders/customer_controller.dart';
-import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
+import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
 import 'package:resturant_sys/widgets/catalog/dialogs/deal_form_dialog.dart';
 import 'package:resturant_sys/widgets/orders/customer_directory.dart';
 
@@ -25,7 +25,7 @@ class _Customers extends CustomerController {
   }];
 }
 
-class _Deals extends OrderAndCheckoutController {
+class _Deals extends CatalogAndRecipeController {
   _Deals() : super(database: _UnusedDatabase());
   List<DealItemDraft>? saved;
   @override

@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import '../../../core/catalog/menu_item.dart';
 import '../../../core/orders/deal.dart';
 import '../../../core/orders/deal_item.dart';
-import '../../../core/orders/order_and_checkout_controller.dart';
+import '../../../core/catalog/catalog_and_recipe_controller.dart';
 
 class DealFormDialog extends StatefulWidget {
   const DealFormDialog({super.key, required this.controller, required this.managerId,
     required this.menuItems, this.deal});
-  final OrderAndCheckoutController controller;
+  final CatalogAndRecipeController controller;
   final int managerId;
   final List<MenuItem> menuItems;
   final Deal? deal;

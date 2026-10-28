@@ -1,3 +1,9 @@
+import '../orders/customer_controller.dart';
+import '../orders/cart_item.dart';
+import '../orders/deal.dart';
+import '../orders/deal_item.dart';
+import '../orders/deal_item_option.dart';
+import 'deal_draft.dart';
 import '../settings/managed_configuration.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../database/pos_database_constants.dart';
@@ -12,10 +18,14 @@ import 'raw_ingredient.dart';
 import 'recipe_item.dart';
 import 'storage_unit.dart';
 
+export 'deal_draft.dart';
+
+part 'catalog_deals.dart';
+
 /// Domain controller managing Menu Categories, Menu Items with tax-inclusive pricing,
 /// Raw Ingredients, Recipe Bill of Materials (BOM), Modifiers, Pre-Approved Discounts,
 /// and Catalog Media Storage.
-class CatalogAndRecipeController {
+class CatalogAndRecipeController with _DealCatalog {
   CatalogAndRecipeController({
     required this.database,
     CatalogMediaService? mediaService,
