@@ -6,6 +6,34 @@ import 'package:resturant_sys/core/analytics/analytics_models.dart';
 import 'package:resturant_sys/widgets/supervisor/analytics_export_actions.dart';
 
 void main() {
+  testWidgets('Compact export menu saves the displayed report as CSV', (tester) async {
+    final directory = await Directory.systemTemp.createTemp('dashboard-export-');
+    addTearDown(() => directory.delete(recursive: true));
+    final snapshot = AnalyticsSnapshot(query: AnalyticsQuery(startDate: DateTime(2026, 10, 26),
+      endDateExclusive: DateTime(2026, 10, 27)), generatedAt: DateTime.utc(2026, 10, 26),
+      businessDayIds: [4], sections: [AnalyticsSection(family: AnalyticsFamily.overview, title: 'Overview',
+        metrics: const [AnalyticsMetric(id: 'recorded_value', label: 'Recorded order value', value: 415000,
+          unit: AnalyticsUnit.paisa, explanation: 'Selected Business Day fixture')])]);
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: AnalyticsExportActions(
+      snapshot: snapshot, family: AnalyticsFamily.overview, compact: true,
+      canExport: () => true, pickDirectory: () async => directory.path))));
+    await tester.tap(find.byKey(const ValueKey('analytics_export_menu')));
+    await tester.pumpAndSettle();
+    expect(find.text('XLSX (all reports)'), findsOneWidget);
+    expect(find.text('PDF (this report)'), findsOneWidget);
+    await tester.runAsync(() async {
+      await tester.tap(find.text('CSV (this report)'));
+      for (var attempt = 0; attempt < 100; attempt++) {
+        if ((await directory.list().toList()).whereType<File>().isNotEmpty) break;
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    });
+    await tester.pumpAndSettle();
+    final file = (await directory.list().toList()).whereType<File>().single;
+    expect(await file.readAsString(), contains('415000'));
+    expect(find.textContaining('Saved CSV'), findsOneWidget);
+  });
+
   testWidgets('local export cancels cleanly and rejects session lock while directory picker is open', (tester) async {
     final directory = Directory.systemTemp.createTempSync('analytics-actions-');
     addTearDown(() => directory.deleteSync(recursive: true));

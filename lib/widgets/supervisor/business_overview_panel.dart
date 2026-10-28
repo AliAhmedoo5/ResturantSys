@@ -34,6 +34,8 @@ class BusinessOverviewPanel extends StatelessWidget {
     if (primary.isEmpty && overview != null) primary.addAll(overview.metrics.take(4));
     final position = overview?.metrics.where((m) =>
       ['all_collection_due', 'expected_drawer', 'negative_stock'].contains(m.id)).toList() ?? [];
+    final displayed = {...primary.map((m) => m.id), ...position.map((m) => m.id)};
+    final additional = overview?.metrics.where((m) => !displayed.contains(m.id)).toList() ?? [];
     final alerts = <_Attention>[];
     final coverage = _metric(AnalyticsFamily.cash, 'count_coverage');
     if (coverage?.sampleCount != null && coverage?.populationCount != null &&
@@ -92,6 +94,9 @@ class BusinessOverviewPanel extends StatelessWidget {
       ],
       const SizedBox(height: 16),
       dayDetails,
+      if (additional.isNotEmpty) ExpansionTile(tilePadding: EdgeInsets.zero,
+        title: const Text('Additional overview measures', style: TextStyle(fontSize: 13)),
+        children: [metricGrid(additional, 3)]),
     ]);
   }
 
@@ -113,8 +118,8 @@ class BusinessOverviewPanel extends StatelessWidget {
         child: Text('No issues detected in the available checks. Review individual reports for coverage.',
           style: TextStyle(color: StreetFoodMafiaColors.secondaryText, height: 1.5))),
       for (var index = 0; index < alerts.length; index++) ...[
-        if (index > 0) const Divider(height: 24),
-        Padding(padding: const EdgeInsets.only(top: 16), child: _attentionRow(alerts[index])),
+        if (index > 0) const Divider(height: 16),
+        Padding(padding: const EdgeInsets.only(top: 12), child: _attentionRow(alerts[index])),
       ],
     ]),
   );
@@ -129,7 +134,8 @@ class BusinessOverviewPanel extends StatelessWidget {
       const SizedBox(height: 5),
       Text(alert.description, style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
       TextButton.icon(onPressed: () => onReport(alert.family),
-        style: TextButton.styleFrom(padding: EdgeInsets.zero, alignment: Alignment.centerLeft),
+        style: TextButton.styleFrom(padding: EdgeInsets.zero, alignment: Alignment.centerLeft,
+          minimumSize: const Size(0, 32), tapTargetSize: MaterialTapTargetSize.shrinkWrap),
         icon: const Icon(Icons.arrow_forward_rounded, size: 16), label: Text(alert.action)),
     ])),
   ]);

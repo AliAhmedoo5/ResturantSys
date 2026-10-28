@@ -253,7 +253,7 @@ void main() {
     });
     await tester.pumpWidget(MaterialApp(home: Scaffold(body: ManagerAnalyticsWorkspace(service: service))));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Order cohort filters'));
+    await tester.tap(find.byKey(const ValueKey('analytics_filters_toggle')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const ValueKey('analytics_cashier')), '-1');
     await tester.ensureVisible(find.byKey(const ValueKey('analytics_apply_filters')));
