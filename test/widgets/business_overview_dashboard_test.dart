@@ -39,7 +39,8 @@ AnalyticsSnapshot overviewFixture(AnalyticsQuery query) => AnalyticsSnapshot(
       AnalyticsColumn(key: 'closed_at', label: 'Closed at'),
       AnalyticsColumn(key: 'status', label: 'Status'),
     ], rows: [AnalyticsRow(id: '4', sourceId: '4', sourceType: 'business_days', cells: {
-      'business_date': '2026-10-26', 'opened_at': '2026-10-26 12:01:00',
+      'business_date': '2026-10-26', 'opened_at': '2026-10-26 12:01:00 +05:00 [Asia/Karachi]',
+      'opened_at_source': '2026-10-26T07:01:00Z',
       'closed_at': null, 'status': 'OPEN',
     })]),
     AnalyticsSection(family: AnalyticsFamily.sales, title: 'Sales', rows: [
@@ -173,6 +174,7 @@ void main() {
     final scrollable = find.descendant(of: find.byKey(const ValueKey('analytics_body')),
       matching: find.byType(Scrollable)).first;
     await tester.scrollUntilVisible(find.text('business_days #4'), 180, scrollable: scrollable);
+    expect(find.text('26 Oct, 12:01'), findsOneWidget);
     await tester.tap(find.text('business_days #4'));
     await tester.pumpAndSettle();
     expect(find.text('Source IDs: 4'), findsOneWidget);

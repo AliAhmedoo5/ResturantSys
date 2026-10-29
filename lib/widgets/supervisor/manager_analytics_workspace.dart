@@ -384,6 +384,8 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
         'Updated ${DateFormat('dd MMM yyyy HH:mm:ss').format(snapshot.generatedAt.isUtc ? snapshot.generatedAt.add(const Duration(hours: 5)) : snapshot.generatedAt)}'
         ' • ${snapshot.businessDayIds.length} Business Days in selection',
         style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
+      if (snapshot != null) Text('Source schema ${snapshot.sourceSchemaVersion ?? "unavailable"} • ${snapshot.reportVersion} • cutoff ${analyticsTimestamp(snapshot.generatedAt.toUtc().toIso8601String())}',
+        style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
       const SizedBox(height: 8),
       if (_busy) const LinearProgressIndicator(minHeight: 2),
         if (_filtersExpanded) _filterPanel(),
@@ -812,8 +814,8 @@ class _SourceTableState extends State<_SourceTable> {
         ]));
     }
     if (row.sourceType == 'business_days' && ['business_date', 'opened_at', 'closed_at'].contains(column.key)) {
-      final date = DateTime.tryParse(value?.toString() ?? '');
-      final local = date?.isUtc == true ? date!.add(const Duration(hours: 5)) : date;
+      final source = row.cells['${column.key}_source'] ?? value;
+      final local = analyticsKarachiTime(source);
       return Text(local == null ? '—' : DateFormat(column.key == 'business_date'
         ? 'dd MMM yyyy' : 'dd MMM, HH:mm').format(local));
     }

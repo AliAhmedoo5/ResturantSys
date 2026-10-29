@@ -22,16 +22,19 @@ class _ReportBuilder {
       ...sections.firstWhere((s) => s.family == AnalyticsFamily.cash).metrics.where((m) => ['expected_drawer', 'variance'].contains(m.id)),
       ...sections.firstWhere((s) => s.family == AnalyticsFamily.inventory).metrics.where((m) => m.id == 'negative_stock'),
       ...sections.firstWhere((s) => s.family == AnalyticsFamily.profitability).metrics.where((m) => m.id == 'gross_profit'),
-    ], rows: e.get('days').map((d) => _row('business_days', d, {'business_date': _sqlDate(_karachi(d['opened_at'])!), 'opened_at': d['opened_at'], 'closed_at': d['closed_at'], 'status': d['status']})).toList(), columns: _columns(['business_date', 'opened_at', 'closed_at', 'status']), notes: [
+    ], rows: e.get('days').map((d) => _row('business_days', d, {'business_date': _sqlDate(_karachi(d['opened_at'])!), 'opened_at': d['opened_at'], 'closed_at': d['closed_at'], 'status': d['status']})).toList(), columns: _columns(['business_date', 'opened_at', 'opened_at_source', 'closed_at', 'closed_at_source', 'status']), notes: [
       'Overview combines explicitly labeled order-cohort, selected-day and current global measures. See each formula for scope.',
       if (e.query.live && !e.get('days').any((d) => d['status'] == 'OPEN')) 'No Business Day is currently open. Historical reporting remains available.',
     ]);
-    return AnalyticsSnapshot(query: e.query, generatedAt: e.now, generatedByStaffId: e.actor, businessDayIds: {...e.get('days').map((d) => d['id'] as int), ...e.get('order_days').map((d) => d['id'] as int)}.toList(), sections: [overview, ...sections], notes: [
-      'Order time basis: ${e.query.timeBasis.name}; grouping: ${e.query.grouping.name}; Asia/Karachi (UTC+05:00). Start inclusive; end exclusive. Business Day weekday uses assigned opening date; calendar weekday uses actual creation date. Weeks start Monday; months use local calendar months.',
+    return AnalyticsSnapshot(query: e.query, generatedAt: e.now, generatedByStaffId: e.actor, sourceSchemaVersion: e.sourceSchemaVersion, businessDayIds: {...e.get('days').map((d) => d['id'] as int), ...e.get('order_days').map((d) => d['id'] as int)}.toList(), sections: [overview, ...sections], notes: [
+      'Analytics formula version 2; PKR; Order time basis: ${e.query.timeBasis.name}; grouping: ${e.query.grouping.name}; Asia/Karachi (UTC+05:00). Start inclusive; end exclusive. Business Day weekday uses assigned opening date; calendar weekday uses actual creation date. Weeks start Monday; months use local calendar months.',
       'Non-order ledgers and drawer reconciliation retain Business Day opening-date scope. Calendar Order activity does not change their scope or Order assignments.',
+
       'Exploratory view over current committed local records. Immutable sealed Z-reports retain their original content hash and revision.',
       'Legacy REAL rupees are normalized once per source amount through PaisaEngine; integer-paisa columns are preferred. Historical floating-point precision is not restored.',
       _intervalBasis,
+      'Source schema version: ${e.sourceSchemaVersion ?? "unavailable"}; snapshot cutoff ${e.now.toIso8601String()}. Event time and immutable recording time are separate where stored. Missing evidence stays unavailable.',
+      'Naive legacy timestamps are assumed Asia/Karachi; original values and explicit UTC/offset evidence remain in source details. Historical names are captured only from migration onward; current names are separate context.',
       if (e.query.hasOrderFilters) 'Order filters affect sales/orders/customers/menu, related delivery attempts and order audits. Current inventory/staff/Khata and whole-day cash/procurement/expense totals keep their labeled scope.',
       if (partial) 'Percentage comparisons withheld: selected coverage contains a live/open Business Day and equivalent elapsed prior coverage is not established.',
       if (e.get('days').isEmpty) 'No Business Days match the selected date range.',
@@ -537,11 +540,65 @@ class _ReportBuilder {
     };
     final absent = (sources[family] ?? const <String>[]).where(e.absent.contains).toList();
     final safeMetrics = absent.isEmpty ? metrics : metrics.map((m) => AnalyticsMetric(id: m.id, label: m.label, unit: m.unit, explanation: '${m.explanation} Missing source tables: ${absent.join(', ')}.', quality: AnalyticsQuality.missing)).toList();
-    return AnalyticsSection(family: family, title: title, metrics: safeMetrics, rows: rows, columns: _columns(keys), notes: [...notes, if (absent.isNotEmpty) 'Missing source tables: ${absent.join(', ')}. Values withheld rather than asserted zero.']);
+    return AnalyticsSection(family: family, title: title, metrics: safeMetrics, rows: rows, columns: _columns({...keys, ...rows.expand((row) => row.cells.keys)}.toList()), notes: [...notes, if (absent.isNotEmpty) 'Missing source tables: ${absent.join(', ')}. Values withheld rather than asserted zero.']);
   }
   static List<AnalyticsColumn> _columns(List<String> keys) => keys.map((key) => AnalyticsColumn(key: key, label: _label(key), unit: key.endsWith('_paisa') ? AnalyticsUnit.paisa : key == 'unit_cost_rupees_per_base_unit' ? AnalyticsUnit.decimal : null)).toList();
   static String _label(String key) => key.replaceAll('_', ' ');
-  static AnalyticsRow _row(String source, _Record record, Map<String, Object?> cells) => AnalyticsRow(id: '$source-${record['id']}', sourceType: source, sourceId: '${record['id']}', cells: cells);
+  AnalyticsRow _row(String source, _Record record, Map<String, Object?> cells) {
+    final detail = <String, Object?>{...cells};
+    final shiftId = source == 'shifts' ? record['id'] : record['shift_id'];
+    final shift = [...e.get('shifts'), ...e.get('order_shifts')].where((s) => s['id'] == shiftId).firstOrNull;
+    final dayId = source == 'business_days' ? record['id'] : record['business_day_id'] ?? shift?['business_day_id'];
+    final day = [...e.get('days'), ...e.get('order_days')].where((d) => d['id'] == dayId).firstOrNull;
+    if (dayId != null) detail['business_day_id'] = dayId;
+    if (shiftId != null) detail['shift_id'] = shiftId;
+    if (day != null) {
+      detail['business_day_start'] = day['opened_at'];
+      detail['business_day_end'] = day['closed_at'];
+    }
+    if (shift != null) {
+      detail['shift_start'] = shift['opened_at'];
+      detail['shift_end'] = shift['closed_at'];
+    }
+    void identity(String kind, Object? id, String table, {String? retained}) {
+      if (id == null) return;
+      final evidence = e.get('identity_snapshots').where((row) => row['source_table'] == source && row['source_id'] == record['id'] && row['identity_kind'] == kind).firstOrNull;
+      final directory = table == 'staff' ? 'staff' : table == 'vendor_khata' ? 'vendors' : 'expense_categories';
+      final current = e.get(directory).where((row) => row['id'] == id).firstOrNull;
+      detail['${kind}_id'] = id;
+      detail['${kind}_name_at_transaction'] = _safeText(retained ?? evidence?['name_snapshot'] ?? 'Unavailable historical name');
+      detail['${kind}_name_current'] = _safeText(current?['name'] ?? 'Unavailable current name');
+    }
+    if (shift != null) {
+      final retained = e.get('identity_snapshots').where((row) => row['source_table'] == 'shifts' && row['source_id'] == shiftId && row['identity_kind'] == 'shift_owner').firstOrNull;
+      identity('shift_owner', shift['staff_id'], 'staff', retained: (record['shift_owner_name_snapshot'] ?? retained?['name_snapshot']) as String?);
+    }
+    if (source == 'orders') identity('order_cashier', record['cashier_id'], 'staff');
+    if (source != 'shifts' && source != 'staff' && source != 'orders') {
+      final actor = record['recorded_by'] ?? record['manager_id'] ?? record['staff_id'] ?? record['cashier_id'];
+      identity('recorded_by', actor, 'staff', retained: record['recorded_by_name_snapshot'] as String?);
+      identity('approved_by', record['approved_by'], 'staff');
+    }
+    identity('supplier', record['vendor_id'], 'vendor_khata');
+    identity('employee', record['employee_id'], 'staff');
+    if (source == 'expense_entries') identity('category', record['category_id'], 'expense_categories', retained: record['category_snapshot'] as String?);
+    // Only source timestamp fields, never derived periods or invented event times.
+    for (final key in ['created_at', 'created_at_utc', 'actual_at', 'recorded_at', 'opened_at', 'closed_at', 'dispatched_at', 'settled_at', 'settled_at_utc', 'delivered_at', 'returned_at']) {
+      if (record.containsKey(key) && !detail.containsKey(key)) detail[key] = record[key];
+    }
+    if (source == 'payment_events') {
+      detail['event_time'] = record['actual_at'];
+      detail['recording_time'] = record['recorded_at'];
+    }
+    for (final entry in detail.entries.toList()) {
+      if (analyticsKarachiTime(entry.value) == null) continue;
+      // Restrict conversion to timestamp keys, never date-like names or IDs.
+      if (!RegExp(r'(_at|_utc|_time|_start|_end)$').hasMatch(entry.key)) continue;
+      detail['${entry.key}_source'] = entry.value;
+      detail[entry.key] = analyticsTimestamp(entry.value);
+    }
+    return AnalyticsRow(id: '$source-${record['id']}', sourceType: source, sourceId: '${record['id']}', cells: detail);
+  }
   static Map<String, List<_Record>> _group(List<_Record> rows, String key) {
     final groups = <String, List<_Record>>{};
     for (final row in rows) { groups.putIfAbsent('${row[key] ?? 'Unknown'}', () => []).add(row); }

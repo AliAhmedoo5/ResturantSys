@@ -57,3 +57,13 @@ Closed Z-reports are immutable saved snapshots with their own revision/hash. A h
 Dashboard exports use the displayed immutable query snapshot, carrying the selected period, filters, time zone, units, quality and source metadata. CSV and Excel text is protected against spreadsheet formula interpretation; numeric money remains numeric. Exporting does not automatically email or otherwise transmit a report.
 
 The implementation specification and confirmed test boundaries are in [0002-manager-analytics.md](specs/0002-manager-analytics.md). Framework analysis, tests, screenshots and builds run in GitHub Actions only.
+
+## Auditable identity and timestamp evidence
+
+Manager snapshots capture SQLite `PRAGMA user_version` inside the authorized read transaction, report formula version, cutoff, selected Business Day IDs, filters and evidence notes. CSV, XLSX and PDF serialize this same immutable snapshot. The workspace displays schema, formula version and the cutoff in Asia/Karachi.
+
+Known source timestamps display `+05:00 [Asia/Karachi]`; matching `_source` columns retain their original stored UTC/offset or naive value. A naive legacy timestamp is explicitly assumed to be Asia/Karachi. For example `2026-10-29T19:30:00Z` displays as `2026-10-30 00:30:00 +05:00`. A missing actual event time remains missing, even when a recording timestamp exists.
+
+Schema 23 captures names atomically at source insertion in an append-only identity evidence table. It preserves Shift-owner Cashier separately from the recording and approval actors, supplier, employee and expense category identities. Current names are labeled separately; an unknown transaction-time name is marked unavailable. Migration does not backfill current names into old financial history or modify original sealed reports. Existing expense category snapshots remain authoritative. Stable source and identity IDs survive renames and staff/supplier archival.
+
+Audit Timestamp means immutable recording evidence; Event Time means actual occurrence. New money events retain explicit UTC recording time and preserve actual event time independently. Reports convert either known instant for Asia/Karachi display while exporting the source string. Existing naive local fields are preserved, never rewritten as supposedly known UTC history.
