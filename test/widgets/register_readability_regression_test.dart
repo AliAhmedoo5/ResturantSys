@@ -71,6 +71,7 @@ void main() {
     ));
     await tester.tap(find.text('Split Tender'));
     await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('split_electronic_input')), '0');
     for (final amount in ['100', '500']) {
       await tester.enterText(find.byKey(const ValueKey('split_cash_input')), amount);
       await tester.pumpAndSettle();
@@ -125,7 +126,9 @@ void main() {
           await Future<void>.delayed(const Duration(milliseconds: 10));
           await tester.pump();
           if (find.text('Loading POS Workspace...').evaluate().isEmpty &&
-              find.byType(CircularProgressIndicator).evaluate().isEmpty) return;
+              find.byType(CircularProgressIndicator).evaluate().isEmpty) {
+            return;
+          }
         }
         fail('Register did not finish loading.');
       });
@@ -152,7 +155,9 @@ void main() {
         for (var attempt = 0; attempt < 500; attempt++) {
           await Future<void>.delayed(const Duration(milliseconds: 10));
           await tester.pump();
-          if (find.byType(CircularProgressIndicator).evaluate().isEmpty) return;
+          if (find.byType(CircularProgressIndicator).evaluate().isEmpty) {
+            return;
+          }
         }
         fail('Billing did not finish reloading.');
       });
@@ -176,7 +181,7 @@ void main() {
       for (final target in [find.byKey(const ValueKey('workspace_tab_register')), find.text('Action')]) {
         await mouse.moveTo(tester.getCenter(target));
         await tester.pump();
-        expect(RendererBinding.instance.mouseTracker.debugDeviceActiveCursor(1), SystemMouseCursors.click);
+        expect(tester.binding.mouseTracker.debugDeviceActiveCursor(1), SystemMouseCursors.click);
       }
     });
   });
