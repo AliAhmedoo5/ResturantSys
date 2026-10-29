@@ -235,7 +235,7 @@ void main() {
     final early=await khata.recordCreditDelivery(vendorId:vendor.id,amount:100,
       createdAt:DateTime(2026,10,1),dueDate:DateTime(2026,10,15));
     await khata.recordSettlementPayment(vendorId:vendor.id,amount:160,
-      paymentSource:VendorPaymentSource.paidOutsideDrawer);
+      paymentSource:VendorPaymentSource.paidOutsideDrawer,staffId:manager);
     final invoices=await khata.invoices(vendor.id);
     expect(invoices.singleWhere((i)=>i['id']==early.id)['due_paisa'],0);
     expect(invoices.singleWhere((i)=>i['id']==late.id)['due_paisa'],5000);

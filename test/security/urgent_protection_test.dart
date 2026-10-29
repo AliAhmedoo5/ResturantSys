@@ -16,6 +16,7 @@ void main() {
   late Directory directory;
   late PosDatabase store;
   late Database db;
+  late int managerId;
 
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('urgent_protection_');
@@ -34,6 +35,7 @@ void main() {
         'is_active': 1, 'created_at': '2026-10-27 12:00:00',
       });
     }
+    managerId = (await db.query('staff', where: "role='SUPERVISOR'")).single['id'] as int;
   });
 
   tearDown(() async {
@@ -46,7 +48,7 @@ void main() {
     final supplier = await khata.createVendor(name: 'History', phone: '03000000000');
     await khata.recordCreditDelivery(vendorId: supplier.id, amount: 500);
     await khata.recordSettlementPayment(vendorId: supplier.id, amount: 500,
-        paymentSource: VendorPaymentSource.paidOutsideDrawer);
+        paymentSource: VendorPaymentSource.paidOutsideDrawer, staffId: managerId);
     await khata.deleteVendor(supplier.id);
     expect((await khata.getVendorById(supplier.id))!.isArchived, isTrue);
     expect(await khata.getVendorTransactions(vendorId: supplier.id), hasLength(2));
@@ -95,7 +97,7 @@ void main() {
     await khata.deleteVendor(supplier.id);
     await expectLater(khata.recordCreditDelivery(vendorId: supplier.id, amount: 10), throwsStateError);
     await khata.recordSettlementPayment(vendorId: supplier.id, amount: 200,
-        paymentSource: VendorPaymentSource.paidOutsideDrawer);
+        paymentSource: VendorPaymentSource.paidOutsideDrawer, staffId: managerId);
     expect((await khata.getVendorStatement(supplier.id)).openingBalance, 200);
     await khata.setVendorArchived(supplier.id, false);
     await khata.recordCreditDelivery(vendorId: supplier.id, amount: 10);

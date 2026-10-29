@@ -6,7 +6,10 @@ enum VendorPaymentSource {
 
   /// Settlement paid from outside the till (e.g., bank transfer, cheque, or owner personal funds),
   /// updating the ledger payable balance without touching the register cash float.
-  paidOutsideDrawer('Paid Outside Drawer');
+  paidOutsideDrawer('Paid Outside Drawer'),
+
+  bank('Bank / digital'),
+  owner('Owner cash');
 
   const VendorPaymentSource(this.displayName);
   final String displayName;

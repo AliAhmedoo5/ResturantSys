@@ -1,4 +1,5 @@
 import 'package:intl/intl.dart';
+export 'analytics_time.dart';
 
 part 'report_chart_projection.dart';
 part 'business_overview_data.dart';
@@ -66,11 +67,13 @@ class AnalyticsQuery {
 }
 
 class AnalyticsSnapshot {
-  AnalyticsSnapshot({required this.query, required this.generatedAt, required List<AnalyticsSection> sections, required List<int> businessDayIds, List<String> notes = const [], this.generatedByStaffId}) : sections = List.unmodifiable(sections), businessDayIds = List.unmodifiable(businessDayIds), notes = List.unmodifiable(notes);
+  AnalyticsSnapshot({required this.query, required this.generatedAt, required List<AnalyticsSection> sections, required List<int> businessDayIds, List<String> notes = const [], this.generatedByStaffId, this.sourceSchemaVersion, this.reportVersion = 'manager-analytics-v2'}) : sections = List.unmodifiable(sections), businessDayIds = List.unmodifiable(businessDayIds), notes = List.unmodifiable(notes);
   late final BusinessOverviewData overview = BusinessOverviewData(this);
   final AnalyticsQuery query;
   final DateTime generatedAt;
   final int? generatedByStaffId;
+  final int? sourceSchemaVersion;
+  final String reportVersion;
   final List<AnalyticsSection> sections;
   final List<int> businessDayIds;
   final List<String> notes;
