@@ -228,7 +228,7 @@ class _OperationsWorkspaceState extends State<OperationsWorkspace> {
         IconButton(tooltip:'Refresh',onPressed:_load,icon:const Icon(Icons.refresh))]),
       if(_error!=null) Text(_error!,style:TextStyle(color:Theme.of(context).colorScheme.error)),
       if(widget.payroll) ...[
-        DropdownButtonFormField<int>(key:ValueKey(_employeeId),initialValue:_employeeId,
+        DropdownButtonFormField<int>(mouseCursor: WidgetStateMouseCursor.clickable, key:ValueKey(_employeeId),initialValue:_employeeId,
           decoration:const InputDecoration(labelText:'Employee'),
           items:_staff.map((s)=>DropdownMenuItem(value:s['id'] as int,child:Text('${s['name']}${s['is_active']==0 ? ' (inactive)' : ''}'))).toList(),
           onChanged:(v) async {setState(()=>_employeeId=v);await _load();}),

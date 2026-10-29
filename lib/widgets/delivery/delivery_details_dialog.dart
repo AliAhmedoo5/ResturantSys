@@ -76,7 +76,7 @@ class _DeliveryDetailsDialogState extends State<DeliveryDetailsDialog> {
       if (_matches.isNotEmpty) SizedBox(height: 100, child: ListView(children: _matches.map((a) => ListTile(dense: true,
         title: Text('${a.customerName} • ${a.phone}'), subtitle: Text(a.fullAddress), onTap: () => setState(() => _fill(a)))).toList())),
       TextFormField(key: const ValueKey('delivery_name'), controller: _name, decoration: const InputDecoration(labelText: 'Customer name')),
-      DropdownButtonFormField<int>(key: ValueKey('delivery_area_$_areaId'), initialValue: _areaId, isExpanded: true,
+      DropdownButtonFormField<int>(mouseCursor: WidgetStateMouseCursor.clickable, key: ValueKey('delivery_area_$_areaId'), initialValue: _areaId, isExpanded: true,
         decoration: const InputDecoration(labelText: 'Active delivery area'), items: _areas.map((a) => DropdownMenuItem(value: a.id,
           child: Text('${a.name} • Rs ${(a.deliveryFeePaisa / 100).toStringAsFixed(2)}', overflow: TextOverflow.ellipsis, textAlign: TextAlign.right, style: WarmCounterTypography.tabularNumbers))).toList(),
         onChanged: (id) => setState(() => _areaId = id), validator: (v) => v == null ? 'Select an active area' : null),

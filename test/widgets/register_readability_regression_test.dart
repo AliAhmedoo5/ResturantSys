@@ -194,6 +194,7 @@ void main() {
               onSelected: (_) {}),
           Expanded(child: Column(mainAxisSize: MainAxisSize.min, children: [
             ElevatedButton(onPressed: () {}, child: const Text('Action')),
+            FilledButton(onPressed: () {}, child: const Text('Filled action')),
             OutlinedButton(onPressed: () {}, child: const Text('Outline')),
             TextButton(onPressed: () {}, child: const Text('Text action')),
             IconButton(key: const ValueKey('icon_action'), onPressed: () {}, icon: const Icon(Icons.add)),
@@ -210,7 +211,8 @@ void main() {
       addTearDown(mouse.removePointer);
       for (final target in [
         find.byKey(const ValueKey('workspace_tab_register')), find.text('Action'),
-        find.text('Outline'), find.text('Text action'), find.byKey(const ValueKey('icon_action')),
+        find.text('Filled action'), find.text('Outline'), find.text('Text action'),
+        find.byKey(const ValueKey('icon_action')),
         find.byKey(const ValueKey('checkbox_action')), find.byKey(const ValueKey('switch_action')),
         find.text('List action'),
       ]) {

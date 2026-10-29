@@ -112,7 +112,7 @@ class _ReportDeliveryDialogState extends State<ReportDeliveryDialog> {
           content:SizedBox(width:460,child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,children:[
             Text('Send from ${saved['gmail_sender']}. This sends a real email with sample PDF and Excel attachments, containing no financial data.'),
             const SizedBox(height:16),
-            DropdownButtonFormField<String>(value:selected,isExpanded:true,
+            DropdownButtonFormField<String>(mouseCursor: WidgetStateMouseCursor.clickable, value:selected,isExpanded:true,
               decoration:const InputDecoration(labelText:'Approved test recipient'),
               items:targets.map((address)=>DropdownMenuItem(value:address,child:Text(address))).toList(),
               onChanged:(value){if(value!=null)setDialogState(()=>selected=value);}),
@@ -205,7 +205,7 @@ class _ReportDeliveryDialogState extends State<ReportDeliveryDialog> {
         ListView(padding:const EdgeInsets.symmetric(vertical:16),children:[
           const Text('Email the saved PDF and Excel reports after closing the Business Day. Sending resumes when internet returns while this app is open.'),
           const SizedBox(height:12),
-          DropdownButtonFormField<String>(value:_provider,
+          DropdownButtonFormField<String>(mouseCursor: WidgetStateMouseCursor.clickable, value:_provider,
             decoration:const InputDecoration(labelText:'Send reports using'),
             items:const [DropdownMenuItem(value:'GMAIL',child:Text('Gmail — no domain or server needed')),
               DropdownMenuItem(value:'RELAY',child:Text('Existing Email / WhatsApp relay'))],
