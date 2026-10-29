@@ -76,4 +76,3 @@ class _FinanceTimeline {
     'Late finance entries require an open assigned Business Day and, for drawer cash, the same open physical Shift. Closed-period correction entry is unavailable; original sealed reports remain unchanged.',
   ];
 }
-

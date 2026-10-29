@@ -174,4 +174,3 @@ String _localSql(String column, {bool dateOnly = false}) {
   return "CASE WHEN $column LIKE '%Z' OR substr($column,-6,1) IN ('+','-') THEN $function($column,'+5 hours') ELSE $function($column) END";
 }
 DateTime? _karachi(Object? raw) => analyticsKarachiTime(raw);
-
