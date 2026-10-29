@@ -525,11 +525,7 @@ class _ReportBuilder {
           'Cashier shift duration is not paid attendance or worked labor-hour evidence.',
           unit: AnalyticsUnit.decimal);
     } else if (directMinutes == 0) {
-      productivityMetric = _metric('labor_productivity', 'Orders per labor hour', null,
-          unavailable: true,
-          unavailableQuality: AnalyticsQuality.missing,
-          unit: AnalyticsUnit.decimal,
-          explanation: '0.0 direct operational hours logged in period; direct labor productivity is unavailable.');
+      productivityMetric = _missing('labor_productivity', 'Orders per labor hour', '0.0 direct operational hours logged in period; direct labor productivity is unavailable.', unit: AnalyticsUnit.decimal);
     } else if (e.query.hasOrderFilters) {
       productivityMetric = _missing('labor_productivity', 'Orders per labor hour',
           'Direct labor productivity requires unfiltered store orders; direct operational hours cannot be apportioned to order subsets.',

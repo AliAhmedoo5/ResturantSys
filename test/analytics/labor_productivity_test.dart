@@ -27,7 +27,7 @@ void main() {
     final shifts = ShiftAndCashController(database: db);
 
     // Business Day #45: Friday 2026-10-30
-    final day = await shifts.openBusinessDay(openedByStaffId: manager['id'] as int);
+    await shifts.openBusinessDay(openedByStaffId: manager['id'] as int);
     // Cashier Bilal opens register Shift #90 at 11:00 AM and closes at 11:00 PM (12 drawer hours)
     final shift = await shifts.openShift(staffId: cashier['id'] as int, openingFloat: 10000);
 
@@ -182,7 +182,7 @@ void main() {
     final auth = AuthService(database: db)..session.login(Staff.fromMap(manager));
     final shifts = ShiftAndCashController(database: db);
 
-    final day = await shifts.openBusinessDay(openedByStaffId: manager['id'] as int);
+    await shifts.openBusinessDay(openedByStaffId: manager['id'] as int);
     // Register drawer open for 12 hours
     final shift = await shifts.openShift(staffId: cashier['id'] as int, openingFloat: 10000);
     await db.insert('orders', {
@@ -230,7 +230,7 @@ void main() {
     final operations = OperationsController(db);
     final shifts = ShiftAndCashController(database: db);
 
-    final day = await shifts.openBusinessDay(openedByStaffId: manager['id'] as int);
+    await shifts.openBusinessDay(openedByStaffId: manager['id'] as int);
     final mgmtDept = (await db.query('departments', where: "name='Management'")).first['id'] as int;
 
     // Only Management hours are logged (0.0 direct operational hours)
@@ -277,7 +277,7 @@ void main() {
     final operations = OperationsController(db);
     final shifts = ShiftAndCashController(database: db);
 
-    final day = await shifts.openBusinessDay(openedByStaffId: manager['id'] as int);
+    await shifts.openBusinessDay(openedByStaffId: manager['id'] as int);
     final kitchenDept = (await db.query('departments', where: "name='Kitchen'")).first['id'] as int;
 
     final cook = await db.insert('staff', {
