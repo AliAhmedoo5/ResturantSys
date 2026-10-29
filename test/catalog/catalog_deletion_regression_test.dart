@@ -59,8 +59,11 @@ void main() {
       if (target == 'category') {
         // Each receipt column stays immutable, including nullable snapshots.
         for (final entry in history.single.entries) {
+          final changedValue = entry.value is num
+              ? (entry.value as num) + 1
+              : '${entry.value ?? ''}changed';
           await expectLater(db.update('order_items', {
-            entry.key: entry.value == null ? 'changed' : null,
+            entry.key: changedValue,
           }, where: 'id = ?', whereArgs: [lineId]),
             throwsA(predicate((error) => error.toString().contains('Business Day is permanently closed'))),
             reason: '${entry.key} must remain protected while its catalog record exists');
