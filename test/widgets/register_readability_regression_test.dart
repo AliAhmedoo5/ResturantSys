@@ -185,8 +185,6 @@ void main() {
     });
 
     testWidgets('sidebar and enabled actions show a hand pointer', (tester) async {
-      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
-      addTearDown(() => debugDefaultTargetPlatformOverride = null);
       await tester.pumpWidget(MaterialApp(
         theme: WarmCounterTheme.darkTheme,
         home: Scaffold(body: Row(children: [
@@ -227,6 +225,6 @@ void main() {
       await mouse.moveTo(tester.getCenter(find.byKey(const ValueKey('text_input'))));
       await tester.pump();
       expect(tester.binding.mouseTracker.debugDeviceActiveCursor(1), SystemMouseCursors.text);
-    });
+    }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
   });
 }
