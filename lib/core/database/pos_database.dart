@@ -1131,6 +1131,3 @@ class PosDatabase {
     }
   }
 }
-
-
-

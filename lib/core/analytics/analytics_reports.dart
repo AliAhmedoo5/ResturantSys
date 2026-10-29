@@ -652,7 +652,3 @@ class _ReportBuilder {
     } on FormatException { return 'Unreadable snapshot'; }
   }
 }
-
-
-
-

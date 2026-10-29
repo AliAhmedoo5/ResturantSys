@@ -58,4 +58,3 @@ abstract final class PaymentEvent {
         : DateTime.utc(value.year, value.month, value.day, value.hour, value.minute, value.second).subtract(const Duration(hours: 5));
   }
 }
-

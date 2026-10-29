@@ -780,4 +780,3 @@ class _RevisionCatalogPickerState extends State<_RevisionCatalogPicker> {
     );
   }
 }
-
