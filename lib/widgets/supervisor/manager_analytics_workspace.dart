@@ -814,8 +814,8 @@ class _SourceTableState extends State<_SourceTable> {
         ]));
     }
     if (row.sourceType == 'business_days' && ['business_date', 'opened_at', 'closed_at'].contains(column.key)) {
-      final date = DateTime.tryParse(value?.toString() ?? '');
-      final local = date?.isUtc == true ? date!.add(const Duration(hours: 5)) : date;
+      final source = row.cells['${column.key}_source'] ?? value;
+      final local = analyticsKarachiTime(source);
       return Text(local == null ? '—' : DateFormat(column.key == 'business_date'
         ? 'dd MMM yyyy' : 'dd MMM, HH:mm').format(local));
     }
