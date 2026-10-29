@@ -8,7 +8,7 @@ class _ReportBuilder {
   late final List<_Record> valid = orders.where(_valid).toList();
   late final Set<Object?> validIds = valid.map((o) => o['id']).toSet();
   late final List<_Record> soldItems = e.get('items').where((i) => validIds.contains(i['order_id'])).toList();
-  bool get partial => e.query.live || e.get('days').any((d) => d['status'] == 'OPEN');
+  bool get partial => e.query.live || [...e.get('days'), ...e.get('order_days')].any((d) => d['status'] == 'OPEN');
   String get _orderBasis => 'Filtered order cohort by ${e.query.timeBasis == AnalyticsTimeBasis.businessDay ? 'assigned Business Day FK' : 'actual creation time in Asia/Karachi, inclusive start/exclusive end'}. Recorded current valid value includes Collection Due; excludes VOIDED, CANCELLED and REFUNDED. This is not recognized revenue.';
   static const _globalBasis = 'Selected Business Days, all shifts/domain events. Cashier, shift, Dining Type and payment filters apply only to order-based reports, not these totals.';
   static const _currentBasis = 'Current installation-wide position at refresh; not historical. Order filters do not apply.';
@@ -56,10 +56,10 @@ class _ReportBuilder {
       _metric('tax', 'Tax carve-out', _sum(valid, 'tax_amount'), explanation: 'Stored transaction tax amount, separate from recorded order value; $_orderBasis'),
       _metric('delivery_fees', 'Delivery fees', _integers(valid, 'delivery_fee_paisa'), explanation: 'Stored integer-paisa fee snapshots; $_orderBasis'),
       _metric('rounding', 'Cash rounding', _integers(valid, 'cash_rounding_paisa'), explanation: 'Signed stored cash rounding delta; $_orderBasis'),
-      _metric('collected_tender', 'Collected tender', payments.fold<int>(0, (sum, p) => sum + _money(p, 'amount_tendered') - _money(p, 'change_returned')), explanation: 'Tender minus change, including negative explicit refunds; retained funds in SETTLED/REFUND_PENDING/CANCELLED/REFUNDED orders. Order Business Day cohort, not receipt-event date. ${e.query.paymentMethod == null ? 'All methods.' : 'Only ${e.query.paymentMethod} tender lines; full matching orders remain the sales cohort.'}'),
+      _metric('collected_tender', 'Collected tender', payments.fold<int>(0, (sum, p) => sum + _money(p, 'amount_tendered') - _money(p, 'change_returned')), explanation: 'Tender minus change, including negative explicit refunds; retained funds in SETTLED/REFUND_PENDING/CANCELLED/REFUNDED orders. Selected Order cohort, not receipt-event date. ${e.query.paymentMethod == null ? 'All methods.' : 'Only ${e.query.paymentMethod} tender lines; full matching orders remain the sales cohort.'}'),
       _average('average_ticket', 'Average ticket', value, valid.length, AnalyticsUnit.paisa, 'Recorded eligible order value / eligible order count; denominator shown. $_orderBasis'),
       _metric('recognized_revenue', 'Tax-exclusive recognized revenue', _sum(valid, 'grand_total') - _sum(valid, 'tax_amount'), explanation: 'Recognized on confirmation including COD receivables and delivery fees, less stored tax carve-out; cancellations/revisions use current recorded totals.'),
-      _metric('recorded_value_change', 'Change from preceding window', value - _sum(prior, 'grand_total'), explanation: partial ? 'Unavailable for incomplete open-day coverage.' : 'Absolute current minus preceding equal Business Day date-window recorded value.', unavailable: partial),
+      _metric('recorded_value_change', 'Change from preceding window', value - _sum(prior, 'grand_total'), explanation: partial ? 'Unavailable for incomplete open-day coverage.' : 'Absolute current minus preceding equal selected-basis date-window recorded value.', unavailable: partial),
     ];
     final dimensions = <AnalyticsRow>[];
     for (final key in ['dining_type', 'cashier_id', 'shift_id']) {
@@ -77,16 +77,18 @@ class _ReportBuilder {
     return _section(AnalyticsFamily.sales, 'Sales', metrics, [
       ...daily,
       ...dimensions,
-    ], ['kind', 'business_date', 'business_day_id', 'period_start', 'time_basis', 'grouping', 'dimension', 'dimension_value', 'orders', 'recorded_value_paisa', 'collected_paisa'], [_orderBasis, 'Daily rows and chart use these identical values. Source IDs identify contributing Business Days; order detail is in Order operations.', 'Historical comparisons use the preceding equal opening-date window with identical order filters. A zero prior baseline has no percentage.', 'Daily totals, each Dining Type/cashier/shift/hour breakdown and tender breakdown are independent views; never sum these different row kinds together.']);
+    ], ['kind', 'business_date', 'business_day_id', 'period_start', 'time_basis', 'grouping', 'dimension', 'dimension_value', 'orders', 'recorded_value_paisa', 'collected_paisa'], [_orderBasis, 'Period rows and chart use these identical values. Source IDs identify contributing Business Days or calendar-selected Orders; order detail is in Order operations.', 'Historical comparisons use the preceding equal selected-basis window with identical order filters. A zero prior baseline has no percentage.', 'Daily totals, each Dining Type/cashier/shift/hour breakdown and tender breakdown are independent views; never sum these different row kinds together.']);
   }
 
   List<AnalyticsRow> _orderPeriods() {
     final days = {for (final d in [...e.get('days'), ...e.get('order_days')]) d['id']: d};
     final groups = <String, List<_Record>>{};
     final starts = <String, String>{};
+    final periodDays = <String, Set<Object?>>{};
     String? keyFor(_Record order) {
       final operational = e.query.timeBasis == AnalyticsTimeBasis.businessDay;
-      final time = _karachi(operational ? days[order['business_day_id']]?['opened_at'] : order['created_at']);
+      final assignedDay = days[order['business_day_id']];
+      final time = _karachi(operational ? assignedDay?['opened_at'] : order['created_at']);
       if (time == null) return null;
       final date = _date(time);
       final start = switch (e.query.grouping) {
@@ -97,6 +99,7 @@ class _ReportBuilder {
       final key = operational && e.query.grouping == AnalyticsGrouping.day
           ? 'day-${order['business_day_id']}' : _sqlDate(start);
       starts[key] = _sqlDate(start);
+      periodDays.putIfAbsent(key, () => {}).add(order['business_day_id']);
       return key;
     }
     if (e.query.timeBasis == AnalyticsTimeBasis.businessDay) {
@@ -116,7 +119,7 @@ class _ReportBuilder {
     return [for (final key in keys) AnalyticsRow(id: 'order-period-$key',
       sourceType: e.query.timeBasis == AnalyticsTimeBasis.businessDay ? 'business_days' : 'orders',
       sourceId: e.query.timeBasis == AnalyticsTimeBasis.businessDay
-          ? (key.startsWith('day-') ? key.substring(4) : groups[key]!.map((o) => o['business_day_id']).toSet().join(','))
+          ? periodDays[key]!.join(',')
           : groups[key]!.map((o) => o['id']).join(','),
       cells: {'kind': 'Daily total', 'business_date': starts[key], 'period_start': starts[key],
         'business_day_id': key.startsWith('day-') ? int.parse(key.substring(4)) : null,
@@ -499,9 +502,9 @@ class _ReportBuilder {
     ], rows, ['kind', 'business_day_id', 'order_id', 'shift_id', 'ingredient_id', 'token', 'revision', 'action', 'reason', 'staff_id', 'delta_paisa', 'hash', 'channel', 'status', 'attempts', 'stock_at_checkout', 'created_at'], ['Order revisions/tokens/rounding/checkout alerts use filtered order cohort. Report runs/outbox use whole selected Business Days. Delivery audit uses selected actual intervals.', 'Immutable Z-report provenance is shown; this explorer never rewrites snapshots. Sensitive payloads, errors, recipients, credentials and raw customer contact fields are excluded.']);
   }
 
-  AnalyticsMetric _metric(String id, String label, num value, {AnalyticsUnit unit = AnalyticsUnit.paisa, String explanation = _orderBasis, num? previous, bool unavailable = false, AnalyticsQuality unavailableQuality = AnalyticsQuality.notApplicable}) {
+  AnalyticsMetric _metric(String id, String label, num value, {AnalyticsUnit unit = AnalyticsUnit.paisa, String? explanation, num? previous, bool unavailable = false, AnalyticsQuality unavailableQuality = AnalyticsQuality.notApplicable}) {
     final difference = !partial && !unavailable && previous != null ? value - previous : null;
-    return AnalyticsMetric(id: id, label: label, value: unavailable ? null : value, unit: unit, explanation: explanation,
+    return AnalyticsMetric(id: id, label: label, value: unavailable ? null : value, unit: unit, explanation: explanation ?? _orderBasis,
       quality: unavailable ? unavailableQuality : AnalyticsQuality.complete,
       changeAbsolute: difference,
       changePercent: difference != null && previous != null && previous != 0 ? difference / previous.abs() * 100 : null);
