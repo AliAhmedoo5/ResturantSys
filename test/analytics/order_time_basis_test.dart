@@ -32,6 +32,9 @@ void main() {
     final rows = after.section(AnalyticsFamily.orders).rows.where((r) => r.sourceType == 'orders').toList();
     expect(rows.map((r) => r.sourceId), ['$overnight']);
     expect(rows.single.cells['business_day_id'], day);
+    expect(rows.single.cells['shift_owner_id'], cashier['id']);
+    expect(rows.single.cells['shift_start_source'], '2026-10-29T13:00:00Z');
+    expect(rows.single.cells['shift_start'], '2026-10-29 18:00:00 +05:00 [Asia/Karachi]');
     expect(after.businessDayIds, contains(day));
     expect(after.query.timeBasis, AnalyticsTimeBasis.calendarTime);
     expect(after.query.grouping, AnalyticsGrouping.week);
