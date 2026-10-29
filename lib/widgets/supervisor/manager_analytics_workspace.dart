@@ -379,12 +379,12 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
         ' â€¢ Asia/Karachi â€¢ ${_query.live ? 'Active Business Day' : '${DateFormat('dd MMM yyyy').format(_query.startDate)} to ${DateFormat('dd MMM yyyy').format(_query.endDateExclusive)} (end exclusive)'}'
         '${snapshot == null ? '' : ' â€¢ ${snapshot.businessDayIds.length} Business Days'}',
         style: const TextStyle(color: StreetFoodMafiaColors.secondaryText, fontSize: 12)),
-      Text('Order activity: ${_query.timeBasis == AnalyticsTimeBasis.businessDay ? 'assigned Business Day weekday' : 'actual calendar weekday'} • ${_query.grouping.name} • weeks start Monday • local calendar months. Other ledgers retain Business Day scope.', style: const TextStyle(fontSize: 12)),
+      Text('Order activity: ${_query.timeBasis == AnalyticsTimeBasis.businessDay ? 'assigned Business Day weekday' : 'actual calendar weekday'} â€¢ ${_query.grouping.name} â€¢ weeks start Monday â€¢ local calendar months. Other ledgers retain Business Day scope.', style: const TextStyle(fontSize: 12)),
       if (snapshot != null && _family != AnalyticsFamily.overview) Text(
         'Updated ${DateFormat('dd MMM yyyy HH:mm:ss').format(snapshot.generatedAt.isUtc ? snapshot.generatedAt.add(const Duration(hours: 5)) : snapshot.generatedAt)}'
         ' â€¢ ${snapshot.businessDayIds.length} Business Days in selection',
         style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
-      if (snapshot != null) Text('Source schema ${snapshot.sourceSchemaVersion ?? "unavailable"} • ${snapshot.reportVersion} • cutoff ${analyticsTimestamp(snapshot.generatedAt.toUtc().toIso8601String())}',
+      if (snapshot != null) Text('Source schema ${snapshot.sourceSchemaVersion ?? "unavailable"} â€¢ ${snapshot.reportVersion} â€¢ cutoff ${analyticsTimestamp(snapshot.generatedAt.toUtc().toIso8601String())}',
         style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
       const SizedBox(height: 8),
       if (_busy) const LinearProgressIndicator(minHeight: 2),
