@@ -63,6 +63,34 @@ class SnapshotService implements AnalyticsService {
 }
 
 void main() {
+  testWidgets('Order time basis survives period and grouping changes', (tester) async {
+    final queries = <AnalyticsQuery>[];
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: ManagerAnalyticsWorkspace(
+      service: SnapshotService(onLoad: (query) async {
+        queries.add(query);
+        return SnapshotService.fixture(query);
+      }), clock: () => DateTime(2026, 10, 30, 12),
+    ))));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const ValueKey('analytics_time_basis')));
+    await tester.tap(find.byKey(const ValueKey('analytics_time_basis')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Calendar time').last);
+    await tester.pumpAndSettle();
+    expect(queries.last.timeBasis, AnalyticsTimeBasis.calendarTime);
+    await tester.tap(find.byKey(const ValueKey('analytics_grouping')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Month').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('analytics_period')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Last 7 dates').last);
+    await tester.pumpAndSettle();
+    expect(queries.last.timeBasis, AnalyticsTimeBasis.calendarTime);
+    expect(queries.last.grouping, AnalyticsGrouping.month);
+    expect(queries.last.live, isFalse);
+  });
+
   setUpAll(() async {
     final file = File('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf');
     if (Platform.environment['CAPTURE_DESKTOP'] == 'true' && await file.exists()) {

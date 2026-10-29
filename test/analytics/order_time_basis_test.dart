@@ -54,4 +54,24 @@ void main() {
     expect(calendar.copyWith(shiftId: 2).timeBasis, AnalyticsTimeBasis.calendarTime);
     expect(calendar.copyWith(shiftId: 2).grouping, AnalyticsGrouping.month);
   });
+
+  test('same-date Business Days remain distinct even when one has no Orders', () async {
+    final store = PosDatabase(factory: databaseFactoryFfi, customPath: inMemoryDatabasePath);
+    final db = await store.initialize();
+    addTearDown(store.close);
+    final staff = await db.query('staff');
+    final manager = staff.firstWhere((r) => r['role'] != 'CASHIER');
+    final auth = AuthService(database: db)..session.login(Staff.fromMap(manager));
+    final days = <int>[];
+    for (final hour in [8, 18]) {
+      days.add(await db.insert('business_days', {'opened_at': '2026-10-29 ${hour.toString().padLeft(2, '0')}:00:00', 'status': 'OPEN', 'opened_by_staff_id': manager['id']}));
+    }
+    final snapshot = await AnalyticsService(database: db, authService: auth).load(
+      AnalyticsQuery(startDate: DateTime(2026, 10, 29), endDateExclusive: DateTime(2026, 10, 30)));
+    final rows = snapshot.section(AnalyticsFamily.sales).rows.where((r) => r.cells['kind'] == 'Daily total').toList();
+    expect(rows.map((r) => r.cells['business_day_id']), days);
+    expect(rows.map((r) => r.sourceId), days.map((id) => '$id'));
+    expect(rows.map((r) => r.cells['orders']), [0, 0]);
+    expect(snapshot.businessDayIds, days);
+  });
 }
