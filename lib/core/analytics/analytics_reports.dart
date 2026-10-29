@@ -331,6 +331,8 @@ class _ReportBuilder {
 
   AnalyticsSection _cash() {
     final shifts = e.get('shifts');
+    final receivingIds = e.get('days').map((d) => d['id']).toSet();
+    final receiptEvents = e.get('payment_events').where((p) => ['RECEIPT', 'REFUND'].contains(p['kind']) && receivingIds.contains(p['business_day_id'])).toList();
     final moves = e.get('movements');
     final payments = e.get('cash_payments');
     final receipts = payments.where((p) => p['payment_method'] == 'CASH' && _money(p, 'amount_tendered') > 0).toList();
@@ -352,6 +354,19 @@ class _ReportBuilder {
       _metric('open_shifts', 'Open shifts', shifts.where((s) => s['status'] == 'OPEN').length, unit: AnalyticsUnit.count, explanation: _globalBasis),
       _metric('unresolved_discrepancies', 'Unresolved discrepancies', shifts.where((s) => s['discrepancy_status'] == 'FLAGGED').length, unit: AnalyticsUnit.count, explanation: 'Selected shifts with stored FLAGGED review status.'),
     ], [
+      ...receiptEvents.map((p) => _row('payment_events', p, {
+        'kind': 'Independent customer money event', 'event_kind': p['kind'],
+        'event_key': p['event_key'], 'amount_paisa': p['amount_paisa'],
+        'payment_source': p['payment_source'], 'payment_method': p['payment_method'],
+        'actual_at': p['actual_at'], 'recorded_at': p['recorded_at'],
+        'receiving_business_day_id': p['business_day_id'], 'receiving_shift_id': p['shift_id'],
+        'business_day_id': p['business_day_id'], 'shift_id': p['shift_id'],
+        'originating_business_day_id': p['originating_business_day_id'], 'originating_shift_id': p['originating_shift_id'],
+        'order_id': p['order_id'], 'tender_id': p['tender_id'], 'movement_id': p['movement_id'],
+        'recorded_by': p['recorded_by'], 'approved_by': p['approved_by'],
+        'recorded_by_name_snapshot': p['recorded_by_name_snapshot'], 'shift_owner_name_snapshot': p['shift_owner_name_snapshot'],
+        'change_paisa': p['change_paisa'], 'rounding_paisa': p['rounding_paisa'],
+      })),
       ...shifts.map((s) {
         final shiftMoves = moves.where((m) => m['shift_id'] == s['id']);
         final expectedShift = _money(s, 'opening_float') + receiptsFor(receipts.where((p) => p['shift_id'] == s['id'])) + _sum(shiftMoves.where((m) => m['type'] == 'PAY_IN'), 'amount') - _sum(shiftMoves.where((m) => m['type'] != 'PAY_IN'), 'amount');
@@ -359,7 +374,7 @@ class _ReportBuilder {
       }),
       ...moves.map((m) => _row('cash_movements', m, {'kind': 'Drawer movement', 'shift_id': m['shift_id'], 'cashier_id': m['staff_id'], 'type': m['type'], 'category': _safeText(m['category']), 'amount_paisa': _money(m, 'amount'), 'created_at': m['created_at']})),
       ...e.get('reports').map((r) => _row('report_runs', r, {'kind': 'Sealed Z-report provenance', 'business_day_id': r['business_day_id'], 'status': r['status'], 'hash': r['content_hash'], 'created_at': r['created_at']})),
-    ], ['kind', 'business_day_id', 'shift_id', 'cashier_id', 'status', 'opening_paisa', 'expected_paisa', 'counted_paisa', 'variance_paisa', 'review_status', 'type', 'category', 'amount_paisa', 'hash', 'created_at'], [_globalBasis, 'Legacy payments lack receipt timestamps: customer collections are by source order Business Day/shift, not actual collection-event date. Shift rows are exploratory X-report inputs; sealed Z-report hashes remain original.']);
+    ], ['event_kind', 'event_key', 'payment_source', 'payment_method', 'actual_at', 'recorded_at', 'receiving_business_day_id', 'receiving_shift_id', 'originating_business_day_id', 'originating_shift_id', 'order_id', 'tender_id', 'movement_id', 'recorded_by', 'approved_by', 'recorded_by_name_snapshot', 'shift_owner_name_snapshot', 'change_paisa', 'rounding_paisa', 'kind', 'business_day_id', 'shift_id', 'cashier_id', 'status', 'opening_paisa', 'expected_paisa', 'counted_paisa', 'variance_paisa', 'review_status', 'type', 'category', 'amount_paisa', 'hash', 'created_at'], [_globalBasis, 'Legacy payments lack receipt timestamps: customer collections are by source order Business Day/shift, not actual collection-event date. Shift rows are exploratory X-report inputs; sealed Z-report hashes remain original.']);
   }
 
   AnalyticsSection _expenses() {
@@ -526,3 +541,4 @@ class _ReportBuilder {
     } on FormatException { return 'Unreadable snapshot'; }
   }
 }
+

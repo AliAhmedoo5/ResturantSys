@@ -32,5 +32,15 @@ void main() {
     expect(row.cells['actual_at'], isNotNull);
     expect(row.cells['recorded_at'], isNotNull);
     expect((await controller.getOrderPayments(order)).length, 1);
+
+    Future<RefundResult> refund() => controller.recordCashierRefund(orderId: order, shiftId: receiving, cashierId: 2, amountPaisa: 5000, method: PaymentMethod.cash, reason: 'Partial return', commandId: 'refund-1');
+    final refunded = await refund();
+    expect((await refund()).cashMovementId, refunded.cashMovementId);
+    expect((await controller.getOrderPayments(order)).length, 2);
+    final afterRefund = await AnalyticsService(database: db, authService: auth).load(snapshot.query);
+    expect(afterRefund.section(AnalyticsFamily.cash).rows.where((r) => r.sourceType == 'payment_events').map((r) => r.cells['amount_paisa']), [10000, -5000]);
+
+    await expectLater(controller.recordCashierReceipt(orderId: order, shiftId: receiving, cashierId: 2, amountPaisa: 1000, method: PaymentMethod.cash, commandId: 'invalid-time', actualAt: now.subtract(const Duration(days: 1))), throwsStateError);
+    expect((await controller.getOrderPayments(order)).length, 2, reason: 'Failed event validation must roll back its tender');
   });
 }

@@ -1,4 +1,5 @@
 import 'historical_costs.dart';
+import '../payments/payment_event.dart';
 import '../catalog/discount_stack.dart';
 import '../delivery/delivery_controller.dart';
 import 'paisa_engine.dart';
@@ -645,6 +646,16 @@ class OrderAndCheckoutController {
           },
         );
 
+        if (tender.method != PaymentMethod.cod) {
+          await PaymentEvent.record(txn, eventKey: 'tender-$paymentId', kind: 'RECEIPT',
+            amountPaisa: PaisaEngine.rupeesToPaisa(tender.amountTendered) - PaisaEngine.rupeesToPaisa(tender.changeReturned),
+            paymentSource: tender.method == PaymentMethod.cash ? 'DRAWER' : 'BANK',
+            paymentMethod: tender.method.code, recordedBy: cashierId, recordedAt: now,
+            businessDayId: businessDayId, shiftId: shiftId, orderId: orderId, tenderId: paymentId,
+            changePaisa: PaisaEngine.rupeesToPaisa(tender.changeReturned),
+            roundingPaisa: createdPayments.isEmpty ? cashRoundingPaisa : 0,
+            sourceTable: 'order_payments', sourceId: paymentId);
+        }
         createdPayments.add(OrderPayment(
           id: paymentId,
           orderId: orderId,
@@ -1979,6 +1990,42 @@ class OrderAndCheckoutController {
     });
   }
 
+  /// Accepts an independent partial collection in the current Cashier's Shift.
+  /// The original Order's Business Day and Shift remain unchanged.
+  Future<int> recordCashierReceipt({required int orderId, required int shiftId,
+    required int cashierId, required int amountPaisa, required PaymentMethod method,
+    required String commandId, DateTime? actualAt, String? referenceCode}) async {
+    if (amountPaisa <= 0 || commandId.trim().isEmpty || method == PaymentMethod.cod || method == PaymentMethod.split) {
+      throw ArgumentError('A positive manual tender and stable command identity are required.');
+    }
+    return database.transaction((txn) async {
+      await _requireActiveCashier(txn, cashierId);
+      final previous = await txn.query('payment_events', where: 'event_key=?', whereArgs: ['receipt-$commandId']);
+      if (previous.isNotEmpty) {
+        final row = previous.single;
+        if (row['order_id'] != orderId || row['shift_id'] != shiftId || row['recorded_by'] != cashierId || row['amount_paisa'] != amountPaisa || row['payment_method'] != method.code) throw StateError('Receipt retry does not match its original operation.');
+        return row['id'] as int;
+      }
+      final shifts = await txn.query('shifts', where: 'id=? AND staff_id=? AND status=?', whereArgs: [shiftId, cashierId, 'OPEN']);
+      if (shifts.isEmpty) throw StateError('A Cashier-owned open receiving Shift is required.');
+      final orders = await txn.query('orders', where: 'id=?', whereArgs: [orderId]);
+      if (orders.isEmpty || orders.single['payment_status'] != 'COLLECTION_DUE') throw StateError('Only Collection Due orders accept further receipts.');
+      final locked = await txn.rawQuery("SELECT t.id FROM rider_trips t JOIN rider_trip_orders x ON x.trip_id=t.id WHERE x.order_id=? AND t.status='SETTLED'", [orderId]);
+      if (locked.isNotEmpty) throw StateError('Settled Trip Lock prevents direct tender changes.');
+      final payments = await txn.query('order_payments', where: 'order_id=?', whereArgs: [orderId]);
+      final paid = payments.fold<int>(0, (sum,p) => sum + ((p['amount_tendered_paisa'] as int?) ?? PaisaEngine.rupeesToPaisa((p['amount_tendered'] as num).toDouble())) - ((p['change_returned_paisa'] as int?) ?? PaisaEngine.rupeesToPaisa((p['change_returned'] as num?)?.toDouble() ?? 0)));
+      final due = PaisaEngine.rupeesToPaisa((orders.single['grand_total'] as num).toDouble()) - paid;
+      if (amountPaisa > due) throw StateError('Receipt exceeds the remaining Collection Due.');
+      final tender = await txn.insert('order_payments', {'order_id': orderId, 'payment_method': method.code, 'amount_tendered': PaisaEngine.paisaToRupees(amountPaisa), 'amount_tendered_paisa': amountPaisa, 'change_returned': 0, 'change_returned_paisa': 0, 'reference_code': referenceCode});
+      final id = await PaymentEvent.record(txn, eventKey: 'receipt-$commandId', kind: 'RECEIPT', amountPaisa: amountPaisa,
+        paymentSource: method == PaymentMethod.cash ? 'DRAWER' : 'BANK', paymentMethod: method.code,
+        recordedBy: cashierId, recordedAt: DateTime.now().toUtc(), actualAt: actualAt,
+        businessDayId: shifts.single['business_day_id'] as int, shiftId: shiftId, orderId: orderId, tenderId: tender, sourceTable: 'order_payments', sourceId: tender);
+      if (amountPaisa == due) await txn.update('orders', {'payment_status': 'SETTLED'}, where: 'id=?', whereArgs: [orderId]);
+      return id;
+    });
+  }
+
   /// Executes an explicit cashier disbursement action (drawer cash payout or digital refund).
   /// Decouples order reductions/cancellations from cash drawer opening.
   /// Cash refunds insert a `PAY_OUT` movement into `cash_movements` preserving cash drawer variance integrity.
@@ -1991,6 +2038,7 @@ class OrderAndCheckoutController {
     String? referenceCode,
     required String reason,
     String? commandId,
+    DateTime? actualAt,
   }) async {
     if (amountPaisa <= 0) {
       throw ArgumentError('Refund amount must be greater than zero.');
@@ -2006,6 +2054,17 @@ class OrderAndCheckoutController {
     return await database.transaction((txn) async {
       final now = DateTime.now();
       final formattedNow = _formatTimestamp(now);
+
+      final receiving = await txn.query('shifts', where: 'id=? AND staff_id=? AND status=?', whereArgs: [shiftId, cashierId, 'OPEN']);
+      if (receiving.isEmpty) throw StateError('A Cashier-owned open receiving Shift is required.');
+      if (commandId != null) {
+        final previous = await txn.query('payment_events', where: 'event_key=?', whereArgs: ['refund-$commandId']);
+        if (previous.isNotEmpty) {
+          final row = previous.single;
+          if (row['order_id'] != orderId || row['shift_id'] != shiftId || row['recorded_by'] != cashierId || row['amount_paisa'] != -amountPaisa || row['payment_method'] != method.code) throw StateError('Refund retry does not match its original operation.');
+          return RefundResult(orderId: orderId, shiftId: shiftId, cashierId: cashierId, amountPaisa: amountPaisa, method: method, reason: trimmedReason, referenceCode: referenceCode, cashMovementId: row['movement_id'] as int?, paymentStatus: order.paymentStatus, recordedAt: DateTime.parse(row['recorded_at'] as String));
+        }
+      }
 
       int? cashMovementId;
       if (method == PaymentMethod.cash) {
@@ -2026,7 +2085,7 @@ class OrderAndCheckoutController {
 
       // Record refund payment line in order_payments
       // Negative amount records the refund credit
-      await txn.insert(
+      final refundTenderId = await txn.insert(
         PosDatabaseConstants.tableOrderPayments,
         {
           'order_id': orderId,
@@ -2038,6 +2097,13 @@ class OrderAndCheckoutController {
           'reference_code': referenceCode ?? (commandId ?? 'REFUND-$orderId'),
         },
       );
+
+      await PaymentEvent.record(txn, eventKey: commandId == null ? 'tender-$refundTenderId' : 'refund-$commandId', kind: 'REFUND',
+        amountPaisa: -amountPaisa, paymentSource: method == PaymentMethod.cash ? 'DRAWER' : 'BANK', paymentMethod: method.code,
+        recordedBy: cashierId, recordedAt: now, actualAt: actualAt,
+        businessDayId: receiving.single['business_day_id'] as int, shiftId: shiftId,
+        orderId: orderId, tenderId: refundTenderId, movementId: cashMovementId,
+        sourceTable: 'order_payments', sourceId: refundTenderId);
 
       final paymentRows = await txn.query(
         PosDatabaseConstants.tableOrderPayments,
@@ -2118,6 +2184,7 @@ class OrderAndCheckoutController {
     return pending > 0 ? pending : 0;
   }
 }
+
 
 
 
