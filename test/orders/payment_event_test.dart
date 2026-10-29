@@ -23,7 +23,8 @@ void main() {
     final receiving = await db.insert('shifts', {'business_day_id': day, 'staff_id': 2, 'opened_at': opened, 'status': 'OPEN', 'opening_float': 0});
     final order = await db.insert('orders', {'business_day_id': day, 'shift_id': origin, 'cashier_id': 2, 'token_number': 1, 'dining_type': 'TAKEAWAY', 'subtotal': 200, 'grand_total': 200, 'payment_status': 'COLLECTION_DUE', 'created_at': opened});
     final controller = OrderAndCheckoutController(database: db);
-    Future<int> collect() => controller.recordCashierReceipt(orderId: order, shiftId: receiving, cashierId: 2, amountPaisa: 10000, method: PaymentMethod.cash, commandId: 'receipt-1');
+    final actual = now.subtract(const Duration(minutes: 30));
+    Future<int> collect() => controller.recordCashierReceipt(orderId: order, shiftId: receiving, cashierId: 2, amountPaisa: 10000, method: PaymentMethod.cash, commandId: 'receipt-1', actualAt: actual);
     expect(await collect(), await collect());
     final auth = AuthService(database: db)..session.login(Staff.fromMap((await db.query('staff', where: 'id=1')).single));
     final snapshot = await AnalyticsService(database: db, authService: auth).load(AnalyticsQuery(startDate: now, endDateExclusive: now.add(const Duration(days: 1)), live: true));
@@ -31,8 +32,9 @@ void main() {
     expect(row.cells['amount_paisa'], 10000);
     expect(row.cells['originating_shift_id'], origin);
     expect(row.cells['receiving_shift_id'], receiving);
-    expect(row.cells['actual_at'], isNotNull);
+    expect(row.cells['actual_at'], actual.toIso8601String());
     expect(row.cells['recorded_at'], isNotNull);
+    expect(DateTime.parse(row.cells['recorded_at'] as String).isAfter(actual), isTrue);
     final csv = AnalyticsExportService().csv(snapshot, AnalyticsFamily.cash);
     expect(csv, contains('receiving shift id'));
     expect(csv, contains('originating shift id'));
