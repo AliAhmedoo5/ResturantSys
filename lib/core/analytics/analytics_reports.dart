@@ -175,12 +175,12 @@ class _ReportBuilder {
     }
     times.sort();
     final trips = e.get('trips');
-    final due = _sum(valid.where((o) => o['payment_status'] == 'COLLECTION_DUE'), 'grand_total');
+    final due = _integers(valid.where((o) => o['payment_status'] == 'COLLECTION_DUE'), 'collection_due_paisa');
     final metrics = <AnalyticsMetric>[
       _metric('delivery_orders', 'Delivery orders', deliveredOrders.length, unit: AnalyticsUnit.count, explanation: 'Eligible DELIVERY orders in filtered order cohort.'),
       _metric('delivery_fees', 'Recorded delivery fees', _integers(deliveredOrders, 'delivery_fee_paisa'), explanation: 'Eligible filtered delivery order fee snapshots.'),
-      _metric('collection_due', 'Collection Due (selected cohort)', due, explanation: 'Current COLLECTION_DUE eligible order value within selected filtered order Business Days; delivery does not imply collection.'),
-      _metric('all_collection_due', 'Collection Due (all outstanding)', _sum(e.get('all_due'), 'grand_total'), explanation: 'Current installation-wide COLLECTION_DUE orders across all Business Days; date/order filters do not apply.'),
+      _metric('collection_due', 'Collection Due (selected cohort)', due, explanation: 'Remaining payable less net tenders for current COLLECTION_DUE eligible orders within the selected cohort; delivery does not imply collection.'),
+      _metric('all_collection_due', 'Collection Due (all outstanding)', _integers(e.get('all_due'), 'collection_due_paisa'), explanation: 'Current installation-wide COLLECTION_DUE orders across all Business Days; date/order filters do not apply.'),
       _metric('trips', 'Trips (whole selected days)', trips.length, unit: AnalyticsUnit.count, explanation: _globalBasis),
       _metric('unsettled_exposure', 'Unsettled expected COD (selected days)', _integers(trips.where((t) => ['DISPATCHED', 'RETURNED'].contains(t['status'])), 'cash_expected_paisa'), explanation: 'Expected COD in unsettled trips selected by trip Business Day, all orders. Exposure is not proof of customer collection or rider debt.'),
       _metric('all_unsettled_exposure', 'Unsettled expected COD (all outstanding)', _integers(e.get('all_trips'), 'cash_expected_paisa'), explanation: 'Current global expected COD for DISPATCHED/RETURNED trips; not verified cash collected.'),
@@ -592,5 +592,6 @@ class _ReportBuilder {
     } on FormatException { return 'Unreadable snapshot'; }
   }
 }
+
 
 

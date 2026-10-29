@@ -1,6 +1,7 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:resturant_sys/core/database/pos_database_constants.dart';
 import 'business_day.dart';
+import '../payments/payment_event.dart';
 import 'report_export_service.dart';
 import 'report_delivery_service.dart';
 import 'shift.dart';
@@ -780,7 +781,7 @@ class ShiftAndCashController {
     final cashSales=(tenderSalesPaisa['CASH']??0)/100;
     final cardSales=(tenderSalesPaisa['CARD']??0)/100;
     final raastSales=(tenderSalesPaisa['RAAST']??0)/100;
-    final dueRows=await database.rawQuery("SELECT COALESCE(SUM(CAST(ROUND(grand_total*100) AS INTEGER)),0) AS paisa FROM orders WHERE business_day_id=? AND payment_status='COLLECTION_DUE'",[businessDayId]);
+    final dueRows=await database.rawQuery("SELECT COALESCE(SUM($outstandingCollectionPaisaSql),0) AS paisa FROM orders o WHERE o.business_day_id=? AND o.payment_status='COLLECTION_DUE'",[businessDayId]);
     final collectionDuePaisa=(dueRows.single['paisa'] as num).toInt();
 
     // 4. Voids
@@ -950,5 +951,6 @@ class ShiftAndCashController {
     return closedDay;
   }
 }
+
 
 

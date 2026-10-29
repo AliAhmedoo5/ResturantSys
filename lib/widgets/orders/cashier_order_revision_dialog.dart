@@ -457,7 +457,14 @@ class _CashierOrderRevisionDialogState
 
               // Pending refund banner (if refund owed)
               if ((_pendingRefundPaisa ?? 0) > 0)
-                TextField(controller: _refundActualTime, decoration: const InputDecoration(labelText: 'Refund actual time (optional, Pakistan time)', helperText: 'YYYY-MM-DD HH:MM. Blank uses entry time; only the open receiving Shift is allowed.')),
+                Align(alignment: Alignment.centerLeft, child: TextButton(
+                  onPressed: _isSubmitting ? null : () => showDialog<void>(context: context, builder: (context) => AlertDialog(
+                    title: const Text('Refund actual time'),
+                    content: TextField(controller: _refundActualTime, decoration: const InputDecoration(labelText: 'Pakistan time: YYYY-MM-DD HH:MM', helperText: 'Blank uses entry time. The receiving Shift must be open.')),
+                    actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Done'))],
+                  )),
+                  child: const Text('Set late refund actual time (optional)'),
+                )),
               if ((_pendingRefundPaisa ?? 0) > 0)
                 Container(
                   key: const ValueKey('pending_refund_banner'),

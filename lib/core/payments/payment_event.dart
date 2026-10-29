@@ -1,5 +1,11 @@
 import 'package:sqflite_common/sqlite_api.dart';
 
+/// Remaining customer debt. `o` denotes the source Order alias.
+const outstandingCollectionPaisaSql = '''MAX(0,CAST(ROUND(o.grand_total*100) AS INTEGER)-COALESCE((
+  SELECT SUM(COALESCE(due_payment.amount_tendered_paisa,CAST(ROUND(due_payment.amount_tendered*100) AS INTEGER))
+    -COALESCE(due_payment.change_returned_paisa,CAST(ROUND(due_payment.change_returned*100) AS INTEGER)))
+  FROM order_payments due_payment WHERE due_payment.order_id=o.id),0))''';
+
 /// Shared append-only evidence written inside the authorized operation's transaction.
 abstract final class PaymentEvent {
   static Future<int> record(DatabaseExecutor txn, {

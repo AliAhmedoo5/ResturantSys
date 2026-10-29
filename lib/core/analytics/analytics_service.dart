@@ -4,6 +4,7 @@ import 'package:sqflite_common/sqlite_api.dart';
 import '../auth/auth_service.dart';
 import '../auth/staff_role.dart';
 import '../orders/paisa_engine.dart';
+import '../payments/payment_event.dart';
 import '../inventory/stock_count_valuation.dart';
 import 'analytics_models.dart';
 
@@ -49,7 +50,7 @@ class AnalyticsService {
       e.rows[key] = await txn.rawQuery(sql, args);
     }
     await read('days', 'business_days', 'SELECT b.id,b.opened_at,b.closed_at,b.status FROM business_days b WHERE $dayScope ORDER BY b.opened_at', dayArgs);
-    const fields = 'o.id,o.business_day_id,o.shift_id,o.cashier_id,o.token_number,o.dining_type,o.subtotal,o.discount_amount,o.discount_id,o.tax_amount,o.grand_total,o.payment_status,o.token_status,o.cash_rounding_paisa,o.delivery_area_id,o.delivery_area_name_snapshot,o.delivery_fee_paisa,o.customer_phone,o.created_at';
+    const fields = 'o.id,o.business_day_id,o.shift_id,o.cashier_id,o.token_number,o.dining_type,o.subtotal,o.discount_amount,o.discount_id,o.tax_amount,o.grand_total,o.payment_status,o.token_status,o.cash_rounding_paisa,o.delivery_area_id,o.delivery_area_name_snapshot,o.delivery_fee_paisa,o.customer_phone,o.created_at,$outstandingCollectionPaisaSql AS collection_due_paisa';
     final orderFrom = 'FROM orders o JOIN business_days b ON b.id=o.business_day_id WHERE $orderScope';
     await read('orders', 'orders', 'SELECT $fields $orderFrom ORDER BY o.id', orderArgs);
     await read('order_days', 'business_days', 'SELECT DISTINCT b.id,b.opened_at,b.closed_at,b.status FROM business_days b JOIN orders o ON o.business_day_id=b.id WHERE $orderScope ORDER BY b.opened_at,b.id', orderArgs);
@@ -98,7 +99,7 @@ class AnalyticsService {
     await read('token_audit', 'checkout_token_audit', 'SELECT x.id,x.order_id,x.token_number,x.action,x.payment_status,x.revision,x.recorded_at FROM checkout_token_audit x $joinedOrder', orderArgs);
     await read('rounding', 'rounding_variance_ledger', 'SELECT x.id,x.order_id,x.shift_id,x.cash_rounding_paisa,x.created_at FROM rounding_variance_ledger x $joinedOrder', orderArgs);
     await read('stock_alerts', 'checkout_stock_alerts', 'SELECT x.order_id,x.ingredient_id,x.stock_at_checkout,x.created_at FROM checkout_stock_alerts x $joinedOrder', orderArgs);
-    await read('all_due', 'orders', "SELECT id,grand_total FROM orders WHERE payment_status='COLLECTION_DUE'");
+    await read('all_due', 'orders', "SELECT o.id,$outstandingCollectionPaisaSql AS collection_due_paisa FROM orders o WHERE o.payment_status='COLLECTION_DUE'");
     await read('all_trips', 'rider_trips', "SELECT id,cash_expected_paisa FROM rider_trips WHERE status IN ('DISPATCHED','RETURNED')");
     if (!query.live) {
       final duration = _date(query.endDateExclusive).difference(_date(query.startDate));
@@ -155,4 +156,5 @@ DateTime? _karachi(Object? raw) {
   if (parsed == null) return null;
   return parsed.isUtc || RegExp(r'[+-]\d\d:\d\d$').hasMatch(raw) ? parsed.toUtc().add(const Duration(hours: 5)) : DateTime.utc(parsed.year, parsed.month, parsed.day, parsed.hour, parsed.minute, parsed.second);
 }
+
 

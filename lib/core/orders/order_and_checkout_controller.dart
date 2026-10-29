@@ -1998,6 +1998,7 @@ class OrderAndCheckoutController {
     if (amountPaisa <= 0 || commandId.trim().isEmpty || method == PaymentMethod.cod || method == PaymentMethod.split) {
       throw ArgumentError('A positive manual tender and stable command identity are required.');
     }
+    if (method == PaymentMethod.cash && amountPaisa % 100 != 0) throw ArgumentError('Physical cash receipts require whole rupees.');
     return database.transaction((txn) async {
       await _requireActiveCashier(txn, cashierId);
       final previous = await txn.query('payment_events', where: 'event_key=?', whereArgs: ['receipt-$commandId']);

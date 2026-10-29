@@ -40,6 +40,7 @@ void main() {
     expect(csv, contains('originating shift id'));
     expect(csv, contains('receipt-receipt-1'));
     expect((await controller.getOrderPayments(order)).length, 1);
+    expect(snapshot.section(AnalyticsFamily.delivery).metrics.singleWhere((m) => m.id == 'collection_due').value, 10000);
     final shifts = ShiftAndCashController(database: db);
     expect(await shifts.calculateCashSales(origin), 0);
     expect(await shifts.calculateCashSales(receiving), 100);
