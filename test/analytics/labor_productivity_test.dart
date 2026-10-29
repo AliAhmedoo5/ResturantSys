@@ -277,7 +277,7 @@ void main() {
     final operations = OperationsController(db);
     final shifts = ShiftAndCashController(database: db);
 
-    final day = await shifts.openBusinessDay(openedByStaffId: manager['id'] as int, openedAt: DateTime.utc(2026, 10, 15, 6, 0));
+    await shifts.openBusinessDay(openedByStaffId: manager['id'] as int, openedAt: DateTime.utc(2026, 10, 15, 6, 0));
     final kitchenDept = (await db.query('departments', where: "name='Kitchen'")).first['id'] as int;
 
     final cook = await db.insert('staff', {
