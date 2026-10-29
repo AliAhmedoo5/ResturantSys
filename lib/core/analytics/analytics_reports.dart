@@ -9,7 +9,7 @@ class _ReportBuilder {
   late final Set<Object?> validIds = valid.map((o) => o['id']).toSet();
   late final List<_Record> soldItems = e.get('items').where((i) => validIds.contains(i['order_id'])).toList();
   bool get partial => e.query.live || e.get('days').any((d) => d['status'] == 'OPEN');
-  static const _orderBasis = 'Filtered order cohort by Business Day FK. Recorded current valid value includes Collection Due; excludes VOIDED, CANCELLED and REFUNDED. This is not recognized revenue.';
+  String get _orderBasis => 'Filtered order cohort by ${e.query.timeBasis == AnalyticsTimeBasis.businessDay ? 'assigned Business Day FK' : 'actual creation time in Asia/Karachi, inclusive start/exclusive end'}. Recorded current valid value includes Collection Due; excludes VOIDED, CANCELLED and REFUNDED. This is not recognized revenue.';
   static const _globalBasis = 'Selected Business Days, all shifts/domain events. Cashier, shift, Dining Type and payment filters apply only to order-based reports, not these totals.';
   static const _currentBasis = 'Current installation-wide position at refresh; not historical. Order filters do not apply.';
   static const _intervalBasis = 'Timestamp-only events within the union of selected actual Business Day intervals; opening inclusive, closing exclusive. No five-minute extension.';
@@ -26,8 +26,10 @@ class _ReportBuilder {
       'Overview combines explicitly labeled order-cohort, selected-day and current global measures. See each formula for scope.',
       if (e.query.live && !e.get('days').any((d) => d['status'] == 'OPEN')) 'No Business Day is currently open. Historical reporting remains available.',
     ]);
-    return AnalyticsSnapshot(query: e.query, generatedAt: e.now, generatedByStaffId: e.actor, sourceSchemaVersion: e.sourceSchemaVersion, businessDayIds: e.get('days').map((d) => d['id'] as int).toList(), sections: [overview, ...sections], notes: [
-      'Analytics formula version 2; PKR; Asia/Karachi (UTC+05:00). Business dates use Business Day opening date; order/shift/trip FK retains overnight attribution.',
+    return AnalyticsSnapshot(query: e.query, generatedAt: e.now, generatedByStaffId: e.actor, sourceSchemaVersion: e.sourceSchemaVersion, businessDayIds: {...e.get('days').map((d) => d['id'] as int), ...e.get('order_days').map((d) => d['id'] as int)}.toList(), sections: [overview, ...sections], notes: [
+      'Analytics formula version 2; PKR; Order time basis: ${e.query.timeBasis.name}; grouping: ${e.query.grouping.name}; Asia/Karachi (UTC+05:00). Start inclusive; end exclusive. Business Day weekday uses assigned opening date; calendar weekday uses actual creation date. Weeks start Monday; months use local calendar months.',
+      'Non-order ledgers and drawer reconciliation retain Business Day opening-date scope. Calendar Order activity does not change their scope or Order assignments.',
+
       'Exploratory view over current committed local records. Immutable sealed Z-reports retain their original content hash and revision.',
       'Legacy REAL rupees are normalized once per source amount through PaisaEngine; integer-paisa columns are preferred. Historical floating-point precision is not restored.',
       _intervalBasis,
@@ -45,15 +47,7 @@ class _ReportBuilder {
     final value = _sum(valid, 'grand_total');
     final collectedOrders = orders.where(_collected).map((o) => o['id']).toSet();
     final payments = e.get('payments').where((p) => collectedOrders.contains(p['order_id']) && (e.query.paymentMethod == null || p['payment_method'] == e.query.paymentMethod)).toList();
-    final rows = <AnalyticsRow>[];
-    for (final day in e.get('days')) {
-      final cohort = valid.where((o) => o['business_day_id'] == day['id']).toList();
-      rows.add(_row('business_days', day, {'business_date': _sqlDate(_karachi(day['opened_at'])!), 'orders': cohort.length, 'recorded_value_paisa': _sum(cohort, 'grand_total')}));
-    }
-    // Multiple Business Days can open on the same business date. Merge the chart
-    // point while retaining every contributing source ID in the row.
-    final daily = <String, List<AnalyticsRow>>{};
-    for (final row in rows) { daily.putIfAbsent(row.cells['business_date'] as String, () => []).add(row); }
+    final daily = _orderPeriods();
     final metrics = <AnalyticsMetric>[
       _metric('recorded_value', 'Recorded order value', value, explanation: _orderBasis, previous: _sum(prior, 'grand_total')),
       _metric('orders', 'Eligible orders', valid.length, unit: AnalyticsUnit.count, explanation: _orderBasis, previous: prior.length),
@@ -81,12 +75,57 @@ class _ReportBuilder {
       dimensions.add(AnalyticsRow(id: 'hour-${hour.key}', sourceType: 'orders', sourceId: hour.value.map((o) => o['id']).join(','), cells: {'kind': 'Hourly breakdown', 'dimension': 'Creation hour (Karachi)', 'dimension_value': hour.key, 'orders': hour.value.length, 'recorded_value_paisa': _sum(hour.value, 'grand_total')}));
     }
     return _section(AnalyticsFamily.sales, 'Sales', metrics, [
-      ...daily.entries.map((entry) => AnalyticsRow(id: 'business-date-${entry.key}', sourceType: 'business_days', sourceId: entry.value.map((r) => r.sourceId).join(','), cells: {'kind': 'Daily total', 'business_date': entry.key, 'orders': entry.value.fold<int>(0, (s, r) => s + (r.cells['orders'] as int)), 'recorded_value_paisa': entry.value.fold<int>(0, (s, r) => s + (r.cells['recorded_value_paisa'] as int))})),
+      ...daily,
       ...dimensions,
-    ], ['kind', 'business_date', 'dimension', 'dimension_value', 'orders', 'recorded_value_paisa', 'collected_paisa'], [_orderBasis, 'Daily rows and chart use these identical values. Source IDs identify contributing Business Days; order detail is in Order operations.', 'Historical comparisons use the preceding equal opening-date window with identical order filters. A zero prior baseline has no percentage.', 'Daily totals, each Dining Type/cashier/shift/hour breakdown and tender breakdown are independent views; never sum these different row kinds together.']);
+    ], ['kind', 'business_date', 'business_day_id', 'period_start', 'time_basis', 'grouping', 'dimension', 'dimension_value', 'orders', 'recorded_value_paisa', 'collected_paisa'], [_orderBasis, 'Daily rows and chart use these identical values. Source IDs identify contributing Business Days; order detail is in Order operations.', 'Historical comparisons use the preceding equal opening-date window with identical order filters. A zero prior baseline has no percentage.', 'Daily totals, each Dining Type/cashier/shift/hour breakdown and tender breakdown are independent views; never sum these different row kinds together.']);
+  }
+
+  List<AnalyticsRow> _orderPeriods() {
+    final days = {for (final d in [...e.get('days'), ...e.get('order_days')]) d['id']: d};
+    final groups = <String, List<_Record>>{};
+    final starts = <String, String>{};
+    String? keyFor(_Record order) {
+      final operational = e.query.timeBasis == AnalyticsTimeBasis.businessDay;
+      final time = _karachi(operational ? days[order['business_day_id']]?['opened_at'] : order['created_at']);
+      if (time == null) return null;
+      final date = _date(time);
+      final start = switch (e.query.grouping) {
+        AnalyticsGrouping.day => date,
+        AnalyticsGrouping.week => date.subtract(Duration(days: date.weekday - DateTime.monday)),
+        AnalyticsGrouping.month => DateTime.utc(date.year, date.month),
+      };
+      final key = operational && e.query.grouping == AnalyticsGrouping.day
+          ? 'day-${order['business_day_id']}' : _sqlDate(start);
+      starts[key] = _sqlDate(start);
+      return key;
+    }
+    if (e.query.timeBasis == AnalyticsTimeBasis.businessDay) {
+      for (final day in e.get('days')) {
+        final key = keyFor({'business_day_id': day['id']});
+        if (key != null) groups.putIfAbsent(key, () => []);
+      }
+    }
+    for (final order in valid) {
+      final key = keyFor(order);
+      if (key != null) groups.putIfAbsent(key, () => []).add(order);
+    }
+    final keys = groups.keys.toList()..sort((a,b) {
+      final date = starts[a]!.compareTo(starts[b]!);
+      return date != 0 ? date : a.compareTo(b);
+    });
+    return [for (final key in keys) AnalyticsRow(id: 'order-period-$key',
+      sourceType: e.query.timeBasis == AnalyticsTimeBasis.businessDay ? 'business_days' : 'orders',
+      sourceId: e.query.timeBasis == AnalyticsTimeBasis.businessDay
+          ? (key.startsWith('day-') ? key.substring(4) : groups[key]!.map((o) => o['business_day_id']).toSet().join(','))
+          : groups[key]!.map((o) => o['id']).join(','),
+      cells: {'kind': 'Daily total', 'business_date': starts[key], 'period_start': starts[key],
+        'business_day_id': key.startsWith('day-') ? int.parse(key.substring(4)) : null,
+        'time_basis': e.query.timeBasis.name, 'grouping': e.query.grouping.name,
+        'orders': groups[key]!.length, 'recorded_value_paisa': _sum(groups[key]!, 'grand_total')})];
   }
 
   AnalyticsSection _orders() {
+    final daysById = {for (final d in [...e.get('days'), ...e.get('order_days')]) d['id']: d};
     final revisions = e.get('revisions');
     final revisedIds = revisions.map((r) => r['order_id']).toSet();
     final cancelled = {...orders.where((o) => ['CANCELLED', 'VOIDED', 'REFUNDED'].contains(o['payment_status'])).map((o) => o['id']), ...revisions.where((r) => r['action'] == 'CANCEL').map((r) => r['order_id'])};
@@ -117,9 +156,9 @@ class _ReportBuilder {
       }
     }
     return _section(AnalyticsFamily.orders, 'Order operations', metrics, [
-      ...orders.map((o) => _row('orders', o, {'order_id': o['id'], 'business_day_id': o['business_day_id'], 'cashier_id': o['cashier_id'], 'shift_id': o['shift_id'], 'token': o['token_number'], 'dining_type': o['dining_type'], 'payment_status': o['payment_status'], 'token_status': o['token_status'], 'recorded_value_paisa': _money(o, 'grand_total'), 'created_at': o['created_at']})),
+      ...orders.map((o) => _row('orders', o, {'order_id': o['id'], 'business_day_id': o['business_day_id'], 'cashier_id': o['cashier_id'], 'shift_id': o['shift_id'], 'token': o['token_number'], 'dining_type': o['dining_type'], 'payment_status': o['payment_status'], 'token_status': o['token_status'], 'recorded_value_paisa': _money(o, 'grand_total'), 'created_at': o['created_at'], 'assigned_business_date': _karachi(daysById[o['business_day_id']]?['opened_at']) == null ? null : _sqlDate(_karachi(daysById[o['business_day_id']]!['opened_at'])!)})),
       ...revisions.map((r) => _row('order_revisions', r, {'order_id': r['order_id'], 'revision': r['revision_no'], 'action': r['action'], 'reason': _safeText(r['reason']), 'cashier_id': r['cashier_id'], 'delta_paisa': r['money_delta_paisa'], 'created_at': r['created_at_utc']})),
-    ], ['order_id', 'business_day_id', 'token', 'cashier_id', 'shift_id', 'dining_type', 'payment_status', 'token_status', 'recorded_value_paisa', 'action', 'revision', 'delta_paisa', 'reason', 'created_at'], [_orderBasis, 'Order and revision source rows are separate kinds. Their counts/amounts must not be added together.']);
+    ], ['order_id', 'business_day_id', 'assigned_business_date', 'token', 'cashier_id', 'shift_id', 'dining_type', 'payment_status', 'token_status', 'recorded_value_paisa', 'action', 'revision', 'delta_paisa', 'reason', 'created_at'], [_orderBasis, 'Order and revision source rows are separate kinds. Their counts/amounts must not be added together.']);
   }
 
   AnalyticsSection _delivery() {

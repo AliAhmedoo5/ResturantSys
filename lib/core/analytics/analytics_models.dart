@@ -7,6 +7,8 @@ part 'business_overview_data.dart';
 enum AnalyticsFamily { overview, sales, orders, delivery, customers, menu, inventory, procurement, suppliers, cash, expenses, staff, profitability, audit }
 enum AnalyticsUnit { count, paisa, percent, decimal, minutes }
 enum AnalyticsQuality { complete, estimated, missing, notApplicable }
+enum AnalyticsTimeBasis { businessDay, calendarTime }
+enum AnalyticsGrouping { day, week, month }
 
 class AnalyticsMetric {
   const AnalyticsMetric({required this.id, required this.label, this.value, required this.unit, required this.explanation, this.quality = AnalyticsQuality.complete, this.sampleCount, this.populationCount, this.changePercent, this.changeAbsolute});
@@ -46,20 +48,22 @@ class AnalyticsSection {
 const _unchanged = Object();
 
 class AnalyticsQuery {
-  AnalyticsQuery({required this.startDate, required this.endDateExclusive, this.live = false, this.cashierId, this.shiftId, this.diningType, this.paymentMethod}) {
+  AnalyticsQuery({required this.startDate, required this.endDateExclusive, this.live = false, this.cashierId, this.shiftId, this.diningType, this.paymentMethod, this.timeBasis = AnalyticsTimeBasis.businessDay, this.grouping = AnalyticsGrouping.day}) {
     if (!startDate.isBefore(endDateExclusive)) throw ArgumentError('Business Day range must have start < end.');
     if (cashierId != null && cashierId! <= 0 || shiftId != null && shiftId! <= 0) throw ArgumentError('Staff and shift IDs must be positive.');
   }
   final DateTime startDate, endDateExclusive;
   final bool live;
+  final AnalyticsTimeBasis timeBasis;
+  final AnalyticsGrouping grouping;
   final int? cashierId, shiftId;
   final String? diningType, paymentMethod;
   bool get hasOrderFilters => cashierId != null || shiftId != null || diningType != null || paymentMethod != null;
-  AnalyticsQuery copyWith({DateTime? startDate, DateTime? endDateExclusive, bool? live, Object? cashierId = _unchanged, Object? shiftId = _unchanged, Object? diningType = _unchanged, Object? paymentMethod = _unchanged}) => AnalyticsQuery(startDate: startDate ?? this.startDate, endDateExclusive: endDateExclusive ?? this.endDateExclusive, live: live ?? this.live, cashierId: identical(cashierId, _unchanged) ? this.cashierId : cashierId as int?, shiftId: identical(shiftId, _unchanged) ? this.shiftId : shiftId as int?, diningType: identical(diningType, _unchanged) ? this.diningType : diningType as String?, paymentMethod: identical(paymentMethod, _unchanged) ? this.paymentMethod : paymentMethod as String?);
+  AnalyticsQuery copyWith({DateTime? startDate, DateTime? endDateExclusive, bool? live, AnalyticsTimeBasis? timeBasis, AnalyticsGrouping? grouping, Object? cashierId = _unchanged, Object? shiftId = _unchanged, Object? diningType = _unchanged, Object? paymentMethod = _unchanged}) => AnalyticsQuery(startDate: startDate ?? this.startDate, endDateExclusive: endDateExclusive ?? this.endDateExclusive, live: live ?? this.live, timeBasis: timeBasis ?? this.timeBasis, grouping: grouping ?? this.grouping, cashierId: identical(cashierId, _unchanged) ? this.cashierId : cashierId as int?, shiftId: identical(shiftId, _unchanged) ? this.shiftId : shiftId as int?, diningType: identical(diningType, _unchanged) ? this.diningType : diningType as String?, paymentMethod: identical(paymentMethod, _unchanged) ? this.paymentMethod : paymentMethod as String?);
   @override
-  bool operator ==(Object other) => other is AnalyticsQuery && startDate == other.startDate && endDateExclusive == other.endDateExclusive && live == other.live && cashierId == other.cashierId && shiftId == other.shiftId && diningType == other.diningType && paymentMethod == other.paymentMethod;
+  bool operator ==(Object other) => other is AnalyticsQuery && startDate == other.startDate && endDateExclusive == other.endDateExclusive && live == other.live && timeBasis == other.timeBasis && grouping == other.grouping && cashierId == other.cashierId && shiftId == other.shiftId && diningType == other.diningType && paymentMethod == other.paymentMethod;
   @override
-  int get hashCode => Object.hash(startDate, endDateExclusive, live, cashierId, shiftId, diningType, paymentMethod);
+  int get hashCode => Object.hash(startDate, endDateExclusive, live, cashierId, shiftId, diningType, paymentMethod, timeBasis, grouping);
 }
 
 class AnalyticsSnapshot {
