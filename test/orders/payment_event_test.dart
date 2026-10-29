@@ -5,6 +5,7 @@ import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
 import 'package:resturant_sys/core/orders/payment_method.dart';
 import 'package:resturant_sys/core/analytics/analytics_models.dart';
 import 'package:resturant_sys/core/analytics/analytics_service.dart';
+import 'package:resturant_sys/core/analytics/analytics_export_service.dart';
 import 'package:resturant_sys/core/auth/auth_service.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
@@ -32,6 +33,10 @@ void main() {
     expect(row.cells['receiving_shift_id'], receiving);
     expect(row.cells['actual_at'], isNotNull);
     expect(row.cells['recorded_at'], isNotNull);
+    final csv = AnalyticsExportService().csv(snapshot, AnalyticsFamily.cash);
+    expect(csv, contains('receiving shift id'));
+    expect(csv, contains('originating shift id'));
+    expect(csv, contains('receipt-receipt-1'));
     expect((await controller.getOrderPayments(order)).length, 1);
     final shifts = ShiftAndCashController(database: db);
     expect(await shifts.calculateCashSales(origin), 0);

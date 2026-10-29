@@ -2119,7 +2119,7 @@ class OrderAndCheckoutController {
       final grandTotalPaisa = PaisaEngine.rupeesToPaisa(order.grandTotal);
       String updatedStatus = order.paymentStatus;
       if (netPaidPaisa <= grandTotalPaisa) {
-        updatedStatus = grandTotalPaisa == 0 ? 'CANCELLED' : 'SETTLED';
+        updatedStatus = grandTotalPaisa == 0 ? 'CANCELLED' : netPaidPaisa < grandTotalPaisa ? 'COLLECTION_DUE' : 'SETTLED';
         await txn.update(
           PosDatabaseConstants.tableOrders,
           {'payment_status': updatedStatus},
