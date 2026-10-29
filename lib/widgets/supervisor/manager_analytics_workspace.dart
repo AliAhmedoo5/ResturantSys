@@ -119,7 +119,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
   AnalyticsQuery _withDates(DateTime start, DateTime end, {required bool live}) =>
       AnalyticsQuery(startDate: start, endDateExclusive: end, live: live,
         cashierId: _query.cashierId, shiftId: _query.shiftId,
-        diningType: _query.diningType, paymentMethod: _query.paymentMethod);
+        diningType: _query.diningType, paymentMethod: _query.paymentMethod, timeBasis: _query.timeBasis, grouping: _query.grouping);
 
   Future<void> _selectPreset(String? value) async {
     if (value == null) return;
@@ -128,7 +128,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
         firstDate: DateTime(2000), lastDate: _today,
         initialDateRange: DateTimeRange(start: _query.startDate,
           end: _query.endDateExclusive.subtract(const Duration(days: 1))),
-        helpText: 'Select Business Day opening dates (inclusive)');
+        helpText: _query.timeBasis == AnalyticsTimeBasis.businessDay ? 'Select Business Day opening dates (inclusive)' : 'Select Karachi calendar dates (inclusive)');
       if (range == null || !mounted) return;
       setState(() => _preset = value);
       _changeQuery(_withDates(range.start, range.end.add(const Duration(days: 1)), live: false));
@@ -145,7 +145,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
     _changeQuery(AnalyticsQuery(startDate: _query.startDate,
       endDateExclusive: _query.endDateExclusive, live: _query.live,
       cashierId: int.tryParse(_cashier.text.trim()), shiftId: int.tryParse(_shift.text.trim()),
-      diningType: _dining, paymentMethod: _payment));
+      diningType: _dining, paymentMethod: _payment, timeBasis: _query.timeBasis, grouping: _query.grouping));
   }
 
   void _selectReport(AnalyticsFamily family) {
@@ -334,7 +334,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
         )),
         SizedBox(width: compact ? 155 : 190, child: DropdownButtonFormField<String>(
           key: const ValueKey('analytics_period'), value: _preset, isExpanded: true,
-          decoration: const InputDecoration(labelText: 'Business Day period', isDense: true, border: OutlineInputBorder()),
+          decoration: InputDecoration(labelText: _query.timeBasis == AnalyticsTimeBasis.businessDay ? 'Business Day period' : 'Calendar Order period', isDense: true, border: const OutlineInputBorder()),
           items: const [
             DropdownMenuItem(value: 'live', child: Text('Active day')),
             DropdownMenuItem(value: 'today', child: Text('Today')),
@@ -343,6 +343,22 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
             DropdownMenuItem(value: 'month', child: Text('Last 30 dates')),
             DropdownMenuItem(value: 'custom', child: Text('Custom rangeâ€¦')),
           ], onChanged: _selectPreset,
+        )),
+        SizedBox(width: 185, child: DropdownButtonFormField<AnalyticsTimeBasis>(
+          key: const ValueKey('analytics_time_basis'), value: _query.timeBasis,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'Order time basis', isDense: true, border: OutlineInputBorder()),
+          items: const [DropdownMenuItem(value: AnalyticsTimeBasis.businessDay, child: Text('Business Day')),
+            DropdownMenuItem(value: AnalyticsTimeBasis.calendarTime, child: Text('Calendar time'))],
+          onChanged: (value) { if (value != null) _changeQuery(_query.copyWith(timeBasis: value)); },
+        )),
+        SizedBox(width: 140, child: DropdownButtonFormField<AnalyticsGrouping>(
+          key: const ValueKey('analytics_grouping'), value: _query.grouping, isExpanded: true,
+          decoration: const InputDecoration(labelText: 'Order grouping', isDense: true, border: OutlineInputBorder()),
+          items: const [DropdownMenuItem(value: AnalyticsGrouping.day, child: Text('Day')),
+            DropdownMenuItem(value: AnalyticsGrouping.week, child: Text('Week (Mon)')),
+            DropdownMenuItem(value: AnalyticsGrouping.month, child: Text('Month'))],
+          onChanged: (value) { if (value != null) _changeQuery(_query.copyWith(grouping: value)); },
         )),
         if (compact) ..._quickFilterFields(compact: true),
         IconButton.outlined(key: const ValueKey('analytics_refresh'), tooltip: 'Refresh analytics',
@@ -363,6 +379,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
         ' â€¢ Asia/Karachi â€¢ ${_query.live ? 'Active Business Day' : '${DateFormat('dd MMM yyyy').format(_query.startDate)} to ${DateFormat('dd MMM yyyy').format(_query.endDateExclusive)} (end exclusive)'}'
         '${snapshot == null ? '' : ' â€¢ ${snapshot.businessDayIds.length} Business Days'}',
         style: const TextStyle(color: StreetFoodMafiaColors.secondaryText, fontSize: 12)),
+      Text('Order activity: ${_query.timeBasis == AnalyticsTimeBasis.businessDay ? 'assigned Business Day weekday' : 'actual calendar weekday'} • ${_query.grouping.name} • weeks start Monday • local calendar months. Other ledgers retain Business Day scope.', style: const TextStyle(fontSize: 12)),
       if (snapshot != null && _family != AnalyticsFamily.overview) Text(
         'Updated ${DateFormat('dd MMM yyyy HH:mm:ss').format(snapshot.generatedAt.isUtc ? snapshot.generatedAt.add(const Duration(hours: 5)) : snapshot.generatedAt)}'
         ' â€¢ ${snapshot.businessDayIds.length} Business Days in selection',
