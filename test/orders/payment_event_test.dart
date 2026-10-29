@@ -24,7 +24,7 @@ void main() {
     Future<int> collect() => controller.recordCashierReceipt(orderId: order, shiftId: receiving, cashierId: 2, amountPaisa: 10000, method: PaymentMethod.cash, commandId: 'receipt-1');
     expect(await collect(), await collect());
     final auth = AuthService(database: db)..session.login(Staff.fromMap((await db.query('staff', where: 'id=1')).single));
-    final snapshot = await AnalyticsService(database: db, authService: auth).load(AnalyticsQuery(live: true));
+    final snapshot = await AnalyticsService(database: db, authService: auth).load(AnalyticsQuery(startDate: now, endDateExclusive: now.add(const Duration(days: 1)), live: true));
     final row = snapshot.section(AnalyticsFamily.cash).rows.singleWhere((r) => r.sourceType == 'payment_events');
     expect(row.cells['amount_paisa'], 10000);
     expect(row.cells['originating_shift_id'], origin);
