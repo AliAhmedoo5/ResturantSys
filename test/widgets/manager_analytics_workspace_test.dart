@@ -293,10 +293,12 @@ void main() {
     expect(find.text('Positive ID required'), findsOneWidget);
     expect(requested!.cashierId, isNull);
     await tester.enterText(find.byKey(const ValueKey('analytics_cashier')), '7');
+    await tester.ensureVisible(find.byKey(const ValueKey('analytics_apply_filters')));
     await tester.tap(find.byKey(const ValueKey('analytics_apply_filters')));
     await tester.pumpAndSettle();
     expect(requested!.cashierId, 7);
     expect(find.textContaining('Filters applied'), findsOneWidget);
+    await tester.ensureVisible(find.text('Clear'));
     await tester.tap(find.text('Clear'));
     await tester.pumpAndSettle();
     expect(requested!.hasOrderFilters, isFalse);
