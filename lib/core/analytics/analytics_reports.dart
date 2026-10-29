@@ -84,7 +84,9 @@ class _ReportBuilder {
     final periodDays = <String, Set<Object?>>{};
     String? keyFor(_Record order) {
       final operational = e.query.timeBasis == AnalyticsTimeBasis.businessDay;
-      final time = _karachi(operational ? days[order['business_day_id']]?['opened_at'] : order['created_at']);
+      final assignedDay = days[order['business_day_id']];
+      final assignedOpening = assignedDay?['opened_at'];
+      final time = _karachi(operational ? assignedOpening : order['created_at']);
       if (time == null) return null;
       final date = _date(time);
       final start = switch (e.query.grouping) {
@@ -522,9 +524,9 @@ class _ReportBuilder {
     ], rows, ['kind', 'business_day_id', 'order_id', 'shift_id', 'ingredient_id', 'token', 'revision', 'action', 'reason', 'staff_id', 'delta_paisa', 'hash', 'channel', 'status', 'attempts', 'stock_at_checkout', 'created_at'], ['Order revisions/tokens/rounding/checkout alerts use filtered order cohort. Report runs/outbox use whole selected Business Days. Delivery audit uses selected actual intervals.', 'Immutable Z-report provenance is shown; this explorer never rewrites snapshots. Sensitive payloads, errors, recipients, credentials and raw customer contact fields are excluded.']);
   }
 
-  AnalyticsMetric _metric(String id, String label, num value, {AnalyticsUnit unit = AnalyticsUnit.paisa, String explanation = _orderBasis, num? previous, bool unavailable = false, AnalyticsQuality unavailableQuality = AnalyticsQuality.notApplicable}) {
+  AnalyticsMetric _metric(String id, String label, num value, {AnalyticsUnit unit = AnalyticsUnit.paisa, String? explanation, num? previous, bool unavailable = false, AnalyticsQuality unavailableQuality = AnalyticsQuality.notApplicable}) {
     final difference = !partial && !unavailable && previous != null ? value - previous : null;
-    return AnalyticsMetric(id: id, label: label, value: unavailable ? null : value, unit: unit, explanation: explanation,
+    return AnalyticsMetric(id: id, label: label, value: unavailable ? null : value, unit: unit, explanation: explanation ?? _orderBasis,
       quality: unavailable ? unavailableQuality : AnalyticsQuality.complete,
       changeAbsolute: difference,
       changePercent: difference != null && previous != null && previous != 0 ? difference / previous.abs() * 100 : null);
