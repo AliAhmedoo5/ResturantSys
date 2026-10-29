@@ -13,7 +13,7 @@ import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
 
 void main() {
   setUpAll(sqfliteFfiInit);
-  for (final target in ['category', 'menu item', 'deal']) {
+  for (final target in ['category', 'menu item', 'deal', 'category upgrade']) {
     test('deletes $target after day close without changing order history', () async {
       final directory = await Directory.systemTemp.createTemp('catalog_delete_');
       final pos = PosDatabase(factory: databaseFactoryFfi, customPath: '${directory.path}/pos.db');
@@ -21,7 +21,19 @@ void main() {
         await pos.close();
         await directory.delete(recursive: true);
       });
-      final db = await pos.initialize();
+      var db = await pos.initialize();
+      if (target == 'category upgrade') {
+        // Restore the actual v21 guard before exercising the versioned upgrade.
+        await db.execute('DROP TRIGGER closed_order_items_UPDATE');
+        await db.execute('''CREATE TRIGGER closed_order_items_UPDATE BEFORE UPDATE ON order_items
+          WHEN EXISTS(SELECT 1 FROM orders o JOIN business_days b ON b.id=o.business_day_id
+            WHERE o.id=OLD.order_id AND b.status='CLOSED')
+          BEGIN SELECT RAISE(ABORT,'Business Day is permanently closed'); END''');
+        await db.setVersion(21);
+        await pos.close();
+        db = await pos.initialize();
+        expect(await db.getVersion(), 22);
+      }
       final catalog = CatalogAndRecipeController(database: db);
       final shifts = ShiftAndCashController(database: db);
       final orders = OrderAndCheckoutController(database: db);
@@ -43,7 +55,18 @@ void main() {
       await shifts.closeBusinessDay(closedByStaffId: 1, autoLockActiveShifts: true);
       final history = await db.query('order_items');
       final reports = await db.query('report_runs');
+      final lineId = history.single['id'];
       if (target == 'category') {
+        // Each receipt column stays immutable, including nullable snapshots.
+        for (final entry in history.single.entries) {
+          await expectLater(db.update('order_items', {
+            entry.key: entry.value == null ? 'changed' : null,
+          }, where: 'id = ?', whereArgs: [lineId]),
+            throwsA(predicate((error) => error.toString().contains('Business Day is permanently closed'))),
+            reason: '${entry.key} must remain protected while its catalog record exists');
+        }
+      }
+      if (target.startsWith('category')) {
         await catalog.deleteCategory(category.id);
         expect(await catalog.getCategories(), isEmpty);
       } else if (target == 'menu item') {
@@ -61,6 +84,9 @@ void main() {
       expect(await db.query('order_items'), [for (final row in history) {...row, reference: null}]);
       expect(await db.query('report_runs'), reports);
       expect(await db.rawQuery('PRAGMA foreign_key_check'), isEmpty);
+      await expectLater(db.update('order_items', {'quantity': 2}, where: 'id = ?', whereArgs: [lineId]),
+        throwsA(predicate((error) => error.toString().contains('Business Day is permanently closed'))));
+      await expectLater(db.delete('order_items', where: 'id = ?', whereArgs: [lineId]), throwsA(isA<DatabaseException>()));
     });
   }
 }

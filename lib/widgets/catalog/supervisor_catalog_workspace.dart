@@ -150,6 +150,21 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
   // Category Actions
   // ---------------------------------------------------------------------------
 
+  Future<void> _deleteCatalogRecord(Future<void> Function() delete, String label) async {
+    try {
+      await delete();
+      if (mounted) await _loadAllCatalogData();
+    } catch (error) {
+      if (!mounted) return;
+      final message = error is StateError ? error.message
+          : 'Could not delete $label. It may be linked to protected records. Please try again.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(message),
+        backgroundColor: WarmCounterColors.lightDestructiveAction,
+      ));
+    }
+  }
+
   void _showAddCategoryDialog() {
     showDialog<void>(
       context: context,
@@ -226,13 +241,18 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
       ),
     );
 
-    if (confirmed == true) {
+    if (confirmed == true && mounted) {
       if (widget.controller != null) {
-        await widget.controller!.deleteCategory(category.id);
-        await _loadAllCatalogData();
+        await _deleteCatalogRecord(() async {
+          await widget.controller!.deleteCategory(category.id);
+          if (_menuItemCategoryFilter == category.id) _menuItemCategoryFilter = null;
+        }, 'category');
       } else {
         setState(() {
           _categories.removeWhere((c) => c.id == category.id);
+          final itemIds = _allMenuItems.where((item) => item.categoryId == category.id).map((item) => item.id).toSet();
+          _removePreviewMenuItems(itemIds);
+          if (_menuItemCategoryFilter == category.id) _menuItemCategoryFilter = null;
         });
       }
     }
@@ -241,6 +261,13 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
   // ---------------------------------------------------------------------------
   // Menu Item Actions
   // ---------------------------------------------------------------------------
+
+  void _removePreviewMenuItems(Set<int> ids) {
+    _allMenuItems.removeWhere((item) => ids.contains(item.id));
+    _menuItems.removeWhere((item) => ids.contains(item.id));
+    _modifiers.removeWhere((modifier) => ids.contains(modifier.menuItemId));
+    _modifierGroups.removeWhere((group) => ids.contains(group.menuItemId));
+  }
 
   void _showAddMenuItemDialog() {
     if (_categories.isEmpty) {
@@ -373,13 +400,12 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
       ),
     );
 
-    if (confirmed == true) {
+    if (confirmed == true && mounted) {
       if (widget.controller != null) {
-        await widget.controller!.deleteMenuItem(item.id);
-        await _loadAllCatalogData();
+        await _deleteCatalogRecord(() => widget.controller!.deleteMenuItem(item.id), 'menu item');
       } else {
         setState(() {
-          _menuItems.removeWhere((m) => m.id == item.id);
+          _removePreviewMenuItems({item.id});
         });
       }
     }
@@ -479,7 +505,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Raw Ingredient'),
-        content: Text('Delete "${ingredient.name}" from kitchen inventory? Cannot be deleted if used in an active recipe.'),
+        content: Text('Delete "${ingredient.name}" from kitchen inventory? Ingredients linked to recipes or inventory and cost history must be retained.'),
         actions: [
           TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
           ElevatedButton(
@@ -491,7 +517,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
       ),
     );
 
-    if (confirmed == true) {
+    if (confirmed == true && mounted) {
       if (widget.controller != null) {
         try {
           await widget.controller!.deleteRawIngredient(ingredient.id);
@@ -500,7 +526,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Cannot delete ingredient: it is linked to one or more active recipes.'),
+                content: Text('Cannot delete ingredient: it may be linked to recipes or protected inventory and cost history.'),
                 backgroundColor: WarmCounterColors.lightDestructiveAction,
               ),
             );
@@ -686,10 +712,9 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
       ),
     );
 
-    if (confirmed == true) {
+    if (confirmed == true && mounted) {
       if (widget.controller != null) {
-        await widget.controller!.deleteModifier(modifier.id);
-        await _loadAllCatalogData();
+        await _deleteCatalogRecord(() => widget.controller!.deleteModifier(modifier.id), 'modifier');
       } else {
         setState(() {
           _modifiers.removeWhere((m) => m.id == modifier.id);
@@ -785,11 +810,12 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
       ),
     );
 
-    if (confirmed == true) {
+    if (confirmed == true && mounted) {
       if (widget.controller != null) {
-        if (widget.managerId == null) throw StateError('Manager session required.');
-        await widget.controller!.deleteManagedDiscount(managerId: widget.managerId!, id: preset.id);
-        await _loadAllCatalogData();
+        await _deleteCatalogRecord(() async {
+          if (widget.managerId == null) throw StateError('Manager session required.');
+          await widget.controller!.deleteManagedDiscount(managerId: widget.managerId!, id: preset.id);
+        }, 'discount preset');
       } else {
         setState(() {
           _discounts.removeWhere((d) => d.id == preset.id);
