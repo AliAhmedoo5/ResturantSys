@@ -32,7 +32,7 @@ Unknown due dates remain unknown. New supplier overpayments are blocked.
 Manager Portal → **Payroll** includes staff without POS login and retains inactive
 staff history. Configure an effective monthly salary in YYYY-MM, then manually
 accrue a period. Blank accrual amount uses the full configured salary; an explicit
-amount permits approved proration with a reason, without an assumed day divisor.
+amount permits approved proration with a reason, using the calendar-day divisor policy in [ADR-0020](adr/0020-earned-period-payroll-and-labor-allocation.md).
 Salary rates are immutable and cannot change already accrued periods.
 
 Post advances, recover them explicitly against accrued pay, and make partial
@@ -46,7 +46,7 @@ and recoveries must be reversed first if needed to keep balances nonnegative.
 Reversals keep original entries and reasons. A drawer-funded payment reversal
 requires returned cash and the current open drawer; it never changes a closed
 shift. Accrual recognizes salary expense; payment and recovery do not recognize
-it a second time.
+it a second time. Under [ADR-0020](adr/0020-earned-period-payroll-and-labor-allocation.md), salary expense is recognized strictly in its earned period (YYYY-MM), while salary payments appear in money flow on their actual disbursement date. Cashier shift register duration is strictly distinguished from worker attendance.
 
 ## Expenses
 
