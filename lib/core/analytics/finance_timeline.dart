@@ -5,7 +5,7 @@ part of 'analytics_service.dart';
 class _FinanceTimeline {
   _FinanceTimeline(this.e);
   final _Evidence e;
-  static const keys = ['event_kind', 'payment_source', 'actual_at', 'recorded_at',
+  static const keys = ['event_kind', 'payment_source', 'actual_at', 'recorded_at', 'actual_at_utc', 'recorded_at_utc',
     'recorded_by', 'recorded_by_name_snapshot', 'shift_owner_id',
     'shift_owner_name_snapshot', 'approved_by', 'source_table', 'source_id',
     'movement_id', 'time_coverage'];
@@ -53,11 +53,12 @@ class _FinanceTimeline {
         'kind': 'Finance payment', 'event_kind': r['kind'],
         'amount_paisa': r['amount_paisa'], 'payment_source': r['payment_source'],
         'business_day_id': r['business_day_id'], 'shift_id': r['shift_id'],
-        'shift_owner_id': shift?['staff_id'],
+        'shift_owner_id': r['shift_owner_id'] ?? shift?['staff_id'],
         'shift_owner_name_snapshot': r['shift_owner_name_snapshot'],
         'recorded_by': r['recorded_by'], 'recorded_by_name_snapshot': r['recorded_by_name_snapshot'],
-        'approved_by': r['approved_by'], 'actual_at': r['actual_at'],
-        'recorded_at': r['recorded_at'], 'source_table': r['source_table'],
+        'approved_by': r['approved_by'], 'actual_at': _display(r['actual_at']),
+        'recorded_at': _display(r['recorded_at']),
+        'actual_at_utc': r['actual_at'], 'recorded_at_utc': r['recorded_at'], 'source_table': r['source_table'],
         'source_id': r['source_id'], 'movement_id': r['movement_id'],
         'time_coverage': r['actual_at'] == null ? 'Unknown actual time' : 'Retained actual time',
       });
@@ -69,6 +70,10 @@ class _FinanceTimeline {
         'business_day_id': r['business_day_id'], 'payment_source': r['source'] ?? 'Unknown historical source',
       })),
   ];
+  String? _display(Object? raw) {
+    final time = _karachi(raw);
+    return time == null ? null : '${_sqlTime(time)} Asia/Karachi';
+  }
   List<String> get notes => [
     'Finance timeline: signed Integer Paisa; DRAWER, BANK and OWNER streams remain separate. A linked Cash Movement is custody evidence for the same event, not a second payment. Non-drawer records legitimately have no physical Shift.',
     'Actual and immutable recording times are separate. Legacy expense/payroll/supplier posting timestamps are not inferred actual money times; ledger rows remain visible separately and are absent from actual-time totals unless retained payment evidence exists.',

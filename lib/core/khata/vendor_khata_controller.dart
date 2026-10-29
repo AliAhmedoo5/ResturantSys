@@ -467,6 +467,7 @@ class VendorKhataController {
       }
     }
 
+    if (staffId == null) throw ArgumentError('A recording Manager is required for supplier payment.');
     final effectiveDate = createdAt ?? DateTime.now();
     final formattedDate = _formatTimestamp(effectiveDate);
     final amountPaisa = PaisaEngine.rupeesToPaisa(amount);
@@ -564,7 +565,9 @@ class VendorKhataController {
         final days = await txn.query('business_days', where: "status='OPEN'" +
           (businessDayId == null ? '' : ' AND id=?'),
           whereArgs: businessDayId == null ? null : [businessDayId]);
-        if (days.length != 1) throw StateError('An open Business Day is required.');
+        if (days.length != 1 && (isDrawerPayment || actualAt != null || createdAt != null || businessDayId != null)) {
+          throw StateError('An open Business Day is required for an attributed or late payment.');
+        }
         final recorded = DateTime.now().toUtc();
         await PaymentEvent.record(txn, eventKey: 'vendor_transactions:$txnId',
           kind: 'SUPPLIER_PAYMENT', amountPaisa: -amountPaisa,
@@ -572,7 +575,7 @@ class VendorKhataController {
             ? 'OWNER' : paymentSource == VendorPaymentSource.bank ? 'BANK' : 'EXTERNAL_UNKNOWN',
           recordedBy: staffId, approvedBy: staffId, recordedAt: recorded,
           actualAt: actualAt ?? createdAt ?? recorded,
-          businessDayId: days.single['id'] as int,
+          businessDayId: days.length == 1 ? days.single['id'] as int : null,
           shiftId: isDrawerPayment ? shiftId : null, movementId: movementId,
           sourceTable: 'vendor_transactions', sourceId: txnId);
       }
