@@ -32,8 +32,8 @@ class ReportExportService {
     final tenders = await db.rawQuery("""SELECT op.payment_method,
       SUM(COALESCE(op.amount_tendered_paisa,CAST(ROUND(op.amount_tendered*100) AS INTEGER))
       -COALESCE(op.change_returned_paisa,CAST(ROUND(op.change_returned*100) AS INTEGER))) AS paisa
-      FROM order_payments op JOIN orders o ON o.id=op.order_id
-      WHERE o.business_day_id=? AND o.payment_status IN ('SETTLED','REFUND_PENDING','CANCELLED','REFUNDED')
+      FROM order_payments op JOIN orders o ON o.id=op.order_id LEFT JOIN payment_events pe ON pe.tender_id=op.id
+      WHERE COALESCE(pe.business_day_id,o.business_day_id)=? AND (pe.id IS NOT NULL OR o.payment_status IN ('SETTLED','REFUND_PENDING','CANCELLED','REFUNDED'))
       GROUP BY op.payment_method ORDER BY op.payment_method""", [dayId]);
     final due = (await db.rawQuery("SELECT COALESCE(SUM(CAST(ROUND(grand_total*100) AS INTEGER)),0) AS paisa FROM orders WHERE business_day_id=? AND payment_status='COLLECTION_DUE'", [dayId])).single['paisa'];
     final sales = await db.rawQuery("""SELECT o.token_number,oi.name,oi.quantity,
@@ -164,3 +164,4 @@ class ReportExportService {
     }
   }
 }
+

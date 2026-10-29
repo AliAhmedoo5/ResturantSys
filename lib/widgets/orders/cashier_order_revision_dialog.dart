@@ -52,6 +52,7 @@ class _CashierOrderRevisionDialogState
   bool _isChoosingItems = false;
   String? _errorMessage;
   int? _pendingRefundPaisa;
+  final _refundActualTime = TextEditingController();
 
   static const List<String> _quickReasons = [
     'Customer changed mind',
@@ -99,6 +100,7 @@ class _CashierOrderRevisionDialogState
 
   @override
   void dispose() {
+    _refundActualTime.dispose();
     _reasonController.dispose();
     super.dispose();
   }
@@ -224,6 +226,7 @@ class _CashierOrderRevisionDialogState
         cashierId: widget.cashierId,
         reason: reason,
         commandId: commandId,
+        actualAt: _refundActualTime.text.trim().isEmpty ? null : DateTime.parse('${_refundActualTime.text.trim().replaceFirst(' ', 'T')}:00+05:00'),
         newItems: _revisedItems,
       );
 
@@ -314,6 +317,7 @@ class _CashierOrderRevisionDialogState
         reason: _reasonController.text.trim().isNotEmpty
             ? _reasonController.text.trim()
             : 'Order revision refund payout',
+ 
         commandId: commandId,
       );
 
@@ -453,6 +457,8 @@ class _CashierOrderRevisionDialogState
               const SizedBox(height: 12),
 
               // Pending refund banner (if refund owed)
+              if ((_pendingRefundPaisa ?? 0) > 0)
+                TextField(controller: _refundActualTime, decoration: const InputDecoration(labelText: 'Refund actual time (optional, Pakistan time)', helperText: 'YYYY-MM-DD HH:MM. Blank uses entry time; only the open receiving Shift is allowed.')),
               if ((_pendingRefundPaisa ?? 0) > 0)
                 Container(
                   key: const ValueKey('pending_refund_banner'),
@@ -768,3 +774,4 @@ class _RevisionCatalogPickerState extends State<_RevisionCatalogPicker> {
     );
   }
 }
+

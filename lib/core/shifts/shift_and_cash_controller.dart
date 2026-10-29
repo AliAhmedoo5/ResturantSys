@@ -400,16 +400,16 @@ class ShiftAndCashController {
     int? shiftId,
     int? businessDayId,
   }) async {
-    final scope = shiftId != null ? 'o.shift_id' : 'o.business_day_id';
+    final scope = shiftId != null ? 'COALESCE(pe.shift_id,o.shift_id)' : 'COALESCE(pe.business_day_id,o.business_day_id)';
     final rows = await executor.rawQuery("""
       SELECT COALESCE(SUM(
         COALESCE(op.amount_tendered_paisa, CAST(ROUND(op.amount_tendered * 100) AS INTEGER))
         - COALESCE(op.change_returned_paisa, CAST(ROUND(op.change_returned * 100) AS INTEGER))
       ), 0) AS receipt_paisa
-      FROM order_payments op JOIN orders o ON o.id = op.order_id
+      FROM order_payments op JOIN orders o ON o.id = op.order_id LEFT JOIN payment_events pe ON pe.tender_id=op.id
       WHERE $scope = ? AND op.payment_method = 'CASH'
         AND COALESCE(op.amount_tendered_paisa, CAST(ROUND(op.amount_tendered * 100) AS INTEGER)) > 0
-        AND o.payment_status IN ('SETTLED', 'REFUND_PENDING', 'CANCELLED', 'REFUNDED')
+        AND (pe.id IS NOT NULL OR o.payment_status IN ('SETTLED', 'REFUND_PENDING', 'CANCELLED', 'REFUNDED'))
     """, [shiftId ?? businessDayId]);
     return (rows.single['receipt_paisa'] as num).toInt();
   }
@@ -462,8 +462,8 @@ class ShiftAndCashController {
         SELECT op.payment_method, COALESCE(SUM(op.amount_tendered), 0.0) as total
         FROM ${PosDatabaseConstants.tableOrderPayments} op
         JOIN ${PosDatabaseConstants.tableOrders} o ON op.order_id = o.id
-        WHERE o.shift_id = ? 
-          AND o.payment_status = 'SETTLED'
+        LEFT JOIN payment_events pe ON pe.tender_id=op.id WHERE COALESCE(pe.shift_id,o.shift_id) = ? 
+          AND (pe.id IS NOT NULL OR o.payment_status = 'SETTLED')
           AND op.payment_method IN ('CARD', 'RAAST', 'JAZZCASH', 'EASYPAISA', 'BANK_TRANSFER')
         GROUP BY op.payment_method;
       ''', [shiftId]);
@@ -772,8 +772,8 @@ class ShiftAndCashController {
       SELECT op.payment_method,
         SUM(COALESCE(op.amount_tendered_paisa,CAST(ROUND(op.amount_tendered*100) AS INTEGER))
         -COALESCE(op.change_returned_paisa,CAST(ROUND(op.change_returned*100) AS INTEGER))) AS paisa
-      FROM order_payments op JOIN orders o ON o.id=op.order_id
-      WHERE o.business_day_id=? AND o.payment_status IN ('SETTLED','REFUND_PENDING','CANCELLED','REFUNDED')
+      FROM order_payments op JOIN orders o ON o.id=op.order_id LEFT JOIN payment_events pe ON pe.tender_id=op.id
+      WHERE COALESCE(pe.business_day_id,o.business_day_id)=? AND (pe.id IS NOT NULL OR o.payment_status IN ('SETTLED','REFUND_PENDING','CANCELLED','REFUNDED'))
       GROUP BY op.payment_method
     """,[businessDayId]);
     final tenderSalesPaisa = {for(final row in tenderRows) row['payment_method'] as String:(row['paisa'] as num).toInt()};
@@ -950,4 +950,5 @@ class ShiftAndCashController {
     return closedDay;
   }
 }
+
 

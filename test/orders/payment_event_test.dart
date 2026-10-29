@@ -7,6 +7,7 @@ import 'package:resturant_sys/core/analytics/analytics_models.dart';
 import 'package:resturant_sys/core/analytics/analytics_service.dart';
 import 'package:resturant_sys/core/auth/auth_service.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
+import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
 
 void main() {
   setUpAll(sqfliteFfiInit);
@@ -32,6 +33,9 @@ void main() {
     expect(row.cells['actual_at'], isNotNull);
     expect(row.cells['recorded_at'], isNotNull);
     expect((await controller.getOrderPayments(order)).length, 1);
+    final shifts = ShiftAndCashController(database: db);
+    expect(await shifts.calculateCashSales(origin), 0);
+    expect(await shifts.calculateCashSales(receiving), 100);
 
     Future<RefundResult> refund() => controller.recordCashierRefund(orderId: order, shiftId: receiving, cashierId: 2, amountPaisa: 5000, method: PaymentMethod.cash, reason: 'Partial return', commandId: 'refund-1');
     final refunded = await refund();

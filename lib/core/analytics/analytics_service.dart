@@ -63,7 +63,7 @@ class AnalyticsService {
     await read('cost_events', 'order_cost_events', 'SELECT x.* FROM order_cost_events x $joinedOrder', orderArgs);
     // A physical drawer uses all orders in its shifts; order filters never alter it.
     await read('shifts', 'shifts', 'SELECT s.* FROM shifts s JOIN business_days b ON b.id=s.business_day_id WHERE $dayScope', dayArgs);
-    await read('cash_payments', 'order_payments', "SELECT p.*,o.shift_id FROM order_payments p JOIN orders o ON o.id=p.order_id JOIN business_days b ON b.id=o.business_day_id WHERE $dayScope AND o.payment_status IN ('SETTLED','REFUND_PENDING','CANCELLED','REFUNDED')", dayArgs);
+    await read('cash_payments', 'order_payments', "SELECT p.*,COALESCE(pe.shift_id,o.shift_id) AS shift_id FROM order_payments p JOIN orders o ON o.id=p.order_id LEFT JOIN payment_events pe ON pe.tender_id=p.id JOIN business_days b ON b.id=COALESCE(pe.business_day_id,o.business_day_id) WHERE $dayScope AND (pe.id IS NOT NULL OR o.payment_status IN ('SETTLED','REFUND_PENDING','CANCELLED','REFUNDED'))", dayArgs);
     await read('movements', 'cash_movements', 'SELECT m.id,m.shift_id,m.staff_id,m.type,m.amount,m.category,m.created_at FROM cash_movements m JOIN shifts s ON s.id=m.shift_id JOIN business_days b ON b.id=s.business_day_id WHERE $dayScope', dayArgs);
     await read('trips', 'rider_trips', 'SELECT t.* FROM rider_trips t JOIN business_days b ON b.id=t.business_day_id WHERE $dayScope', dayArgs);
     await read('attempts', 'rider_trip_orders', 'SELECT x.id,x.order_id,x.trip_id,x.status,x.delivered_at,x.returned_at,t.dispatched_at,t.rider_staff_id FROM rider_trip_orders x JOIN rider_trips t ON t.id=x.trip_id $joinedOrder', orderArgs);
@@ -155,3 +155,4 @@ DateTime? _karachi(Object? raw) {
   if (parsed == null) return null;
   return parsed.isUtc || RegExp(r'[+-]\d\d:\d\d$').hasMatch(raw) ? parsed.toUtc().add(const Duration(hours: 5)) : DateTime.utc(parsed.year, parsed.month, parsed.day, parsed.hour, parsed.minute, parsed.second);
 }
+
