@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:resturant_sys/core/auth/auth_service.dart';
@@ -54,6 +55,19 @@ Future<void> captureCheckout(WidgetTester tester, String name) async {
 }
 
 void main() {
+  setUpAll(() async {
+    // Match the existing desktop-preview harness instead of painting Ahem blocks.
+    final font = File('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf');
+    if (Platform.environment['CAPTURE_DESKTOP'] == 'true' && await font.exists()) {
+      final loader = FontLoader(WarmCounterTypography.fontFamily);
+      loader.addFont(Future.value(ByteData.sublistView(await font.readAsBytes())));
+      await loader.load();
+      final icons = FontLoader('MaterialIcons');
+      icons.addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'));
+      await icons.load();
+    }
+  });
+
   testWidgets('cash change and shortfall banners have readable text', (tester) async {
     tester.view.physicalSize = const Size(1366, 900);
     tester.view.devicePixelRatio = 1;
