@@ -54,6 +54,7 @@ class AnalyticsService {
     final orderFrom = 'FROM orders o JOIN business_days b ON b.id=o.business_day_id WHERE $orderScope';
     await read('orders', 'orders', 'SELECT $fields $orderFrom ORDER BY o.id', orderArgs);
     await read('order_days', 'business_days', 'SELECT DISTINCT b.id,b.opened_at,b.closed_at,b.status FROM business_days b JOIN orders o ON o.business_day_id=b.id WHERE $orderScope ORDER BY b.opened_at,b.id', orderArgs);
+    await read('order_shifts', 'shifts', 'SELECT DISTINCT s.* FROM shifts s JOIN orders o ON o.shift_id=s.id JOIN business_days b ON b.id=o.business_day_id WHERE $orderScope ORDER BY s.id', orderArgs);
     final joinedOrder = 'JOIN orders o ON o.id=x.order_id JOIN business_days b ON b.id=o.business_day_id WHERE $orderScope';
     await read('payments', 'order_payments', 'SELECT x.* FROM order_payments x $joinedOrder', orderArgs);
     await read('items', 'order_items', 'SELECT x.id,x.order_id,x.menu_item_id,x.deal_id,x.name,x.quantity,x.unit_price,x.total_price,x.modifiers_json,x.deal_choices_json,x.bom_json FROM order_items x $joinedOrder', orderArgs);
