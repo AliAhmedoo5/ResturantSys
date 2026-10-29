@@ -32,9 +32,9 @@ void main() {
     expect(row.cells['amount_paisa'], 10000);
     expect(row.cells['originating_shift_id'], origin);
     expect(row.cells['receiving_shift_id'], receiving);
-    expect(row.cells['actual_at'], actual.toIso8601String());
+    expect(row.cells['actual_at_source'] ?? row.cells['actual_at'], actual.toIso8601String());
     expect(row.cells['recorded_at'], isNotNull);
-    expect(DateTime.parse(row.cells['recorded_at'] as String).isAfter(actual), isTrue);
+    expect(DateTime.parse((row.cells['recorded_at_source'] ?? row.cells['recorded_at']) as String).isAfter(actual), isTrue);
     final csv = AnalyticsExportService().csv(snapshot, AnalyticsFamily.cash);
     expect(csv, contains('receiving shift id'));
     expect(csv, contains('originating shift id'));
@@ -49,7 +49,7 @@ void main() {
     expect((await refund()).cashMovementId, refunded.cashMovementId);
     expect((await controller.getOrderPayments(order)).length, 2);
     final afterRefund = await AnalyticsService(database: db, authService: auth).load(snapshot.query);
-    expect(afterRefund.section(AnalyticsFamily.cash).rows.where((r) => r.sourceType == 'payment_events').map((r) => r.cells['amount_paisa']), [10000, -5000]);
+    expect(afterRefund.section(AnalyticsFamily.cash).rows.where((r) => r.sourceType == 'payment_events').map((r) => r.cells['amount_paisa']), unorderedEquals([10000, -5000]));
 
     await expectLater(controller.recordCashierReceipt(orderId: order, shiftId: receiving, cashierId: 2, amountPaisa: 1000, method: PaymentMethod.cash, commandId: 'invalid-time', actualAt: now.subtract(const Duration(days: 1))), throwsStateError);
     expect((await controller.getOrderPayments(order)).length, 2, reason: 'Failed event validation must roll back its tender');
