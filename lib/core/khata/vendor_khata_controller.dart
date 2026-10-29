@@ -474,7 +474,7 @@ class VendorKhataController {
     amount = amountPaisa / 100;
 
     return await database.transaction((txn) async {
-      if (staffId != null) await CustomerController.requireRole(txn, staffId, manager: true);
+      await CustomerController.requireRole(txn, staffId, manager: true);
       // 1. Verify vendor exists
       final vendorRows = await txn.query(
         PosDatabaseConstants.tableVendorKhata,
@@ -561,8 +561,7 @@ class VendorKhataController {
       );
 
       await _allocate(txn,vendorId,txnId,amountPaisa,allocations);
-      if (staffId != null) {
-        final days = await txn.query('business_days', where: "status='OPEN'" +
+      final days = await txn.query('business_days', where: "status='OPEN'" +
           (businessDayId == null ? '' : ' AND id=?'),
           whereArgs: businessDayId == null ? null : [businessDayId]);
         if (days.length != 1 && (isDrawerPayment || actualAt != null || createdAt != null || businessDayId != null)) {
@@ -578,7 +577,6 @@ class VendorKhataController {
           businessDayId: days.length == 1 ? days.single['id'] as int : null,
           shiftId: isDrawerPayment ? shiftId : null, movementId: movementId,
           sourceTable: 'vendor_transactions', sourceId: txnId);
-      }
 
       return VendorTransaction(
         id: txnId,

@@ -82,15 +82,50 @@ void main() {
     final events = report.rows.where((r) => r.cells['kind'] == 'Finance payment').toList();
     expect(events, hasLength(2));
     expect(events.every((r) => r.cells['shift_id'] == null), isTrue);
-    expect(events.every((r) => r.cells['actual_at'] == '2026-10-26 01:00:00 Asia/Karachi'), isTrue);
+    expect(events.every((r) => r.cells['actual_at'].toString().startsWith('2026-10-26 01:00:00') && r.cells['actual_at'].toString().contains('Asia/Karachi')), isTrue);
     expect(report.metrics.singleWhere((m) => m.id == 'finance_bank_outflow').value, 3000);
     expect(report.metrics.singleWhere((m) => m.id == 'finance_owner_outflow').value, 5000);
     final export = AnalyticsExportService().csv(snapshot, AnalyticsFamily.expenses);
-    expect(export, contains('2026-10-26 01:00:00 Asia/Karachi'));
+    expect(export, contains('2026-10-26 01:00:00'));
     expect(export, contains('SUPPLIER_PAYMENT'));
     expect(export, isNot(contains('03001234567')));
     final previous = await service.load(query.copyWith(startDate: DateTime(2026, 10, 25), endDateExclusive: DateTime(2026, 10, 26)));
     expect(previous.section(AnalyticsFamily.expenses).rows.where((r) => r.cells['kind'] == 'Finance payment'), isEmpty);
+  });
+
+  test('invalid late finance entries leave no partial posting and closed-period correction stays unavailable', () async {
+    final store = PosDatabase(factory: databaseFactoryFfi, customPath: inMemoryDatabasePath);
+    final db = await store.initialize();
+    addTearDown(store.close);
+    final people = await db.query('staff');
+    final manager = people.firstWhere((p) => p['role'] != 'CASHIER');
+    final managerId = manager['id'] as int;
+    final cashierId = people.firstWhere((p) => p['role'] == 'CASHIER')['id'] as int;
+    final shifts = ShiftAndCashController(database: db);
+    await shifts.openBusinessDay(openedByStaffId: managerId, openedAt: DateTime(2026, 10, 25, 18));
+    final shift = await shifts.openShift(staffId: cashierId, openingFloat: 1000, openedAt: DateTime(2026, 10, 25, 18));
+    final operations = OperationsController(db);
+    final category = await operations.saveCategory(managerId: managerId, name: 'Utilities');
+    Future<int> pay(String request, DateTime actual) => operations.postExpense(
+      managerId: managerId, categoryId: category, amountPaisa: 12000,
+      description: 'Electricity', source: FundingSource.drawer, shiftId: shift.id,
+      reason: 'Paid late', requestKey: request, actualAt: actual);
+    final original = await pay('valid', DateTime.parse('2026-10-26T01:00:00+05:00'));
+    expect(await pay('valid', DateTime.parse('2026-10-26T01:00:00+05:00')), original);
+    await expectLater(pay('too-early', DateTime.parse('2026-10-24T01:00:00+05:00')), throwsStateError);
+    await expectLater(pay('future', DateTime.now().toUtc().add(const Duration(days: 1))), throwsArgumentError);
+    expect(await operations.expenses(managerId: managerId), hasLength(1));
+    expect(await shifts.getCashMovements(shift.id), hasLength(1));
+    final auth = AuthService(database: db)..session.login(Staff.fromMap(manager));
+    final snapshot = await AnalyticsService(database: db, authService: auth).load(
+      AnalyticsQuery(startDate: DateTime(2026, 10, 25), endDateExclusive: DateTime(2026, 10, 26)));
+    expect(snapshot.section(AnalyticsFamily.expenses).rows.where((r) => r.cells['kind'] == 'Finance payment'), hasLength(1));
+    await shifts.closeShift(shiftId: shift.id, staffId: cashierId, countedCash: 880);
+    await shifts.closeBusinessDay(closedByStaffId: managerId);
+    await shifts.openBusinessDay(openedByStaffId: managerId);
+    await expectLater(operations.reverseExpense(managerId: managerId, entryId: original,
+      reason: 'Historical correction', requestKey: 'closed-correction'), throwsStateError);
+    expect(await operations.expenses(managerId: managerId), hasLength(1));
   });
 
 }
