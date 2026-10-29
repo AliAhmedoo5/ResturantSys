@@ -40,7 +40,7 @@ Future<void> _showWorkspace(WidgetTester tester, {CatalogAndRecipeController? co
       initialCategories: const [MenuCategory(id: 1, name: 'Pizza', displayOrder: 0, colorHex: '#FFFFFF')],
       initialMenuItems: const [MenuItem(id: 1, categoryId: 1, name: 'Slice', basePrice: 100)],
       initialModifiers: const [Modifier(id: 1, menuItemId: 1, name: 'Extra cheese', priceDelta: 10)],
-      initialRawIngredients: const [RawIngredient(id: 1, name: 'Dough', storageUnit: StorageUnit.count)],
+      initialRawIngredients: const [RawIngredient(id: 1, name: 'Dough', storageUnit: StorageUnit.count, currentStock: 10, lowStockThreshold: 2)],
       initialDiscounts: const [DiscountPreset(id: 1, name: 'Lunch offer', type: DiscountType.flat, value: 10, isActive: true)],
     ))));
   await tester.pumpAndSettle();
