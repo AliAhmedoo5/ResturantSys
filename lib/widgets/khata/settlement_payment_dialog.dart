@@ -163,7 +163,7 @@ class _SettlementPaymentDialogState extends State<SettlementPaymentDialog> {
                   value: VendorPaymentSource.owner, groupValue: _paymentSource,
                   onChanged: (value) => setState(() => _paymentSource = value!),
                 ),
-                TextFormField(controller: _actualController,
+                TextFormField(key: const Key('settlement_actual_time_field'), controller: _actualController,
                   decoration: const InputDecoration(labelText: 'Actual Pakistan time (YYYY-MM-DD HH:MM, blank = now)'),
                   validator: (value) => value == null || value.trim().isEmpty ||
                     DateTime.tryParse('${value.trim().replaceFirst(' ', 'T')}+05:00') != null
