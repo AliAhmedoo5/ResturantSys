@@ -334,7 +334,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
         )),
         SizedBox(width: compact ? 155 : 190, child: DropdownButtonFormField<String>(
           key: const ValueKey('analytics_period'), value: _preset, isExpanded: true,
-          decoration: const InputDecoration(labelText: 'Business Day period', isDense: true, border: OutlineInputBorder()),
+          decoration: InputDecoration(labelText: _query.timeBasis == AnalyticsTimeBasis.businessDay ? 'Business Day period' : 'Calendar Order period', isDense: true, border: const OutlineInputBorder()),
           items: const [
             DropdownMenuItem(value: 'live', child: Text('Active day')),
             DropdownMenuItem(value: 'today', child: Text('Today')),
