@@ -14,7 +14,7 @@ void main() {
     final db = await store.initialize();
     addTearDown(store.close);
     final staff = await db.query('staff');
-    final manager = staff.firstWhere((r) => r['role'] == 'MANAGER');
+    final manager = staff.firstWhere((r) => r['role'] != 'CASHIER');
     final cashier = staff.firstWhere((r) => r['role'] == 'CASHIER');
     final auth = AuthService(database: db)..session.login(Staff.fromMap(manager));
     final day = await db.insert('business_days', {'opened_at': '2026-10-29T13:00:00Z', 'status': 'OPEN', 'opened_by_staff_id': manager['id']});
