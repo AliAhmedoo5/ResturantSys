@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../orders/customer_controller.dart';
+import '../orders/paisa_engine.dart';
 import '../payments/payment_event.dart';
 
 enum FundingSource {
@@ -27,6 +28,68 @@ class OperationsController {
       throw ArgumentError('Enter a positive amount within the supported range.');
     }
   }
+
+  static void _requestKey(String requestKey) {
+    if (requestKey.trim().isEmpty) throw ArgumentError('Request key is required.');
+  }
+
+  /// Determines whether a department represents direct operational/production labor (ADR-0020 §6).
+  ///
+  /// Direct labor includes guest-facing and food production roles:
+  /// - Kitchen / Back of House / Cooks / Dishwashers
+  /// - Front Counter / Register Cashiers / POS
+  /// - Service / Dining / Front of House / Waitstaff
+  /// - Delivery Riders / Drivers / Dispatch
+  ///
+  /// Excludes:
+  /// - Management, Executive, Administration, Office, Accounting, HR, Supervisor, Overhead, and Unassigned/Unknown.
+  static bool isDirectOperationalLabor(String? departmentName) {
+    if (departmentName == null) return false;
+    final d = departmentName.trim().toLowerCase();
+    if (d.isEmpty) return false;
+
+    if (d.contains('manage') ||
+        d.contains('admin') ||
+        d.contains('exec') ||
+        d.contains('account') ||
+        d.contains('office') ||
+        d.contains('supervis') ||
+        d.contains('overhead') ||
+        d.contains('hr') ||
+        d.contains('human resource')) {
+      return false;
+    }
+
+    const directKeywords = [
+      'kitchen',
+      'cook',
+      'prep',
+      'dishwash',
+      'boh',
+      'back of house',
+      'front counter',
+      'counter',
+      'cashier',
+      'register',
+      'service',
+      'dining',
+      'foh',
+      'front of house',
+      'floor',
+      'waiter',
+      'waitstaff',
+      'delivery',
+      'rider',
+      'driver',
+      'dispatch',
+    ];
+
+    return directKeywords.any((kw) => d.contains(kw));
+  }
+
+  /// Allocates an integer amount of paisa proportionally across weights with remainder distributed to the largest bucket.
+  static List<int> allocatePaisaProportionally(int totalPaisa, List<int> parts) =>
+      PaisaEngine.allocateProportionally(totalPaisa: totalPaisa, parts: parts);
 
   static void _reason(String reason) {
     if (reason.trim().isEmpty) throw ArgumentError('A reason is required.');
@@ -138,7 +201,7 @@ class OperationsController {
   /// if its payload matches. The transaction and unique key prevent double cash.
   Future<int?> _replay(DatabaseExecutor db, String table, String requestKey,
       Map<String, Object?> payload) async {
-    _reason(requestKey);
+    _requestKey(requestKey);
     final rows = await db.query(table, where: 'request_key=?', whereArgs: [requestKey.trim()]);
     if (rows.isEmpty) return null;
     final old = rows.single;
@@ -363,12 +426,12 @@ class OperationsController {
     required DateTime clockIn,
     required DateTime clockOut,
     int breakMinutes = 0,
-    int? workedMinutes,
     int? businessDayId,
-    String reason = '',
+    required String reason,
     required String requestKey,
   }) async {
-    _reason(requestKey);
+    _requestKey(requestKey);
+    _reason(reason);
     final trimmedDate = workDate.trim();
     if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(trimmedDate)) {
       throw ArgumentError('Work date must be YYYY-MM-DD.');
@@ -380,7 +443,7 @@ class OperationsController {
       throw ArgumentError('Break minutes cannot be negative.');
     }
     final elapsedMinutes = clockOut.difference(clockIn).inMinutes;
-    final netMinutes = workedMinutes ?? (elapsedMinutes - breakMinutes);
+    final netMinutes = elapsedMinutes - breakMinutes;
     if (netMinutes <= 0) {
       throw ArgumentError('Worked minutes must be positive.');
     }
@@ -561,22 +624,17 @@ class OperationsController {
             ],
           });
         } else {
-          var allocatedSum = 0;
+          final minutesList = hoursList.map((h) => h['total_minutes'] as int).toList();
+          final allocatedShares = allocatePaisaProportionally(accrualPaisa, minutesList);
           final empDepts = <Map<String, dynamic>>[];
-          int maxIndex = 0;
-          int maxMinutes = -1;
 
           for (var i = 0; i < hoursList.length; i++) {
             final h = hoursList[i];
             final deptId = h['department_id'] as int;
             final deptName = h['department_name'] as String;
             final mins = h['total_minutes'] as int;
-            if (mins > maxMinutes) {
-              maxMinutes = mins;
-              maxIndex = i;
-            }
-            final sharePaisa = (accrualPaisa * mins) ~/ totalMinutes;
-            allocatedSum += sharePaisa;
+            final sharePaisa = allocatedShares[i];
+            deptAllocations[deptId] = (deptAllocations[deptId] ?? 0) + sharePaisa;
             empDepts.add({
               'department_id': deptId,
               'department_name': deptName,
@@ -584,17 +642,6 @@ class OperationsController {
               'worked_minutes': mins,
               'share_percent': double.parse((mins / totalMinutes * 100).toStringAsFixed(2)),
             });
-          }
-
-          final remainder = accrualPaisa - allocatedSum;
-          if (remainder > 0 && empDepts.isNotEmpty) {
-            empDepts[maxIndex]['allocated_paisa'] = (empDepts[maxIndex]['allocated_paisa'] as int) + remainder;
-          }
-
-          for (final d in empDepts) {
-            final dId = d['department_id'] as int;
-            final pAmount = d['allocated_paisa'] as int;
-            deptAllocations[dId] = (deptAllocations[dId] ?? 0) + pAmount;
           }
 
           employeeAllocations.add({
@@ -612,13 +659,21 @@ class OperationsController {
       'department_id': e.key,
       'department_name': deptNames[e.key] ?? 'Dept #${e.key}',
       'allocated_paisa': e.value,
+      'is_direct_labor': isDirectOperationalLabor(deptNames[e.key]),
     }).toList();
 
     return {
       'period': period,
       'total_labor_cost_paisa': payrollEntries.fold<int>(0, (sum, p) => sum + (p['net_accrual_paisa'] as int)),
+      'direct_labor_paisa': departmentSummary.where((d) => d['is_direct_labor'] == true).fold<int>(0, (s, d) => s + (d['allocated_paisa'] as int)),
+      'overhead_labor_paisa': departmentSummary.where((d) => d['is_direct_labor'] != true).fold<int>(0, (s, d) => s + (d['allocated_paisa'] as int)),
       'departments': departmentSummary,
       'employees': employeeAllocations,
     };
   });
 }
+
+/// Standalone predicate for direct operational labor categorization (ADR-0020 §6).
+bool isDirectOperationalLabor(String? departmentName) =>
+    OperationsController.isDirectOperationalLabor(departmentName);
+

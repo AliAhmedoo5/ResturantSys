@@ -261,6 +261,7 @@ void main() {
         clockIn: DateTime.utc(2026, 10, 25, 11, 0),
         clockOut: DateTime.utc(2026, 10, 25, 20, 0),
         breakMinutes: 60,
+        reason: 'Cashier attempt',
         requestKey: key(),
       ),
       throwsStateError,
@@ -274,6 +275,7 @@ void main() {
         workDate: 'invalid-date',
         clockIn: DateTime.utc(2026, 10, 25, 11, 0),
         clockOut: DateTime.utc(2026, 10, 25, 20, 0),
+        reason: 'Invalid date check',
         requestKey: key(),
       ),
       throwsArgumentError,
@@ -285,6 +287,7 @@ void main() {
         workDate: '2026-10-25',
         clockIn: DateTime.utc(2026, 10, 25, 20, 0),
         clockOut: DateTime.utc(2026, 10, 25, 11, 0),
+        reason: 'Clock out before in',
         requestKey: key(),
       ),
       throwsArgumentError,
@@ -297,7 +300,33 @@ void main() {
         clockIn: DateTime.utc(2026, 10, 25, 11, 0),
         clockOut: DateTime.utc(2026, 10, 25, 12, 0),
         breakMinutes: 120, // Break exceeds shift
+        reason: 'Break exceeds shift',
         requestKey: key(),
+      ),
+      throwsArgumentError,
+    );
+    // Empty reason and empty requestKey reject
+    await expectLater(
+      operations.recordWorkedHours(
+        managerId: manager,
+        employeeId: employee,
+        workDate: '2026-10-25',
+        clockIn: DateTime.utc(2026, 10, 25, 11, 0),
+        clockOut: DateTime.utc(2026, 10, 25, 20, 0),
+        reason: '   ',
+        requestKey: key(),
+      ),
+      throwsArgumentError,
+    );
+    await expectLater(
+      operations.recordWorkedHours(
+        managerId: manager,
+        employeeId: employee,
+        workDate: '2026-10-25',
+        clockIn: DateTime.utc(2026, 10, 25, 11, 0),
+        clockOut: DateTime.utc(2026, 10, 25, 20, 0),
+        reason: 'Valid reason',
+        requestKey: '   ',
       ),
       throwsArgumentError,
     );
@@ -359,6 +388,7 @@ void main() {
       clockIn: DateTime.utc(2026, 10, 25, 11, 0),
       clockOut: DateTime.utc(2026, 10, 25, 19, 0),
       breakMinutes: 0,
+      reason: 'Immutability test',
       requestKey: key(),
     );
 
@@ -403,29 +433,36 @@ void main() {
       requestKey: key(),
     );
 
-    // Danish worked 80 hours (4800 mins) in Kitchen, 120 hours (7200 mins) in Service. Total = 200 hours.
-    await operations.recordWorkedHours(
-      managerId: manager,
-      employeeId: danish,
-      departmentId: kitchenDept,
-      workDate: '2026-10-10',
-      clockIn: DateTime.utc(2026, 10, 10, 8, 0),
-      clockOut: DateTime.utc(2026, 10, 10, 16, 0),
-      breakMinutes: 0,
-      workedMinutes: 4800, // 80 hrs
-      requestKey: key(),
-    );
-    await operations.recordWorkedHours(
-      managerId: manager,
-      employeeId: danish,
-      departmentId: serviceDept,
-      workDate: '2026-10-20',
-      clockIn: DateTime.utc(2026, 10, 20, 8, 0),
-      clockOut: DateTime.utc(2026, 10, 20, 16, 0),
-      breakMinutes: 0,
-      workedMinutes: 7200, // 120 hrs
-      requestKey: key(),
-    );
+    // Danish worked 80 hours (4800 mins) in Kitchen: 10 shifts of 8h (480m)
+    for (var d = 1; d <= 10; d++) {
+      final dayStr = d.toString().padLeft(2, '0');
+      await operations.recordWorkedHours(
+        managerId: manager,
+        employeeId: danish,
+        departmentId: kitchenDept,
+        workDate: '2026-10-$dayStr',
+        clockIn: DateTime.utc(2026, 10, d, 8, 0),
+        clockOut: DateTime.utc(2026, 10, d, 16, 0),
+        breakMinutes: 0,
+        reason: 'Kitchen prep shift $d',
+        requestKey: key(),
+      );
+    }
+    // Danish worked 120 hours (7200 mins) in Service: 15 shifts of 8h (480m)
+    for (var d = 11; d <= 25; d++) {
+      final dayStr = d.toString().padLeft(2, '0');
+      await operations.recordWorkedHours(
+        managerId: manager,
+        employeeId: danish,
+        departmentId: serviceDept,
+        workDate: '2026-10-$dayStr',
+        clockIn: DateTime.utc(2026, 10, d, 8, 0),
+        clockOut: DateTime.utc(2026, 10, d, 16, 0),
+        breakMinutes: 0,
+        reason: 'Service floor shift $d',
+        requestKey: key(),
+      );
+    }
 
     final allocation = await operations.departmentLaborAllocation(managerId: manager, period: '2026-10');
     expect(allocation['total_labor_cost_paisa'], 3000000);
@@ -439,6 +476,44 @@ void main() {
     expect(kitchenAlloc, 1200000);
     expect(serviceAlloc, 1800000);
     expect(kitchenAlloc + serviceAlloc, 3000000);
+    expect(allocation['direct_labor_paisa'], 3000000);
+    expect(allocation['overhead_labor_paisa'], 0);
+  });
+
+  test('isDirectOperationalLabor allowlist correctly categorizes direct production vs overhead (ADR-0020 §6)', () {
+    expect(OperationsController.isDirectOperationalLabor('Kitchen'), isTrue);
+    expect(OperationsController.isDirectOperationalLabor('Kitchen Cook'), isTrue);
+    expect(OperationsController.isDirectOperationalLabor('Back of House'), isTrue);
+    expect(OperationsController.isDirectOperationalLabor('Front Counter'), isTrue);
+    expect(OperationsController.isDirectOperationalLabor('Register Cashiers'), isTrue);
+    expect(OperationsController.isDirectOperationalLabor('Service / Dining'), isTrue);
+    expect(OperationsController.isDirectOperationalLabor('Dining Floor Waitstaff'), isTrue);
+    expect(OperationsController.isDirectOperationalLabor('Delivery Riders'), isTrue);
+
+    // Overhead / excluded
+    expect(OperationsController.isDirectOperationalLabor('Management'), isFalse);
+    expect(OperationsController.isDirectOperationalLabor('General Manager'), isFalse);
+    expect(OperationsController.isDirectOperationalLabor('Executive'), isFalse);
+    expect(OperationsController.isDirectOperationalLabor('Administration'), isFalse);
+    expect(OperationsController.isDirectOperationalLabor('Office Accounting'), isFalse);
+    expect(OperationsController.isDirectOperationalLabor('Supervisor'), isFalse);
+    expect(OperationsController.isDirectOperationalLabor('Administrative Overhead'), isFalse);
+    expect(OperationsController.isDirectOperationalLabor('Human Resources'), isFalse);
+    expect(OperationsController.isDirectOperationalLabor('Unknown'), isFalse);
+    expect(OperationsController.isDirectOperationalLabor(''), isFalse);
+    expect(OperationsController.isDirectOperationalLabor(null), isFalse);
+  });
+
+  test('allocatePaisaProportionally exact floor division with largest bucket remainder', () {
+    // 100 paisa across 3 equal parts: 33, 33, 33 + 1 remainder -> 34, 33, 33
+    final r1 = OperationsController.allocatePaisaProportionally(100, [10, 10, 10]);
+    expect(r1, [34, 33, 33]);
+    expect(r1.reduce((a, b) => a + b), 100);
+
+    // 3,000,000 paisa across 80 and 120 parts -> 1,200,000 and 1,800,000
+    final r2 = OperationsController.allocatePaisaProportionally(3000000, [80, 120]);
+    expect(r2, [1200000, 1800000]);
+    expect(r2.reduce((a, b) => a + b), 3000000);
   });
 
   test('department labor allocation defaults to primary department for unlogged staff and avoids payment double-expense', () async {

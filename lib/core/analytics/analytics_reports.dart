@@ -465,14 +465,8 @@ class _ReportBuilder {
     final workedHours = e.get('worked_hours');
     final hasAttendance = workedHours.isNotEmpty && !e.absent.contains('worked_hours');
 
-    bool isDirect(String? dept) {
-      final d = (dept ?? '').toLowerCase().trim();
-      if (d.contains('manage') || d.contains('admin') || d.contains('account') ||
-          d.contains('office') || d.contains('supervisor') || d.contains('overhead')) {
-        return false;
-      }
-      return true;
-    }
+    bool isDirect(String? dept) =>
+        OperationsController.isDirectOperationalLabor(dept);
 
     final activeStaff = staff.where((s) => s['is_active'] == 1).toList();
     final staffWithHours = workedHours.map((w) => w['employee_id']).toSet();
@@ -547,7 +541,29 @@ class _ReportBuilder {
           explanation: 'Eligible confirmed orders (${valid.length}) divided by direct operational worked hours ($directHours hrs). Excludes management overhead.');
     }
 
-    final totalLaborCost = e.get('payroll_entries').fold<int>(0, (sum, p) => sum + (p['kind']=='ACCRUAL' || (p['kind']=='REVERSAL' && p['source']=='NONE' && p['advance_delta_paisa']==0) ? p['payable_delta_paisa'] as int : 0));
+    // Match earned period(s) of report interval to avoid leaking accruals across months
+    final reportPeriods = <String>{};
+    for (final d in e.get('days')) {
+      final openedAt = _karachi(d['opened_at']);
+      if (openedAt != null) {
+        reportPeriods.add('${openedAt.year.toString().padLeft(4, '0')}-${openedAt.month.toString().padLeft(2, '0')}');
+      }
+    }
+    if (reportPeriods.isEmpty) {
+      var cur = DateTime.utc(e.query.startDate.year, e.query.startDate.month);
+      final end = DateTime.utc(e.query.endDateExclusive.year, e.query.endDateExclusive.month);
+      while (!cur.isAfter(end)) {
+        reportPeriods.add('${cur.year.toString().padLeft(4, '0')}-${cur.month.toString().padLeft(2, '0')}');
+        cur = DateTime.utc(cur.year, cur.month + 1);
+      }
+    }
+
+    final earnedPayroll = e.get('payroll_entries').where((p) {
+      final period = p['period'] as String?;
+      return period != null && reportPeriods.contains(period);
+    }).toList();
+
+    final totalLaborCost = earnedPayroll.fold<int>(0, (sum, p) => sum + (p['kind']=='ACCRUAL' || (p['kind']=='REVERSAL' && p['source']=='NONE' && p['advance_delta_paisa']==0) ? p['payable_delta_paisa'] as int : 0));
 
     var directLaborPaisa = 0;
     var overheadLaborPaisa = 0;
@@ -555,7 +571,7 @@ class _ReportBuilder {
     final staffAllocationBasis = <int, String>{};
 
     final empAccruals = <int, int>{};
-    for (final p in e.get('payroll_entries')) {
+    for (final p in earnedPayroll) {
       if (p['kind'] == 'ACCRUAL' || (p['kind'] == 'REVERSAL' && p['source'] == 'NONE' && p['advance_delta_paisa'] == 0)) {
         final empId = p['employee_id'] as int;
         final delta = p['payable_delta_paisa'] as int;
@@ -582,34 +598,14 @@ class _ReportBuilder {
       final hours = empHours[empId];
       if (hours != null && hours.isNotEmpty) {
         staffAllocationBasis[empId] = 'Verified hours';
-        final empTotalMins = hours.fold<int>(0, (sum, h) => sum + ((h['worked_minutes'] as num?)?.toInt() ?? 0));
+        final minsList = hours.map((h) => (h['worked_minutes'] as num?)?.toInt() ?? 0).toList();
+        final empTotalMins = minsList.fold<int>(0, (sum, m) => sum + m);
         if (empTotalMins > 0) {
-          var allocatedSoFar = 0;
-          int maxIndex = 0;
-          int maxMins = -1;
-          final parts = <Map<String, dynamic>>[];
-
+          final shares = allocatePaisaProportionally(accrual, minsList);
           for (var i = 0; i < hours.length; i++) {
             final h = hours[i];
-            final mins = (h['worked_minutes'] as num?)?.toInt() ?? 0;
-            if (mins > maxMins) {
-              maxMins = mins;
-              maxIndex = i;
-            }
-            final part = (accrual * mins) ~/ empTotalMins;
-            allocatedSoFar += part;
+            final amount = shares[i];
             final deptName = h['department_name'] as String? ?? h['department'] as String? ?? '';
-            parts.add({'dept': deptName, 'amount': part});
-          }
-
-          final rem = accrual - allocatedSoFar;
-          if (rem > 0 && parts.isNotEmpty) {
-            parts[maxIndex]['amount'] = (parts[maxIndex]['amount'] as int) + rem;
-          }
-
-          for (final part in parts) {
-            final deptName = part['dept'] as String;
-            final amount = part['amount'] as int;
             if (isDirect(deptName)) {
               directLaborPaisa += amount;
             } else {
@@ -696,7 +692,26 @@ class _ReportBuilder {
     final revenue = _sum(valid, 'grand_total') - _sum(valid, 'tax_amount');
     final gross = revenue - cogs;
     final expenses = _integers(e.get('expense_entries'), 'expense_delta_paisa');
-    final labor = e.get('payroll_entries').fold<int>(0, (sum, p) => sum + (p['kind'] == 'ACCRUAL' || (p['kind'] == 'REVERSAL' && p['source'] == 'NONE' && p['advance_delta_paisa'] == 0) ? p['payable_delta_paisa'] as int : 0));
+    final profPeriods = <String>{};
+    for (final d in e.get('days')) {
+      final openedAt = _karachi(d['opened_at']);
+      if (openedAt != null) {
+        profPeriods.add('${openedAt.year.toString().padLeft(4, '0')}-${openedAt.month.toString().padLeft(2, '0')}');
+      }
+    }
+    if (profPeriods.isEmpty) {
+      var cur = DateTime.utc(e.query.startDate.year, e.query.startDate.month);
+      final end = DateTime.utc(e.query.endDateExclusive.year, e.query.endDateExclusive.month);
+      while (!cur.isAfter(end)) {
+        profPeriods.add('${cur.year.toString().padLeft(4, '0')}-${cur.month.toString().padLeft(2, '0')}');
+        cur = DateTime.utc(cur.year, cur.month + 1);
+      }
+    }
+    final profPayroll = e.get('payroll_entries').where((p) {
+      final period = p['period'] as String?;
+      return period != null && profPeriods.contains(period);
+    }).toList();
+    final labor = profPayroll.fold<int>(0, (sum, p) => sum + (p['kind'] == 'ACCRUAL' || (p['kind'] == 'REVERSAL' && p['source'] == 'NONE' && p['advance_delta_paisa'] == 0) ? p['payable_delta_paisa'] as int : 0));
     final rawWaste = _sum(e.get('waste').where((w) => w['reason'] != 'WASTED_COOKED'), 'cost_loss');
     final variance = _integers(e.get('physical_counts'), 'estimated_cost_paisa');
     final netAvailable = complete && !e.query.hasOrderFilters && !e.absent.contains('expense_entries') && !e.absent.contains('payroll_entries') &&

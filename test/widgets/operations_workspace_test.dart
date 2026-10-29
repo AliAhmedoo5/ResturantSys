@@ -89,4 +89,62 @@ void main() {
     expect(find.textContaining('Worked: 2026-10-25'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('payroll workspace safely handles overnight shift crossing midnight (e.g. 22:00 to 04:00)', (tester) async {
+    final nightCookId = await controller.database.insert('staff', {'name':'Night Chef','department_id':1,
+      'pin_hash':'night-chef','role':'CASHIER','login_enabled':0,'created_at':'2026-10-01'});
+    await tester.pumpWidget(MaterialApp(home:Scaffold(body:OperationsWorkspace(
+      controller:controller,managerId:manager,payroll:true))));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Log worked hours'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'Work date (YYYY-MM-DD)'), '2026-10-25');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Clock-in (HH:MM or YYYY-MM-DD HH:MM)'), '22:00');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Clock-out (HH:MM or YYYY-MM-DD HH:MM)'), '04:00');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Break duration in minutes (0 if none)'), '60');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Reason / attendance notes'), 'Overnight kitchen prep');
+
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    final hours = await controller.workedHoursHistory(managerId: manager, employeeId: nightCookId);
+    expect(hours, hasLength(1));
+    // 22:00 to 04:00 next day = 6 hours (360 mins) - 60m break = 300 mins (5.0 hrs)
+    expect(hours.first['worked_minutes'], 300);
+    expect(hours.first['work_date'], '2026-10-25');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('payroll workspace displays Department Labor Allocation breakdown in Manager UI', (tester) async {
+    final cookId = await controller.database.insert('staff', {'name':'Cook Tariq','department_id':1,
+      'pin_hash':'tariq-pin','role':'CASHIER','login_enabled':0,'created_at':'2026-10-01'});
+    final currentPeriod = DateTime.now().toIso8601String().substring(0, 7);
+
+    await controller.setSalary(
+      managerId: manager,
+      employeeId: cookId,
+      effectivePeriod: currentPeriod,
+      amountPaisa: 4000000,
+      reason: 'Standard monthly salary',
+    );
+    await controller.postPayroll(
+      managerId: manager,
+      employeeId: cookId,
+      period: currentPeriod,
+      kind: 'ACCRUAL',
+      amountPaisa: 4000000,
+      reason: 'Current period accrual',
+      requestKey: 'accrual-tariq',
+    );
+
+    await tester.pumpWidget(MaterialApp(home:Scaffold(body:OperationsWorkspace(
+      controller:controller,managerId:manager,payroll:true))));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Department Labor Allocation ($currentPeriod)'), findsOneWidget);
+    expect(find.textContaining('Kitchen: Rs. 40,000.00'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

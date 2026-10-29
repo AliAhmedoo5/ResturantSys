@@ -106,6 +106,7 @@ class OperationsWorkspace extends StatefulWidget {
 
 class _OperationsWorkspaceState extends State<OperationsWorkspace> {
   List<_Row> _staff = [], _categories = [], _expenses = [], _history = [], _rates = [], _workedHours = [], _departments = [];
+  Map<String, dynamic>? _deptAllocation;
   int? _employeeId, _shiftId;
   String? _error;
   bool _loading = true;
@@ -116,6 +117,20 @@ class _OperationsWorkspaceState extends State<OperationsWorkspace> {
   String _request() => 'manager-$_manager-${DateTime.now().microsecondsSinceEpoch}';
   static const _sources = {'DRAWER':'Active drawer', 'BANK':'Bank', 'OWNER':'Owner cash'};
   FundingSource _source(String code) => FundingSource.values.singleWhere((s) => s.code == code);
+  static String _formatPktTime(Object? value, {bool timeOnly = false}) {
+    if (value == null) return '-';
+    final parsed = DateTime.tryParse(value.toString());
+    if (parsed == null) return value.toString();
+    final pkt = parsed.isUtc ? parsed.add(const Duration(hours: 5)) : parsed;
+    final y = pkt.year.toString().padLeft(4, '0');
+    final m = pkt.month.toString().padLeft(2, '0');
+    final d = pkt.day.toString().padLeft(2, '0');
+    final hh = pkt.hour.toString().padLeft(2, '0');
+    final mm = pkt.minute.toString().padLeft(2, '0');
+    if (timeOnly) return '$hh:$mm PKT';
+    return '$y-$m-$d $hh:$mm PKT';
+  }
+
 
   DateTime? _actual(String? value) {
     if (value == null || value.trim().isEmpty) return null;
@@ -139,9 +154,14 @@ class _OperationsWorkspaceState extends State<OperationsWorkspace> {
       final rates = employee == null ? <_Row>[] : await _controller.salaryHistory(managerId: _manager, employeeId: employee);
       final workedHours = employee == null ? <_Row>[] : await _controller.workedHoursHistory(managerId: _manager, employeeId: employee);
       final departments = await _controller.database.query('departments', orderBy: 'id');
+      Map<String, dynamic>? deptAllocation;
+      if (widget.payroll) {
+        deptAllocation = await _controller.departmentLaborAllocation(managerId: _manager, period: _period);
+      }
       if (!mounted) return;
       setState(() { _staff=staff; _categories=categories; _expenses=expenses;
         _history=history; _rates=rates; _workedHours=workedHours; _departments=departments;
+        _deptAllocation=deptAllocation;
         _employeeId=employee; _shiftId=shifts.firstOrNull?['id'] as int?; _loading=false; _error=null; });
     } catch(e) { if (mounted) setState(() { _error=e.toString(); _loading=false; }); }
   }
@@ -167,20 +187,33 @@ class _OperationsWorkspaceState extends State<OperationsWorkspace> {
         ],
         save: (v) async {
           final workDate = v['work_date']!.trim();
-          DateTime parseTime(String val) {
+          bool isTimeOnly(String val) => RegExp(r'^\d{1,2}:\d{2}$').hasMatch(val.trim());
+
+          DateTime parsePktTime(String val, {bool isClockOut = false, DateTime? clockInPkt}) {
             var s = val.trim();
-            if (RegExp(r'^\d{1,2}:\d{2}$').hasMatch(s)) {
+            final timeOnly = isTimeOnly(s);
+            if (timeOnly) {
               s = '$workDate ${s.padLeft(5, '0')}';
             }
             if (!RegExp(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$').hasMatch(s)) {
               throw ArgumentError('Use HH:MM or YYYY-MM-DD HH:MM for shift times.');
             }
-            final p = DateTime.parse(s);
-            return DateTime.utc(p.year, p.month, p.day, p.hour, p.minute).subtract(const Duration(hours: 5));
+            var p = DateTime.parse(s);
+            // If clock-out is time-only and on or before clock-in, shift crossed midnight into next day
+            if (isClockOut && timeOnly && clockInPkt != null && !p.isAfter(clockInPkt)) {
+              p = p.add(const Duration(days: 1));
+            }
+            return p;
           }
-          final inTime = parseTime(v['clock_in']!);
-          final outTime = parseTime(v['clock_out']!);
+
+          final inPkt = parsePktTime(v['clock_in']!);
+          final outPkt = parsePktTime(v['clock_out']!, isClockOut: true, clockInPkt: inPkt);
+
+          // Convert PKT (UTC+5) to UTC for storage
+          final inTime = DateTime.utc(inPkt.year, inPkt.month, inPkt.day, inPkt.hour, inPkt.minute).subtract(const Duration(hours: 5));
+          final outTime = DateTime.utc(outPkt.year, outPkt.month, outPkt.day, outPkt.hour, outPkt.minute).subtract(const Duration(hours: 5));
           final breaks = int.tryParse(v['break_minutes']?.trim() ?? '0') ?? 0;
+          final inputReason = v['reason']?.trim() ?? '';
           await _controller.recordWorkedHours(
             managerId: _manager,
             employeeId: employee,
@@ -189,7 +222,7 @@ class _OperationsWorkspaceState extends State<OperationsWorkspace> {
             clockIn: inTime,
             clockOut: outTime,
             breakMinutes: breaks,
-            reason: v['reason']?.trim() ?? '',
+            reason: inputReason.isNotEmpty ? inputReason : 'Verified on-shift attendance',
             requestKey: request,
           );
         });
@@ -297,10 +330,51 @@ class _OperationsWorkspaceState extends State<OperationsWorkspace> {
           for(final action in const {'SALARY':'Configure salary','ACCRUAL':'Accrue salary','HOURS':'Log worked hours','ADVANCE':'Pay advance','RECOVERY':'Recover advance','PAYMENT':'Pay salary'}.entries)
             OutlinedButton(onPressed:_employeeId==null ? null : ()=>_payrollAction(action.key),child:Text(action.value)),
         ]),
+        if (_deptAllocation != null) ...[
+          Card(
+            margin: const EdgeInsets.symmetric(vertical: 8),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Department Labor Allocation ($_period)',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      Text('Total: ${_money(_deptAllocation!['total_labor_cost_paisa'] as int? ?? 0)}',
+                        style: const TextStyle(fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  if ((_deptAllocation!['departments'] as List<dynamic>? ?? []).isEmpty)
+                    const Text('No labor cost accrued for this period.',
+                      style: TextStyle(color: Colors.grey, fontSize: 12))
+                  else
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        for (final d in (_deptAllocation!['departments'] as List<dynamic>))
+                          Chip(
+                            label: Text(
+                              '${d['department_name']}: ${_money(d['allocated_paisa'] as int)}',
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                            ),
+                          ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
         for(final rate in _rates) ListTile(title:Text('Monthly salary ${_money(rate['amount_paisa'])} from ${rate['effective_period']}'),subtitle:Text('${rate['reason']}')),
         for(final w in _workedHours) ListTile(
           title:Text('Worked: ${w['work_date']} • ${w['department_name']} • ${(w['worked_minutes'] as int) ~/ 60}h ${(w['worked_minutes'] as int) % 60}m'),
-          subtitle:Text('${w['clock_in']} - ${w['clock_out']} (Break: ${w['break_minutes']}m) • Logged by ${w['manager_name'] ?? "Manager #${w['manager_id']}"}\n${w['reason']}'),
+          subtitle:Text('${_formatPktTime(w['clock_in'])} - ${_formatPktTime(w['clock_out'])} (Break: ${w['break_minutes']}m) • Logged by ${w['manager_name'] ?? "Manager #${w['manager_id']}"}\n${w['reason']}'),
         ),
       ] else ...[
         Text('Net recorded expense: ${_money(_expenses.fold<int>(0,(sum,e)=>sum+(e['expense_delta_paisa'] as int)))}'),
@@ -321,7 +395,7 @@ class _OperationsWorkspaceState extends State<OperationsWorkspace> {
       for(final row in history) Card(child:ListTile(
         title:Text(widget.payroll ? '#${row['id']} ${row['period']} ${row['kind']} ${_money(row['amount_paisa'])}' :
           '#${row['id']} ${row['category_snapshot']} • ${row['description']} ${_money(row['expense_delta_paisa'])}'),
-        subtitle:Text('${row['source']} • ${row['created_at']} • Manager #${row['manager_id']}\n${row['reason']}${reversed.contains(row['id']) ? ' • REVERSED' : ''}'),
+        subtitle:Text('${row['source']} • ${_formatPktTime(row['created_at'])} • Manager #${row['manager_id']}\n${row['reason']}${reversed.contains(row['id']) ? ' • REVERSED' : ''}'),
         trailing:row['reversal_of']!=null || reversed.contains(row['id']) ? null :
           Wrap(children:[if(!widget.payroll) TextButton(onPressed:()=>_expense(row),child:const Text('Correct')),
             TextButton(onPressed:()=>_reverse(row,widget.payroll),child:const Text('Reverse'))]),

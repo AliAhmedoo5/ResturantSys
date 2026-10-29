@@ -242,7 +242,7 @@ void main() {
       clockIn: DateTime.utc(2026, 10, 30, 5, 0),
       clockOut: DateTime.utc(2026, 10, 30, 13, 0),
       breakMinutes: 0,
-      workedMinutes: 480, // 8.0 hrs
+      reason: 'Management shift',
       requestKey: 'hours-mgmt-only',
     );
 
@@ -264,5 +264,93 @@ void main() {
     expect(productivity.value, isNull);
     expect(productivity.quality, AnalyticsQuality.missing);
     expect(productivity.explanation, contains('0.0 direct operational hours logged in period'));
+  });
+
+  test('Department labor allocation strictly matches earned period (YYYY-MM) and does not leak accruals across posting dates (ADR-0020 §1)', () async {
+    final store = PosDatabase(factory: databaseFactoryFfi, customPath: inMemoryDatabasePath);
+    final db = await store.initialize();
+    addTearDown(store.close);
+
+    final staffRows = await db.query('staff');
+    final manager = staffRows.firstWhere((r) => r['role'] != 'CASHIER');
+    final auth = AuthService(database: db)..session.login(Staff.fromMap(manager));
+    final operations = OperationsController(db);
+    final shifts = ShiftAndCashController(database: db);
+
+    final day = await shifts.openBusinessDay(openedByStaffId: manager['id'] as int);
+    final kitchenDept = (await db.query('departments', where: "name='Kitchen'")).first['id'] as int;
+
+    final cook = await db.insert('staff', {
+      'name': 'Cook Ali',
+      'department_id': kitchenDept,
+      'pin_hash': 'cook-pin',
+      'role': 'CASHIER',
+      'login_enabled': 0,
+      'created_at': '2026-10-01',
+    });
+
+    // October accrual of PKR 50,000 posted late on November 2nd
+    await operations.setSalary(
+      managerId: manager['id'] as int,
+      employeeId: cook,
+      effectivePeriod: '2026-10',
+      amountPaisa: 5000000,
+      reason: 'Monthly agreement',
+    );
+    // Insert directly into payroll_entries with created_at in November, but period = '2026-10'
+    await db.insert('payroll_entries', {
+      'employee_id': cook,
+      'period': '2026-10',
+      'kind': 'ACCRUAL',
+      'amount_paisa': 5000000,
+      'payable_delta_paisa': 5000000,
+      'advance_delta_paisa': 0,
+      'business_day_id': day.id,
+      'manager_id': manager['id'] as int,
+      'reason': 'October earned accrual posted on Nov 2nd',
+      'request_key': 'accrual-oct-posted-nov',
+      'created_at': '2026-11-02 10:00:00',
+    });
+
+    // November accrual of PKR 50,000 posted in November with period = '2026-11'
+    await db.insert('payroll_entries', {
+      'employee_id': cook,
+      'period': '2026-11',
+      'kind': 'ACCRUAL',
+      'amount_paisa': 5000000,
+      'payable_delta_paisa': 5000000,
+      'advance_delta_paisa': 0,
+      'business_day_id': day.id,
+      'manager_id': manager['id'] as int,
+      'reason': 'November earned accrual',
+      'request_key': 'accrual-nov',
+      'created_at': '2026-11-25 10:00:00',
+    });
+
+    final service = AnalyticsService(database: db, authService: auth);
+
+    // Query 1: October Report (2026-10-01 to 2026-11-01)
+    // Must include the October earned accrual (5,000,000 paisa) even though posted in November!
+    final octSnapshot = await service.load(AnalyticsQuery(
+      startDate: DateTime(2026, 10, 1),
+      endDateExclusive: DateTime(2026, 11, 1),
+    ));
+    final octStaff = octSnapshot.section(AnalyticsFamily.staff);
+    final octLaborCost = octStaff.metrics.firstWhere((m) => m.id == 'labor_cost').value;
+    final octDirectCost = octStaff.metrics.firstWhere((m) => m.id == 'direct_labor_cost').value;
+    expect(octLaborCost, 5000000);
+    expect(octDirectCost, 5000000);
+
+    // Query 2: November Report (2026-11-01 to 2026-12-01)
+    // Must ONLY include November earned accrual (5,000,000 paisa); October accrual must NOT leak into November!
+    final novSnapshot = await service.load(AnalyticsQuery(
+      startDate: DateTime(2026, 11, 1),
+      endDateExclusive: DateTime(2026, 12, 1),
+    ));
+    final novStaff = novSnapshot.section(AnalyticsFamily.staff);
+    final novLaborCost = novStaff.metrics.firstWhere((m) => m.id == 'labor_cost').value;
+    final novDirectCost = novStaff.metrics.firstWhere((m) => m.id == 'direct_labor_cost').value;
+    expect(novLaborCost, 5000000);
+    expect(novDirectCost, 5000000);
   });
 }
