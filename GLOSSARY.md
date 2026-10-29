@@ -177,3 +177,20 @@ _Avoid_: Entry time, posting time (when referring to actual occurrence)
 **Manager Portal**:
 The back-office administrative section of the application protected by a Manager PIN for catalog CRUD, recipes, Khata, staff PINs, settings, and reporting.
 _Avoid_: Admin panel, backend, supervisor portal
+
+
+**Historical Correction**:
+An append-only administrative adjustment to a previously closed Business Day or Shift, recorded exclusively by an authenticated Manager without altering sealed reports or creating current-day drawer movements.
+_Avoid_: Ledger edit, retroactive update, backdated transaction
+
+**Adjustment Bridge**:
+An explicit itemized reconciliation showing original sealed report metrics, each approved historical correction, and the resulting adjusted total up to a defined correction cutoff.
+_Avoid_: Audit patch, variance overlay, adjusted balance overwrite
+
+**Correction Cutoff**:
+The designated evaluation timestamp bounding which historical corrections are included in an adjusted analytical view or export.
+_Avoid_: Filter time, query limit
+
+**Contra-Correction**:
+An append-only reversal of a prior erroneous historical correction that references the original entry with an inverted sign, preserving complete audit lineage without mutating or deleting database records.
+_Avoid_: Correction deletion, rollback, cancellation wipe
