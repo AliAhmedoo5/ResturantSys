@@ -156,7 +156,7 @@ void main() {
       expect(deliveryResult!['notes'], equals('Spices and garlic powder delivery'));
     });
 
-    testWidgets('SettlementPaymentDialog supports dual payment sources', (tester) async {
+    testWidgets('SettlementPaymentDialog separates bank and owner sources with explicit actual Pakistan time', (tester) async {
       tester.view.physicalSize = const Size(1920, 1080);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -202,7 +202,10 @@ void main() {
 
       expect(find.text('Settle Supplier Balance'), findsOneWidget);
       expect(find.text('Paid from Active Drawer'), findsOneWidget);
-      expect(find.text('Paid Outside Drawer'), findsOneWidget);
+      expect(find.text('Bank / digital (outside drawer)'), findsOneWidget);
+      expect(find.text('Owner cash (outside drawer)'), findsOneWidget);
+
+      await tester.enterText(find.byKey(const Key('settlement_actual_time_field')), '2026-10-26 01:00');
 
       // Default with activeShiftId is drawer
       // Toggle to outside drawer
@@ -222,13 +225,15 @@ void main() {
         'HBL transfer by owner',
       );
 
+      await tester.ensureVisible(find.byKey(const Key('confirm_settlement_button')));
       await tester.tap(find.byKey(const Key('confirm_settlement_button')));
       await tester.pumpAndSettle();
 
       expect(settlementResult, isNotNull);
       expect(settlementResult!['amount'], equals(10000.0));
-      expect(settlementResult!['payment_source'], equals(VendorPaymentSource.paidOutsideDrawer));
+      expect(settlementResult!['payment_source'], equals(VendorPaymentSource.bank));
       expect(settlementResult!['reference_slip'], equals('BANK-FT-99'));
+      expect(settlementResult!['actual_at'], DateTime.parse('2026-10-25T20:00:00Z'));
     });
 
     testWidgets('VendorKhataWorkspace renders directory, filters by search, and shows statements', (tester) async {

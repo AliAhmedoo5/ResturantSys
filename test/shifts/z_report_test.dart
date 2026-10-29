@@ -414,6 +414,7 @@ void main() {
         vendorId: vendor.id,
         amount: 2000.0,
         paymentSource: VendorPaymentSource.paidOutsideDrawer,
+        staffId: supervisorId,
         notes: 'Bank transfer',
       );
 

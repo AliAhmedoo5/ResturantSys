@@ -409,7 +409,9 @@ class _ReportBuilder {
 
   AnalyticsSection _expenses() {
     final out = e.get('movements').where((m) => m['type'] != 'PAY_IN').toList();
+    final finance = _FinanceTimeline(e);
     final metrics = <AnalyticsMetric>[
+      ...finance.metrics,
       _metric('recorded_outflow', 'Recorded drawer outflow', _sum(out, 'amount'), explanation: 'All selected-shift PAY_OUT rows; not automatically operating expense. $_globalBasis'),
       _metric('outflow_count', 'Drawer outflow events', out.length, unit: AnalyticsUnit.count, explanation: _globalBasis),
       _metric('operating_expense', 'Recorded operating expense', _integers(e.get('expense_entries'), 'expense_delta_paisa'), explanation: 'Selected Business Day expense postings less reversals, across all funding sources. Legacy generic cash outflows are not inferred expenses.'),
@@ -417,7 +419,8 @@ class _ReportBuilder {
     for (final entry in _group(out, 'category').entries) {
       metrics.add(_metric('category_${entry.key}', '${entry.key} drawer outflow', _sum(entry.value, 'amount'), explanation: 'Recorded PAY_OUT category/source only, not asserted operating expense.'));
     }
-    return _section(AnalyticsFamily.expenses, 'Expenses and outflows', metrics, [
+    return _section(AnalyticsFamily.expenses, 'Finance timeline and expenses', metrics, [
+      ...finance.rows,
       ...e.get('expense_entries').map((x) => _row('expense_entries', x, {
         'kind': 'Expense ledger', 'business_day_id': x['business_day_id'],
         'category': _safeText(x['category_snapshot']), 'description': _safeText(x['description']),
@@ -428,9 +431,9 @@ class _ReportBuilder {
         'category': _safeText(m['category']), 'amount_paisa': _money(m, 'amount'),
         'source': 'Shift drawer', 'classification': 'Cash movement; do not add to expense ledger totals',
         'created_at': m['created_at']})),
-    ], ['kind', 'business_day_id', 'shift_id', 'category', 'description', 'payee', 'amount_paisa',
+    ], ['kind', ..._FinanceTimeline.keys, 'business_day_id', 'shift_id', 'category', 'description', 'payee', 'amount_paisa',
       'source', 'reversal_of', 'correction_of', 'manager_id', 'reason', 'classification', 'created_at'],
-      [_globalBasis, 'Expense entries retain category snapshots. Cash movements reconcile physical funds and must not be added to expense entries. Legacy outflows are not inferred expenses.']);
+      [...finance.notes, _globalBasis, 'Expense entries retain category snapshots. Cash movements reconcile physical funds and must not be added to expense entries. Legacy outflows are not inferred expenses.']);
   }
 
   AnalyticsSection _staff() {

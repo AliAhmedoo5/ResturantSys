@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../orders/customer_controller.dart';
+import '../payments/payment_event.dart';
 
 enum FundingSource {
   drawer('DRAWER', 'Active drawer'), bank('BANK', 'Bank'), owner('OWNER', 'Owner cash');
@@ -70,6 +71,35 @@ class OperationsController {
       'amount': amount / 100, 'category': category, 'notes': reason.trim(), 'created_at': _now});
   }
 
+  Future<void> _event(DatabaseExecutor txn, {required String table,
+      required int id, required String kind, required int amount,
+      required int manager, required FundingSource source, int? day,
+      int? shift, int? movement, DateTime? actualAt}) async {
+    final recorded = DateTime.now().toUtc();
+    final dayId = day ?? await _openDay(txn, null);
+    await PaymentEvent.record(txn, eventKey: '$table:$id', kind: kind,
+      amountPaisa: amount, paymentSource: source.code, recordedBy: manager,
+      approvedBy: manager, recordedAt: recorded, actualAt: actualAt ?? recorded,
+      businessDayId: dayId, shiftId: source == FundingSource.drawer ? shift : null,
+      movementId: movement, sourceTable: table, sourceId: id);
+  }
+
+  Future<void> _openOriginal(DatabaseExecutor txn, String table, Map<String, Object?> old) async {
+    int? day = old['business_day_id'] as int?;
+    if (day == null) {
+      final events = await txn.query('payment_events', where: 'source_table=? AND source_id=?',
+        whereArgs: [table, old['id']], limit: 1);
+      if (events.isNotEmpty) day = events.single['business_day_id'] as int?;
+    }
+    if (day == null && old['cash_movement_id'] != null) {
+      final rows = await txn.rawQuery('SELECT s.business_day_id FROM cash_movements m JOIN shifts s ON s.id=m.shift_id WHERE m.id=?', [old['cash_movement_id']]);
+      if (rows.isNotEmpty) day = rows.single['business_day_id'] as int;
+    }
+    if (day == null || (await txn.query('business_days', where: "id=? AND status='OPEN'", whereArgs: [day])).isEmpty) {
+      throw StateError('Closed or unknown historical periods cannot be corrected here.');
+    }
+  }
+
   Future<void> setSalary({required int managerId, required int employeeId,
       required String effectivePeriod, required int amountPaisa, required String reason}) async {
     _positive(amountPaisa); _period(effectivePeriod); _reason(reason);
@@ -120,7 +150,7 @@ class OperationsController {
 
   Future<int> postPayroll({required int managerId, required int employeeId,
       required String period, required String kind, int? amountPaisa,
-      FundingSource? source, int? shiftId, required String reason, required String requestKey}) async {
+      FundingSource? source, int? shiftId, required String reason, required String requestKey, DateTime? actualAt}) async {
     _period(period); _reason(reason);
     if (!['ACCRUAL','PAYMENT','ADVANCE','RECOVERY'].contains(kind)) throw ArgumentError('Invalid payroll action.');
     return database.transaction((txn) async {
@@ -149,10 +179,14 @@ class OperationsController {
       }
       final movement = funded ? await _cash(txn, managerId: managerId, source: source!,
           shiftId: shiftId, amount: amount, category: 'Payroll $kind', reason: reason) : null;
-      return txn.insert('payroll_entries', {...payload, 'request_key': requestKey.trim(),
+      final entry = await txn.insert('payroll_entries', {...payload, 'request_key': requestKey.trim(),
         'payable_delta_paisa': kind == 'ACCRUAL' ? amount : (kind == 'PAYMENT' || kind == 'RECOVERY' ? -amount : 0),
         'advance_delta_paisa': kind == 'ADVANCE' ? amount : (kind == 'RECOVERY' ? -amount : 0),
         'cash_movement_id': movement, 'created_at': _now});
+      if (funded) await _event(txn, table: 'payroll_entries', id: entry, kind: 'PAYROLL_$kind',
+        amount: -amount, manager: managerId, source: source!, shift: shiftId,
+        movement: movement, actualAt: actualAt);
+      return entry;
     });
   }
 
@@ -173,14 +207,19 @@ class OperationsController {
         throw StateError('Reverse dependent payments or recoveries first.');
       }
       final source = FundingSource.values.where((s) => s.code == old['source']).firstOrNull;
+      if (source != null) await _openOriginal(txn, 'payroll_entries', old);
       final movement = source == null ? null : await _cash(txn,
           managerId: managerId, source: source, shiftId: shiftId,
           amount: old['amount_paisa'] as int, category: 'Payroll reversal', reason: reason, reverse: true);
-      return txn.insert('payroll_entries', {...payload, 'employee_id': old['employee_id'],
+      final entry = await txn.insert('payroll_entries', {...payload, 'employee_id': old['employee_id'],
         'period': old['period'], 'kind': 'REVERSAL', 'amount_paisa': old['amount_paisa'],
         'payable_delta_paisa': -payable, 'advance_delta_paisa': -advance,
         'source': old['source'], 'cash_movement_id': movement,
         'request_key': requestKey.trim(), 'created_at': _now});
+      if (source != null) await _event(txn, table: 'payroll_entries', id: entry,
+        kind: 'PAYROLL_REVERSAL', amount: old['amount_paisa'] as int,
+        manager: managerId, source: source, shift: shiftId, movement: movement);
+      return entry;
     });
   }
 
@@ -224,7 +263,7 @@ class OperationsController {
       required int amountPaisa, required String description, String payee = '',
       required FundingSource source, int? shiftId, int? businessDayId,
       String? receiptPath, required String reason, required String requestKey,
-      int? correctsEntryId}) async {
+      int? correctsEntryId, DateTime? actualAt}) async {
     _positive(amountPaisa); _reason(description); _reason(reason);
     return database.transaction((txn) async {
       await CustomerController.requireRole(txn, managerId, manager: true);
@@ -246,9 +285,13 @@ class OperationsController {
       }
       final movement = await _cash(txn, managerId: managerId, source: source, shiftId: shiftId,
           amount: amountPaisa, category: 'Expense: ${category['name']}', reason: reason);
-      return txn.insert('expense_entries', {...payload, 'category_snapshot': category['name'],
+      final entry = await txn.insert('expense_entries', {...payload, 'category_snapshot': category['name'],
         'expense_delta_paisa': amountPaisa, 'business_day_id': day,
         'cash_movement_id': movement, 'request_key': requestKey.trim(), 'created_at': _now});
+      await _event(txn, table: 'expense_entries', id: entry, kind: 'EXPENSE',
+        amount: -amountPaisa, manager: managerId, source: source, day: day,
+        shift: shiftId, movement: movement, actualAt: actualAt);
+      return entry;
     });
   }
 
@@ -260,13 +303,18 @@ class OperationsController {
     if (replay != null) return replay;
     final old = (await txn.query('expense_entries', where: 'id=?', whereArgs: [entryId])).single;
     if (old['reversal_of'] != null) throw StateError('Cannot reverse a reversal.');
+    await _openOriginal(txn, 'expense_entries', old);
     final source = FundingSource.values.singleWhere((s) => s.code == old['source']);
     final movement = await _cash(txn, managerId: managerId, source: source, shiftId: shiftId,
         amount: old['amount_paisa'] as int, category: 'Expense reversal', reason: reason, reverse: true);
-    return txn.insert('expense_entries', {...old, ...payload, 'id': null,
+    final entry = await txn.insert('expense_entries', {...old, ...payload, 'id': null,
       'business_day_id': day, 'correction_of': null,
       'expense_delta_paisa': -(old['amount_paisa'] as int), 'cash_movement_id': movement,
       'request_key': requestKey.trim(), 'created_at': _now});
+    await _event(txn, table: 'expense_entries', id: entry, kind: 'EXPENSE_REVERSAL',
+      amount: old['amount_paisa'] as int, manager: managerId, source: source,
+      day: day, shift: shiftId, movement: movement);
+    return entry;
   }
 
   Future<int> reverseExpense({required int managerId, required int entryId,

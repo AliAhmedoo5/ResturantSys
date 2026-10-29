@@ -8,6 +8,7 @@ import '../inventory/stock_count_valuation.dart';
 import 'analytics_models.dart';
 
 part 'analytics_reports.dart';
+part 'finance_timeline.dart';
 part 'customer_report_details.dart';
 typedef _Record = Map<String, Object?>;
 
@@ -57,6 +58,8 @@ class AnalyticsService {
     await read('order_shifts', 'shifts', 'SELECT DISTINCT s.* FROM shifts s JOIN orders o ON o.shift_id=s.id JOIN business_days b ON b.id=o.business_day_id WHERE $orderScope ORDER BY s.id', orderArgs);
     final joinedOrder = 'JOIN orders o ON o.id=x.order_id JOIN business_days b ON b.id=o.business_day_id WHERE $orderScope';
     await read('payments', 'order_payments', 'SELECT x.* FROM order_payments x $joinedOrder', orderArgs);
+    // Independent receiving evidence must survive an originating order outside scope.
+    await read('payment_events', 'payment_events', 'SELECT x.*,o.business_day_id AS originating_business_day_id,o.shift_id AS originating_shift_id,s.staff_id AS shift_owner_id FROM payment_events x LEFT JOIN orders o ON o.id=x.order_id LEFT JOIN shifts s ON s.id=x.shift_id');
     await read('items', 'order_items', 'SELECT x.id,x.order_id,x.menu_item_id,x.deal_id,x.name,x.quantity,x.unit_price,x.total_price,x.modifiers_json,x.deal_choices_json,x.bom_json FROM order_items x $joinedOrder', orderArgs);
     await read('revisions', 'order_revisions', 'SELECT x.id,x.order_id,x.revision_no,x.action,x.reason,x.cashier_id,x.created_at_utc,x.money_delta_paisa FROM order_revisions x $joinedOrder', orderArgs);
     await read('cost_coverage', 'order_cost_coverage', 'SELECT x.* FROM order_cost_coverage x $joinedOrder', orderArgs);
