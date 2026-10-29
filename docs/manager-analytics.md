@@ -24,8 +24,8 @@ Select **Overview** or one of the 13 report families:
 | Supplier Khata | Current payable, credit purchases and payments by funding source |
 | Cash & shifts | Float, receipts, movements, expected/count cash and discrepancies |
 | Expenses | Recorded outflows and categories, with financial classifications explained |
-| Staff & payroll | Staff/department/job-role and cashier activity; missing payroll inputs |
-| Profitability | Available revenue/cost components and missing costing/allocation inputs |
+| Staff & payroll | Salary rates, posted accruals, payments, advances/recoveries, current balances and separately labeled cashier activity |
+| Profitability | Historical global order COGS and revenue, with cost coverage and policy-dependent allocation limits |
 | Control & audit | Recorded revision/token/rounding/report evidence and export/delivery health |
 
 Read each metric's explanation and quality state. **Missing data** is not zero. **Not applicable** indicates no applicable population or denominator. **Estimated** identifies incomplete evidence or approximate methodology. Coverage counts explain which records contribute to timing and rate statistics.
@@ -48,7 +48,9 @@ Monetary aggregation uses integer paisa. Existing legacy rupee fields are conver
 
 ## History and missing evidence
 
-The database does not yet contain complete salary/accrual/advance ledgers, invoice due-date allocations, event-time sale cost layers, historical preparation lifecycle timestamps or a comprehensive security/configuration audit. Corresponding reports explain what cannot be calculated reliably. Older inventory history also has a coverage boundary: movement recording began with schema v14. Schema v16 begins recording explicitly observed cashier status changes; it does not reconstruct older milestones or make historical preparation-time analytics complete.
+The database stores salary rates and immutable payroll accrual, payment, advance and recovery ledgers; expense categories and immutable expense postings; supplier invoice due dates and payment allocations; and historical global order COGS at retained event-time acquisition rates. Reports distinguish these existing inputs from missing old evidence. New linked finance payment events retain actual time independently of recording time. Earlier finance postings without those events do not establish actual money timing. Salary earned-period allocation, historical supplier opening/allocation reconstruction and Menu Item/Deal margin allocation still require their stated policy and evidence boundaries; acquisition-rate COGS does not establish stock valuation.
+
+Inventory movement coverage began with schema v14. Schema v16 retains observed cashier status milestones without reconstructing older preparation history. Current Holds are persisted, while complete Hold lifecycle history is unavailable. Supplier archiving and stored cost history exist; they do not make earlier supplier opening edits versioned. Operations and configuration audit records exist, while complete security-event capture and the reporting projections remain separate coverage gaps. Corresponding reports should disclose those specific limits rather than describe the implemented ledgers as absent.
 
 Closed Z-reports are immutable saved snapshots with their own revision/hash. A historical dashboard query over current records is exploratory and can differ after a later correction; it must not overwrite or silently replace the sealed report. Open **Z-Reports & Backups** for the original saved day-close report and its delivery archive.
 
