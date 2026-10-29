@@ -288,7 +288,6 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const ValueKey('analytics_cashier')), '-1');
     await tester.ensureVisible(find.byKey(const ValueKey('analytics_apply_filters')));
-    await tester.ensureVisible(find.byKey(const ValueKey('analytics_apply_filters')));
     await tester.tap(find.byKey(const ValueKey('analytics_apply_filters')));
     await tester.pumpAndSettle();
     expect(find.text('Positive ID required'), findsOneWidget);
@@ -299,6 +298,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(requested!.cashierId, 7);
     expect(find.textContaining('Filters applied'), findsOneWidget);
+    await tester.ensureVisible(find.text('Clear'));
     await tester.tap(find.text('Clear'));
     await tester.pumpAndSettle();
     expect(requested!.hasOrderFilters, isFalse);
