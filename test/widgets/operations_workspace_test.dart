@@ -97,6 +97,11 @@ void main() {
       controller:controller,managerId:manager,payroll:true))));
     await tester.pumpAndSettle();
 
+    await tester.tap(find.byType(DropdownButtonFormField<int>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Night Chef').last);
+    await tester.pumpAndSettle();
+
     await tester.tap(find.text('Log worked hours'));
     await tester.pumpAndSettle();
 
@@ -118,7 +123,8 @@ void main() {
   });
 
   testWidgets('payroll workspace displays Department Labor Allocation breakdown in Manager UI', (tester) async {
-    final cookId = await controller.database.insert('staff', {'name':'Cook Tariq','department_id':1,
+    final kitchenDept = (await controller.database.query('departments', where: "name='Kitchen'")).first['id'] as int;
+    final cookId = await controller.database.insert('staff', {'name':'Cook Tariq','department_id':kitchenDept,
       'pin_hash':'tariq-pin','role':'CASHIER','login_enabled':0,'created_at':'2026-10-01'});
     final currentPeriod = DateTime.now().toIso8601String().substring(0, 7);
 

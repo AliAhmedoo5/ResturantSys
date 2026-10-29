@@ -410,6 +410,7 @@ class ShiftAndCashController {
       FROM order_payments op JOIN orders o ON o.id = op.order_id LEFT JOIN payment_events pe ON pe.tender_id=op.id
       WHERE $scope = ? AND op.payment_method = 'CASH'
         AND COALESCE(op.amount_tendered_paisa, CAST(ROUND(op.amount_tendered * 100) AS INTEGER)) > 0
+        AND o.payment_status != 'VOIDED'
         AND (pe.id IS NOT NULL OR o.payment_status IN ('SETTLED', 'REFUND_PENDING', 'CANCELLED', 'REFUNDED'))
     """, [shiftId ?? businessDayId]);
     return (rows.single['receipt_paisa'] as num).toInt();
