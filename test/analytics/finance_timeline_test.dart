@@ -89,6 +89,13 @@ void main() {
     expect(export, contains('2026-10-26 01:00:00'));
     expect(export, contains('SUPPLIER_PAYMENT'));
     expect(export, isNot(contains('03001234567')));
+    final exactWindow = await service.load(query.copyWith(startDate: DateTime(2026, 10, 26, 1),
+      endDateExclusive: DateTime(2026, 10, 26, 2), live: true));
+    expect(exactWindow.section(AnalyticsFamily.expenses).rows.where((r) => r.cells['kind'] == 'Finance payment'), hasLength(2));
+    final after = await service.load(query.copyWith(startDate: DateTime(2026, 10, 26, 1, 0, 1),
+      endDateExclusive: DateTime(2026, 10, 26, 2), live: true));
+    expect(after.section(AnalyticsFamily.expenses).rows.where((r) => r.cells['kind'] == 'Finance payment'), isEmpty);
+
     final previous = await service.load(query.copyWith(startDate: DateTime(2026, 10, 25), endDateExclusive: DateTime(2026, 10, 26)));
     expect(previous.section(AnalyticsFamily.expenses).rows.where((r) => r.cells['kind'] == 'Finance payment'), isEmpty);
   });

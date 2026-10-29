@@ -14,13 +14,14 @@ class _FinanceTimeline {
     final q = e.query;
     if (q.shiftId != null && r['shift_id'] != q.shiftId) return false;
     final shift = e.get('shifts').where((s) => s['id'] == r['shift_id']).firstOrNull;
-    if (q.cashierId != null && shift?['staff_id'] != q.cashierId) return false;
-    if (q.timeBasis == AnalyticsTimeBasis.calendarTime && !q.live) {
+    if (q.cashierId != null && (r['shift_owner_id'] ?? shift?['staff_id']) != q.cashierId) return false;
+    if (q.timeBasis == AnalyticsTimeBasis.calendarTime) {
       final time = _karachi(r['actual_at']);
-      return time != null && !time.isBefore(_date(q.startDate)) && time.isBefore(_date(q.endDateExclusive));
+      return time != null && !time.isBefore(_clock(q.startDate)) && time.isBefore(_clock(q.endDateExclusive));
     }
     return e.get('days').any((d) => d['id'] == r['business_day_id']);
   }
+  DateTime _clock(DateTime t) => DateTime.utc(t.year, t.month, t.day, t.hour, t.minute, t.second, t.millisecond, t.microsecond);
   late final events = e.get('payment_events').where(_finance).where(_selected).toList()
     ..sort((a, b) => '${a['actual_at'] ?? ''}:${a['id']}'.compareTo('${b['actual_at'] ?? ''}:${b['id']}'));
   late final uncovered = <_Record>[
