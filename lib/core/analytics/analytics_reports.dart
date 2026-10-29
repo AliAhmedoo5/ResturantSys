@@ -372,7 +372,16 @@ class _ReportBuilder {
   AnalyticsSection _cash() {
     final shifts = e.get('shifts');
     final receivingIds = e.get('days').map((d) => d['id']).toSet();
-    final receiptEvents = e.get('payment_events').where((p) => ['RECEIPT', 'REFUND'].contains(p['kind']) && receivingIds.contains(p['business_day_id'])).toList();
+    final receiptEvents = e.get('payment_events').where((p) {
+      if (!['RECEIPT', 'REFUND'].contains(p['kind'])) return false;
+      if (e.query.timeBasis == AnalyticsTimeBasis.calendarTime && !e.query.live) {
+        final actual = _karachi(p['actual_at']);
+        if (actual == null || actual.isBefore(_date(e.query.startDate)) || !actual.isBefore(_date(e.query.endDateExclusive))) return false;
+      } else if (!receivingIds.contains(p['business_day_id'])) { return false; }
+      return (e.query.shiftId == null || p['shift_id'] == e.query.shiftId) &&
+          (e.query.cashierId == null || p['shift_owner_id'] == e.query.cashierId) &&
+          (e.query.paymentMethod == null || p['payment_method'] == e.query.paymentMethod);
+    }).toList();
     final moves = e.get('movements');
     final payments = e.get('cash_payments');
     final receipts = payments.where((p) => p['payment_method'] == 'CASH' && _money(p, 'amount_tendered') > 0).toList();
@@ -414,7 +423,7 @@ class _ReportBuilder {
       }),
       ...moves.map((m) => _row('cash_movements', m, {'kind': 'Drawer movement', 'shift_id': m['shift_id'], 'cashier_id': m['staff_id'], 'type': m['type'], 'category': _safeText(m['category']), 'amount_paisa': _money(m, 'amount'), 'created_at': m['created_at']})),
       ...e.get('reports').map((r) => _row('report_runs', r, {'kind': 'Sealed Z-report provenance', 'business_day_id': r['business_day_id'], 'status': r['status'], 'hash': r['content_hash'], 'created_at': r['created_at']})),
-    ], ['event_kind', 'event_key', 'payment_source', 'payment_method', 'actual_at', 'recorded_at', 'receiving_business_day_id', 'receiving_shift_id', 'originating_business_day_id', 'originating_shift_id', 'order_id', 'tender_id', 'movement_id', 'recorded_by', 'approved_by', 'recorded_by_name_snapshot', 'shift_owner_name_snapshot', 'change_paisa', 'rounding_paisa', 'kind', 'business_day_id', 'shift_id', 'cashier_id', 'status', 'opening_paisa', 'expected_paisa', 'counted_paisa', 'variance_paisa', 'review_status', 'type', 'category', 'amount_paisa', 'hash', 'created_at'], [_globalBasis, 'Legacy payments lack receipt timestamps: customer collections are by source order Business Day/shift, not actual collection-event date. Shift rows are exploratory X-report inputs; sealed Z-report hashes remain original.']);
+    ], ['event_kind', 'event_key', 'payment_source', 'payment_method', 'actual_at', 'recorded_at', 'receiving_business_day_id', 'receiving_shift_id', 'originating_business_day_id', 'originating_shift_id', 'order_id', 'tender_id', 'movement_id', 'recorded_by', 'approved_by', 'recorded_by_name_snapshot', 'shift_owner_name_snapshot', 'change_paisa', 'rounding_paisa', 'kind', 'business_day_id', 'shift_id', 'cashier_id', 'status', 'opening_paisa', 'expected_paisa', 'counted_paisa', 'variance_paisa', 'review_status', 'type', 'category', 'amount_paisa', 'hash', 'created_at'], [_globalBasis, 'Independent customer money event rows use receiving Business Day/Shift (or actual time in calendar mode); Shift/Cashier/method filters narrow those activity rows only. Legacy payments without linked events have unknown timing/receiving attribution and remain order-cohort estimates in the legacy drawer metrics. Never add event rows to the linked tender/movement again. Shift rows are exploratory X-report inputs; sealed Z-report hashes remain original.']);
   }
 
   AnalyticsSection _expenses() {
@@ -581,4 +590,5 @@ class _ReportBuilder {
     } on FormatException { return 'Unreadable snapshot'; }
   }
 }
+
 

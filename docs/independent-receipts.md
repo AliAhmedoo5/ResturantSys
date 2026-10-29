@@ -1,0 +1,11 @@
+# Independent customer money evidence
+
+New Cashier checkouts write one immutable receipt event for each collected manual tender in the same SQLite transaction as its Order and stock effects. COD placeholders are not receipts. Amounts are signed Integer Paisa net of retained change; change and Cash Rounding remain separately visible. A refund links its negative tender and optional drawer PAY_OUT to one event. Stable command identities make independent receipt/refund retries return the existing result, rejecting conflicting retry payloads.
+
+Cashiers can accept a partial Collection Due receipt through `recordCashierReceipt` in their current open Shift; the receiving Business Day and Shift are recorded independently from the originating Order. Settled Trip Locks prohibit direct further collections. Managers cannot execute these commands. The existing Cashier checkout and explicit refund interfaces write the same evidence automatically.
+
+Actual event time defaults to entry time. The domain receipt/refund contract also accepts an explicit late actual timestamp within the receiving open Shift and Business Day, never after recording time. Recording time is permanently stored in UTC. This is not a closed-day correction workflow. Any failed event validation rolls back all linked writes.
+
+Manager Cash and shifts contributing rows expose receipt/refund kind, signed amount, method, source, actual and recording timestamps, original and receiving relationships, actors, tender/movement links, change and rounding. Shared CSV/XLSX/PDF exports use those same snapshot columns. Business Day mode selects receiving assignments; calendar mode selects actual timestamps in Asia/Karachi. Cashier means Shift owner for these rows. Domain-only filters do not redefine whole-drawer metrics.
+
+Schema 22 adds an empty append-only event ledger without backfilling historical tenders. Historical receiving attribution and timing remain unknown; original balances and sealed reports are preserved. Existing drawer metrics retain explicitly disclosed legacy cohort semantics pending the separate selected-Shift reconciliation slice. Never sum an event with its own linked tender or Cash Movement as another financial effect.
