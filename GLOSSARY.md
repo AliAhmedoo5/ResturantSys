@@ -167,8 +167,12 @@ A local durable queue storing end-of-day reports with retry schedules, ensuring 
 _Avoid_: Send cache, email queue, sync queue
 
 **Audit Timestamp**:
-The unalterable local date and time permanently recorded on every database transaction, cash movement, revision, and inventory log.
+The immutable time at which an action was recorded, retained with its original UTC or offset evidence and displayed in Asia/Karachi. Naive legacy values carry a disclosed Asia/Karachi assumption; they are not proof of the actual event time.
 _Avoid_: System time, clock stamp
+
+**Event Time**:
+The time at which the recorded activity actually occurred, distinct from its Audit Timestamp when entry was delayed. Unknown historical Event Times remain unknown.
+_Avoid_: Entry time, posting time (when referring to actual occurrence)
 
 **Manager Portal**:
 The back-office administrative section of the application protected by a Manager PIN for catalog CRUD, recipes, Khata, staff PINs, settings, and reporting.
