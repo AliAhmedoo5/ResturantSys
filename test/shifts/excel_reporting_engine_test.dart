@@ -150,6 +150,7 @@ void main() {
         vendorId: vendor.id,
         amount: 3000.0,
         paymentSource: VendorPaymentSource.paidOutsideDrawer,
+        staffId: supervisorId,
         notes: 'Interbank wire transfer',
       );
 
