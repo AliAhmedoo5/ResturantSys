@@ -150,7 +150,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Department Labor Allocation ($currentPeriod)'), findsOneWidget);
-    expect(find.textContaining('Kitchen: Rs. 40,000.00'), findsOneWidget);
+    expect(find.textContaining('Kitchen: Rs. 40000.00'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
