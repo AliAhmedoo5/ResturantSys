@@ -17,11 +17,10 @@ class _FinanceTimeline {
     if (q.cashierId != null && (r['shift_owner_id'] ?? shift?['staff_id']) != q.cashierId) return false;
     if (q.timeBasis == AnalyticsTimeBasis.calendarTime) {
       final time = _karachi(r['actual_at']);
-      return time != null && !time.isBefore(_clock(q.startDate)) && time.isBefore(_clock(q.endDateExclusive));
+      return time != null && !time.isBefore(analyticsWallClock(q.startDate)) && time.isBefore(analyticsWallClock(q.endDateExclusive));
     }
     return e.get('days').any((d) => d['id'] == r['business_day_id']);
   }
-  DateTime _clock(DateTime t) => DateTime.utc(t.year, t.month, t.day, t.hour, t.minute, t.second, t.millisecond, t.microsecond);
   late final events = e.get('payment_events').where(_finance).where(_selected).toList()
     ..sort((a, b) => '${a['actual_at'] ?? ''}:${a['id']}'.compareTo('${b['actual_at'] ?? ''}:${b['id']}'));
   late final uncovered = <_Record>[
@@ -77,3 +76,4 @@ class _FinanceTimeline {
     'Late finance entries require an open assigned Business Day and, for drawer cash, the same open physical Shift. Closed-period correction entry is unavailable; original sealed reports remain unchanged.',
   ];
 }
+

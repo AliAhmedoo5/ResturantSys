@@ -64,14 +64,13 @@ class AnalyticsService {
     // Receiving context belongs to independently selected events, including
     // assignments outside the calendar order cohort. It is not drawer scope.
     final selectedDayIds = e.get('days').map((d) => d['id']).toSet();
-    DateTime clock(DateTime t) => DateTime.utc(t.year,t.month,t.day,t.hour,t.minute,t.second,t.millisecond,t.microsecond);
     final selectedEvents = e.get('payment_events').where((p) {
       if (query.shiftId != null && p['shift_id'] != query.shiftId) return false;
       if (query.cashierId != null && p['shift_owner_id'] != query.cashierId) return false;
       if (['RECEIPT','REFUND'].contains(p['kind']) && query.paymentMethod != null && p['payment_method'] != query.paymentMethod) return false;
       if (query.timeBasis == AnalyticsTimeBasis.calendarTime) {
         final actual = _karachi(p['actual_at']);
-        return actual != null && !actual.isBefore(clock(query.startDate)) && actual.isBefore(clock(query.endDateExclusive));
+        return actual != null && !actual.isBefore(analyticsWallClock(query.startDate)) && actual.isBefore(analyticsWallClock(query.endDateExclusive));
       }
       return selectedDayIds.contains(p['business_day_id']);
     }).toList();
@@ -175,3 +174,4 @@ String _localSql(String column, {bool dateOnly = false}) {
   return "CASE WHEN $column LIKE '%Z' OR substr($column,-6,1) IN ('+','-') THEN $function($column,'+5 hours') ELSE $function($column) END";
 }
 DateTime? _karachi(Object? raw) => analyticsKarachiTime(raw);
+

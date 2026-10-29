@@ -1,5 +1,8 @@
 /// Known restaurant timestamps use Asia/Karachi (UTC+05:00). UTC instances
 /// returned here carry wall-clock fields for deterministic grouping/formatting.
+DateTime analyticsWallClock(DateTime time) => DateTime.utc(time.year, time.month,
+    time.day, time.hour, time.minute, time.second, time.millisecond, time.microsecond);
+
 DateTime? analyticsKarachiTime(Object? raw) {
   if (raw is! String) return null;
   final parsed = DateTime.tryParse(raw);

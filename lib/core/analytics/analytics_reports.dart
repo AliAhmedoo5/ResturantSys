@@ -381,8 +381,7 @@ class _ReportBuilder {
       if (!['RECEIPT', 'REFUND'].contains(p['kind'])) return false;
       if (e.query.timeBasis == AnalyticsTimeBasis.calendarTime) {
         final actual = _karachi(p['actual_at']);
-        DateTime clock(DateTime t) => DateTime.utc(t.year, t.month, t.day, t.hour, t.minute, t.second, t.millisecond, t.microsecond);
-        if (actual == null || actual.isBefore(clock(e.query.startDate)) || !actual.isBefore(clock(e.query.endDateExclusive))) return false;
+        if (actual == null || actual.isBefore(analyticsWallClock(e.query.startDate)) || !actual.isBefore(analyticsWallClock(e.query.endDateExclusive))) return false;
       } else if (!receivingIds.contains(p['business_day_id'])) { return false; }
       return (e.query.shiftId == null || p['shift_id'] == e.query.shiftId) &&
           (e.query.cashierId == null || p['shift_owner_id'] == e.query.cashierId) &&
@@ -653,4 +652,5 @@ class _ReportBuilder {
     } on FormatException { return 'Unreadable snapshot'; }
   }
 }
+
 
