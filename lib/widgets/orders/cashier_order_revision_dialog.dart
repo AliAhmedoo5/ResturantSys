@@ -226,7 +226,6 @@ class _CashierOrderRevisionDialogState
         cashierId: widget.cashierId,
         reason: reason,
         commandId: commandId,
-        actualAt: _refundActualTime.text.trim().isEmpty ? null : DateTime.parse('${_refundActualTime.text.trim().replaceFirst(' ', 'T')}:00+05:00'),
         newItems: _revisedItems,
       );
 
@@ -317,7 +316,7 @@ class _CashierOrderRevisionDialogState
         reason: _reasonController.text.trim().isNotEmpty
             ? _reasonController.text.trim()
             : 'Order revision refund payout',
- 
+        actualAt: _refundActualTime.text.trim().isEmpty ? null : DateTime.parse('${_refundActualTime.text.trim().replaceFirst(' ', 'T')}:00+05:00'),
         commandId: commandId,
       );
 
