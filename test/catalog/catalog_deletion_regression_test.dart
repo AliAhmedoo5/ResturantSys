@@ -24,6 +24,7 @@ void main() {
       var db = await pos.initialize();
       if (target == 'category upgrade') {
         // Restore the actual v21 guard before exercising the versioned upgrade.
+        await db.execute('DROP TRIGGER IF EXISTS menu_item_delete_modifiers');
         await db.execute('DROP TRIGGER closed_order_items_UPDATE');
         await db.execute('''CREATE TRIGGER closed_order_items_UPDATE BEFORE UPDATE ON order_items
           WHEN EXISTS(SELECT 1 FROM orders o JOIN business_days b ON b.id=o.business_day_id

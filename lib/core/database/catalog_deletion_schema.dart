@@ -3,6 +3,13 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 /// Catalog deletion may detach nullable references from a saved receipt. It
 /// cannot change the receipt itself or bypass the closed Business Day boundary.
 Future<void> createCatalogDeletionGuard(DatabaseExecutor db) async {
+  // Group ownership cascades from menu_items, but modifiers.group_id uses
+  // RESTRICT. Remove owned options first so cascade ordering cannot block a
+  // menu item (or its category) from being deleted. A failed parent deletion
+  // rolls this trigger's work back with the same SQLite statement.
+  await db.execute('''CREATE TRIGGER IF NOT EXISTS menu_item_delete_modifiers
+    BEFORE DELETE ON menu_items
+    BEGIN DELETE FROM modifiers WHERE menu_item_id=OLD.id; END''');
   final columns = await db.rawQuery('PRAGMA table_info(order_items)');
   final unchanged = columns
       .map((column) => column['name'] as String)
