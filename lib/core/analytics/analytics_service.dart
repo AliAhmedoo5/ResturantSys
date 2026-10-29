@@ -61,6 +61,24 @@ class AnalyticsService {
     await read('payments', 'order_payments', 'SELECT x.* FROM order_payments x $joinedOrder', orderArgs);
     // Independent receiving evidence must survive an originating order outside scope.
     await read('payment_events', 'payment_events', 'SELECT x.*,o.business_day_id AS originating_business_day_id,o.shift_id AS originating_shift_id,s.staff_id AS shift_owner_id FROM payment_events x LEFT JOIN orders o ON o.id=x.order_id LEFT JOIN shifts s ON s.id=x.shift_id');
+    // Receiving context belongs to independently selected events, including
+    // assignments outside the calendar order cohort. It is not drawer scope.
+    final selectedDayIds = e.get('days').map((d) => d['id']).toSet();
+    DateTime clock(DateTime t) => DateTime.utc(t.year,t.month,t.day,t.hour,t.minute,t.second,t.millisecond,t.microsecond);
+    final selectedEvents = e.get('payment_events').where((p) {
+      if (query.shiftId != null && p['shift_id'] != query.shiftId) return false;
+      if (query.cashierId != null && p['shift_owner_id'] != query.cashierId) return false;
+      if (['RECEIPT','REFUND'].contains(p['kind']) && query.paymentMethod != null && p['payment_method'] != query.paymentMethod) return false;
+      if (query.timeBasis == AnalyticsTimeBasis.calendarTime) {
+        final actual = _karachi(p['actual_at']);
+        return actual != null && !actual.isBefore(clock(query.startDate)) && actual.isBefore(clock(query.endDateExclusive));
+      }
+      return selectedDayIds.contains(p['business_day_id']);
+    }).toList();
+    final eventDayIds = selectedEvents.map((p) => p['business_day_id']).whereType<int>().toSet().toList();
+    final eventShiftIds = selectedEvents.map((p) => p['shift_id']).whereType<int>().toSet().toList();
+    if (eventDayIds.isNotEmpty) await read('event_days', 'business_days', 'SELECT id,opened_at,closed_at,status FROM business_days WHERE id IN (${List.filled(eventDayIds.length, '?').join(',')})', eventDayIds);
+    if (eventShiftIds.isNotEmpty) await read('event_shifts', 'shifts', 'SELECT * FROM shifts WHERE id IN (${List.filled(eventShiftIds.length, '?').join(',')})', eventShiftIds);
     await read('items', 'order_items', 'SELECT x.id,x.order_id,x.menu_item_id,x.deal_id,x.name,x.quantity,x.unit_price,x.total_price,x.modifiers_json,x.deal_choices_json,x.bom_json FROM order_items x $joinedOrder', orderArgs);
     await read('revisions', 'order_revisions', 'SELECT x.id,x.order_id,x.revision_no,x.action,x.reason,x.cashier_id,x.created_at_utc,x.money_delta_paisa FROM order_revisions x $joinedOrder', orderArgs);
     await read('cost_coverage', 'order_cost_coverage', 'SELECT x.* FROM order_cost_coverage x $joinedOrder', orderArgs);
@@ -107,7 +125,7 @@ class AnalyticsService {
     await read('all_due', 'orders', "SELECT o.id,$outstandingCollectionPaisaSql AS collection_due_paisa FROM orders o WHERE o.payment_status='COLLECTION_DUE'");
     await read('all_trips', 'rider_trips', "SELECT id,cash_expected_paisa FROM rider_trips WHERE status IN ('DISPATCHED','RETURNED')");
     if (!query.live) {
-      final duration = _date(query.endDateExclusive).difference(_date(query.startDate));
+      final duration = query.timeBasis == AnalyticsTimeBasis.calendarTime ? query.endDateExclusive.difference(query.startDate) : _date(query.endDateExclusive).difference(_date(query.startDate));
       final prior = query.copyWith(startDate: query.startDate.subtract(duration), endDateExclusive: query.startDate);
       await read('previous_orders', 'orders', 'SELECT o.id,o.grand_total,o.payment_status FROM orders o JOIN business_days b ON b.id=o.business_day_id WHERE ${_orderCohortScope(prior)}', _orderCohortArgs(prior));
       final priorIntervalArgs = [..._dayArgs(prior), _sqlTime(_karachi(e.now.toIso8601String())!)];

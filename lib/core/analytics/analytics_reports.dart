@@ -26,7 +26,7 @@ class _ReportBuilder {
       'Overview combines explicitly labeled order-cohort, selected-day and current global measures. See each formula for scope.',
       if (e.query.live && !e.get('days').any((d) => d['status'] == 'OPEN')) 'No Business Day is currently open. Historical reporting remains available.',
     ]);
-    return AnalyticsSnapshot(query: e.query, generatedAt: e.now, generatedByStaffId: e.actor, sourceSchemaVersion: e.sourceSchemaVersion, businessDayIds: {...e.get('days').map((d) => d['id'] as int), ...e.get('order_days').map((d) => d['id'] as int)}.toList(), sections: [overview, ...sections], notes: [
+    return AnalyticsSnapshot(query: e.query, generatedAt: e.now, generatedByStaffId: e.actor, sourceSchemaVersion: e.sourceSchemaVersion, businessDayIds: {...e.get('days').map((d) => d['id'] as int), ...e.get('order_days').map((d) => d['id'] as int), ...e.get('event_days').map((d) => d['id'] as int)}.toList(), sections: [overview, ...sections], notes: [
       'Analytics formula version 2; PKR; Order time basis: ${e.query.timeBasis.name}; grouping: ${e.query.grouping.name}; Asia/Karachi (UTC+05:00). Start inclusive; end exclusive. Business Day weekday uses assigned opening date; calendar weekday uses actual creation date. Weeks start Monday; months use local calendar months.',
       'Non-order ledgers and drawer reconciliation retain Business Day opening-date scope. Calendar Order activity does not change their scope or Order assignments.',
 
@@ -575,9 +575,9 @@ class _ReportBuilder {
   AnalyticsRow _row(String source, _Record record, Map<String, Object?> cells) {
     final detail = <String, Object?>{...cells};
     final shiftId = source == 'shifts' ? record['id'] : record['shift_id'];
-    final shift = [...e.get('shifts'), ...e.get('order_shifts')].where((s) => s['id'] == shiftId).firstOrNull;
+    final shift = [...e.get('shifts'), ...e.get('order_shifts'), ...e.get('event_shifts')].where((s) => s['id'] == shiftId).firstOrNull;
     final dayId = source == 'business_days' ? record['id'] : record['business_day_id'] ?? shift?['business_day_id'];
-    final day = [...e.get('days'), ...e.get('order_days')].where((d) => d['id'] == dayId).firstOrNull;
+    final day = [...e.get('days'), ...e.get('order_days'), ...e.get('event_days')].where((d) => d['id'] == dayId).firstOrNull;
     if (dayId != null) detail['business_day_id'] = dayId;
     if (shiftId != null) detail['shift_id'] = shiftId;
     if (day != null) {
@@ -653,3 +653,4 @@ class _ReportBuilder {
     } on FormatException { return 'Unreadable snapshot'; }
   }
 }
+

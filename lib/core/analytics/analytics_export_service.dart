@@ -136,6 +136,8 @@ class AnalyticsExportService {
     ['timezone', 'Asia/Karachi'], ['generated_by_staff_id', s.generatedByStaffId],
     ['business_date_start', _date(s.query.startDate)],
     ['business_date_end_exclusive', _date(s.query.endDateExclusive)],
+    ['query_start_inclusive', '${s.query.startDate.toIso8601String().replaceAll('Z', '')}+05:00'],
+    ['query_end_exclusive', '${s.query.endDateExclusive.toIso8601String().replaceAll('Z', '')}+05:00'],
     ['business_day_ids', s.businessDayIds.join(';')], ['live', s.query.live.toString()],
     ['cashier_id', s.query.cashierId], ['shift_id', s.query.shiftId],
     ['dining_type', s.query.diningType], ['payment_method', s.query.paymentMethod],

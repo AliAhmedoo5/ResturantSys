@@ -9,9 +9,39 @@ import 'package:resturant_sys/core/analytics/analytics_export_service.dart';
 import 'package:resturant_sys/core/auth/auth_service.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
+import 'package:resturant_sys/core/finance/operations_controller.dart';
 
 void main() {
   setUpAll(sqfliteFfiInit);
+  test('calendar event-only snapshot retains receiving context without broadening drawer scope', () async {
+    final store = PosDatabase(factory: databaseFactoryFfi, customPath: inMemoryDatabasePath);
+    final db = await store.initialize();
+    addTearDown(store.close);
+    final shifts = ShiftAndCashController(database: db);
+    final day = await shifts.openBusinessDay(openedByStaffId: 1, openedAt: DateTime(2026,10,27,18));
+    final shift = await shifts.openShift(staffId: 2, openingFloat: 1000, openedAt: DateTime(2026,10,27,18));
+    final order = await db.insert('orders', {'business_day_id': day.id, 'shift_id': shift.id, 'cashier_id': 2, 'token_number': 1, 'dining_type': 'TAKEAWAY', 'subtotal': 200, 'grand_total': 200, 'payment_status': 'COLLECTION_DUE', 'created_at': '2026-10-27 18:15:00'});
+    await OrderAndCheckoutController(database: db).recordCashierReceipt(orderId: order, shiftId: shift.id, cashierId: 2, amountPaisa: 10000, method: PaymentMethod.cash, commandId: 'old-order-new-receipt', actualAt: DateTime.parse('2026-10-28T10:30:00+05:00'));
+    final operations = OperationsController(db);
+    final category = await operations.saveCategory(managerId: 1, name: 'Utilities');
+    await operations.postExpense(managerId: 1, categoryId: category, amountPaisa: 2000, description: 'Bank bill', source: FundingSource.bank, businessDayId: day.id, reason: 'Paid', requestKey: 'event-only-bank', actualAt: DateTime.parse('2026-10-28T11:00:00+05:00'));
+    final auth = AuthService(database: db)..session.login(Staff.fromMap((await db.query('staff', where: 'id=1')).single));
+    final snapshot = await AnalyticsService(database: db, authService: auth).load(AnalyticsQuery(startDate: DateTime(2026,10,28,10), endDateExclusive: DateTime(2026,10,28,12), timeBasis: AnalyticsTimeBasis.calendarTime));
+    expect(snapshot.businessDayIds, [day.id]);
+    expect(snapshot.section(AnalyticsFamily.orders).rows.where((r) => r.sourceType == 'orders'), isEmpty);
+    final receipt = snapshot.section(AnalyticsFamily.cash).rows.singleWhere((r) => r.sourceType == 'payment_events');
+    expect(receipt.cells['shift_owner_id'], 2);
+    expect(receipt.cells['shift_start_source'], '2026-10-27 18:00:00');
+    expect(receipt.cells['business_day_start_source'], '2026-10-27 18:00:00');
+    final finance = snapshot.section(AnalyticsFamily.expenses).rows.singleWhere((r) => r.cells['kind'] == 'Finance payment');
+    expect(finance.cells['business_day_start_source'], '2026-10-27 18:00:00');
+    expect(finance.cells['shift_id'], isNull);
+    expect(snapshot.section(AnalyticsFamily.cash).metrics.singleWhere((m) => m.id == 'opening_float').value, 0);
+    final csv = AnalyticsExportService().csv(snapshot, AnalyticsFamily.cash);
+    expect(csv, contains('query_start_inclusive,2026-10-28T10:00:00.000+05:00'));
+    expect(csv, contains('query_end_exclusive,2026-10-28T12:00:00.000+05:00'));
+  });
+
   test('cashier receipt retries retain independent receiving attribution', () async {
     final store = PosDatabase(factory: databaseFactoryFfi, customPath: inMemoryDatabasePath);
     final db = await store.initialize();
