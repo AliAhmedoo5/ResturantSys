@@ -39,6 +39,14 @@ void main() {
     expect(csv, contains('receiving shift id'));
     expect(csv, contains('originating shift id'));
     expect(csv, contains('receipt-receipt-1'));
+    final localActual = actual.add(const Duration(hours: 5));
+    for (final live in [false, true]) {
+      final calendar = snapshot.query.copyWith(timeBasis: AnalyticsTimeBasis.calendarTime, live: live, startDate: localActual, endDateExclusive: localActual.add(const Duration(minutes: 1)));
+      final included = await AnalyticsService(database: db, authService: auth).load(calendar);
+      expect(included.section(AnalyticsFamily.cash).rows.where((r) => r.sourceType == 'payment_events').length, 1);
+      final excluded = await AnalyticsService(database: db, authService: auth).load(calendar.copyWith(startDate: localActual.subtract(const Duration(minutes: 1)), endDateExclusive: localActual));
+      expect(excluded.section(AnalyticsFamily.cash).rows.where((r) => r.sourceType == 'payment_events'), isEmpty, reason: 'Actual end boundary is exclusive, including in live mode');
+    }
     expect((await controller.getOrderPayments(order)).length, 1);
     expect(snapshot.section(AnalyticsFamily.delivery).metrics.singleWhere((m) => m.id == 'collection_due').value, 10000);
     final shifts = ShiftAndCashController(database: db);
