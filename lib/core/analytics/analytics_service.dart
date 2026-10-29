@@ -8,6 +8,7 @@ import '../inventory/stock_count_valuation.dart';
 import 'analytics_models.dart';
 
 part 'analytics_reports.dart';
+part 'finance_timeline.dart';
 part 'customer_report_details.dart';
 typedef _Record = Map<String, Object?>;
 

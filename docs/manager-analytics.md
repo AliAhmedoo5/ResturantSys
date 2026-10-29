@@ -57,3 +57,11 @@ Closed Z-reports are immutable saved snapshots with their own revision/hash. A h
 Dashboard exports use the displayed immutable query snapshot, carrying the selected period, filters, time zone, units, quality and source metadata. CSV and Excel text is protected against spreadsheet formula interpretation; numeric money remains numeric. Exporting does not automatically email or otherwise transmit a report.
 
 The implementation specification and confirmed test boundaries are in [0002-manager-analytics.md](specs/0002-manager-analytics.md). Framework analysis, tests, screenshots and builds run in GitHub Actions only.
+
+Finance payment timeline (reporting version 2)
+
+The Expenses family includes a dated finance payment timeline. Expense, supplier settlement, salary payment and advance commands atomically retain a linked payment event with signed Integer Paisa, actual time, immutable recording time, recording Manager, approval, assigned Business Day and physical Shift where applicable. The Shift owner remains separate from the Manager recorder. Bank/digital and owner payments have no physical Shift and cannot change drawer cash.
+
+Finance flow totals use those events once; linked Cash Movements and expense/payroll/supplier ledger contributors are supporting views and must not be added again. Payroll accruals, advance offsets and unpaid credit purchases are excluded. Open-period late entries accept explicit Pakistan time. Entries cannot precede the assigned open day or physical Shift, use a future actual time, or correct closed historical periods. Returned funds within an open period produce separately linked reversal events.
+
+Legacy finance records without linked time evidence remain visible as coverage gaps and in their original posting views. Their posting timestamp is not substituted for actual money time. Actual-time calendar totals exclude unknown times; incomplete evidence is disclosed and totals marked estimated. Transaction recording evidence and original sealed reports remain immutable. Shared CSV/XLSX/PDF serialization consumes these same snapshot rows and coverage notes.

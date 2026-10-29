@@ -117,6 +117,15 @@ class _OperationsWorkspaceState extends State<OperationsWorkspace> {
   static const _sources = {'DRAWER':'Active drawer', 'BANK':'Bank', 'OWNER':'Owner cash'};
   FundingSource _source(String code) => FundingSource.values.singleWhere((s) => s.code == code);
 
+  DateTime? _actual(String? value) {
+    if (value == null || value.trim().isEmpty) return null;
+    if (!RegExp(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$').hasMatch(value.trim())) throw ArgumentError('Use YYYY-MM-DD HH:MM for Pakistan time.');
+    final parsed = DateTime.tryParse(value.trim());
+    if (parsed == null) throw ArgumentError('Use YYYY-MM-DD HH:MM for Pakistan time.');
+    return DateTime.utc(parsed.year, parsed.month, parsed.day, parsed.hour,
+      parsed.minute, parsed.second).subtract(const Duration(hours: 5));
+  }
+
   @override
   void initState() { super.initState(); _load(); }
   Future<void> _load() async {
@@ -144,6 +153,7 @@ class _OperationsWorkspaceState extends State<OperationsWorkspace> {
       fields: [OperationField('period', kind == 'SALARY' ? 'Effective period (YYYY-MM)' : 'Period (YYYY-MM)', initial: _period),
         OperationField('amount',kind=='ACCRUAL' ? 'Accrual amount (PKR, optional)' : 'Amount (PKR)',required:kind!='ACCRUAL'),
         if (kind == 'PAYMENT' || kind == 'ADVANCE') const OperationField('source','Payment source',initial:'OWNER', options:_sources),
+        if (kind == 'PAYMENT' || kind == 'ADVANCE') const OperationField('actual','Actual Pakistan time (YYYY-MM-DD HH:MM, blank = now)',required:false),
         const OperationField('reason','Reason')], save: (v) async {
         if (kind == 'SALARY') {
           await _controller.setSalary(managerId:_manager, employeeId:employee,
@@ -152,7 +162,7 @@ class _OperationsWorkspaceState extends State<OperationsWorkspace> {
           await _controller.postPayroll(managerId:_manager, employeeId:employee,
             period:v['period']!, kind:kind, amountPaisa:kind == 'ACCRUAL' && v['amount']!.isEmpty ? null : parseMoney(v['amount']!),
             source:v['source'] == null ? null : _source(v['source']!), shiftId:_shiftId,
-            reason:v['reason']!, requestKey:request);
+            reason:v['reason']!, requestKey:request, actualAt:_actual(v['actual']));
         }
       });
     await _load();
@@ -190,12 +200,13 @@ class _OperationsWorkspaceState extends State<OperationsWorkspace> {
         OperationField('payee','Payee',required:false,initial:old?['payee'] as String? ?? ''),
         OperationField('amount','Amount (PKR)',initial:old==null ? '' : ((old['amount_paisa'] as int)/100).toStringAsFixed(2)),
         OperationField('source','Payment source',initial:old?['source'] as String? ?? 'OWNER',options:_sources),
+        const OperationField('actual','Actual Pakistan time (YYYY-MM-DD HH:MM, blank = now)',required:false),
         OperationField('receipt','Receipt path (optional)',required:false,initial:old?['receipt_path'] as String? ?? ''),
         const OperationField('reason','Reason / correction explanation')], save:(v) async {
         await _controller.postExpense(managerId:_manager,categoryId:int.parse(v['category']!),
           amountPaisa:parseMoney(v['amount']!),description:v['description']!,payee:v['payee']!,
           source:_source(v['source']!),shiftId:_shiftId,receiptPath:v['receipt']!.isEmpty ? null : v['receipt'],
-          reason:v['reason']!,requestKey:request,correctsEntryId:old?['id'] as int?);
+          reason:v['reason']!,requestKey:request,actualAt:_actual(v['actual']),correctsEntryId:old?['id'] as int?);
       });
     await _load();
   }

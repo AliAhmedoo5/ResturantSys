@@ -1,3 +1,4 @@
+import '../payments/payment_event.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:resturant_sys/core/database/pos_database_constants.dart';
 import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
@@ -451,6 +452,8 @@ class VendorKhataController {
     DateTime? createdAt,
     Map<int,int>? allocations,
     String? requestKey,
+    DateTime? actualAt,
+    int? businessDayId,
   }) async {
     if (!amount.isFinite || amount <= 0 || PaisaEngine.rupeesToPaisa(amount) <= 0) {
       throw ArgumentError('Settlement payment amount must be greater than zero.');
@@ -493,6 +496,7 @@ class VendorKhataController {
       await _uniqueReference(txn,vendorId,txnType.dbValue,referenceSlip,requestKey);
 
       // 2. If paid from active drawer, verify active shift and auto-generate CashMovement (Pay-Out)
+      int? movementId;
       if (isDrawerPayment) {
         final shiftRows = await txn.query(
           PosDatabaseConstants.tableShifts,
@@ -516,7 +520,7 @@ class VendorKhataController {
         final movementNotes =
             'Khata settlement to ${vendor.name}$slipPart$notePart';
 
-        await txn.insert(
+        movementId = await txn.insert(
           PosDatabaseConstants.tableCashMovements,
           {
             'shift_id': shiftId,
@@ -556,6 +560,22 @@ class VendorKhataController {
       );
 
       await _allocate(txn,vendorId,txnId,amountPaisa,allocations);
+      if (staffId != null) {
+        final days = await txn.query('business_days', where: "status='OPEN'" +
+          (businessDayId == null ? '' : ' AND id=?'),
+          whereArgs: businessDayId == null ? null : [businessDayId]);
+        if (days.length != 1) throw StateError('An open Business Day is required.');
+        final recorded = DateTime.now().toUtc();
+        await PaymentEvent.record(txn, eventKey: 'vendor_transactions:$txnId',
+          kind: 'SUPPLIER_PAYMENT', amountPaisa: -amountPaisa,
+          paymentSource: isDrawerPayment ? 'DRAWER' : paymentSource == VendorPaymentSource.owner
+            ? 'OWNER' : paymentSource == VendorPaymentSource.bank ? 'BANK' : 'EXTERNAL_UNKNOWN',
+          recordedBy: staffId, approvedBy: staffId, recordedAt: recorded,
+          actualAt: actualAt ?? createdAt ?? recorded,
+          businessDayId: days.single['id'] as int,
+          shiftId: isDrawerPayment ? shiftId : null, movementId: movementId,
+          sourceTable: 'vendor_transactions', sourceId: txnId);
+      }
 
       return VendorTransaction(
         id: txnId,
