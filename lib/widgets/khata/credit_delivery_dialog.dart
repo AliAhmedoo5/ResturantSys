@@ -222,6 +222,7 @@ class _CreditDeliveryDialogState extends State<CreditDeliveryDialog> {
                 // Optional Linked Raw Ingredient
                 if (widget.rawIngredients.isNotEmpty) ...[
                   DropdownButtonFormField<int?>(
+                    mouseCursor: WidgetStateMouseCursor.clickable,
                     key: const Key('credit_ingredient_dropdown'),
                     initialValue: _selectedIngredientId,
                     decoration: const InputDecoration(

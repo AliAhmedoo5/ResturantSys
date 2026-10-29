@@ -684,6 +684,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
                           final isSelected = _selectedVendor?.id == vendor.id;
 
                           return InkWell(
+                            mouseCursor: WidgetStateMouseCursor.clickable,
                             key: Key('vendor_tile_${vendor.id}'),
                             onTap: () => _selectVendor(vendor),
                             child: Container(

@@ -128,6 +128,7 @@ class _ModifierFormDialogState extends State<ModifierFormDialog> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 DropdownButtonFormField<int?>(
+                  mouseCursor: WidgetStateMouseCursor.clickable,
                   key: const ValueKey('modifier_item_dropdown'),
                   initialValue: _selectedMenuItemId,
                   isExpanded: true,
@@ -154,6 +155,7 @@ class _ModifierFormDialogState extends State<ModifierFormDialog> {
                 ),
                 const SizedBox(height: WarmCounterSpacing.space16),
                 DropdownButtonFormField<int?>(
+                  mouseCursor: WidgetStateMouseCursor.clickable,
                   key: ValueKey('modifier_group_dropdown_${_selectedMenuItemId ?? 'global'}'),
                   initialValue: _selectedGroupId,
                   decoration: const InputDecoration(labelText: 'Modifier group'),
@@ -201,6 +203,7 @@ class _ModifierFormDialogState extends State<ModifierFormDialog> {
                     const SizedBox(width: WarmCounterSpacing.space16),
                     Expanded(
                       child: DropdownButtonFormField<int?>(
+                        mouseCursor: WidgetStateMouseCursor.clickable,
                         key: const ValueKey('modifier_ingredient_dropdown'),
                         initialValue: _selectedRawIngredientId,
                         isExpanded: true,

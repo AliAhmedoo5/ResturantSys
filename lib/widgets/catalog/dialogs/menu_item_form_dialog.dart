@@ -160,6 +160,7 @@ class _MenuItemFormDialogState extends State<MenuItemFormDialog> {
                     const SizedBox(height: WarmCounterSpacing.space16),
                   ],
                   DropdownButtonFormField<int>(
+                    mouseCursor: WidgetStateMouseCursor.clickable,
                     key: const ValueKey('menu_item_category_dropdown'),
                     initialValue: _selectedCategoryId,
                     isExpanded: true,

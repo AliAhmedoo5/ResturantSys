@@ -233,6 +233,7 @@ class _RecipeBuilderDialogState extends State<RecipeBuilderDialog> {
                         Expanded(
                           flex: 3,
                           child: DropdownButtonFormField<int>(
+                            mouseCursor: WidgetStateMouseCursor.clickable,
                             key: const ValueKey('recipe_ingredient_dropdown'),
                             initialValue: _selectedIngredientId,
                             decoration: const InputDecoration(labelText: 'Select Ingredient'),

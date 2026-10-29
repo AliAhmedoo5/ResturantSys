@@ -123,7 +123,7 @@ class _ChartCardState extends State<_ChartCard> {
       child: Tooltip(message: '${point.label}: $formatted'
         '${point.explanation.isEmpty ? '' : '\n${point.explanation}'}'
         '${inspect == null ? '' : '\nInspect ${point.rows.length} source records'}',
-        child: InkWell(key: ValueKey('chart_point_${chart.id}_$index'), onTap: inspect,
+        child: InkWell(mouseCursor: WidgetStateMouseCursor.clickable, key: ValueKey('chart_point_${chart.id}_$index'), onTap: inspect,
           borderRadius: BorderRadius.circular(6),
           child: Padding(padding: const EdgeInsets.symmetric(vertical: 9),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [

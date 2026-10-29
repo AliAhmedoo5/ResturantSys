@@ -210,6 +210,7 @@ class _DealSelectionDialogState extends State<DealSelectionDialog> {
                     : '';
 
                 return ChoiceChip(
+                  mouseCursor: WidgetStateMouseCursor.clickable,
                   key: ValueKey('deal_opt_${item.id}_${opt.id}'),
                   label: Text('$optName$upgradeLabel'),
                   selected: isChosen,

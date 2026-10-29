@@ -272,6 +272,7 @@ class _SettlementPaymentDialogState extends State<SettlementPaymentDialog> {
 
                 if (widget.invoices.isNotEmpty) ...[
                   DropdownButtonFormField<int>(
+                    mouseCursor: WidgetStateMouseCursor.clickable,
                     decoration: const InputDecoration(labelText: 'Allocate payment', border: OutlineInputBorder()),
                     items: [const DropdownMenuItem(value: 0, child: Text('Opening payable, then earliest due invoices')),
                       for (final invoice in widget.invoices) if ((invoice['due_paisa'] as int) > 0)

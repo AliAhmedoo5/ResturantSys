@@ -261,6 +261,7 @@ class _SupervisorVoidDialogState extends State<SupervisorVoidDialog> {
                               return Padding(
                                 padding: const EdgeInsets.only(bottom: 6.0),
                                 child: InkWell(
+                                  mouseCursor: WidgetStateMouseCursor.clickable,
                                   key: ValueKey('void_reason_${reason.replaceAll(' ', '_').toLowerCase()}'),
                                   borderRadius: WarmCounterSpacing.controlBorderRadius,
                                   onTap: _isAuthorizing

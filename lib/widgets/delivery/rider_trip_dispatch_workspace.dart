@@ -453,6 +453,7 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
                           ),
                         ),
                         child: InkWell(
+                          mouseCursor: WidgetStateMouseCursor.clickable,
                           onTap: () {
                             setState(() {
                               if (isSelected) {
@@ -538,6 +539,7 @@ class _RiderTripDispatchWorkspaceState extends State<RiderTripDispatchWorkspace>
           const Divider(height: 20),
           // Batch Controls
           DropdownButtonFormField<int>(
+            mouseCursor: WidgetStateMouseCursor.clickable,
             key: const ValueKey('rider_select_dropdown'),
             initialValue: _selectedRider?.id,
             dropdownColor: StreetFoodMafiaColors.darkNavy,

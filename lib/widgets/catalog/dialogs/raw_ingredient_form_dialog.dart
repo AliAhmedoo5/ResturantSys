@@ -120,6 +120,7 @@ class _RawIngredientFormDialogState extends State<RawIngredientFormDialog> {
                 ),
                 const SizedBox(height: WarmCounterSpacing.space16),
                 DropdownButtonFormField<StorageUnit>(
+                  mouseCursor: WidgetStateMouseCursor.clickable,
                   key: const ValueKey('ingredient_unit_dropdown'),
                   initialValue: _selectedUnit,
                   isExpanded: true,

@@ -1,7 +1,10 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:resturant_sys/core/auth/auth_service.dart';
@@ -37,6 +40,19 @@ void expectReadableBanner(WidgetTester tester, Finder text) {
       reason: 'Checkout text must be readable against its actual banner fill.');
 }
 
+Future<void> captureCheckout(WidgetTester tester, String name) async {
+  if (Platform.environment['CAPTURE_DESKTOP'] != 'true') return;
+  final boundary = tester.renderObject<RenderRepaintBoundary>(
+      find.byKey(const ValueKey('checkout_preview')));
+  await tester.runAsync(() async {
+    final image = await boundary.toImage();
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+    final directory = await Directory('build/desktop-previews').create(recursive: true);
+    await File('${directory.path}/$name.png').writeAsBytes(bytes!.buffer.asUint8List());
+    image.dispose();
+  });
+}
+
 void main() {
   testWidgets('cash change and shortfall banners have readable text', (tester) async {
     tester.view.physicalSize = const Size(1366, 900);
@@ -45,9 +61,9 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(MaterialApp(
       theme: WarmCounterTheme.darkTheme,
-      home: Scaffold(body: TenderCheckoutDialog(
+      home: RepaintBoundary(key: const ValueKey('checkout_preview'), child: Scaffold(body: TenderCheckoutDialog(
         grandTotal: 500, onCompleteCheckout: (_) async {},
-      )),
+      ))),
     ));
     for (final amount in ['500', '1000', '100']) {
       await tester.enterText(find.byKey(const ValueKey('cash_tendered_input')), amount);
@@ -55,6 +71,7 @@ void main() {
       expectReadableBanner(tester, find.byKey(const ValueKey('return_change_display')));
       expectReadableBanner(tester, find.text(amount == '100'
           ? 'Remaining Unpaid Balance' : 'Return Change to Customer'));
+      await captureCheckout(tester, 'checkout-cash-$amount');
     }
   });
 
@@ -65,9 +82,9 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(MaterialApp(
       theme: WarmCounterTheme.darkTheme,
-      home: Scaffold(body: TenderCheckoutDialog(
+      home: RepaintBoundary(key: const ValueKey('checkout_preview'), child: Scaffold(body: TenderCheckoutDialog(
         grandTotal: 500, onCompleteCheckout: (_) async {},
-      )),
+      ))),
     ));
     await tester.tap(find.text('Split Tender'));
     await tester.pumpAndSettle();
@@ -77,6 +94,7 @@ void main() {
       await tester.pumpAndSettle();
       expectReadableBanner(tester, find.textContaining('Total Allocated:'));
       expectReadableBanner(tester, find.text(amount == '500' ? 'Balanced' : 'Remaining: Rs 400.00'));
+      await captureCheckout(tester, 'checkout-split-$amount');
     }
   });
 
@@ -167,22 +185,46 @@ void main() {
     });
 
     testWidgets('sidebar and enabled actions show a hand pointer', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
       await tester.pumpWidget(MaterialApp(
         theme: WarmCounterTheme.darkTheme,
         home: Scaffold(body: Row(children: [
           AppSidebar(staff: manager, selected: AppWorkspaceTab.register,
               onSelected: (_) {}),
-          Expanded(child: ElevatedButton(onPressed: () {}, child: const Text('Action'))),
+          Expanded(child: Column(mainAxisSize: MainAxisSize.min, children: [
+            ElevatedButton(onPressed: () {}, child: const Text('Action')),
+            OutlinedButton(onPressed: () {}, child: const Text('Outline')),
+            TextButton(onPressed: () {}, child: const Text('Text action')),
+            IconButton(key: const ValueKey('icon_action'), onPressed: () {}, icon: const Icon(Icons.add)),
+            Checkbox(key: const ValueKey('checkbox_action'), value: false, onChanged: (_) {}),
+            Switch(key: const ValueKey('switch_action'), value: false, onChanged: (_) {}),
+            ListTile(title: const Text('List action'), onTap: () {}),
+            const ElevatedButton(onPressed: null, child: Text('Disabled')),
+            const TextField(key: ValueKey('text_input')),
+          ])),
         ])),
       ));
       final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
       await mouse.addPointer(location: Offset.zero);
       addTearDown(mouse.removePointer);
-      for (final target in [find.byKey(const ValueKey('workspace_tab_register')), find.text('Action')]) {
+      for (final target in [
+        find.byKey(const ValueKey('workspace_tab_register')), find.text('Action'),
+        find.text('Outline'), find.text('Text action'), find.byKey(const ValueKey('icon_action')),
+        find.byKey(const ValueKey('checkbox_action')), find.byKey(const ValueKey('switch_action')),
+        find.text('List action'),
+      ]) {
         await mouse.moveTo(tester.getCenter(target));
         await tester.pump();
-        expect(tester.binding.mouseTracker.debugDeviceActiveCursor(1), SystemMouseCursors.click);
+        expect(tester.binding.mouseTracker.debugDeviceActiveCursor(1), SystemMouseCursors.click,
+            reason: 'The enabled control at ${tester.getCenter(target)} must show a hand.');
       }
+      await mouse.moveTo(tester.getCenter(find.text('Disabled')));
+      await tester.pump();
+      expect(tester.binding.mouseTracker.debugDeviceActiveCursor(1), SystemMouseCursors.basic);
+      await mouse.moveTo(tester.getCenter(find.byKey(const ValueKey('text_input'))));
+      await tester.pump();
+      expect(tester.binding.mouseTracker.debugDeviceActiveCursor(1), SystemMouseCursors.text);
     });
   });
 }

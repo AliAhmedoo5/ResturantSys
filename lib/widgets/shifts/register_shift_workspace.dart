@@ -330,12 +330,12 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
 
     final isDayOpen = _activeBusinessDay != null && _activeBusinessDay!.isOpen;
     final isShiftOpen = _activeShift != null && _activeShift!.isOpen;
-    final showBilling = isDayOpen &&
+    final canShowBilling = isDayOpen &&
         isShiftOpen &&
         widget.orderController != null &&
         widget.catalogController != null &&
-        widget.currentStaff.canAccessRegister &&
-        !_showShiftDetails;
+        widget.currentStaff.canAccessRegister;
+    final showBilling = canShowBilling && !_showShiftDetails;
 
     return Column(
       children: [
@@ -352,7 +352,7 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
           onCloseShiftTap: _showBlindShiftCloseDialog,
           onDiscrepancyQueueTap: _showDiscrepancyReviewDialog,
         ),
-        if (isShiftOpen && widget.orderController != null && widget.catalogController != null)
+        if (canShowBilling)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             color: WarmCounterColors.lightPageBackground,

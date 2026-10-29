@@ -181,6 +181,7 @@ class _StaffFormDialogState extends State<StaffFormDialog> {
                   // Department Dropdown
                   Expanded(
                     child: DropdownButtonFormField<int>(
+                      mouseCursor: WidgetStateMouseCursor.clickable,
                       key: const ValueKey('staff_department_dropdown'),
                       isExpanded: true,
                       initialValue: _selectedDepartmentId,
@@ -204,6 +205,7 @@ class _StaffFormDialogState extends State<StaffFormDialog> {
                   // Role Dropdown
                   Expanded(
                     child: DropdownButtonFormField<String>(
+                      mouseCursor: WidgetStateMouseCursor.clickable,
                       key: const ValueKey('staff_role_dropdown'),
                       isExpanded: true,
                       initialValue: _loginEnabled ? _selectedRole.code : 'NONE',
@@ -229,6 +231,7 @@ class _StaffFormDialogState extends State<StaffFormDialog> {
               ),
               const SizedBox(height: WarmCounterSpacing.space16),
               DropdownButtonFormField<int>(
+                mouseCursor: WidgetStateMouseCursor.clickable,
                 key: ValueKey('staff_job_role_${_jobRoleId ?? 0}'),
                 initialValue: _jobRoleId ?? 0,
                 isExpanded: true,

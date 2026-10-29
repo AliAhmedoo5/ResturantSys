@@ -67,6 +67,7 @@ class _OperationFormState extends State<_OperationForm> {
             decoration: InputDecoration(labelText: f.label, border: const OutlineInputBorder()),
             validator: (v) => f.required && (v == null || v.trim().isEmpty) ? 'Required' : null) :
           Row(children: [Expanded(child: DropdownButtonFormField<String>(
+            mouseCursor: WidgetStateMouseCursor.clickable,
             key: ValueKey('${f.name}:${_controllers[f.name]!.text}:${_options[f.name]!.length}'),
             initialValue: _controllers[f.name]!.text.isEmpty ? null : _controllers[f.name]!.text,
             isExpanded: true, decoration: InputDecoration(labelText: f.label, border: const OutlineInputBorder()),

@@ -335,6 +335,7 @@ class _KitchenWastageWorkspaceState extends State<KitchenWastageWorkspace> {
                 ),
                 const SizedBox(height: WarmCounterSpacing.space8),
                 DropdownButtonFormField<int>(
+                  mouseCursor: WidgetStateMouseCursor.clickable,
                   key: const ValueKey('wastage_ingredient_dropdown'),
                   value: _selectedIngredient?.id,
                   isExpanded: true,
@@ -394,6 +395,7 @@ class _KitchenWastageWorkspaceState extends State<KitchenWastageWorkspace> {
                 ),
                 const SizedBox(height: WarmCounterSpacing.space8),
                 DropdownButtonFormField<WastageReason>(
+                  mouseCursor: WidgetStateMouseCursor.clickable,
                   key: const ValueKey('wastage_reason_dropdown'),
                   value: _selectedReason,
                   isExpanded: true,

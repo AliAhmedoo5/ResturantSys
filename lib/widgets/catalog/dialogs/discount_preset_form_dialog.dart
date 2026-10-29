@@ -169,6 +169,7 @@ class _DiscountPresetFormDialogState extends State<DiscountPresetFormDialog> {
               ),
               const SizedBox(height: WarmCounterSpacing.space16),
               DropdownButtonFormField<DiscountType>(
+                mouseCursor: WidgetStateMouseCursor.clickable,
                 key: const ValueKey('discount_type_dropdown'),
                 initialValue: _selectedType,
                 isExpanded: true,

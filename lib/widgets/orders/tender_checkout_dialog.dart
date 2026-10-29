@@ -209,6 +209,7 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
     return SizedBox(
       width: 132,
       child: InkWell(
+        mouseCursor: WidgetStateMouseCursor.clickable,
         key: ValueKey('tender_tab_${method.name}'),
         onTap: () => setState(() => _selectedMethod = method),
         borderRadius: WarmCounterSpacing.controlBorderRadius,
@@ -325,8 +326,8 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
           padding: const EdgeInsets.all(WarmCounterSpacing.space16),
           decoration: BoxDecoration(
             color: isShort
-                ? const Color(0xFFFFF3E0) // Warm warning tint
-                : const Color(0xFFE8F5E9), // Clean green tint
+                ? WarmCounterColors.lightWarningHighlight
+                : WarmCounterColors.lightSurfaceMuted,
             borderRadius: WarmCounterSpacing.panelBorderRadius,
             border: Border.all(
               color: isShort
@@ -343,7 +344,7 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
                 style: WarmCounterTypography.bodyMedium.copyWith(
                   fontWeight: FontWeight.w700,
                   color: isShort
-                      ? const Color(0xFFE65100)
+                      ? WarmCounterColors.lightWarning
                       : WarmCounterColors.lightPrimaryAction,
                 ),
               ),
@@ -367,6 +368,7 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
 
   Widget _buildDenominationChip(double amount, String label) {
     return ActionChip(
+      mouseCursor: WidgetStateMouseCursor.clickable,
       label: Text(label),
       onPressed: () {
         setState(() {
@@ -463,6 +465,7 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
           children: [
             const Text('2. Electronic Portion Method:', style: WarmCounterTypography.secondaryLabel),
             DropdownButton<PaymentMethod>(
+              mouseCursor: WidgetStateMouseCursor.clickable,
               value: _splitElectronicMethod,
               items: const [
                 DropdownMenuItem(value: PaymentMethod.raast, child: Text('Raast QR')),
@@ -488,9 +491,13 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
         Container(
           padding: const EdgeInsets.all(WarmCounterSpacing.space12),
           decoration: BoxDecoration(
-            color: isMatched ? const Color(0xFFE8F5E9) : const Color(0xFFFFEBEE),
+            color: isMatched
+                ? WarmCounterColors.lightSurfaceMuted
+                : WarmCounterColors.lightDestructiveHighlight,
             borderRadius: WarmCounterSpacing.controlBorderRadius,
-            border: Border.all(color: isMatched ? Colors.green : Colors.red),
+            border: Border.all(color: isMatched
+                ? StreetFoodMafiaColors.statusReady
+                : WarmCounterColors.lightDestructiveAction),
           ),
           child: Wrap(
             spacing: 12,
@@ -505,7 +512,9 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
                 isMatched ? 'Balanced' : 'Remaining: Rs ${_currencyFormat.format(_splitDue - _splitTotalPaid)}',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
-                  color: isMatched ? Colors.green : Colors.red,
+                  color: isMatched
+                      ? StreetFoodMafiaColors.statusReady
+                      : WarmCounterColors.lightDestructiveAction,
                 ),
               ),
             ],

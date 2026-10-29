@@ -70,6 +70,8 @@ abstract final class WarmCounterTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: StreetFoodMafiaColors.cartelYellow,
           foregroundColor: StreetFoodMafiaColors.textOnPrimary,
+          enabledMouseCursor: SystemMouseCursors.click,
+          disabledMouseCursor: SystemMouseCursors.basic,
           minimumSize: const Size(
             WarmCounterSpacing.minTouchTargetSize,
             WarmCounterSpacing.minTouchTargetSize,
@@ -99,6 +101,8 @@ abstract final class WarmCounterTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: StreetFoodMafiaColors.offWhite,
+          enabledMouseCursor: SystemMouseCursors.click,
+          disabledMouseCursor: SystemMouseCursors.basic,
           minimumSize: const Size(
             WarmCounterSpacing.minTouchTargetSize,
             WarmCounterSpacing.minTouchTargetSize,
@@ -127,6 +131,8 @@ abstract final class WarmCounterTheme {
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: StreetFoodMafiaColors.cartelYellow,
+          enabledMouseCursor: SystemMouseCursors.click,
+          disabledMouseCursor: SystemMouseCursors.basic,
           minimumSize: const Size(
             WarmCounterSpacing.minTouchTargetSize,
             WarmCounterSpacing.minTouchTargetSize,
@@ -139,6 +145,17 @@ abstract final class WarmCounterTheme {
           ),
         ),
       ),
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(
+          enabledMouseCursor: SystemMouseCursors.click,
+          disabledMouseCursor: SystemMouseCursors.basic,
+        ),
+      ),
+      checkboxTheme: const CheckboxThemeData(mouseCursor: WidgetStateMouseCursor.clickable),
+      radioTheme: const RadioThemeData(mouseCursor: WidgetStateMouseCursor.clickable),
+      switchTheme: const SwitchThemeData(mouseCursor: WidgetStateMouseCursor.clickable),
+      listTileTheme: const ListTileThemeData(mouseCursor: WidgetStateMouseCursor.clickable),
+      popupMenuTheme: const PopupMenuThemeData(mouseCursor: WidgetStateMouseCursor.clickable),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: StreetFoodMafiaColors.darkNavy,
