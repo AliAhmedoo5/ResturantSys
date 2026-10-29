@@ -774,7 +774,7 @@ class ShiftAndCashController {
         SUM(COALESCE(op.amount_tendered_paisa,CAST(ROUND(op.amount_tendered*100) AS INTEGER))
         -COALESCE(op.change_returned_paisa,CAST(ROUND(op.change_returned*100) AS INTEGER))) AS paisa
       FROM order_payments op JOIN orders o ON o.id=op.order_id LEFT JOIN payment_events pe ON pe.tender_id=op.id
-      WHERE COALESCE(pe.business_day_id,o.business_day_id)=? AND (pe.id IS NOT NULL OR o.payment_status IN ('SETTLED','REFUND_PENDING','CANCELLED','REFUNDED'))
+      WHERE COALESCE(pe.business_day_id,o.business_day_id)=? AND o.payment_status != 'VOIDED' AND (pe.id IS NOT NULL OR o.payment_status IN ('SETTLED','REFUND_PENDING','CANCELLED','REFUNDED'))
       GROUP BY op.payment_method
     """,[businessDayId]);
     final tenderSalesPaisa = {for(final row in tenderRows) row['payment_method'] as String:(row['paisa'] as num).toInt()};

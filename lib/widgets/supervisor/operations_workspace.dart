@@ -341,8 +341,12 @@ class _OperationsWorkspaceState extends State<OperationsWorkspace> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Department Labor Allocation ($_period)',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      Expanded(
+                        child: Text('Department Labor Allocation ($_period)',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          overflow: TextOverflow.ellipsis),
+                      ),
+                      const SizedBox(width: 8),
                       Text('Total: ${_money(_deptAllocation!['total_labor_cost_paisa'] as int? ?? 0)}',
                         style: const TextStyle(fontWeight: FontWeight.bold)),
                     ],
