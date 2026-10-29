@@ -53,5 +53,8 @@ void main() {
 
     await expectLater(controller.recordCashierReceipt(orderId: order, shiftId: receiving, cashierId: 2, amountPaisa: 1000, method: PaymentMethod.cash, commandId: 'invalid-time', actualAt: now.subtract(const Duration(days: 1))), throwsStateError);
     expect((await controller.getOrderPayments(order)).length, 2, reason: 'Failed event validation must roll back its tender');
+    await expectLater(controller.recordCashierRefund(orderId: order, shiftId: receiving, cashierId: 2, amountPaisa: 1000, method: PaymentMethod.cash, reason: 'Invalid historical entry', commandId: 'invalid-refund-time', actualAt: now.subtract(const Duration(days: 1))), throwsStateError);
+    expect((await controller.getOrderPayments(order)).length, 2);
+    expect((await shifts.getCashMovements(receiving)).length, 1, reason: 'Failed refund must roll back both its tender and linked PAY_OUT');
   });
 }
