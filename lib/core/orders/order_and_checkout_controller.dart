@@ -1995,8 +1995,8 @@ class OrderAndCheckoutController {
   Future<int> recordCashierReceipt({required int orderId, required int shiftId,
     required int cashierId, required int amountPaisa, required PaymentMethod method,
     required String commandId, DateTime? actualAt, String? referenceCode}) async {
-    if (amountPaisa <= 0 || commandId.trim().isEmpty || method == PaymentMethod.cod || method == PaymentMethod.split) {
-      throw ArgumentError('A positive manual tender and stable command identity are required.');
+    if (amountPaisa < 0 || commandId.trim().isEmpty || method == PaymentMethod.cod || method == PaymentMethod.split) {
+      throw ArgumentError('A valid manual tender and stable command identity are required.');
     }
     if (method == PaymentMethod.cash && amountPaisa % 100 != 0) throw ArgumentError('Physical cash receipts require whole rupees.');
     return database.transaction((txn) async {
@@ -2016,13 +2016,20 @@ class OrderAndCheckoutController {
       final payments = await txn.query('order_payments', where: 'order_id=?', whereArgs: [orderId]);
       final paid = payments.fold<int>(0, (sum,p) => sum + ((p['amount_tendered_paisa'] as int?) ?? PaisaEngine.rupeesToPaisa((p['amount_tendered'] as num).toDouble())) - ((p['change_returned_paisa'] as int?) ?? PaisaEngine.rupeesToPaisa((p['change_returned'] as num?)?.toDouble() ?? 0)));
       final due = PaisaEngine.rupeesToPaisa((orders.single['grand_total'] as num).toDouble()) - paid;
-      if (amountPaisa > due) throw StateError('Receipt exceeds the remaining Collection Due.');
+      final finalCash = method == PaymentMethod.cash && due > 0 && amountPaisa == PaisaEngine.roundCashPaisa(due);
+      if (due <= 0 || amountPaisa == 0 && !finalCash || amountPaisa > due && !finalCash) throw StateError('Receipt must be a partial payment or the exact final payable (half-up rounded for cash).');
+      final roundingPaisa = finalCash ? PaisaEngine.calculateCashRoundingDelta(exactDuePaisa: due, roundedCashPaisa: amountPaisa) : 0;
+      final now = DateTime.now().toUtc();
       final tender = await txn.insert('order_payments', {'order_id': orderId, 'payment_method': method.code, 'amount_tendered': PaisaEngine.paisaToRupees(amountPaisa), 'amount_tendered_paisa': amountPaisa, 'change_returned': 0, 'change_returned_paisa': 0, 'reference_code': referenceCode});
       final id = await PaymentEvent.record(txn, eventKey: 'receipt-$commandId', kind: 'RECEIPT', amountPaisa: amountPaisa,
         paymentSource: method == PaymentMethod.cash ? 'DRAWER' : 'BANK', paymentMethod: method.code,
-        recordedBy: cashierId, recordedAt: DateTime.now().toUtc(), actualAt: actualAt,
+        recordedBy: cashierId, recordedAt: now, actualAt: actualAt, roundingPaisa: roundingPaisa,
         businessDayId: shifts.single['business_day_id'] as int, shiftId: shiftId, orderId: orderId, tenderId: tender, sourceTable: 'order_payments', sourceId: tender);
-      if (amountPaisa == due) await txn.update('orders', {'payment_status': 'SETTLED'}, where: 'id=?', whereArgs: [orderId]);
+      if (roundingPaisa != 0) await txn.insert('rounding_variance_ledger', {
+        'order_id': orderId, 'shift_id': shiftId, 'cash_rounding_paisa': roundingPaisa,
+        'reason': 'Independent final cash receipt half-up rounding', 'created_at': now.toIso8601String(),
+      });
+      if (amountPaisa == due || finalCash) await txn.update('orders', {'payment_status': 'SETTLED'}, where: 'id=?', whereArgs: [orderId]);
       return id;
     });
   }
