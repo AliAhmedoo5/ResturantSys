@@ -65,3 +65,13 @@ The Expenses family includes a dated finance payment timeline. Expense, supplier
 Finance flow totals use those events once; linked Cash Movements and expense/payroll/supplier ledger contributors are supporting views and must not be added again. Payroll accruals, advance offsets and unpaid credit purchases are excluded. Open-period late entries accept explicit Pakistan time. Entries cannot precede the assigned open day or physical Shift, use a future actual time, or correct closed historical periods. Returned funds within an open period produce separately linked reversal events.
 
 Legacy finance records without linked time evidence remain visible as coverage gaps and in their original posting views. Their posting timestamp is not substituted for actual money time. Actual-time calendar totals exclude unknown times; incomplete evidence is disclosed and totals marked estimated. Transaction recording evidence and original sealed reports remain immutable. Shared CSV/XLSX/PDF serialization consumes these same snapshot rows and coverage notes.
+
+## Auditable identity and timestamp evidence
+
+Manager snapshots capture SQLite `PRAGMA user_version` inside the authorized read transaction, report formula version, cutoff, selected Business Day IDs, filters and evidence notes. CSV, XLSX and PDF serialize this same immutable snapshot. The workspace displays schema, formula version and the cutoff in Asia/Karachi.
+
+Known source timestamps display `+05:00 [Asia/Karachi]`; matching `_source` columns retain their original stored UTC/offset or naive value. A naive legacy timestamp is explicitly assumed to be Asia/Karachi. For example `2026-10-29T19:30:00Z` displays as `2026-10-30 00:30:00 +05:00`. A missing actual event time remains missing, even when a recording timestamp exists.
+
+Schema 23 captures names atomically at source insertion in an append-only identity evidence table. It preserves Shift-owner Cashier separately from the recording and approval actors, supplier, employee and expense category identities. Current names are labeled separately; an unknown transaction-time name is marked unavailable. Migration does not backfill current names into old financial history or modify original sealed reports. Existing expense category snapshots remain authoritative. Stable source and identity IDs survive renames and staff/supplier archival.
+
+Audit Timestamp means immutable recording evidence; Event Time means actual occurrence. New money events retain explicit UTC recording time and preserve actual event time independently. Reports convert either known instant for Asia/Karachi display while exporting the source string. Existing naive local fields are preserved, never rewritten as supposedly known UTC history.

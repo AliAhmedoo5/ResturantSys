@@ -40,6 +40,7 @@ class AnalyticsService {
 
   Future<_Evidence> _read(Transaction txn, AnalyticsQuery query, int actor) async {
     final e = _Evidence(query, actor, DateTime.now().toUtc());
+    e.sourceSchemaVersion = (await txn.rawQuery('PRAGMA user_version')).single.values.first as int;
     final dayScope = _dayScope(query);
     final dayArgs = _dayArgs(query);
     final orderScope = _orderCohortScope(query);
@@ -65,7 +66,7 @@ class AnalyticsService {
     // A physical drawer uses all orders in its shifts; order filters never alter it.
     await read('shifts', 'shifts', 'SELECT s.* FROM shifts s JOIN business_days b ON b.id=s.business_day_id WHERE $dayScope', dayArgs);
     await read('cash_payments', 'order_payments', "SELECT p.*,o.shift_id FROM order_payments p JOIN orders o ON o.id=p.order_id JOIN business_days b ON b.id=o.business_day_id WHERE $dayScope AND o.payment_status IN ('SETTLED','REFUND_PENDING','CANCELLED','REFUNDED')", dayArgs);
-    await read('movements', 'cash_movements', 'SELECT m.id,m.shift_id,m.staff_id,m.type,m.amount,m.category,m.created_at FROM cash_movements m JOIN shifts s ON s.id=m.shift_id JOIN business_days b ON b.id=s.business_day_id WHERE $dayScope', dayArgs);
+    await read('movements', 'cash_movements', 'SELECT m.id,m.shift_id,m.staff_id,m.type,m.amount,m.category,m.approved_by,m.created_at FROM cash_movements m JOIN shifts s ON s.id=m.shift_id JOIN business_days b ON b.id=s.business_day_id WHERE $dayScope', dayArgs);
     await read('trips', 'rider_trips', 'SELECT t.* FROM rider_trips t JOIN business_days b ON b.id=t.business_day_id WHERE $dayScope', dayArgs);
     await read('attempts', 'rider_trip_orders', 'SELECT x.id,x.order_id,x.trip_id,x.status,x.delivered_at,x.returned_at,t.dispatched_at,t.rider_staff_id FROM rider_trip_orders x JOIN rider_trips t ON t.id=x.trip_id $joinedOrder', orderArgs);
     await read('ingredients', 'raw_ingredients', 'SELECT id,name,storage_unit,current_stock,low_stock_threshold,cost_per_recipe_unit FROM raw_ingredients');
@@ -89,6 +90,8 @@ class AnalyticsService {
     } else {
       e.absent.add('supplier_payment_allocations');
     }
+    await read('identity_snapshots', 'reporting_identity_snapshots', 'SELECT * FROM reporting_identity_snapshots');
+    await read('expense_categories', 'expense_categories', 'SELECT id,name FROM expense_categories');
     await read('vendors', 'vendor_khata', 'SELECT id,name,opening_balance,current_balance,created_at FROM vendor_khata');
     await read('staff', 'staff', 'SELECT s.id,s.name,s.department_id,s.job_role_id,s.role,s.is_active,s.login_enabled,d.name AS department,j.name AS job_role FROM staff s LEFT JOIN departments d ON d.id=s.department_id LEFT JOIN job_roles j ON j.id=s.job_role_id');
     await read('catalog', 'menu_items', 'SELECT id,name,category_id,is_active FROM menu_items');
@@ -135,6 +138,7 @@ class _Evidence {
   final DateTime now;
   final Map<String, List<_Record>> rows = {};
   final Set<String> absent = {};
+  int? sourceSchemaVersion;
   List<_Record> get(String name) => rows[name] ?? const [];
 }
 
@@ -150,9 +154,4 @@ String _localSql(String column, {bool dateOnly = false}) {
   final function = dateOnly ? 'date' : 'datetime';
   return "CASE WHEN $column LIKE '%Z' OR substr($column,-6,1) IN ('+','-') THEN $function($column,'+5 hours') ELSE $function($column) END";
 }
-DateTime? _karachi(Object? raw) {
-  if (raw is! String) return null;
-  final parsed = DateTime.tryParse(raw);
-  if (parsed == null) return null;
-  return parsed.isUtc || RegExp(r'[+-]\d\d:\d\d$').hasMatch(raw) ? parsed.toUtc().add(const Duration(hours: 5)) : DateTime.utc(parsed.year, parsed.month, parsed.day, parsed.hour, parsed.minute, parsed.second);
-}
+DateTime? _karachi(Object? raw) => analyticsKarachiTime(raw);
