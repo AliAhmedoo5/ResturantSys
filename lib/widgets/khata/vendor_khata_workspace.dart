@@ -371,7 +371,6 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
         await widget.controller!.recordCreditDelivery(
           vendorId: vendor.id,
           amount: result['amount'] as double,
-          actualAt: result['actual_at'] as DateTime?,
           referenceSlip: result['reference_slip'] as String?,
           rawIngredientId: result['raw_ingredient_id'] as int?,
           quantity: result['quantity'] as double?,
@@ -486,6 +485,7 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
         await widget.controller!.recordSettlementPayment(
           vendorId: vendor.id,
           amount: result['amount'] as double,
+          actualAt: result['actual_at'] as DateTime?,
           paymentSource: result['payment_source'] as VendorPaymentSource,
           shiftId: _activeShift?.id,
           staffId: widget.currentStaff?.id,
