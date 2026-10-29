@@ -277,6 +277,10 @@ void main() {
   });
 
   testWidgets('Order filters validate IDs and apply and clear the selected cohort', (tester) async {
+    tester.view.physicalSize = const Size(1366, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     AnalyticsQuery? requested;
     final service = SnapshotService(onLoad: (query) async {
       requested = query;

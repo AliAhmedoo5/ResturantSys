@@ -1,4 +1,5 @@
 import 'package:intl/intl.dart';
+import 'analytics_time.dart';
 export 'analytics_time.dart';
 
 part 'report_chart_projection.dart';

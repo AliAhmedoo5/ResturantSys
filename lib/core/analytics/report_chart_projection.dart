@@ -205,9 +205,8 @@ class _Charts {
     final groups = <String, List<AnalyticsRow>>{};
     var undated = 0;
     for (final row in rows) {
-      final date = DateTime.tryParse(row.cells[dateKey]?.toString() ?? '');
-      if (date == null) { undated++; continue; }
-      final local = date.isUtc ? date.add(const Duration(hours: 5)) : date;
+      final local = analyticsKarachiTime(row.cells['${dateKey}_source'] ?? row.cells[dateKey]);
+      if (local == null) { undated++; continue; }
       groups.putIfAbsent(DateFormat('yyyy-MM-dd').format(local), () => []).add(row);
     }
     final dates = groups.keys.toList()..sort();
