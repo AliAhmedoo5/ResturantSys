@@ -85,7 +85,8 @@ class _ReportBuilder {
     String? keyFor(_Record order) {
       final operational = e.query.timeBasis == AnalyticsTimeBasis.businessDay;
       final assignedDay = days[order['business_day_id']];
-      final time = _karachi(operational ? assignedDay?['opened_at'] : order['created_at']);
+      final assignedOpening = assignedDay?['opened_at'];
+      final time = _karachi(operational ? assignedOpening : order['created_at']);
       if (time == null) return null;
       final date = _date(time);
       final start = switch (e.query.grouping) {
