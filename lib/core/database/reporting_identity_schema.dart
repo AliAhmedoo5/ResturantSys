@@ -18,6 +18,7 @@ Future<void> createReportingIdentitySchema(DatabaseExecutor db) async {
     'payroll_entries': {'recorded_by': 'manager_id', 'employee': 'employee_id'},
     'expense_entries': {'recorded_by': 'manager_id', 'category': 'category_id'},
     'payment_events': {'recorded_by': 'recorded_by', 'approved_by': 'approved_by'},
+    'worked_hours': {'recorded_by': 'manager_id', 'employee': 'employee_id'},
   };
   final tables = (await db.rawQuery("SELECT name FROM sqlite_master WHERE type='table'"))
       .map((row) => row['name']).toSet();

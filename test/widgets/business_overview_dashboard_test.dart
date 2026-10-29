@@ -175,8 +175,10 @@ void main() {
       matching: find.byType(Scrollable)).first;
     await tester.scrollUntilVisible(find.text('business_days #4'), 180, scrollable: scrollable);
     expect(find.text('26 Oct, 12:01'), findsOneWidget);
+    await tester.drag(scrollable, const Offset(0, -250));
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('business_days #4'));
-    await tester.tap(find.text('business_days #4'));
+    await tester.tap(find.text('business_days #4'), warnIfMissed: false);
     await tester.pumpAndSettle();
     expect(find.text('Source IDs: 4'), findsOneWidget);
     await tester.tap(find.text('Close'));

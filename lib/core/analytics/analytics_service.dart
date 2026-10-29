@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:sqflite_common/sqlite_api.dart';
 import '../auth/auth_service.dart';
 import '../auth/staff_role.dart';
+import '../finance/operations_controller.dart';
 import '../orders/paisa_engine.dart';
 import '../payments/payment_event.dart';
 import '../inventory/stock_count_valuation.dart';
@@ -85,8 +86,20 @@ class AnalyticsService {
     await read('waste', 'kitchen_wastage', 'SELECT x.id,x.staff_id,x.raw_ingredient_id,x.quantity,x.cost_loss,x.reason,x.created_at FROM kitchen_wastage x WHERE $interval', intervalArgs);
     await read('vendor_events', 'vendor_transactions', 'SELECT x.id,x.vendor_id,x.shift_id,x.staff_id,x.type,x.amount,x.raw_ingredient_id,x.quantity,x.created_at FROM vendor_transactions x WHERE $interval', intervalArgs);
     await read('expense_entries', 'expense_entries', 'SELECT x.* FROM expense_entries x JOIN business_days b ON b.id=x.business_day_id WHERE $dayScope', dayArgs);
-    await read('payroll_entries', 'payroll_entries', 'SELECT x.* FROM payroll_entries x WHERE $interval', intervalArgs);
+    await read('payroll_entries', 'payroll_entries', 'SELECT x.* FROM payroll_entries x');
     await read('payroll_balances', 'payroll_entries', 'SELECT employee_id AS id,SUM(payable_delta_paisa) payable_paisa,SUM(advance_delta_paisa) advance_paisa FROM payroll_entries GROUP BY employee_id');
+    if (tables.contains('worked_hours')) {
+      final workedIntervalScope = query.live
+          ? "EXISTS(SELECT 1 FROM business_days b WHERE b.status='OPEN' AND (x.business_day_id=b.id OR x.work_date=${_localSql('b.opened_at', dateOnly: true)} OR (${_localSql('x.clock_in')}>=${_localSql('b.opened_at')} AND ${_localSql('x.clock_in')}<COALESCE(${_localSql('b.closed_at')},?))))"
+          : "((x.work_date>=? AND x.work_date<?) OR EXISTS(SELECT 1 FROM business_days b WHERE ${_dayScope(query)} AND (x.business_day_id=b.id OR x.work_date=${_localSql('b.opened_at', dateOnly: true)} OR (${_localSql('x.clock_in')}>=${_localSql('b.opened_at')} AND ${_localSql('x.clock_in')}<COALESCE(${_localSql('b.closed_at')},?)))))";
+      final workedArgs = query.live
+          ? [_sqlTime(_karachi(e.now.toIso8601String())!.add(const Duration(seconds: 1)))]
+          : [_sqlDate(query.startDate), _sqlDate(query.endDateExclusive), ...dayArgs, _sqlTime(_karachi(e.now.toIso8601String())!.add(const Duration(seconds: 1)))];
+      await read('worked_hours', 'worked_hours',
+        'SELECT x.*, d.name AS department_name, s.name AS employee_name FROM worked_hours x LEFT JOIN departments d ON d.id=x.department_id LEFT JOIN staff s ON s.id=x.employee_id WHERE $workedIntervalScope', workedArgs);
+    } else {
+      e.absent.add('worked_hours');
+    }
     if (tables.contains('supplier_payment_allocations')) {
       await read('invoice_balances', 'vendor_transactions', "SELECT t.id,t.vendor_id,t.due_date,COALESCE(t.amount_paisa,CAST(ROUND(t.amount*100) AS INTEGER))-COALESCE(SUM(a.amount_paisa),0) due_paisa FROM vendor_transactions t LEFT JOIN supplier_payment_allocations a ON a.invoice_id=t.id WHERE t.type='PURCHASE_CREDIT' GROUP BY t.id");
     } else {

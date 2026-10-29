@@ -1,3 +1,4 @@
+
 /// Core 64-bit integer paisa financial engine.
 ///
 /// Implements exact money calculation (Rs. 1.00 = 100 paisa), mathematical
@@ -99,7 +100,55 @@ abstract final class PaisaEngine {
       taxableBasePaisa: taxableBasePaisa,
     );
   }
+
+  /// Allocates an integer amount of paisa proportionally across weights or parts
+  /// using integer floor division, distributing any remainder paisa to the largest bucket.
+  ///
+  /// Guarantees that the sum of allocated parts exactly equals [totalPaisa] (zero lost or duplicate paisa).
+  static List<int> allocateProportionally({
+    required int totalPaisa,
+    required List<int> parts,
+  }) {
+    if (parts.isEmpty) return const [];
+    if (totalPaisa <= 0) return List.filled(parts.length, 0);
+
+    final totalWeight = parts.fold<int>(0, (sum, w) => sum + (w > 0 ? w : 0));
+    if (totalWeight <= 0) {
+      final base = totalPaisa ~/ parts.length;
+      final rem = totalPaisa % parts.length;
+      final result = List.filled(parts.length, base);
+      result[0] += rem;
+      return result;
+    }
+
+    final allocated = List<int>.filled(parts.length, 0);
+    var allocatedSum = 0;
+    var maxWeight = -1;
+    var maxIndex = 0;
+
+    for (var i = 0; i < parts.length; i++) {
+      final weight = parts[i] > 0 ? parts[i] : 0;
+      if (weight > maxWeight) {
+        maxWeight = weight;
+        maxIndex = i;
+      }
+      final share = (totalPaisa * weight) ~/ totalWeight;
+      allocated[i] = share;
+      allocatedSum += share;
+    }
+
+    final remainder = totalPaisa - allocatedSum;
+    if (remainder > 0 && parts.isNotEmpty) {
+      allocated[maxIndex] += remainder;
+    }
+
+    return allocated;
+  }
 }
+
+/// Standalone proportional allocation helper adhering to integer floor division and largest-bucket remainder distribution.
+List<int> allocatePaisaProportionally(int totalPaisa, List<int> parts) =>
+    PaisaEngine.allocateProportionally(totalPaisa: totalPaisa, parts: parts);
 
 /// Result of a split-tender calculation.
 class SplitTenderResult {
