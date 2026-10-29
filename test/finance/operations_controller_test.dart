@@ -250,4 +250,244 @@ void main() {
       createdAt:DateTime(2026,10,2),dueDate:DateTime(2026,10,1)),throwsArgumentError);
     expect((await khata.getVendorById(vendor.id))!.currentBalance,100);
   });
+
+  test('worked hours recording validates inputs, computes net minutes, prevents replay, and rejects cashier', () async {
+    // 1. Cashier cannot record worked hours
+    await expectLater(
+      operations.recordWorkedHours(
+        managerId: cashier,
+        employeeId: employee,
+        workDate: '2026-10-25',
+        clockIn: DateTime.utc(2026, 10, 25, 11, 0),
+        clockOut: DateTime.utc(2026, 10, 25, 20, 0),
+        breakMinutes: 60,
+        requestKey: key(),
+      ),
+      throwsStateError,
+    );
+
+    // 2. Invalid inputs reject
+    await expectLater(
+      operations.recordWorkedHours(
+        managerId: manager,
+        employeeId: employee,
+        workDate: 'invalid-date',
+        clockIn: DateTime.utc(2026, 10, 25, 11, 0),
+        clockOut: DateTime.utc(2026, 10, 25, 20, 0),
+        requestKey: key(),
+      ),
+      throwsArgumentError,
+    );
+    await expectLater(
+      operations.recordWorkedHours(
+        managerId: manager,
+        employeeId: employee,
+        workDate: '2026-10-25',
+        clockIn: DateTime.utc(2026, 10, 25, 20, 0),
+        clockOut: DateTime.utc(2026, 10, 25, 11, 0),
+        requestKey: key(),
+      ),
+      throwsArgumentError,
+    );
+    await expectLater(
+      operations.recordWorkedHours(
+        managerId: manager,
+        employeeId: employee,
+        workDate: '2026-10-25',
+        clockIn: DateTime.utc(2026, 10, 25, 11, 0),
+        clockOut: DateTime.utc(2026, 10, 25, 12, 0),
+        breakMinutes: 120, // Break exceeds shift
+        requestKey: key(),
+      ),
+      throwsArgumentError,
+    );
+
+    // 3. Manager successfully records worked hours: 11:00 to 20:00 (9 hrs = 540m) - 60m break = 480m (8.0 hrs)
+    final req = key();
+    final id1 = await operations.recordWorkedHours(
+      managerId: manager,
+      employeeId: employee,
+      workDate: '2026-10-25',
+      clockIn: DateTime.utc(2026, 10, 25, 11, 0),
+      clockOut: DateTime.utc(2026, 10, 25, 20, 0),
+      breakMinutes: 60,
+      reason: 'Shift attendance',
+      requestKey: req,
+    );
+    expect(id1, isPositive);
+
+    final history = await operations.workedHoursHistory(managerId: manager, employeeId: employee);
+    expect(history, hasLength(1));
+    expect(history.first['worked_minutes'], 480);
+    expect(history.first['work_date'], '2026-10-25');
+    expect(history.first['employee_name'], 'Kitchen helper');
+
+    // 4. Request replay with identical payload returns existing id
+    final idReplay = await operations.recordWorkedHours(
+      managerId: manager,
+      employeeId: employee,
+      workDate: '2026-10-25',
+      clockIn: DateTime.utc(2026, 10, 25, 11, 0),
+      clockOut: DateTime.utc(2026, 10, 25, 20, 0),
+      breakMinutes: 60,
+      reason: 'Shift attendance',
+      requestKey: req,
+    );
+    expect(idReplay, id1);
+
+    // 5. Request replay with modified payload throws StateError
+    await expectLater(
+      operations.recordWorkedHours(
+        managerId: manager,
+        employeeId: employee,
+        workDate: '2026-10-25',
+        clockIn: DateTime.utc(2026, 10, 25, 11, 0),
+        clockOut: DateTime.utc(2026, 10, 25, 21, 0),
+        breakMinutes: 60,
+        reason: 'Modified',
+        requestKey: req,
+      ),
+      throwsStateError,
+    );
+  });
+
+  test('worked_hours table is immutable; UPDATE and DELETE abort with financial history trigger', () async {
+    final id = await operations.recordWorkedHours(
+      managerId: manager,
+      employeeId: employee,
+      workDate: '2026-10-25',
+      clockIn: DateTime.utc(2026, 10, 25, 11, 0),
+      clockOut: DateTime.utc(2026, 10, 25, 19, 0),
+      breakMinutes: 0,
+      requestKey: key(),
+    );
+
+    await expectLater(
+      db.rawUpdate('UPDATE worked_hours SET worked_minutes = 999 WHERE id = ?', [id]),
+      throwsA(isA<DatabaseException>()),
+    );
+    await expectLater(
+      db.rawDelete('DELETE FROM worked_hours WHERE id = ?', [id]),
+      throwsA(isA<DatabaseException>()),
+    );
+  });
+
+  test('department labor allocation prorates monthly salary based on verified hours (ADR-0020 Example 3)', () async {
+    // Cook Danish earned PKR 30,000 (3,000,000 paisa) in October 2026
+    final kitchenDept = (await db.query('departments', where: "name='Kitchen'")).first['id'] as int;
+    final serviceDept = (await db.query('departments', where: "name='Front Counter'")).first['id'] as int;
+
+    final danish = await db.insert('staff', {
+      'name': 'Danish',
+      'department_id': kitchenDept,
+      'pin_hash': 'danish-pin',
+      'role': 'CASHIER',
+      'login_enabled': 0,
+      'created_at': '2026-10-01',
+    });
+
+    await operations.setSalary(
+      managerId: manager,
+      employeeId: danish,
+      effectivePeriod: '2026-10',
+      amountPaisa: 3000000,
+      reason: 'Monthly wage agreement',
+    );
+    await operations.postPayroll(
+      managerId: manager,
+      employeeId: danish,
+      period: '2026-10',
+      kind: 'ACCRUAL',
+      amountPaisa: 3000000,
+      reason: 'October earned accrual',
+      requestKey: key(),
+    );
+
+    // Danish worked 80 hours (4800 mins) in Kitchen, 120 hours (7200 mins) in Service. Total = 200 hours.
+    await operations.recordWorkedHours(
+      managerId: manager,
+      employeeId: danish,
+      departmentId: kitchenDept,
+      workDate: '2026-10-10',
+      clockIn: DateTime.utc(2026, 10, 10, 8, 0),
+      clockOut: DateTime.utc(2026, 10, 10, 16, 0),
+      breakMinutes: 0,
+      workedMinutes: 4800, // 80 hrs
+      requestKey: key(),
+    );
+    await operations.recordWorkedHours(
+      managerId: manager,
+      employeeId: danish,
+      departmentId: serviceDept,
+      workDate: '2026-10-20',
+      clockIn: DateTime.utc(2026, 10, 20, 8, 0),
+      clockOut: DateTime.utc(2026, 10, 20, 16, 0),
+      breakMinutes: 0,
+      workedMinutes: 7200, // 120 hrs
+      requestKey: key(),
+    );
+
+    final allocation = await operations.departmentLaborAllocation(managerId: manager, period: '2026-10');
+    expect(allocation['total_labor_cost_paisa'], 3000000);
+
+    final depts = allocation['departments'] as List<Map<String, dynamic>>;
+    final kitchenAlloc = depts.firstWhere((d) => d['department_id'] == kitchenDept)['allocated_paisa'];
+    final serviceAlloc = depts.firstWhere((d) => d['department_id'] == serviceDept)['allocated_paisa'];
+
+    // 80/200 = 40% -> 1,200,000 paisa (PKR 12,000.00)
+    // 120/200 = 60% -> 1,800,000 paisa (PKR 18,000.00)
+    expect(kitchenAlloc, 1200000);
+    expect(serviceAlloc, 1800000);
+    expect(kitchenAlloc + serviceAlloc, 3000000);
+  });
+
+  test('department labor allocation defaults to primary department for unlogged staff and avoids payment double-expense', () async {
+    final kitchenDept = (await db.query('departments', where: "name='Kitchen'")).first['id'] as int;
+    final helper = await db.insert('staff', {
+      'name': 'Unlogged helper',
+      'department_id': kitchenDept,
+      'pin_hash': 'helper-pin',
+      'role': 'CASHIER',
+      'login_enabled': 0,
+      'created_at': '2026-10-01',
+    });
+
+    await operations.setSalary(
+      managerId: manager,
+      employeeId: helper,
+      effectivePeriod: '2026-10',
+      amountPaisa: 2000000,
+      reason: 'Base salary',
+    );
+    await operations.postPayroll(
+      managerId: manager,
+      employeeId: helper,
+      period: '2026-10',
+      kind: 'ACCRUAL',
+      amountPaisa: 2000000,
+      reason: 'Full month accrual',
+      requestKey: key(),
+    );
+    // Salary payment and advances do NOT count as another expense or allocate twice
+    await operations.postPayroll(
+      managerId: manager,
+      employeeId: helper,
+      period: '2026-10',
+      kind: 'PAYMENT',
+      amountPaisa: 1500000,
+      source: FundingSource.drawer,
+      shiftId: shift,
+      reason: 'Salary partial payment',
+      requestKey: key(),
+    );
+
+    final allocation = await operations.departmentLaborAllocation(managerId: manager, period: '2026-10');
+    final helperAlloc = (allocation['employees'] as List<Map<String, dynamic>>)
+        .firstWhere((e) => e['employee_id'] == helper);
+    expect(helperAlloc['method'], 'PRIMARY_DEPARTMENT_DEFAULT');
+    expect(helperAlloc['accrual_paisa'], 2000000);
+    final depts = helperAlloc['allocations'] as List<Map<String, dynamic>>;
+    expect(depts.single['department_id'], kitchenDept);
+    expect(depts.single['allocated_paisa'], 2000000);
+  });
 }

@@ -54,4 +54,39 @@ void main() {
     expect(find.text('Helper'),findsOneWidget);
     expect(tester.takeException(),isNull);
   });
+
+  testWidgets('payroll workspace logs worked hours with department, shift times, and break minutes', (tester) async {
+    final helperId = await controller.database.insert('staff', {'name':'Cook Farhan','department_id':1,
+      'pin_hash':'farhan-helper','role':'CASHIER','login_enabled':0,'created_at':'2026-10-01'});
+    await tester.pumpWidget(MaterialApp(home:Scaffold(body:OperationsWorkspace(
+      controller:controller,managerId:manager,payroll:true))));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Log worked hours'), findsOneWidget);
+    await tester.tap(find.text('Log worked hours'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Log worked hours'), findsWidgets);
+    expect(find.text('Work date (YYYY-MM-DD)'), findsOneWidget);
+    expect(find.text('Clock-in (HH:MM or YYYY-MM-DD HH:MM)'), findsOneWidget);
+    expect(find.text('Clock-out (HH:MM or YYYY-MM-DD HH:MM)'), findsOneWidget);
+    expect(find.text('Break duration in minutes (0 if none)'), findsOneWidget);
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'Work date (YYYY-MM-DD)'), '2026-10-25');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Clock-in (HH:MM or YYYY-MM-DD HH:MM)'), '11:00');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Clock-out (HH:MM or YYYY-MM-DD HH:MM)'), '20:00');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Break duration in minutes (0 if none)'), '60');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Reason / attendance notes'), 'Verified Sunday shift');
+
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    final hours = await controller.workedHoursHistory(managerId: manager, employeeId: helperId);
+    expect(hours, hasLength(1));
+    expect(hours.first['work_date'], '2026-10-25');
+    expect(hours.first['worked_minutes'], 480);
+    expect(hours.first['reason'], 'Verified Sunday shift');
+    expect(find.textContaining('Worked: 2026-10-25'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
