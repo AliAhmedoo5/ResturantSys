@@ -45,8 +45,8 @@ class _CustomerInformationReader {
         'customer_phone', 'delivery_address_snapshot', 'delivery_area_name_snapshot'];
       final fields = names.map((name) => columns.contains(name) ? 'o.$name' : 'NULL AS $name').join(',');
       final scope = 'FROM orders o JOIN business_days b ON b.id=o.business_day_id '
-        'WHERE ${AnalyticsService._dayScope(query)} AND ${AnalyticsService._orderScope(query)}';
-      final args = [...AnalyticsService._dayArgs(query), ...AnalyticsService._orderArgs(query)];
+        'WHERE ${AnalyticsService._orderCohortScope(query)}';
+      final args = AnalyticsService._orderCohortArgs(query);
       final orders = (await txn.rawQuery('SELECT $fields $scope ORDER BY o.id DESC', args)).where(_valid).toList();
       final directory = tables.contains('customers')
         ? await txn.query('customers', columns: ['id', 'name', 'phone', 'notes', 'merged_into']) : <_Record>[];
@@ -69,12 +69,12 @@ class _CustomerInformationReader {
       final links = tables.contains('customer_order_links') ? await txn.rawQuery(
         'SELECT l.order_id,l.customer_id FROM customer_order_links l JOIN orders o ON o.id=l.order_id '
         'JOIN business_days b ON b.id=o.business_day_id '
-        'WHERE ${AnalyticsService._dayScope(query)} AND ${AnalyticsService._orderScope(query)}', args) : <_Record>[];
+        'WHERE ${AnalyticsService._orderCohortScope(query)}', args) : <_Record>[];
       final linkedIds = {for (final link in links) link['order_id']: link['customer_id']};
       final lines = tables.contains('order_items') ? await txn.rawQuery(
         'SELECT i.order_id,i.name,i.quantity FROM order_items i JOIN orders o ON o.id=i.order_id '
         'JOIN business_days b ON b.id=o.business_day_id '
-        'WHERE ${AnalyticsService._dayScope(query)} AND ${AnalyticsService._orderScope(query)} ORDER BY i.id', args) : <_Record>[];
+        'WHERE ${AnalyticsService._orderCohortScope(query)} ORDER BY i.id', args) : <_Record>[];
       final items = <Object?, List<String>>{};
       for (final line in lines) {
         items.putIfAbsent(line['order_id'], () => []).add('${line['quantity']} × ${line['name']}');

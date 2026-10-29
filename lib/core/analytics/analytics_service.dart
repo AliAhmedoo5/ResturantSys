@@ -42,8 +42,8 @@ class AnalyticsService {
     final e = _Evidence(query, actor, DateTime.now().toUtc());
     final dayScope = _dayScope(query);
     final dayArgs = _dayArgs(query);
-    final orderScope = _orderScope(query);
-    final orderArgs = [...dayArgs, ..._orderArgs(query)];
+    final orderScope = _orderCohortScope(query);
+    final orderArgs = _orderCohortArgs(query);
     final tables = (await txn.rawQuery("SELECT name FROM sqlite_master WHERE type='table'")).map((r) => r['name']).toSet();
     Future<void> read(String key, String table, String sql, [List<Object?> args = const []]) async {
       if (!tables.contains(table)) { e.absent.add(table); e.rows[key] = []; return; }
@@ -51,9 +51,10 @@ class AnalyticsService {
     }
     await read('days', 'business_days', 'SELECT b.id,b.opened_at,b.closed_at,b.status FROM business_days b WHERE $dayScope ORDER BY b.opened_at', dayArgs);
     const fields = 'o.id,o.business_day_id,o.shift_id,o.cashier_id,o.token_number,o.dining_type,o.subtotal,o.discount_amount,o.discount_id,o.tax_amount,o.grand_total,o.payment_status,o.token_status,o.cash_rounding_paisa,o.delivery_area_id,o.delivery_area_name_snapshot,o.delivery_fee_paisa,o.customer_phone,o.created_at';
-    final orderFrom = 'FROM orders o JOIN business_days b ON b.id=o.business_day_id WHERE $dayScope AND $orderScope';
+    final orderFrom = 'FROM orders o JOIN business_days b ON b.id=o.business_day_id WHERE $orderScope';
     await read('orders', 'orders', 'SELECT $fields $orderFrom ORDER BY o.id', orderArgs);
-    final joinedOrder = 'JOIN orders o ON o.id=x.order_id JOIN business_days b ON b.id=o.business_day_id WHERE $dayScope AND $orderScope';
+    await read('order_days', 'business_days', 'SELECT DISTINCT b.id,b.opened_at,b.closed_at,b.status FROM business_days b JOIN orders o ON o.business_day_id=b.id WHERE $orderScope ORDER BY b.opened_at,b.id', orderArgs);
+    final joinedOrder = 'JOIN orders o ON o.id=x.order_id JOIN business_days b ON b.id=o.business_day_id WHERE $orderScope';
     await read('payments', 'order_payments', 'SELECT x.* FROM order_payments x $joinedOrder', orderArgs);
     await read('items', 'order_items', 'SELECT x.id,x.order_id,x.menu_item_id,x.deal_id,x.name,x.quantity,x.unit_price,x.total_price,x.modifiers_json,x.deal_choices_json,x.bom_json FROM order_items x $joinedOrder', orderArgs);
     await read('revisions', 'order_revisions', 'SELECT x.id,x.order_id,x.revision_no,x.action,x.reason,x.cashier_id,x.created_at_utc,x.money_delta_paisa FROM order_revisions x $joinedOrder', orderArgs);
@@ -101,13 +102,22 @@ class AnalyticsService {
     if (!query.live) {
       final duration = _date(query.endDateExclusive).difference(_date(query.startDate));
       final prior = query.copyWith(startDate: query.startDate.subtract(duration), endDateExclusive: query.startDate);
-      await read('previous_orders', 'orders', 'SELECT o.id,o.grand_total,o.payment_status FROM orders o JOIN business_days b ON b.id=o.business_day_id WHERE ${_dayScope(prior)} AND ${_orderScope(prior)}', [..._dayArgs(prior), ..._orderArgs(prior)]);
+      await read('previous_orders', 'orders', 'SELECT o.id,o.grand_total,o.payment_status FROM orders o JOIN business_days b ON b.id=o.business_day_id WHERE ${_orderCohortScope(prior)}', _orderCohortArgs(prior));
       final priorIntervalArgs = [..._dayArgs(prior), _sqlTime(_karachi(e.now.toIso8601String())!)];
       await read('previous_purchases', 'mandi_procurements', 'SELECT x.id,x.total_cost FROM mandi_procurements x WHERE ${_intervalScope(prior, 'x.created_at')}', priorIntervalArgs);
       await read('previous_waste', 'kitchen_wastage', 'SELECT x.id,x.cost_loss FROM kitchen_wastage x WHERE ${_intervalScope(prior, 'x.created_at')}', priorIntervalArgs);
     }
     return e;
   }
+
+  // Calendar selection is independent of the assigned Business Day opening date.
+  // Other ledgers retain their explicitly disclosed operational scope.
+  static String _orderCohortScope(AnalyticsQuery q) => '${q.timeBasis == AnalyticsTimeBasis.businessDay ? _dayScope(q) : '(${_localSql('o.created_at')}>=? AND ${_localSql('o.created_at')}<?)'} AND ${_orderScope(q)}';
+  static List<Object?> _orderCohortArgs(AnalyticsQuery q) => [
+    if (q.timeBasis == AnalyticsTimeBasis.businessDay) ..._dayArgs(q)
+    else ...[_sqlTime(q.startDate), _sqlTime(q.endDateExclusive)],
+    ..._orderArgs(q),
+  ];
 
   static String _dayScope(AnalyticsQuery q) => q.live ? "b.status='OPEN'" : '(${_localSql('b.opened_at', dateOnly: true)}>=? AND ${_localSql('b.opened_at', dateOnly: true)}<?)';
   static List<Object?> _dayArgs(AnalyticsQuery q) => q.live ? [] : [_sqlDate(q.startDate), _sqlDate(q.endDateExclusive)];
