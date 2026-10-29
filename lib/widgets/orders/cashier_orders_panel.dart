@@ -1,3 +1,4 @@
+import '../../core/time/actual_event_time.dart';
 import 'package:flutter/material.dart';
 import '../../core/orders/dining_type.dart';
 import '../../core/orders/order.dart';
@@ -58,7 +59,7 @@ class _CashierOrdersPanelState extends State<CashierOrdersPanel> {
         TextField(controller: amount, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Amount received (Rs)')),
         DropdownButtonFormField<PaymentMethod>(initialValue: method, decoration: const InputDecoration(labelText: 'Manual tender'), items: PaymentMethod.values.where((m) => m != PaymentMethod.cod && m != PaymentMethod.split).map((m) => DropdownMenuItem(value: m, child: Text(m.displayName))).toList(), onChanged: (value) => change(() => method = value!)),
         TextField(controller: actual, decoration: const InputDecoration(labelText: 'Late actual time (optional)', helperText: 'Pakistan time: YYYY-MM-DD HH:MM. Blank uses entry time.')),
-        const Text('The receiving Shift must be open. This does not record a rider handover.'),
+        const Text('Final cash rounds half-up to whole rupees. The receiving Shift must be open. This does not record a rider handover.'),
       ])), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Record receipt'))],
     )));
     if (accepted == true && mounted) {
@@ -68,7 +69,7 @@ class _CashierOrdersPanelState extends State<CashierOrdersPanel> {
         final parts = value.split('.');
         final paisa = int.parse(parts.first) * 100 + (parts.length == 1 ? 0 : int.parse(parts.last.padRight(2, '0')));
         final input = actual.text.trim();
-        final time = input.isEmpty ? null : DateTime.parse('${input.replaceFirst(' ', 'T')}:00+05:00');
+        final time = parseActualEventTime(input);
         await widget.controller.recordCashierReceipt(orderId: order.id, shiftId: widget.shiftId!, cashierId: widget.cashierId, amountPaisa: paisa, method: method, commandId: commandId, actualAt: time);
         await _load();
       } catch (error) {

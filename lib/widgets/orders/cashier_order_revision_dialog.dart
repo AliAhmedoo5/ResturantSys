@@ -1,3 +1,4 @@
+import '../../core/time/actual_event_time.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/catalog/menu_item.dart';
@@ -316,7 +317,7 @@ class _CashierOrderRevisionDialogState
         reason: _reasonController.text.trim().isNotEmpty
             ? _reasonController.text.trim()
             : 'Order revision refund payout',
-        actualAt: _refundActualTime.text.trim().isEmpty ? null : DateTime.parse('${_refundActualTime.text.trim().replaceFirst(' ', 'T')}:00+05:00'),
+        actualAt: parseActualEventTime(_refundActualTime.text),
         commandId: commandId,
       );
 

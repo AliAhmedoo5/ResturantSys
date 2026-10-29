@@ -13,8 +13,8 @@ import 'package:resturant_sys/core/finance/operations_controller.dart';
 
 void main() {
   setUpAll(sqfliteFfiInit);
-  for (final example in [(due:1250, partial:0, finalCash:1300, delta:50), (due:1249, partial:0, finalCash:1200, delta:-49), (due:2250, partial:1000, finalCash:1300, delta:50), (due:49, partial:0, finalCash:0, delta:-49)]) {
-    test('final cash receipt rounds ${example.due} paisa with retained delta ${example.delta}', () async {
+  for (final example in [(due:1250, partial:0, finalCash:1300, delta:50, method:PaymentMethod.cash), (due:1249, partial:0, finalCash:1200, delta:-49, method:PaymentMethod.cash), (due:2250, partial:1000, finalCash:1300, delta:50, method:PaymentMethod.cash), (due:49, partial:0, finalCash:0, delta:-49, method:PaymentMethod.cash), (due:1249, partial:0, finalCash:1249, delta:0, method:PaymentMethod.card)]) {
+    test('final manual receipt settles ${example.due} paisa with retained delta ${example.delta}', () async {
       final store = PosDatabase(factory: databaseFactoryFfi, customPath: inMemoryDatabasePath);
       final db = await store.initialize();
       addTearDown(store.close);
@@ -24,7 +24,7 @@ void main() {
       final order = await db.insert('orders', {'business_day_id':day.id,'shift_id':shift.id,'cashier_id':2,'token_number':1,'dining_type':'TAKEAWAY','subtotal':example.due/100,'grand_total':example.due/100,'payment_status':'COLLECTION_DUE','created_at':DateTime.now().toUtc().toIso8601String()});
       final controller = OrderAndCheckoutController(database: db);
       if (example.partial > 0) await controller.recordCashierReceipt(orderId:order,shiftId:shift.id,cashierId:2,amountPaisa:example.partial,method:PaymentMethod.cash,commandId:'partial');
-      Future<int> finish() => controller.recordCashierReceipt(orderId:order,shiftId:shift.id,cashierId:2,amountPaisa:example.finalCash,method:PaymentMethod.cash,commandId:'final');
+      Future<int> finish() => controller.recordCashierReceipt(orderId:order,shiftId:shift.id,cashierId:2,amountPaisa:example.finalCash,method:example.method,commandId:'final');
       expect(await finish(), await finish());
       final saved = await controller.getOrder(order);
       expect(saved.paymentStatus,'SETTLED');
@@ -36,7 +36,7 @@ void main() {
       expect(event.cells['rounding_paisa'],example.delta);
       expect(event.cells['change_paisa'],0);
       final ledger = snapshot.section(AnalyticsFamily.audit).rows.where((r)=>r.sourceType=='rounding_variance_ledger').toList();
-      expect(ledger.length,1,reason:'Retry must not duplicate the rounding ledger');
+      expect(ledger.length,example.delta == 0 ? 0 : 1,reason:'Digital stays exact; retries must not duplicate the rounding ledger');
       expect(AnalyticsExportService().csv(snapshot,AnalyticsFamily.cash),contains('rounding paisa'));
     });
   }

@@ -1,3 +1,4 @@
+import '../../core/time/actual_event_time.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:resturant_sys/core/khata/vendor.dart';
@@ -85,8 +86,7 @@ class _SettlementPaymentDialogState extends State<SettlementPaymentDialog> {
 
     Navigator.of(context).pop({
       'amount': amount,
-      'actual_at': _actualController.text.trim().isEmpty ? null :
-        DateTime.parse('${_actualController.text.trim().replaceFirst(' ', 'T')}+05:00'),
+      'actual_at': parseActualEventTime(_actualController.text),
       'invoice_id': _invoiceId,
       'payment_source': _paymentSource,
       'reference_slip': _slipController.text.trim().isNotEmpty
@@ -165,9 +165,10 @@ class _SettlementPaymentDialogState extends State<SettlementPaymentDialog> {
                 ),
                 TextFormField(key: const Key('settlement_actual_time_field'), controller: _actualController,
                   decoration: const InputDecoration(labelText: 'Actual Pakistan time (YYYY-MM-DD HH:MM, blank = now)'),
-                  validator: (value) => value == null || value.trim().isEmpty ||
-                    DateTime.tryParse('${value.trim().replaceFirst(' ', 'T')}+05:00') != null
-                    ? null : 'Use YYYY-MM-DD HH:MM'),
+                  validator: (value) {
+                    try { parseActualEventTime(value); return null; }
+                    on FormatException { return 'Enter a valid Pakistan time: YYYY-MM-DD HH:MM'; }
+                  }),
                 const SizedBox(height: 12),
 
                 // Current Payable Balance Card
