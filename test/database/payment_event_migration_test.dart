@@ -17,11 +17,14 @@ void main() {
     await db.insert('order_payments', {'order_id': order, 'payment_method': 'CASH', 'amount_tendered': 200, 'change_returned': 50, 'amount_tendered_paisa': 20000, 'change_returned_paisa': 5000});
     final oldTender = await db.query('order_payments');
     final oldShift = await db.query('shifts');
+    await db.insert('report_runs', {'business_day_id': day, 'snapshot_json': '{"sealed":true}', 'content_hash': 'original-sealed-hash', 'created_by': 1, 'created_at': '2026-10-30T01:00:00Z'});
+    final oldReports = await db.query('report_runs');
     await db.setVersion(21);
     await store.close();
     db = await store.initialize();
     expect(await db.query('order_payments'), oldTender);
     expect(await db.query('shifts'), oldShift);
+    expect(await db.query('report_runs'), oldReports);
     expect(await db.query('payment_events'), isEmpty, reason: 'Legacy actual time and receiving attribution remain unknown');
     expect(await db.rawQuery('PRAGMA foreign_key_check'), isEmpty);
   });
