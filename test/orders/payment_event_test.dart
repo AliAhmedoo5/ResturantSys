@@ -1,0 +1,36 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:resturant_sys/core/database/pos_database.dart';
+import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
+import 'package:resturant_sys/core/orders/payment_method.dart';
+import 'package:resturant_sys/core/analytics/analytics_models.dart';
+import 'package:resturant_sys/core/analytics/analytics_service.dart';
+import 'package:resturant_sys/core/auth/auth_service.dart';
+import 'package:resturant_sys/core/auth/staff.dart';
+
+void main() {
+  setUpAll(sqfliteFfiInit);
+  test('cashier receipt retries retain independent receiving attribution', () async {
+    final store = PosDatabase(factory: databaseFactoryFfi, customPath: inMemoryDatabasePath);
+    final db = await store.initialize();
+    addTearDown(store.close);
+    final now = DateTime.now().toUtc();
+    final opened = now.subtract(const Duration(hours: 1)).toIso8601String();
+    final day = await db.insert('business_days', {'opened_at': opened, 'status': 'OPEN', 'opened_by_staff_id': 1});
+    final origin = await db.insert('shifts', {'business_day_id': day, 'staff_id': 2, 'opened_at': opened, 'status': 'CLOSED', 'opening_float': 0});
+    final receiving = await db.insert('shifts', {'business_day_id': day, 'staff_id': 2, 'opened_at': opened, 'status': 'OPEN', 'opening_float': 0});
+    final order = await db.insert('orders', {'business_day_id': day, 'shift_id': origin, 'cashier_id': 2, 'token_number': 1, 'dining_type': 'TAKEAWAY', 'subtotal': 200, 'grand_total': 200, 'payment_status': 'COLLECTION_DUE', 'created_at': opened});
+    final controller = OrderAndCheckoutController(database: db);
+    Future<int> collect() => controller.recordCashierReceipt(orderId: order, shiftId: receiving, cashierId: 2, amountPaisa: 10000, method: PaymentMethod.cash, commandId: 'receipt-1');
+    expect(await collect(), await collect());
+    final auth = AuthService(database: db)..session.login(Staff.fromMap((await db.query('staff', where: 'id=1')).single));
+    final snapshot = await AnalyticsService(database: db, authService: auth).load(AnalyticsQuery(live: true));
+    final row = snapshot.section(AnalyticsFamily.cash).rows.singleWhere((r) => r.sourceType == 'payment_events');
+    expect(row.cells['amount_paisa'], 10000);
+    expect(row.cells['originating_shift_id'], origin);
+    expect(row.cells['receiving_shift_id'], receiving);
+    expect(row.cells['actual_at'], isNotNull);
+    expect(row.cells['recorded_at'], isNotNull);
+    expect((await controller.getOrderPayments(order)).length, 1);
+  });
+}
