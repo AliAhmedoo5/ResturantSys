@@ -43,6 +43,8 @@ void main() {
       final ingredient = await catalog.createRawIngredient(name: 'Dough', storageUnit: StorageUnit.count, currentStock: 10);
       await catalog.setRecipeForMenuItem(menuItemId: item.id, items: [(rawIngredientId: ingredient.id, quantity: 1.0)]);
       await catalog.toggleMenuItemActive(item.id, true);
+      final group = await catalog.createModifierGroup(menuItemId: item.id, name: 'Toppings');
+      await catalog.createModifier(menuItemId: item.id, groupId: group.id, name: 'Extra cheese');
       final deal = await catalog.createDeal(name: 'Pizza meal', basePrice: 100,
         items: [DealItemDraft(groupName: 'Slice', defaultMenuItemId: item.id)]);
       final day = await shifts.openBusinessDay(openedByStaffId: 1);
@@ -82,6 +84,8 @@ void main() {
       if (target != 'deal') {
         expect(await catalog.getMenuItems(), isEmpty);
         expect(await catalog.getMenuItems(activeOnly: true), isEmpty);
+        expect(await catalog.getModifiers(), isEmpty);
+        expect(await catalog.getModifierGroups(), isEmpty);
       }
       // Nullable catalog references detach; every saved sale field stays intact.
       final reference = target == 'deal' ? 'deal_id' : 'menu_item_id';
