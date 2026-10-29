@@ -124,7 +124,11 @@ class AnalyticsExportService {
           .map((row) => row.map(_csvCell).join(',')).join('\r\n');
 
   List<List<Object?>> _metadata(AnalyticsSnapshot s, String family) => [
-    ['report_version', 'manager-analytics-v1'],
+    ['report_version', s.reportVersion],
+    ['source_schema_version', s.sourceSchemaVersion ?? 'Unavailable'],
+    ['snapshot_cutoff_utc', s.generatedAt.toUtc().toIso8601String()],
+    ['timestamp_policy', 'Asia/Karachi UTC+05:00; naive legacy values assumed Karachi; original UTC/offset values retained in source columns'],
+    ['identity_policy', 'At-transaction names are retained evidence; current names are separately labeled; unavailable history is not backfilled'],
     ['report_kind', 'Exploratory current-record snapshot; not a sealed Z-report'],
     ['family', family], ['currency', 'PKR; money amounts use integer paisa (100 paisa = PKR 1); decimal unit rates retain labeled PKR/base-unit precision'],
     ['generated_utc', s.generatedAt.toUtc().toIso8601String()],

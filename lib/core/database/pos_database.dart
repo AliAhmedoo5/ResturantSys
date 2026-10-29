@@ -6,6 +6,7 @@ import 'pos_database_constants.dart';
 import 'operations_schema.dart';
 import 'feature_gaps_schema.dart';
 import 'historical_cost_schema.dart';
+import 'reporting_identity_schema.dart';
 import '../delivery/delivery_controller.dart';
 
 /// Embedded SQLite database manager for the Restaurant POS system.
@@ -133,6 +134,7 @@ class PosDatabase {
     await createOperationsSchema(db);
     await createFeatureGapsSchema(db);
     await createHistoricalCostSchema(db);
+    await createReportingIdentitySchema(db);
   }
 
   Future<void> _createOperationalAccountingTables(DatabaseExecutor executor) async {
@@ -452,6 +454,7 @@ class PosDatabase {
     if (oldVersion < 19) await createOperationsSchema(db);
     if (oldVersion < 20) await createFeatureGapsSchema(db);
     if (oldVersion < 21) await createHistoricalCostSchema(db);
+    if (oldVersion < 23) await createReportingIdentitySchema(db);
   }
 
   Future<void> _upgradeToVersion18(DatabaseExecutor db) async {

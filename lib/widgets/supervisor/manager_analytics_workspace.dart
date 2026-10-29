@@ -367,6 +367,8 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
         'Updated ${DateFormat('dd MMM yyyy HH:mm:ss').format(snapshot.generatedAt.isUtc ? snapshot.generatedAt.add(const Duration(hours: 5)) : snapshot.generatedAt)}'
         ' â€¢ ${snapshot.businessDayIds.length} Business Days in selection',
         style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
+      if (snapshot != null) Text('Source schema ${snapshot.sourceSchemaVersion ?? "unavailable"} • ${snapshot.reportVersion} • cutoff ${analyticsTimestamp(snapshot.generatedAt.toUtc().toIso8601String())}',
+        style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
       const SizedBox(height: 8),
       if (_busy) const LinearProgressIndicator(minHeight: 2),
         if (_filtersExpanded) _filterPanel(),
