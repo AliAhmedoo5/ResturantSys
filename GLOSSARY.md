@@ -177,3 +177,28 @@ _Avoid_: Entry time, posting time (when referring to actual occurrence)
 **Manager Portal**:
 The back-office administrative section of the application protected by a Manager PIN for catalog CRUD, recipes, Khata, staff PINs, settings, and reporting.
 _Avoid_: Admin panel, backend, supervisor portal
+
+
+**Line-Level Sales Allocation**:
+The proportional distribution of order-level discounts and carve-out taxes to individual order items in integer paisa, ensuring exact reconciliation to order receipts without altering sealed historical records.
+_Avoid_: Item discount guess, revenue slice
+
+**Rounding Residual**:
+The remaining integer paisa produced when allocating an order discount or tax via floor division, distributed deterministically to the highest-value lines to ensure zero paisa leakage.
+_Avoid_: Fractional paisa loss, rounding error
+
+**Deal Component Expansion**:
+The proportional distribution of a deal or combo selling price across its constituent items based on their standalone menu prices, enabling item-level contribution margins and recipe food cost analysis.
+_Avoid_: Combo decomposition, package unbundling
+
+**Line Contribution Margin**:
+Net sales allocated to an order line item minus its snapshotted recipe BOM food cost, measuring item profitability in integer paisa.
+_Avoid_: Item gross margin, food profit
+
+**Allocated Discount**:
+The portion of an order discount assigned to a specific item line using integer paisa proportional allocation.
+_Avoid_: Item discount, line reduction
+
+**Unallocated Legacy Order**:
+A closed historical order created before line-level allocation ledgers were introduced, presented in reports with honest missing-allocation disclosure rather than fabricated line splits.
+_Avoid_: Incomplete order, corrupted order
