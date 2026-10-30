@@ -101,4 +101,3 @@ abstract final class PosDatabaseConstants {
   static const String defaultKitchenPin = '2222';
   static const String defaultKitchenDepartment = 'Kitchen';
 }
-

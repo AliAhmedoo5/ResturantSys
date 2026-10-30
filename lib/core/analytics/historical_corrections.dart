@@ -188,6 +188,3 @@ class HistoricalCorrectionSnapshot {
   }
   String csv() => AnalyticsExportService().csv(toAnalyticsSnapshot(),AnalyticsFamily.cash);
 }
-
-
-

@@ -70,7 +70,7 @@ class _HistoricalCorrectionsWorkspaceState extends State<HistoricalCorrectionsWo
           ],
           field('reason','Business reason'),field('pin','Your Manager PIN'),
           if(error!=null)Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error)),
-        ]))),actions:[TextButton(onPressed:saving?null:()=>Navigator.pop(dialog),child:const Text('Cancel')),
+        ])))),actions:[TextButton(onPressed:saving?null:()=>Navigator.pop(dialog),child:const Text('Cancel')),
         FilledButton(onPressed:saving?null:()async{
           if(!form.currentState!.validate())return;
           update(()=>saving=true);
@@ -124,5 +124,3 @@ class _HistoricalCorrectionsWorkspaceState extends State<HistoricalCorrectionsWo
     ]);
   }
 }
-
-

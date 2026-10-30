@@ -143,4 +143,3 @@ Under [Specification #60](https://github.com/AliAhmedoo5/ResturantSys/issues/60)
 - **Trade-offs**:
   - Reporting logic must calculate and present both the original sealed baseline and the adjusted bridge.
   - Correction entries require manual Manager PIN authentication and explicit business justification.
-
