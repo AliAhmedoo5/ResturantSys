@@ -50,6 +50,9 @@ void main() {
       final burger = await catalog.createMenuItem(categoryId: cat.id, name: 'Burger', basePrice: 400);
       final fries = await catalog.createMenuItem(categoryId: cat.id, name: 'Fries', basePrice: 200);
       final drink = await catalog.createMenuItem(categoryId: cat.id, name: 'Drink', basePrice: 100);
+      await catalog.toggleMenuItemActive(burger.id, true);
+      await catalog.toggleMenuItemActive(fries.id, true);
+      await catalog.toggleMenuItemActive(drink.id, true);
 
       final meat = await catalog.createRawIngredient(name: 'Meat', storageUnit: StorageUnit.count, currentStock: 100, costPerRecipeUnit: 150);
       final potato = await catalog.createRawIngredient(name: 'Potato', storageUnit: StorageUnit.count, currentStock: 100, costPerRecipeUnit: 50);
@@ -185,6 +188,7 @@ void main() {
     test('sale-time BOM costing resolves ingredient unit cost from ingredient_cost_history at order creation time', () async {
       final cat = await catalog.createCategory(name: 'Meals', displayOrder: 1, colorHex: '#FFFFFF');
       final meal = await catalog.createMenuItem(categoryId: cat.id, name: 'Special Meal', basePrice: 500);
+      await catalog.toggleMenuItemActive(meal.id, true);
 
       // Create ingredient with initial rate 50 PKR (5,000 paisa)
       final ingredient = await catalog.createRawIngredient(

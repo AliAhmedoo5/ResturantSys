@@ -45,8 +45,9 @@ void main() {
 
       // 2. Insert 5 subsequent failed backup attempts
       for (var i = 1; i <= 5; i++) {
+        final hourStr = (8 + i).toString().padLeft(2, '0');
         await db.insert('backup_attempts', {
-          'attempted_at': '2026-10-30 0${8 + i}:00:00',
+          'attempted_at': '2026-10-30 $hourStr:00:00',
           'initiator': 'SCHEDULED',
           'manager_id': manager.id,
           'primary_status': 'FAILED',
@@ -54,7 +55,7 @@ void main() {
           'verification_status': 'FAILED',
           'failure_category': 'IO_DISK_FULL',
           'failure_message': 'Simulated failure $i',
-          'created_at': '2026-10-30 0${8 + i}:00:00',
+          'created_at': '2026-10-30 $hourStr:00:00',
         });
       }
 
