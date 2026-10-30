@@ -80,10 +80,11 @@ class _OrderWorkload {
         (bucket.records.isNotEmpty || observedHour(bucket.hour!, context)));
       final complete = available && allClosed && elapsed;
       final status = !observed ? 'Unavailable coverage'
-        : !available ? 'Not yet observed in selected intervals (incomplete)'
+        : !available ? bucket.hour != null && unknownHours > 0
+          ? 'Unavailable creation-time coverage (incomplete)' : 'Not yet observed in selected intervals (incomplete)'
         : complete ? operational ? 'Completed Business Day cohort' : 'Elapsed Calendar period; contributing Business Days completed'
         : operational ? bucket.hour == null && context.any((d) => d['status'] == 'OPEN')
-          ? 'Open Business Day (incomplete)' : 'Incomplete Business Day cohort; closure unavailable'
+          ? 'Open Business Day (incomplete)' : 'Incomplete Business Day cohort; open or unavailable closure'
         : elapsed ? 'Elapsed Calendar period; contributing Business Days incomplete'
           : 'Calendar period incomplete at cutoff; Business Day closure retained separately';
       return (complete: complete, available: available, status: status, days: context);
