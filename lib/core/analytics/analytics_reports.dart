@@ -367,21 +367,37 @@ class _ReportBuilder {
 
   AnalyticsSection _menu() {
     final items = soldItems;
+    final validAllocations = e.get('allocations').where((a) => validIds.contains(a['order_id'])).toList();
+    final allocatedOrderIds = validAllocations.map((a) => a['order_id'] as int).toSet();
+    final allocatedCount = valid.where((o) => allocatedOrderIds.contains(o['id'])).length;
+    final legacyOrders = valid.where((o) => !allocatedOrderIds.contains(o['id'])).toList();
+    final legacyDiscountsPaisa = legacyOrders.fold<int>(0, (sum, o) => sum + _money(o, 'discount_amount'));
+
+    // Index parent allocations (ITEM and DEAL_PARENT) by catalog key
+    final allocationsByCatalogKey = <String, List<_Record>>{};
+    for (final alloc in validAllocations) {
+      if (alloc['line_kind'] == 'DEAL_COMPONENT') continue;
+      final type = alloc['deal_id'] != null ? 'deal' : 'item';
+      final id = alloc['deal_id'] ?? alloc['menu_item_id'];
+      final key = '$type:${id ?? 'archived:${alloc['item_name_snapshot']}'}';
+      allocationsByCatalogKey.putIfAbsent(key, () => []).add(alloc);
+    }
+
     final rows = <AnalyticsRow>[];
     final sold = <String>{};
     final groups = <String, List<_Record>>{};
     for (final item in items) {
       final type = item['deal_id'] != null ? 'deal' : 'item';
-      // Deleted catalog IDs can become NULL. Preserve their snapshotted names
-      // rather than merging every archived item into one anonymous product.
       final key = '$type:${item['deal_id'] ?? item['menu_item_id'] ?? 'archived:${item['name']}'}';
       sold.add(key);
       groups.putIfAbsent(key, () => []).add(item);
     }
+
     final ranked = groups.entries.toList()..sort((a, b) {
       final quantity = _integers(b.value, 'quantity').compareTo(_integers(a.value, 'quantity'));
       return quantity != 0 ? quantity : a.key.compareTo(b.key);
     });
+
     var rank = 0;
     int? previousQuantity;
     for (var index = 0; index < ranked.length; index++) {
@@ -390,37 +406,208 @@ class _ReportBuilder {
       final quantity = _integers(entry.value, 'quantity');
       if (quantity != previousQuantity) rank = index + 1;
       previousQuantity = quantity;
-      rows.add(AnalyticsRow(id: 'menu-${entry.key}', sourceType: 'order_items', sourceId: entry.value.map((i) => i['id']).join(','), cells: {
-        'kind': 'Item/deal aggregate',
-        'catalog_kind': first['deal_id'] != null ? 'deal' : 'item',
-        'catalog_id': first['deal_id'] ?? first['menu_item_id'],
-        'name': entry.value.map((i) => _safeText(i['name'])).toSet().join(' / '),
-        'quantity': quantity,
-        'order_count': entry.value.map((i) => i['order_id']).toSet().length,
-        'line_value_paisa': _sum(entry.value, 'total_price'),
-        'popularity_rank': rank,
-        'modifiers': entry.value.map((i) => _snapshotNames(i['modifiers_json'])).where((name) => name.isNotEmpty).toSet().join(' / '),
-        'choices': entry.value.map((i) => _snapshotNames(i['deal_choices_json'])).where((name) => name.isNotEmpty).toSet().join(' / '),
-      }));
+
+      final allocatedRows = allocationsByCatalogKey[entry.key] ?? const [];
+      final lineGross = _sum(entry.value, 'total_price');
+      final lineAllocatedDiscount = allocatedRows.isNotEmpty
+          ? _integers(allocatedRows, 'allocated_discount_paisa')
+          : 0;
+
+      final unallocatedGross = entry.value
+          .where((i) => !allocatedOrderIds.contains(i['order_id']))
+          .fold<int>(0, (s, i) => s + _money(i, 'total_price'));
+
+      final netSalesPaisa = allocatedRows.isNotEmpty
+          ? (_integers(allocatedRows, 'net_sales_paisa') + unallocatedGross)
+          : lineGross;
+
+      final taxCarveOutPaisa = allocatedRows.isNotEmpty
+          ? _integers(allocatedRows, 'tax_carve_out_paisa')
+          : 0;
+
+      final hasBom = allocatedRows.any((a) => a['bom_recipe_cost_paisa'] != null);
+      final bomCostPaisa = hasBom ? _integers(allocatedRows, 'bom_recipe_cost_paisa') : null;
+      final marginPaisa = (hasBom && bomCostPaisa != null)
+          ? (_integers(allocatedRows, 'net_sales_paisa') - bomCostPaisa)
+          : null;
+      final marginRate = (marginPaisa != null && netSalesPaisa > 0)
+          ? (marginPaisa / netSalesPaisa * 100)
+          : null;
+
+      rows.add(AnalyticsRow(
+        id: 'menu-${entry.key}',
+        sourceType: 'order_items',
+        sourceId: entry.value.map((i) => i['id']).join(','),
+        cells: {
+          'kind': 'Item/deal aggregate',
+          'catalog_kind': first['deal_id'] != null ? 'deal' : 'item',
+          'catalog_id': first['deal_id'] ?? first['menu_item_id'],
+          'deal_id': first['deal_id'],
+          'name': entry.value.map((i) => _safeText(i['name'])).toSet().join(' / '),
+          'quantity': quantity,
+          'order_count': entry.value.map((i) => i['order_id']).toSet().length,
+          'line_value_paisa': lineGross,
+          'allocated_discount_paisa': lineAllocatedDiscount,
+          'net_sales_paisa': netSalesPaisa,
+          'tax_carve_out_paisa': taxCarveOutPaisa,
+          'bom_recipe_cost_paisa': bomCostPaisa,
+          'margin_paisa': marginPaisa,
+          'margin_rate': marginRate,
+          'popularity_rank': rank,
+          'modifiers': entry.value.map((i) => _snapshotNames(i['modifiers_json'])).where((name) => name.isNotEmpty).toSet().join(' / '),
+          'choices': entry.value.map((i) => _snapshotNames(i['deal_choices_json'])).where((name) => name.isNotEmpty).toSet().join(' / '),
+        },
+      ));
     }
+
+    // Deal component expansion rows for deep menu engineering
+    final componentAllocations = validAllocations.where((a) => a['line_kind'] == 'DEAL_COMPONENT').toList();
+    final componentGroups = <String, List<_Record>>{};
+    for (final comp in componentAllocations) {
+      final key = '${comp['deal_id']}:${comp['component_menu_item_id'] ?? comp['item_name_snapshot']}';
+      componentGroups.putIfAbsent(key, () => []).add(comp);
+    }
+    for (final compEntry in componentGroups.entries) {
+      final first = compEntry.value.first;
+      final compGross = _integers(compEntry.value, 'gross_sales_paisa');
+      final compDiscount = _integers(compEntry.value, 'allocated_discount_paisa');
+      final compNet = _integers(compEntry.value, 'net_sales_paisa');
+      final compTax = _integers(compEntry.value, 'tax_carve_out_paisa');
+      final hasBom = compEntry.value.any((a) => a['bom_recipe_cost_paisa'] != null);
+      final compBom = hasBom ? _integers(compEntry.value, 'bom_recipe_cost_paisa') : null;
+      final compMargin = (hasBom && compBom != null) ? (compNet - compBom) : null;
+      final compMarginRate = (compMargin != null && compNet > 0) ? (compMargin / compNet * 100) : null;
+
+      rows.add(AnalyticsRow(
+        id: 'deal-comp-${compEntry.key}',
+        sourceType: 'order_item_allocations',
+        sourceId: compEntry.value.map((a) => a['id']).join(','),
+        cells: {
+          'kind': 'Deal component breakdown',
+          'catalog_kind': 'component',
+          'catalog_id': first['component_menu_item_id'],
+          'deal_id': first['deal_id'],
+          'name': _safeText(first['item_name_snapshot']),
+          'quantity': _integers(compEntry.value, 'quantity'),
+          'order_count': compEntry.value.map((a) => a['order_id']).toSet().length,
+          'line_value_paisa': compGross,
+          'allocated_discount_paisa': compDiscount,
+          'net_sales_paisa': compNet,
+          'tax_carve_out_paisa': compTax,
+          'bom_recipe_cost_paisa': compBom,
+          'margin_paisa': compMargin,
+          'margin_rate': compMarginRate,
+          'status': 'Expanded deal component',
+        },
+      ));
+    }
+
+    // Explicit Legacy Unallocated Order Discounts row (ADR-0021 Section 7)
+    if (legacyDiscountsPaisa > 0 || legacyOrders.isNotEmpty) {
+      rows.add(AnalyticsRow(
+        id: 'menu-legacy-unallocated-discounts',
+        sourceType: 'orders',
+        sourceId: legacyOrders.where((o) => _money(o, 'discount_amount') > 0).map((o) => o['id']).join(','),
+        cells: {
+          'kind': 'Legacy unallocated summary',
+          'catalog_kind': 'legacy',
+          'catalog_id': null,
+          'name': 'Legacy Unallocated Order Discounts',
+          'quantity': 0,
+          'order_count': legacyOrders.where((o) => _money(o, 'discount_amount') > 0).length,
+          'line_value_paisa': 0,
+          'allocated_discount_paisa': legacyDiscountsPaisa,
+          'net_sales_paisa': -legacyDiscountsPaisa,
+          'tax_carve_out_paisa': 0,
+          'bom_recipe_cost_paisa': 0,
+          'margin_paisa': -legacyDiscountsPaisa,
+          'status': 'Legacy orders without verified line allocations',
+        },
+      ));
+    }
+
     var zeroSellers = 0;
     for (final type in ['catalog', 'deals']) {
       for (final item in e.get(type)) {
         if (item['is_active'] != 1 || sold.contains('${type == 'deals' ? 'deal' : 'item'}:${item['id']}')) continue;
         zeroSellers++;
-        rows.add(_row(type == 'deals' ? 'deals' : 'menu_items', item, {'kind': 'Current active zero seller', 'catalog_kind': type == 'deals' ? 'deal' : 'item', 'catalog_id': item['id'], 'name': _safeText(item['name']), 'quantity': 0, 'order_count': 0, 'line_value_paisa': 0, 'status': 'Zero recorded sales in selected cohort'}));
+        rows.add(_row(
+          type == 'deals' ? 'deals' : 'menu_items',
+          item,
+          {
+            'kind': 'Current active zero seller',
+            'catalog_kind': type == 'deals' ? 'deal' : 'item',
+            'catalog_id': item['id'],
+            'name': _safeText(item['name']),
+            'quantity': 0,
+            'order_count': 0,
+            'line_value_paisa': 0,
+            'allocated_discount_paisa': 0,
+            'net_sales_paisa': 0,
+            'tax_carve_out_paisa': 0,
+            'bom_recipe_cost_paisa': 0,
+            'margin_paisa': 0,
+            'status': 'Zero recorded sales in selected cohort',
+          },
+        ));
       }
     }
+
     final discounted = valid.where((o) => _money(o, 'discount_amount') > 0).length;
-    return _section(AnalyticsFamily.menu, 'Menu and deals', [
-      _metric('quantity', 'Recorded sold quantity', _integers(items, 'quantity'), unit: AnalyticsUnit.count, explanation: 'Sum current valid order line quantity, including deal counts; deal components are not separate sold lines.'),
-      _metric('line_value', 'Recorded line value', _sum(items, 'total_price'), explanation: 'Stored eligible line totals before order-level discount/tax/fee allocation; not item net revenue.'),
-      _metric('zero_sellers', 'Active zero sellers', zeroSellers, unit: AnalyticsUnit.count, explanation: 'Current active menu/deal entries with no matching eligible line in filtered range; catalog history incomplete.'),
-      _rate('discount_use', 'Discount utilization', discounted, valid.length, 'Eligible selected orders with a positive stored discount / eligible orders.'),
-      _average('quantity_per_order', 'Mean line quantity per order', _integers(items, 'quantity'), valid.length, AnalyticsUnit.decimal, 'Recorded eligible line quantity / eligible order count.'),
-      _missing('item_net_sales', 'Allocated item net sales', 'Order discount/tax/delivery allocation is not persisted; stored line value must not be mislabeled net sales.'),
-      _missing('item_margin', 'Historical item margin', 'BOM quantity snapshots have no event-time ingredient cost layers.'),
-    ], rows, ['kind', 'catalog_kind', 'catalog_id', 'name', 'quantity', 'order_count', 'line_value_paisa', 'popularity_rank', 'modifiers', 'choices', 'status'], [_orderBasis, 'Item/deal aggregate quantity and stored line value combine all eligible lines by catalog identity; order_count is distinct contributing orders. Popularity rank uses quantity descending with equal ranks for ties. Each aggregate retains every contributing order_item source ID.', 'Ascending quantity identifies slow sellers; zero sellers refer to current active catalog. Snapshotted modifier/choice names are source evidence, not inferred upsell profitability.']);
+    final parentAllocations = validAllocations.where((a) => a['line_kind'] != 'DEAL_COMPONENT').toList();
+    final totalAllocatedNetSales = _integers(parentAllocations, 'net_sales_paisa');
+    final totalAllocatedBomCost = parentAllocations.any((a) => a['bom_recipe_cost_paisa'] != null)
+        ? _integers(parentAllocations, 'bom_recipe_cost_paisa')
+        : 0;
+    final totalAllocatedMargin = totalAllocatedNetSales - totalAllocatedBomCost;
+
+    return _section(
+      AnalyticsFamily.menu,
+      'Menu and deals',
+      [
+        _metric('quantity', 'Recorded sold quantity', _integers(items, 'quantity'), unit: AnalyticsUnit.count, explanation: 'Sum current valid order line quantity, including deal counts; deal components are not separate sold lines.'),
+        _metric('line_value', 'Recorded line value', _sum(items, 'total_price'), explanation: 'Stored eligible line totals before order-level discount/tax/fee allocation; not item net revenue.'),
+        _coverage('allocation_coverage', 'Allocation coverage', allocatedCount, valid.length, 'Orders with verified line allocations / Total eligible orders in selected period.'),
+        _metric('zero_sellers', 'Active zero sellers', zeroSellers, unit: AnalyticsUnit.count, explanation: 'Current active menu/deal entries with no matching eligible line in filtered range; catalog history incomplete.'),
+        _rate('discount_use', 'Discount utilization', discounted, valid.length, 'Eligible selected orders with a positive stored discount / eligible orders.'),
+        _average('quantity_per_order', 'Mean line quantity per order', _integers(items, 'quantity'), valid.length, AnalyticsUnit.decimal, 'Recorded eligible line quantity / eligible order count.'),
+        allocatedCount > 0
+            ? _metric('item_net_sales', 'Allocated item net sales', totalAllocatedNetSales, explanation: 'Net sales from orders with verified line allocations after proportional discount deduction.')
+            : _missing('item_net_sales', 'Allocated item net sales', 'Order discount/tax/delivery allocation is not persisted; stored line value must not be mislabeled net sales.'),
+        allocatedCount > 0
+            ? _metric('item_margin', 'Historical item margin', totalAllocatedMargin, explanation: 'Allocated line net sales minus recipe BOM food cost at event-time ingredient rates.')
+            : _missing('item_margin', 'Historical item margin', 'BOM quantity snapshots have no event-time ingredient cost layers.'),
+      ],
+      rows,
+      [
+        'kind',
+        'catalog_kind',
+        'catalog_id',
+        'deal_id',
+        'name',
+        'quantity',
+        'order_count',
+        'line_value_paisa',
+        'allocated_discount_paisa',
+        'net_sales_paisa',
+        'tax_carve_out_paisa',
+        'bom_recipe_cost_paisa',
+        'margin_paisa',
+        'margin_rate',
+        'popularity_rank',
+        'modifiers',
+        'choices',
+        'status',
+      ],
+      [
+        _orderBasis,
+        'Item and deal net sales, allocated discounts, tax carve-outs, and BOM recipe costs are calculated in signed 64-bit Integer Paisa adhering to ADR-0021.',
+        'Proportional discount allocation uses integer floor division; the zero-leak rounding residual is distributed by adding 1 paisa to lines with the highest gross subtotal.',
+        'Deals are expanded across constituent components weighted by standalone regular catalog prices to determine component contribution margins.',
+        'Orders created prior to line allocation capture disclose exact coverage ratio; legacy order discounts are isolated in the "Legacy Unallocated Order Discounts" row so totals reconcile to Order subtotal and grand total without retroactive estimation.',
+        'Ascending quantity identifies slow sellers; zero sellers refer to current active catalog.',
+      ],
+    );
   }
 
   AnalyticsSection _inventory() {
@@ -668,12 +855,415 @@ class _ReportBuilder {
 
   AnalyticsSection _procurement() {
     final purchases = e.get('purchases');
-    return _section(AnalyticsFamily.procurement, 'Procurement', [
-      _metric('purchase_spend', 'Recorded Mandi purchase spend', _sum(purchases, 'total_cost'), explanation: 'Mandi purchase records only; unlinked supplier credit deliveries are separate and not blindly added. $_intervalBasis', previous: _sum(e.get('previous_purchases'), 'total_cost')),
-      _metric('purchase_count', 'Recorded purchases', purchases.length, unit: AnalyticsUnit.count, explanation: 'Mandi purchase rows in selected actual day intervals.', previous: e.get('previous_purchases').length),
-      _metric('purchased_ingredients', 'Distinct purchased ingredients', purchases.map((p) => p['raw_ingredient_id']).toSet().length, unit: AnalyticsUnit.count, explanation: 'Distinct ingredient IDs in selected Mandi purchase records.'),
-      _missing('supplier_performance', 'Supplier delivery performance', 'Mandi purchase records lack supplier link and promised/actual delivery performance timestamps.', unit: AnalyticsUnit.percent),
-    ], purchases.map((p) => _row('mandi_procurements', p, {'ingredient_id': p['raw_ingredient_id'], 'purchase_unit': p['traditional_unit'], 'purchase_quantity': p['quantity'], 'base_quantity': p['converted_quantity'], 'spend_paisa': _money(p, 'total_cost'), 'unit_cost_rupees_per_base_unit': p['cost_per_recipe_unit'], 'created_at': p['created_at']})).toList(), ['ingredient_id', 'purchase_unit', 'purchase_quantity', 'base_quantity', 'spend_paisa', 'unit_cost_rupees_per_base_unit', 'created_at'], [_intervalBasis, _globalBasis, 'Per-ingredient unit rates retain their recorded decimal PKR/base-unit precision (a rate, not a rounded monetary amount). Different base-unit dimensions must not be totaled. Purchase spend is not sales COGS.']);
+    final creditPurchases = e.get('vendor_events').where((t) => t['type'] == 'PURCHASE_CREDIT').toList();
+    final procLinks = e.rows['procurement_links'] ?? [];
+    final allReceiptEvidence = e.rows['all_receipt_evidence'] ?? [];
+    final intervalReceiptEvidence = e.rows['interval_receipt_evidence'] ?? [];
+
+    final ingredientNames = <int, String>{for (final i in e.get('ingredients')) i['id'] as int: _safeText(i['name'])};
+    final ingredientUnits = <int, String>{for (final i in e.get('ingredients')) i['id'] as int: i['storage_unit'] as String? ?? 'g'};
+    final vendorNames = <int, String>{for (final v in e.get('vendors')) v['id'] as int: _safeText(v['name'])};
+
+    // 1. Stable link identification between Mandi procurements and Vendor Khata credit purchases
+    final linkedMandiToTxn = <int, _Record>{};
+    final linkedTxnToMandi = <int, _Record>{};
+
+    for (final p in purchases) {
+      final pId = p['id'] as int;
+      _Record? matchedTxn;
+      final txnId = p['vendor_transaction_id'] as int?;
+      if (txnId != null) {
+        matchedTxn = creditPurchases.where((t) => t['id'] == txnId).firstOrNull;
+      }
+      matchedTxn ??= creditPurchases.where((t) => t['procurement_id'] == pId).firstOrNull;
+      if (matchedTxn == null) {
+        final link = procLinks.where((l) => l['procurement_id'] == pId).firstOrNull;
+        if (link != null) {
+          final lTxnId = link['vendor_transaction_id'] as int?;
+          matchedTxn = creditPurchases.where((t) => t['id'] == lTxnId).firstOrNull;
+        }
+      }
+      if (matchedTxn != null) {
+        linkedMandiToTxn[pId] = matchedTxn;
+        linkedTxnToMandi[matchedTxn['id'] as int] = p;
+      }
+    }
+
+    // Unified acquisition spend and count (counting linked purchases once)
+    int unifiedSpend = 0;
+    int linkedPurchasesCount = linkedMandiToTxn.length;
+    int unlinkedMandiCount = 0;
+    int unlinkedCreditCount = 0;
+
+    for (final p in purchases) {
+      final pId = p['id'] as int;
+      final spend = _money(p, 'total_cost');
+      unifiedSpend += spend;
+      if (!linkedMandiToTxn.containsKey(pId)) {
+        unlinkedMandiCount++;
+      }
+    }
+
+    for (final t in creditPurchases) {
+      final tId = t['id'] as int;
+      if (!linkedTxnToMandi.containsKey(tId)) {
+        unifiedSpend += _money(t, 'amount');
+        unlinkedCreditCount++;
+      }
+    }
+
+    final unlinkedPurchasesCount = unlinkedMandiCount + unlinkedCreditCount;
+    final unifiedPurchaseCount = linkedPurchasesCount + unlinkedPurchasesCount;
+    final selectedDaysCount = e.get('days').isNotEmpty ? e.get('days').length : 1;
+    final purchaseFrequency = unifiedPurchaseCount / selectedDaysCount;
+
+    // 2. Receipt punctuality evaluation from evidence
+    // Group all evidence by root commitment to handle amendments append-only
+    final commitmentsByRoot = <int, List<_Record>>{};
+    for (final ev in allReceiptEvidence) {
+      final rootId = ev['amendment_of'] as int? ?? ev['id'] as int;
+      var currentRoot = rootId;
+      var parent = allReceiptEvidence.where((x) => x['id'] == currentRoot).firstOrNull;
+      while (parent != null && parent['amendment_of'] != null) {
+        currentRoot = parent['amendment_of'] as int;
+        parent = allReceiptEvidence.where((x) => x['id'] == currentRoot).firstOrNull;
+      }
+      commitmentsByRoot.putIfAbsent(currentRoot, () => []).add(ev);
+    }
+
+    bool inInterval(String? ts) {
+      if (ts == null) return false;
+      final dt = _karachi(ts);
+      if (dt == null) return false;
+      for (final d in e.get('days')) {
+        final open = _karachi(d['opened_at']);
+        final close = d['closed_at'] != null ? _karachi(d['closed_at']) : e.now;
+        if (open != null && close != null && !dt.isBefore(open) && dt.isBefore(close)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    final intervalEvIds = intervalReceiptEvidence.map((ev) => ev['id'] as int).toSet();
+    final intervalRootCommitments = <int, List<_Record>>{};
+    for (final entry in commitmentsByRoot.entries) {
+      final chain = entry.value;
+      if (chain.any((ev) => intervalEvIds.contains(ev['id'] as int) ||
+          inInterval(ev['recorded_at'] as String?) ||
+          inInterval(ev['actual_at'] as String?) ||
+          inInterval(ev['promised_at'] as String?))) {
+        intervalRootCommitments[entry.key] = chain;
+      }
+    }
+
+    int validSampleCount = 0;
+    int punctualCount = 0;
+    int lateCount = 0;
+    int unknownPromisesCount = 0;
+    int unknownReceiptsCount = 0;
+
+    final evaluatedCommitments = <_EvaluatedCommitment>[];
+
+    for (final entry in intervalRootCommitments.entries) {
+      final chain = entry.value;
+      chain.sort((a, b) => (a['id'] as int).compareTo(b['id'] as int));
+      final root = chain.first;
+      final latest = chain.last;
+
+      final vendorId = root['vendor_id'] as int;
+      final ingredientId = chain.map((ev) => ev['ingredient_id'] as int?).whereType<int>().lastOrNull ?? root['ingredient_id'] as int?;
+      final procId = chain.map((ev) => ev['procurement_id'] as int?).whereType<int>().lastOrNull;
+      final txnId = chain.map((ev) => ev['vendor_transaction_id'] as int?).whereType<int>().lastOrNull;
+
+      final promisedAt = chain.map((ev) => ev['promised_at'] as String?).whereType<String>().lastOrNull;
+      final actualAt = chain.map((ev) => ev['actual_at'] as String?).whereType<String>().lastOrNull;
+
+      final amendmentCount = chain.length - 1;
+      final recordedAt = latest['recorded_at'] as String? ?? root['recorded_at'] as String? ?? '';
+      final recordedBy = latest['recorded_by'] as int? ?? root['recorded_by'] as int? ?? 1;
+
+      int? delayMins;
+      String status;
+
+      if (promisedAt != null && actualAt != null) {
+        final promDt = _karachi(promisedAt) ?? DateTime.tryParse(promisedAt);
+        final actDt = _karachi(actualAt) ?? DateTime.tryParse(actualAt);
+        if (promDt != null && actDt != null) {
+          delayMins = actDt.difference(promDt).inMinutes;
+          if (delayMins <= 0) {
+            status = 'ON_TIME';
+            punctualCount++;
+          } else {
+            status = 'LATE';
+            lateCount++;
+          }
+          validSampleCount++;
+        } else {
+          status = 'UNKNOWN';
+        }
+      } else if (promisedAt == null && actualAt != null) {
+        status = 'UNKNOWN_PROMISE';
+        unknownPromisesCount++;
+      } else if (promisedAt != null && actualAt == null) {
+        status = 'UNKNOWN_RECEIPT';
+        unknownReceiptsCount++;
+      } else {
+        status = 'UNKNOWN';
+      }
+
+      evaluatedCommitments.add(_EvaluatedCommitment(
+        id: entry.key,
+        vendorId: vendorId,
+        ingredientId: ingredientId,
+        procurementId: procId,
+        vendorTransactionId: txnId,
+        effectivePromisedAt: promisedAt,
+        effectiveActualAt: actualAt,
+        delayMinutes: delayMins,
+        status: status,
+        amendmentCount: amendmentCount,
+        recordedAt: recordedAt,
+        recordedBy: recordedBy,
+        record: latest,
+      ));
+    }
+
+    final totalCommitments = evaluatedCommitments.length;
+
+    // Contributor rows
+    final mandiRows = purchases.map((p) {
+      final pId = p['id'] as int;
+      final isLinked = linkedMandiToTxn.containsKey(pId);
+      final matchedTxn = linkedMandiToTxn[pId];
+      final vendorId = p['vendor_id'] as int? ?? matchedTxn?['vendor_id'] as int?;
+      final ingId = p['raw_ingredient_id'] as int?;
+      final convertedQty = (p['converted_quantity'] as num?)?.toDouble() ?? 0.0;
+      final spend = _money(p, 'total_cost');
+      final unitPricePaisa = convertedQty > 0 ? (spend / convertedQty).round() : null;
+
+      return _row('mandi_procurements', p, {
+        'kind': 'Mandi procurement',
+        'purchase_id': pId,
+        'vendor_transaction_id': p['vendor_transaction_id'] ?? matchedTxn?['id'],
+        'supplier_id': vendorId,
+        'supplier_name': vendorId != null ? (vendorNames[vendorId] ?? 'Supplier #$vendorId') : 'Mandi wholesale',
+        'ingredient_id': ingId,
+        'ingredient_name': ingId != null ? (ingredientNames[ingId] ?? 'Ingredient #$ingId') : 'Unknown ingredient',
+        'purchase_unit': p['traditional_unit'],
+        'purchase_quantity': p['quantity'],
+        'base_quantity': p['converted_quantity'],
+        'base_unit': ingId != null ? (ingredientUnits[ingId] ?? p['traditional_unit']) : p['traditional_unit'],
+        'spend_paisa': spend,
+        'unit_cost_rupees_per_base_unit': p['cost_per_recipe_unit'],
+        'unit_price_paisa': unitPricePaisa,
+        'is_linked': isLinked,
+        'promised_at': null,
+        'actual_at': null,
+        'delay_minutes': null,
+        'punctuality_status': null,
+        'amendment_count': null,
+        'created_at': p['created_at'],
+      });
+    }).toList();
+
+    final unlinkedCreditRows = creditPurchases.where((t) => !linkedTxnToMandi.containsKey(t['id'])).map((t) {
+      final tId = t['id'] as int;
+      final vendorId = t['vendor_id'] as int?;
+      final ingId = t['raw_ingredient_id'] as int?;
+      final qty = (t['quantity'] as num?)?.toDouble();
+      final spend = _money(t, 'amount');
+      final unitPricePaisa = (qty != null && qty > 0) ? (spend / qty).round() : null;
+
+      return _row('vendor_transactions', t, {
+        'kind': 'Supplier credit delivery',
+        'purchase_id': null,
+        'vendor_transaction_id': tId,
+        'supplier_id': vendorId,
+        'supplier_name': vendorId != null ? (vendorNames[vendorId] ?? 'Supplier #$vendorId') : 'Unknown supplier',
+        'ingredient_id': ingId,
+        'ingredient_name': ingId != null
+            ? (ingredientNames[ingId] ?? 'Ingredient #$ingId')
+            : (t['ingredient_name_snapshot'] as String? ?? 'Unlinked ingredient'),
+        'purchase_unit': t['unit_snapshot'] ?? (ingId != null ? ingredientUnits[ingId] : null),
+        'purchase_quantity': qty,
+        'base_quantity': qty,
+        'base_unit': ingId != null ? (ingredientUnits[ingId] ?? t['unit_snapshot']) : t['unit_snapshot'],
+        'spend_paisa': spend,
+        'unit_cost_rupees_per_base_unit': (qty != null && qty > 0) ? (spend / 100.0) / qty : null,
+        'unit_price_paisa': unitPricePaisa,
+        'is_linked': false,
+        'promised_at': null,
+        'actual_at': null,
+        'delay_minutes': null,
+        'punctuality_status': null,
+        'amendment_count': null,
+        'created_at': t['created_at'],
+      });
+    }).toList();
+
+    final receiptEvidenceRows = evaluatedCommitments.map((c) {
+      return _row('supplier_receipt_evidence', c.record, {
+        'kind': 'Supplier receipt evidence',
+        'purchase_id': c.procurementId,
+        'vendor_transaction_id': c.vendorTransactionId,
+        'supplier_id': c.vendorId,
+        'supplier_name': vendorNames[c.vendorId] ?? 'Supplier #${c.vendorId}',
+        'ingredient_id': c.ingredientId,
+        'ingredient_name': c.ingredientId != null ? (ingredientNames[c.ingredientId] ?? 'Ingredient #${c.ingredientId}') : null,
+        'purchase_unit': null,
+        'purchase_quantity': null,
+        'base_quantity': null,
+        'base_unit': null,
+        'spend_paisa': null,
+        'unit_cost_rupees_per_base_unit': null,
+        'unit_price_paisa': null,
+        'is_linked': null,
+        'promised_at': c.effectivePromisedAt,
+        'actual_at': c.effectiveActualAt,
+        'delay_minutes': c.delayMinutes,
+        'punctuality_status': c.status,
+        'amendment_count': c.amendmentCount,
+        'created_at': c.recordedAt,
+      });
+    }).toList();
+
+    final allRows = [...mandiRows, ...unlinkedCreditRows, ...receiptEvidenceRows];
+
+    final punctualityMetric = validSampleCount > 0
+        ? _metric(
+            'supplier_performance',
+            'Supplier delivery performance',
+            (punctualCount * 100.0 / validSampleCount).round(),
+            unit: AnalyticsUnit.percent,
+            explanation: '$punctualCount on-time receipts of $validSampleCount valid commitments with recorded promises and actual delivery times. $unknownPromisesCount unknown promises and $unknownReceiptsCount pending/unknown receipts disclosed separately; not classified as failed deliveries.',
+            sampleCount: validSampleCount,
+            populationCount: totalCommitments,
+          )
+        : _missing(
+            'supplier_performance',
+            'Supplier delivery performance',
+            'No delivery commitments with both promised and actual delivery times recorded in selected interval.',
+            unit: AnalyticsUnit.percent,
+          );
+
+    return _section(
+      AnalyticsFamily.procurement,
+      'Procurement',
+      [
+        _metric(
+          'purchase_spend',
+          'Recorded Mandi purchase spend',
+          _sum(purchases, 'total_cost'),
+          explanation: 'Mandi purchase records only; unlinked supplier credit deliveries are separate and not blindly added. $_intervalBasis',
+          previous: _sum(e.get('previous_purchases'), 'total_cost'),
+        ),
+        _metric(
+          'purchase_count',
+          'Recorded purchases',
+          purchases.length,
+          unit: AnalyticsUnit.count,
+          explanation: 'Mandi purchase rows in selected actual day intervals.',
+          previous: e.get('previous_purchases').length,
+        ),
+        _metric(
+          'purchased_ingredients',
+          'Distinct purchased ingredients',
+          purchases.map((p) => p['raw_ingredient_id']).toSet().length,
+          unit: AnalyticsUnit.count,
+          explanation: 'Distinct ingredient IDs in selected Mandi purchase records.',
+        ),
+        _metric(
+          'unified_spend',
+          'Unified acquisition spend',
+          unifiedSpend,
+          unit: AnalyticsUnit.paisa,
+          explanation: 'Total acquisition spend across wholesale Mandi procurements and credit purchases, counting linked purchases once. $_intervalBasis',
+        ),
+        _metric(
+          'unified_purchase_count',
+          'Unified purchase events',
+          unifiedPurchaseCount,
+          unit: AnalyticsUnit.count,
+          explanation: 'Total distinct acquisition events across Mandi wholesale and credit deliveries, counting linked purchases once.',
+        ),
+        _metric(
+          'linked_purchases_count',
+          'Linked supplier purchases',
+          linkedPurchasesCount,
+          unit: AnalyticsUnit.count,
+          explanation: 'Purchases with verified stable links between Mandi procurement and Vendor Khata credit entries, counted once without double counting.',
+        ),
+        _metric(
+          'unlinked_purchases_count',
+          'Unlinked purchases',
+          unlinkedPurchasesCount,
+          unit: AnalyticsUnit.count,
+          explanation: 'Purchases without cross-ledger links, disclosed honestly without guessing matches.',
+        ),
+        _metric(
+          'purchase_frequency',
+          'Purchase frequency',
+          purchaseFrequency,
+          unit: AnalyticsUnit.decimal,
+          explanation: 'Average unified acquisition events per selected Business Day ($unifiedPurchaseCount purchases / $selectedDaysCount days).',
+        ),
+        punctualityMetric,
+        _metric(
+          'valid_punctuality_sample',
+          'Valid punctuality commitments',
+          validSampleCount,
+          unit: AnalyticsUnit.count,
+          explanation: 'Commitments with both promised delivery deadline and actual receipt timestamp recorded.',
+        ),
+        _metric(
+          'punctual_receipts',
+          'Punctual receipts',
+          punctualCount,
+          unit: AnalyticsUnit.count,
+          explanation: 'Deliveries received at or before promised deadline.',
+        ),
+        _metric(
+          'late_receipts',
+          'Late deliveries',
+          lateCount,
+          unit: AnalyticsUnit.count,
+          explanation: 'Deliveries received strictly after promised deadline.',
+        ),
+        _metric(
+          'unknown_promises',
+          'Receipts with unknown promise',
+          unknownPromisesCount,
+          unit: AnalyticsUnit.count,
+          explanation: 'Deliveries received without a recorded delivery promise; disclosed honestly and not classified as failed.',
+        ),
+        _metric(
+          'unknown_receipts',
+          'Pending or unknown receipts',
+          unknownReceiptsCount,
+          unit: AnalyticsUnit.count,
+          explanation: 'Recorded delivery commitments without an actual receipt timestamp; disclosed honestly and not classified as failed.',
+        ),
+      ],
+      allRows,
+      [
+        'kind', 'purchase_id', 'vendor_transaction_id', 'supplier_id', 'supplier_name',
+        'ingredient_id', 'ingredient_name', 'purchase_unit', 'purchase_quantity',
+        'base_quantity', 'base_unit', 'spend_paisa', 'unit_cost_rupees_per_base_unit',
+        'unit_price_paisa', 'is_linked', 'promised_at', 'actual_at', 'delay_minutes',
+        'punctuality_status', 'amendment_count', 'created_at'
+      ],
+      [
+        _intervalBasis,
+        _globalBasis,
+        'Per-ingredient unit rates retain their recorded decimal PKR/base-unit precision (a rate, not a rounded monetary amount). Different base-unit dimensions must not be totaled. Purchase spend is not sales COGS.',
+        'Normalized acquisition prices reconcile to ingredient base unit and integer paisa.',
+        'Stable links between Mandi procurements and Vendor Khata credit deliveries prevent double-counting unified purchases.',
+        'Unlinked purchases and unavailable units are disclosed honestly without guessing matches.',
+        'Supplier receipt punctuality compares recorded commitments with actual receipt timestamps; unknown promises or receipts are disclosed separately and never classified as failed deliveries.',
+        'Valid-sample coverage indicates commitments with both promised and actual receipt timestamps; no unapproved SLA or scoring formulas are used.',
+      ],
+    );
   }
 
   AnalyticsSection _suppliers() {
@@ -995,6 +1585,36 @@ class _ReportBuilder {
     final covered = orders.where((o) => coverage.contains(o['id'])).length;
     final complete = e.get('days').isNotEmpty && covered == orders.length && events.every((c) => c['cost_paisa'] != null);
     final cogs = events.fold<int>(0, (sum, c) => sum + orderCostSign(c['kind']) * ((c['cost_paisa'] as int?) ?? 0));
+    final ordersById = {for (final o in orders) o['id']: o};
+
+    var foodCogs = 0;
+    var packagingCogs = 0;
+    var unclassifiedCogs = 0;
+    final foodByDining = <String, int>{'DINE_IN': 0, 'TAKEAWAY': 0, 'DELIVERY': 0};
+    final packagingByDining = <String, int>{'DINE_IN': 0, 'TAKEAWAY': 0, 'DELIVERY': 0};
+    final unclassifiedByDining = <String, int>{'DINE_IN': 0, 'TAKEAWAY': 0, 'DELIVERY': 0};
+
+    for (final c in events) {
+      final sign = orderCostSign(c['kind']);
+      final paisa = (c['cost_paisa'] as int?) ?? 0;
+      final signedCost = sign * paisa;
+      final rawCls = c['classification'] as String?;
+      final cls = (rawCls == null || rawCls.trim().isEmpty) ? 'UNCLASSIFIED' : rawCls.trim().toUpperCase();
+      final order = ordersById[c['order_id']];
+      final diningType = (order?['dining_type'] as String?) ?? 'UNKNOWN';
+
+      if (cls == 'FOOD') {
+        foodCogs += signedCost;
+        foodByDining[diningType] = (foodByDining[diningType] ?? 0) + signedCost;
+      } else if (cls == 'PACKAGING') {
+        packagingCogs += signedCost;
+        packagingByDining[diningType] = (packagingByDining[diningType] ?? 0) + signedCost;
+      } else {
+        unclassifiedCogs += signedCost;
+        unclassifiedByDining[diningType] = (unclassifiedByDining[diningType] ?? 0) + signedCost;
+      }
+    }
+
     // Accrual at confirmation: include COD receivables; cancellation reduces the
     // stored total to zero. Delivery fees are earned with the order; tax is excluded.
     final revenue = _sum(valid, 'grand_total') - _sum(valid, 'tax_amount');
@@ -1014,6 +1634,15 @@ class _ReportBuilder {
       _metric('waste_loss', 'Recorded waste loss', _sum(e.get('waste'), 'cost_loss'), explanation: 'Includes cooked loss already included in consumed cost; never subtract it twice.', previous: _sum(e.get('previous_waste'), 'cost_loss')),
       _metric('purchase_spend', 'Recorded Mandi purchase spend', _sum(e.get('purchases'), 'total_cost'), explanation: 'Inventory acquisition spend; not sales COGS.'),
       _metric('cogs', 'Historical realized COGS', cogs, explanation: policy, unavailable: !complete, unavailableQuality: AnalyticsQuality.missing),
+      _metric('food_cogs', 'Historical food COGS', foodCogs, explanation: 'Realized food component of COGS from event-time acquisition rates; original returns subtract cost.', unavailable: !complete, unavailableQuality: AnalyticsQuality.missing),
+      _metric('packaging_cogs', 'Historical packaging COGS', packagingCogs, explanation: 'Realized packaging component of COGS from event-time acquisition rates; original returns subtract cost.', unavailable: !complete, unavailableQuality: AnalyticsQuality.missing),
+      _metric('unclassified_cogs', 'Legacy unclassified COGS', unclassifiedCogs, explanation: 'Pre-upgrade cost events without recorded food/packaging classification. Not retroactively classified.', unavailable: !complete, unavailableQuality: AnalyticsQuality.missing),
+      _metric('food_cogs_dine_in', 'Dine-In food COGS', foodByDining['DINE_IN'] ?? 0, explanation: 'Realized food COGS for Dine-In orders.', unavailable: !complete, unavailableQuality: AnalyticsQuality.missing),
+      _metric('packaging_cogs_dine_in', 'Dine-In packaging COGS', packagingByDining['DINE_IN'] ?? 0, explanation: 'Realized packaging COGS for Dine-In orders.', unavailable: !complete, unavailableQuality: AnalyticsQuality.missing),
+      _metric('food_cogs_takeaway', 'Takeaway food COGS', foodByDining['TAKEAWAY'] ?? 0, explanation: 'Realized food COGS for Takeaway orders.', unavailable: !complete, unavailableQuality: AnalyticsQuality.missing),
+      _metric('packaging_cogs_takeaway', 'Takeaway packaging COGS', packagingByDining['TAKEAWAY'] ?? 0, explanation: 'Realized packaging COGS for Takeaway orders.', unavailable: !complete, unavailableQuality: AnalyticsQuality.missing),
+      _metric('food_cogs_delivery', 'Delivery food COGS', foodByDining['DELIVERY'] ?? 0, explanation: 'Realized food COGS for Delivery orders.', unavailable: !complete, unavailableQuality: AnalyticsQuality.missing),
+      _metric('packaging_cogs_delivery', 'Delivery packaging COGS', packagingByDining['DELIVERY'] ?? 0, explanation: 'Realized packaging COGS for Delivery orders.', unavailable: !complete, unavailableQuality: AnalyticsQuality.missing),
       _metric('gross_profit', 'Actual gross profit', gross, explanation: policy, unavailable: !complete, unavailableQuality: AnalyticsQuality.missing),
       _metric('net_profit', 'Recorded net operating result', gross - expenses - labor - rawWaste + variance,
         explanation: 'Gross profit less posted operating expenses, salary accruals and raw waste, plus signed posted count valuation. Posting-period allocation; unposted liabilities and legacy generic drawer outflows are not inferred. Available only for whole Business Days with complete cost evidence.', unavailable: !netAvailable, unavailableQuality: AnalyticsQuality.missing),
@@ -1024,9 +1653,26 @@ class _ReportBuilder {
         unavailableQuality: AnalyticsQuality.missing),
     ], [
       ...payroll.rows,
-      ...events.map((c) => _row('order_cost_events', c, {'kind': c['kind'], 'order_id': c['order_id'], 'ingredient_id': c['ingredient_id'], 'revision': c['revision'], 'quantity': c['quantity'], 'unit_cost_rupees': c['unit_cost_rupees'], 'cost_paisa': c['cost_paisa'], 'source_event_id': c['source_event_id'], 'created_at': c['recorded_at']})),
+      ...events.map((c) {
+        final rawCls = c['classification'] as String?;
+        final cls = (rawCls == null || rawCls.trim().isEmpty) ? 'UNCLASSIFIED' : rawCls.trim().toUpperCase();
+        final dining = ordersById[c['order_id']]?['dining_type'] ?? 'UNKNOWN';
+        return _row('order_cost_events', c, {
+          'kind': c['kind'],
+          'order_id': c['order_id'],
+          'dining_type': dining,
+          'ingredient_id': c['ingredient_id'],
+          'classification': cls,
+          'revision': c['revision'],
+          'quantity': c['quantity'],
+          'unit_cost_rupees': c['unit_cost_rupees'],
+          'cost_paisa': c['cost_paisa'],
+          'source_event_id': c['source_event_id'],
+          'created_at': c['recorded_at'],
+        });
+      }),
       ...e.get('waste').map((w) => _row('kitchen_wastage', w, {'kind': 'Waste evidence', 'ingredient_id': w['raw_ingredient_id'], 'quantity': w['quantity'], 'recorded_loss_paisa': _money(w, 'cost_loss'), 'reason': _safeText(w['reason']), 'created_at': w['created_at']})),
-    ], ['kind', 'order_id', 'ingredient_id', 'revision', 'quantity', 'unit_cost_rupees', 'cost_paisa', 'source_event_id', 'recorded_loss_paisa', 'reason', 'created_at'], [...payroll.notes, policy, 'Unknown costs remain null. Current purchase rates never rewrite earlier cost events. No invented pre-upgrade profit.', 'Recorded net result uses posting periods; it does not assert that all expenses or earned salary have been entered. Order filters withhold net result because overhead cannot be allocated reliably.']);
+    ], ['kind', 'order_id', 'dining_type', 'ingredient_id', 'classification', 'revision', 'quantity', 'unit_cost_rupees', 'cost_paisa', 'source_event_id', 'recorded_loss_paisa', 'reason', 'created_at'], [...payroll.notes, policy, 'Unknown costs remain null. Current purchase rates never rewrite earlier cost events. No invented pre-upgrade profit.', 'Food and packaging COGS are snapshotted at event time. Legacy pre-classification cost events remain explicit as UNCLASSIFIED and are never retroactively estimated. Realized COGS equals food COGS plus packaging COGS plus any legacy unclassified COGS.', 'Recorded net result uses posting periods; it does not assert that all expenses or earned salary have been entered. Order filters withhold net result because overhead cannot be allocated reliably.']);
   }
 
   static const _safeConfigKeys = {
@@ -1089,9 +1735,42 @@ class _ReportBuilder {
     }
   }
 
+  static String _safeBackupSummary(Map<String, Object?> b) {
+    final primary = b['primary_status'] ?? 'UNKNOWN';
+    final secondary = b['secondary_status'] ?? 'NOT_CONFIGURED';
+    final category = b['failure_category'] as String?;
+    final message = b['failure_message'] as String?;
+    final buf = StringBuffer('Primary: $primary, Secondary: $secondary');
+    if (category != null && category != 'NONE') {
+      buf.write(' [$category]');
+    }
+    if (message != null && message.isNotEmpty) {
+      buf.write(' - ${_safeText(message)}');
+    }
+    return buf.toString();
+  }
+
   AnalyticsSection _audit() {
     final configEvents = e.get('configuration_audit');
     final opsEvents = e.get('operations_audit');
+    final backupEvents = e.get('backup_attempts');
+    final allBackupEvents = e.get('all_backup_attempts');
+    final allVerifiedBackups = allBackupEvents.where((b) => b['verification_status'] == 'VERIFIED' && b['primary_status'] == 'SUCCESS').toList();
+    final verifiedInInterval = backupEvents.where((b) => b['verification_status'] == 'VERIFIED' && b['primary_status'] == 'SUCCESS').toList();
+    final failedInInterval = backupEvents.where((b) => b['primary_status'] == 'FAILED' || b['verification_status'] == 'FAILED').toList();
+    final warningsInInterval = backupEvents.where((b) => b['primary_status'] == 'SUCCESS' && (b['secondary_status'] == 'WARNING' || b['secondary_status'] == 'FAILED')).toList();
+
+    double? lastVerifiedAgeMinutes;
+    if (allVerifiedBackups.isNotEmpty) {
+      final lastTimeStr = allVerifiedBackups.first['attempted_at'] as String?;
+      if (lastTimeStr != null) {
+        final lastTime = DateTime.tryParse(lastTimeStr);
+        if (lastTime != null) {
+          final diff = e.now.difference(lastTime).inMinutes;
+          lastVerifiedAgeMinutes = diff >= 0 ? diff.toDouble() : 0.0;
+        }
+      }
+    }
     final rows = <AnalyticsRow>[
       ...e.get('revisions').map((r) => _row('order_revisions', r, {'kind': 'Order revision', 'order_id': r['order_id'], 'action': r['action'], 'reason': _safeText(r['reason']), 'staff_id': r['cashier_id'], 'delta_paisa': r['money_delta_paisa'], 'created_at': r['created_at_utc']})),
       ...e.get('token_audit').map((a) => _row('checkout_token_audit', a, {'kind': 'Immutable token audit', 'order_id': a['order_id'], 'token': a['token_number'], 'action': a['action'], 'status': a['payment_status'], 'revision': a['revision'], 'created_at': a['recorded_at']})),
@@ -1114,6 +1793,21 @@ class _ReportBuilder {
         'reason': _safeOperationsSummary(o['action'] as String?, o['detail'] as String?),
         'created_at': o['created_at'],
       })),
+      ...backupEvents.map((b) => _row('backup_attempts', b, {
+        'kind': 'Database backup',
+        'action': b['initiator'] ?? 'MANUAL',
+        'status': b['verification_status'] == 'VERIFIED'
+            ? (b['secondary_status'] == 'WARNING' ? 'WARNING' : 'VERIFIED')
+            : (b['verification_status'] ?? 'UNKNOWN'),
+        'staff_id': b['manager_id'],
+        'reason': _safeBackupSummary(b),
+        'created_at': b['attempted_at'] ?? b['created_at'],
+        'primary_status': b['primary_status'],
+        'secondary_status': b['secondary_status'],
+        'failure_category': b['failure_category'],
+        'primary_path': b['primary_path'],
+        'secondary_path': b['secondary_path'],
+      })),
     ];
     return _section(AnalyticsFamily.audit, 'Control and audit', [
       _metric('revision_events', 'Revision audit events', e.get('revisions').length, unit: AnalyticsUnit.count, explanation: 'Append-only revision evidence for filtered selected orders.'),
@@ -1125,14 +1819,35 @@ class _ReportBuilder {
       _metric('configuration_audit_events', 'Configuration audit events', configEvents.length, unit: AnalyticsUnit.count, explanation: 'Recorded configuration and settings change events within selected interval; safe allowlisted changes projected without raw payloads or secrets.'),
       _metric('operations_audit_events', 'Operations audit events', opsEvents.length, unit: AnalyticsUnit.count, explanation: 'Recorded management operations and finance adjustments within selected interval.'),
       _missing('authentication_event_history', 'Authentication and security event history', 'Login failures, session expirations and PIN reset audit history have no persisted event ledger; configuration and operations audits are projected above.', unit: AnalyticsUnit.count),
-      _missing('backup_history', 'Historical successful backups', 'Current settings are not evidence of historical backup success.', unit: AnalyticsUnit.count),
+      allVerifiedBackups.isEmpty
+          ? _missing('backup_history', 'Historical successful backups',
+              'No verified backup attempts have been recorded. Configured backup destinations or schedules are not evidence of backup completion.',
+              unit: AnalyticsUnit.count)
+          : _metric('backup_history', 'Historical successful backups', verifiedInInterval.length,
+              unit: AnalyticsUnit.count,
+              explanation: 'Durable verified successful backup attempts within selected interval.'),
+      _metric('failed_backups', 'Failed backup attempts', failedInInterval.length,
+          unit: AnalyticsUnit.count,
+          explanation: 'Recorded failed backup attempts within selected interval; failures are preserved and never overwritten.'),
+      _metric('backup_secondary_warnings', 'Secondary backup warnings', warningsInInterval.length,
+          unit: AnalyticsUnit.count,
+          explanation: 'Backup attempts where primary backup succeeded but secondary destination produced a warning or failure.'),
+      lastVerifiedAgeMinutes == null
+          ? _missing('last_verified_backup_age', 'Last verified backup age',
+              'No verified backup has been completed yet; configured settings do not establish backup health.',
+              unit: AnalyticsUnit.minutes)
+          : _metric('last_verified_backup_age', 'Last verified backup age', lastVerifiedAgeMinutes,
+              unit: AnalyticsUnit.minutes,
+              explanation: 'Minutes elapsed since the most recent verified successful backup snapshot.'),
     ], rows, ['kind', 'business_day_id', 'order_id', 'shift_id', 'ingredient_id', 'token', 'revision', 'action', 'reason', 'staff_id', 'delta_paisa', 'hash', 'channel', 'status', 'attempts', 'stock_at_checkout', 'created_at'], ['Order revisions/tokens/rounding/checkout alerts use filtered order cohort. Report runs/outbox use whole selected Business Days. Delivery audit uses selected actual intervals.', 'Configuration and operations audits project authorized management actions with safe field allowlisting. Raw JSON, credentials, PIN hashes, passwords and sensitive customer data are strictly excluded. Authentication events (login failures, PIN resets) have no persistent event ledger and remain disclosed as missing.', 'Immutable Z-report provenance is shown; this explorer never rewrites snapshots. Sensitive payloads, errors, recipients, credentials and raw customer contact fields are excluded.']);
   }
 
-  AnalyticsMetric _metric(String id, String label, num value, {AnalyticsUnit unit = AnalyticsUnit.paisa, String? explanation, num? previous, bool unavailable = false, AnalyticsQuality unavailableQuality = AnalyticsQuality.notApplicable}) {
+  AnalyticsMetric _metric(String id, String label, num value, {AnalyticsUnit unit = AnalyticsUnit.paisa, String? explanation, num? previous, bool unavailable = false, AnalyticsQuality unavailableQuality = AnalyticsQuality.notApplicable, int? sampleCount, int? populationCount}) {
     final difference = !partial && !unavailable && previous != null ? value - previous : null;
     return AnalyticsMetric(id: id, label: label, value: unavailable ? null : value, unit: unit, explanation: explanation ?? _orderBasis,
       quality: unavailable ? unavailableQuality : AnalyticsQuality.complete,
+      sampleCount: sampleCount,
+      populationCount: populationCount,
       changeAbsolute: difference,
       changePercent: difference != null && previous != null && previous != 0 ? difference / previous.abs() * 100 : null);
   }
@@ -1250,4 +1965,35 @@ class _ReportBuilder {
       return 'Snapshot present';
     } on FormatException { return 'Unreadable snapshot'; }
   }
+}
+
+class _EvaluatedCommitment {
+  _EvaluatedCommitment({
+    required this.id,
+    required this.vendorId,
+    this.ingredientId,
+    this.procurementId,
+    this.vendorTransactionId,
+    this.effectivePromisedAt,
+    this.effectiveActualAt,
+    this.delayMinutes,
+    required this.status,
+    required this.amendmentCount,
+    required this.recordedAt,
+    required this.recordedBy,
+    required this.record,
+  });
+  final int id;
+  final int vendorId;
+  final int? ingredientId;
+  final int? procurementId;
+  final int? vendorTransactionId;
+  final String? effectivePromisedAt;
+  final String? effectiveActualAt;
+  final int? delayMinutes;
+  final String status;
+  final int amendmentCount;
+  final String recordedAt;
+  final int recordedBy;
+  final _Record record;
 }
