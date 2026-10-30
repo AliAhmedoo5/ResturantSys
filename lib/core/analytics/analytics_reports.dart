@@ -277,32 +277,77 @@ class _ReportBuilder {
     }
     final repeat = groups.values.where((list) => list.length >= 2).length;
     final knownValue = groups.values.fold<int>(0, (sum, list) => sum + _sum(list, 'grand_total'));
+    final lifetimeFirstOrders = <String, _Record>{};
+    for (final order in e.get('first_purchases')) {
+      final phone = _phone(order['customer_phone']);
+      if (phone != null) {
+        final existing = lifetimeFirstOrders[phone];
+        if (existing == null) {
+          lifetimeFirstOrders[phone] = order;
+        } else {
+          final existingTime = _karachi(existing['created_at']);
+          final thisTime = _karachi(order['created_at']);
+          if (thisTime != null && (existingTime == null || thisTime.isBefore(existingTime))) {
+            lifetimeFirstOrders[phone] = order;
+          }
+        }
+      }
+    }
+    var firstTimeCount = 0;
+    var returningCount = 0;
+    for (final entry in groups.entries) {
+      final firstLifetime = lifetimeFirstOrders[entry.key];
+      final firstLifetimeTime = _karachi(firstLifetime?['created_at']);
+      final earliestInCohort = entry.value.map((o) => _karachi(o['created_at'])).whereType<DateTime>().fold<DateTime?>(null, (earliest, t) => earliest == null || t.isBefore(earliest) ? t : earliest);
+      final isReturning = firstLifetimeTime != null && earliestInCohort != null && firstLifetimeTime.isBefore(earliestInCohort);
+      if (isReturning) {
+        returningCount++;
+      } else {
+        firstTimeCount++;
+      }
+    }
     final rows = <AnalyticsRow>[];
     for (final entry in groups.entries) {
       final customer = 'Customer •••${entry.key.substring(entry.key.length - 4)}';
       final value = _sum(entry.value, 'grand_total');
+      final firstLifetime = lifetimeFirstOrders[entry.key];
+      final firstLifetimeTime = _karachi(firstLifetime?['created_at']);
+      final earliestInCohort = entry.value.map((o) => _karachi(o['created_at'])).whereType<DateTime>().fold<DateTime?>(null, (earliest, t) => earliest == null || t.isBefore(earliest) ? t : earliest);
+      final isReturning = firstLifetimeTime != null && earliestInCohort != null && firstLifetimeTime.isBefore(earliestInCohort);
+      final classification = isReturning ? 'Returning' : 'First-time';
+      final firstOrderDateStr = firstLifetimeTime != null ? _sqlTime(firstLifetimeTime) : 'Unknown';
+
       rows.add(AnalyticsRow(id: 'customer-${entry.value.first['id']}', sourceType: 'orders',
         sourceId: entry.value.map((order) => order['id']).join(','), cells: {
-          'kind': 'Customer aggregate', 'customer': customer, 'orders_in_range': entry.value.length,
+          'kind': 'Customer aggregate', 'customer': customer,
+          'history_classification': classification,
+          'first_order_date': firstOrderDateStr,
+          'orders_in_range': entry.value.length,
           'recorded_value_paisa': value, 'average_ticket_paisa': value / entry.value.length,
         }));
       rows.addAll(entry.value.map((order) => _row('orders', order, {
-        'kind': 'Order history', 'customer': customer, 'order_id': order['id'],
+        'kind': 'Order history', 'customer': customer,
+        'history_classification': classification,
+        'first_order_date': firstOrderDateStr,
+        'order_id': order['id'],
         'orders_in_range': entry.value.length, 'recorded_value_paisa': _money(order, 'grand_total'),
         'area': order['delivery_area_name_snapshot'], 'created_at': order['created_at'],
       })));
     }
     return _section(AnalyticsFamily.customers, 'Customers', [
       _metric('known_customers', 'Known phone identities', groups.length, unit: AnalyticsUnit.count, explanation: 'Distinct normalized known phone proxies in eligible filtered orders; not guaranteed distinct people.'),
+      _metric('first_time_customers', 'First-time customers', firstTimeCount, unit: AnalyticsUnit.count, explanation: 'Known phone identities whose very first eligible purchase across available history occurred within the selected range.'),
+      _metric('returning_customers', 'Returning customers', returningCount, unit: AnalyticsUnit.count, explanation: 'Known phone identities who purchased in this period and had an earlier eligible purchase prior to this range.'),
       _metric('known_orders', 'Orders with known phone', knownOrders, unit: AnalyticsUnit.count, explanation: 'Eligible filtered orders with usable normalized phone identity.'),
       _average('known_customer_average_ticket', 'Known-customer average ticket', knownValue, knownOrders,
         AnalyticsUnit.paisa, 'Recorded eligible known-phone order value / eligible known-phone order count. Guests and cancelled/voided/refunded orders excluded; includes Collection Due. Denominator shown; this is order-weighted, not an average of customer means.'),
-      _metric('guest_orders', 'Guest/unknown orders', valid.length - knownOrders, unit: AnalyticsUnit.count, explanation: 'Eligible orders without usable known phone; excluded from repeat denominator.'),
+      _metric('guest_orders', 'Guest/unknown orders', valid.length - knownOrders, unit: AnalyticsUnit.count, explanation: 'Eligible orders without usable known phone; excluded from repeat and history classification.'),
       _rate('identity_coverage', 'Known identity coverage', knownOrders, valid.length, 'Known phone orders / eligible filtered orders.'),
       _rate('repeat_rate', 'Repeat-customer rate', repeat, groups.length, 'Known normalized phone proxies with at least two eligible selected orders / proxies with at least one. Guests excluded.'),
-      _metric('single_order_customers', 'Single-order phone identities', groups.length - repeat, unit: AnalyticsUnit.count, explanation: 'One eligible order within selected range; cannot be called a new lifetime customer.'),
-    ], rows, ['kind', 'customer', 'order_id', 'orders_in_range', 'recorded_value_paisa', 'average_ticket_paisa', 'area', 'created_at'], [
+      _metric('single_order_customers', 'Single-order phone identities', groups.length - repeat, unit: AnalyticsUnit.count, explanation: 'One eligible order within selected range; distinct from first-time/returning lifetime classification.'),
+    ], rows, ['kind', 'customer', 'history_classification', 'first_order_date', 'order_id', 'orders_in_range', 'recorded_value_paisa', 'average_ticket_paisa', 'area', 'created_at'], [
       _orderBasis,
+      'Customer classification distinguishes first-time customers (whose first eligible purchase occurred in this selected window) from returning customers (who had an eligible purchase prior to this window across all available history). Earlier installation boundaries limit historical depth; guest orders without phone numbers cannot be classified.',
       'Phone normalization removes separators and unifies +92/0092/92 mobile prefixes with local 0. Shared numbers and masked suffix collisions are possible. Raw phones, names and addresses are excluded.',
       'Customer aggregate rows show each known identity’s eligible recorded value / its eligible order count, with all contributing order source IDs. Order history rows are a separate view; do not sum these different row kinds together. No known orders makes average ticket Not applicable.',
     ]);
