@@ -151,6 +151,14 @@ void main() {
         reason: 'Customer phone 03001234567 was unreachable after 3 attempts',
       );
 
+      // Settle Trip 1 so Order 1 can be re-attempted on a subsequent trip
+      await riderTripController.settleRiderTrip(
+        tripId: trip1.id,
+        cashierStaffId: cashierId,
+        shiftId: shiftId,
+        cashCountedPaisa: 0,
+      );
+
       // Trip 2 with Order 1 (reattempt) and Order 2 (first attempt)
       final trip2 = await riderTripController.createRiderTrip(
         businessDayId: businessDayId,
