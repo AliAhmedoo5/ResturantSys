@@ -34,16 +34,14 @@ void main() {
       // Day 1 (Historical): 2026-10-20
       final dayHistorical = await db.insert('business_days', {
         'opened_at': '2026-10-20 09:00:00',
-        'closed_at': '2026-10-20 23:00:00',
-        'status': 'CLOSED',
+        'status': 'OPEN',
         'opened_by_staff_id': 1,
       });
       final shiftHistorical = await db.insert('shifts', {
         'business_day_id': dayHistorical,
         'staff_id': 2,
         'opened_at': '2026-10-20 09:00:00',
-        'closed_at': '2026-10-20 23:00:00',
-        'status': 'CLOSED',
+        'status': 'OPEN',
         'opening_float': 1000,
       });
 
@@ -61,19 +59,26 @@ void main() {
         'created_at': '2026-10-20 14:00:00',
       });
 
+      await db.update('shifts', {
+        'closed_at': '2026-10-20 23:00:00',
+        'status': 'CLOSED',
+      }, where: 'id = ?', whereArgs: [shiftHistorical]);
+      await db.update('business_days', {
+        'closed_at': '2026-10-20 23:00:00',
+        'status': 'CLOSED',
+      }, where: 'id = ?', whereArgs: [dayHistorical]);
+
       // Day 2 (Selected cohort): 2026-10-25
       final daySelected = await db.insert('business_days', {
         'opened_at': '2026-10-25 09:00:00',
-        'closed_at': '2026-10-25 23:00:00',
-        'status': 'CLOSED',
+        'status': 'OPEN',
         'opened_by_staff_id': 1,
       });
       final shiftSelected = await db.insert('shifts', {
         'business_day_id': daySelected,
         'staff_id': 2,
         'opened_at': '2026-10-25 09:00:00',
-        'closed_at': '2026-10-25 23:00:00',
-        'status': 'CLOSED',
+        'status': 'OPEN',
         'opening_float': 1000,
       });
 
@@ -118,6 +123,15 @@ void main() {
         'customer_phone': null,
         'created_at': '2026-10-25 16:00:00',
       });
+
+      await db.update('shifts', {
+        'closed_at': '2026-10-25 23:00:00',
+        'status': 'CLOSED',
+      }, where: 'id = ?', whereArgs: [shiftSelected]);
+      await db.update('business_days', {
+        'closed_at': '2026-10-25 23:00:00',
+        'status': 'CLOSED',
+      }, where: 'id = ?', whereArgs: [daySelected]);
     });
 
     tearDown(() async {
