@@ -29,14 +29,14 @@ class _HistoricalCorrectionsWorkspaceState extends State<HistoricalCorrectionsWo
     catch(_){if(mounted)setState(()=>_error='Manager session required.');}
   }
   Future<void> _load()async{
-    if(_day==null||!_authorized)return;
+    if(!mounted||_day==null||!_authorized)return;
     setState((){_busy=true;_error=null;_snapshot=null;});
     try{final value=await widget.service.load(_day!,cutoff:parseActualEventTime(_cutoff.text));if(mounted&&_authorized)setState(()=>_snapshot=value);}
     catch(e){if(mounted)setState(()=>_error='$e');}
     finally{if(mounted)setState(()=>_busy=false);}
   }
   Future<void> _append({int? reverseId})async{
-    if(_day==null||!_authorized)return;
+    if(!mounted||_day==null||!_authorized)return;
     final form=GlobalKey<FormState>();
     final fields={for(final key in ['pin','amount','shift','order','source','reason','event'])key:TextEditingController()};
     var kind=HistoricalCorrectionType.collection;
@@ -70,7 +70,7 @@ class _HistoricalCorrectionsWorkspaceState extends State<HistoricalCorrectionsWo
           ],
           field('reason','Business reason'),field('pin','Your Manager PIN'),
           if(error!=null)Text(error!,style:TextStyle(color:Theme.of(context).colorScheme.error)),
-        ])))),actions:[TextButton(onPressed:saving?null:()=>Navigator.pop(dialog),child:const Text('Cancel')),
+        ]))),actions:[TextButton(onPressed:saving?null:()=>Navigator.pop(dialog),child:const Text('Cancel')),
         FilledButton(onPressed:saving?null:()async{
           if(!form.currentState!.validate())return;
           update(()=>saving=true);
@@ -118,8 +118,9 @@ class _HistoricalCorrectionsWorkspaceState extends State<HistoricalCorrectionsWo
             Text('${row.cells['reason']}'),
             if(row.cells['reverses_correction_id']==null)TextButton(onPressed:()=>_append(reverseId:int.parse(row.sourceId!)),child:const Text('Append contra-reversal')),
           ]
-        ])))),
+        ]))),
       ],
     ]);
   }
 }
+
