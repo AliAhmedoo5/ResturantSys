@@ -616,12 +616,12 @@ class _ReportBuilder {
       final txnsInRange = allTxns.where((t) => t['vendor_id'] == vId && (t['created_at'] as String).compareTo(intervalStart) >= 0 && (t['created_at'] as String).compareTo(cutoffTime) <= 0).toList();
       final txnsUpToCutoff = allTxns.where((t) => t['vendor_id'] == vId && (t['created_at'] as String).compareTo(cutoffTime) <= 0).toList();
 
-      final purchasesBefore = txnsBeforeStart.where((t) => t['type'] == 'PURCHASE_CREDIT').fold<int>(0, (sum, t) => sum + _money(t, 'amount_paisa'));
-      final paymentsBefore = txnsBeforeStart.where((t) => ['PAYMENT_DRAWER', 'PAYMENT_EXTERNAL'].contains(t['type'])).fold<int>(0, (sum, t) => sum + _money(t, 'amount_paisa'));
+      final purchasesBefore = txnsBeforeStart.where((t) => t['type'] == 'PURCHASE_CREDIT').fold<int>(0, (sum, t) => sum + _money(t, 'amount'));
+      final paymentsBefore = txnsBeforeStart.where((t) => ['PAYMENT_DRAWER', 'PAYMENT_EXTERNAL'].contains(t['type'])).fold<int>(0, (sum, t) => sum + _money(t, 'amount'));
       final openingPayablePaisa = baseOpeningPaisa + purchasesBefore - paymentsBefore;
 
-      final purchasesInRange = txnsInRange.where((t) => t['type'] == 'PURCHASE_CREDIT').fold<int>(0, (sum, t) => sum + _money(t, 'amount_paisa'));
-      final paymentsInRange = txnsInRange.where((t) => ['PAYMENT_DRAWER', 'PAYMENT_EXTERNAL'].contains(t['type'])).fold<int>(0, (sum, t) => sum + _money(t, 'amount_paisa'));
+      final purchasesInRange = txnsInRange.where((t) => t['type'] == 'PURCHASE_CREDIT').fold<int>(0, (sum, t) => sum + _money(t, 'amount'));
+      final paymentsInRange = txnsInRange.where((t) => ['PAYMENT_DRAWER', 'PAYMENT_EXTERNAL'].contains(t['type'])).fold<int>(0, (sum, t) => sum + _money(t, 'amount'));
       final closingPayablePaisa = openingPayablePaisa + purchasesInRange + adjsInRangePaisa - paymentsInRange;
 
       // Only include allocations created on or before cutoff
@@ -641,7 +641,7 @@ class _ReportBuilder {
 
       for (final inv in invoicesUpToCutoff) {
         final invId = inv['id'] as int;
-        final invAmount = _money(inv, 'amount_paisa');
+        final invAmount = _money(inv, 'amount');
         final paid = vAllocs.where((a) => a['invoice_id'] == invId).fold<int>(0, (sum, a) => sum + (a['amount_paisa'] as int));
         final due = invAmount - paid;
         final dueDateStr = inv['due_date'] as String?;
@@ -759,7 +759,7 @@ class _ReportBuilder {
         'aging_unknown_paisa': null,
         'due_date': t['due_date'],
         'type': t['type'],
-        'amount_paisa': _money(t, 'amount_paisa'),
+        'amount_paisa': _money(t, 'amount'),
         'created_at': t['created_at'],
       })),
     ], [

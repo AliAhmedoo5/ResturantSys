@@ -273,9 +273,19 @@ void main() {
       'recorded_at': '2026-10-25 19:00:00',
     });
 
+    final shift = await db.insert('shifts', {
+      'business_day_id': day,
+      'staff_id': manager['id'],
+      'opened_at': '2026-10-25 18:00:00',
+      'opening_float': 0,
+      'status': 'OPEN',
+    });
+
     // Order dummy row
     final orderId = await db.insert('orders', {
       'business_day_id': day,
+      'shift_id': shift,
+      'cashier_id': manager['id'],
       'token_number': 101,
       'dining_type': 'DINE_IN',
       'subtotal': 300,
