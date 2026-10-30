@@ -810,40 +810,7 @@ class _ReportBuilder {
       })),
   ];
 
-  AnalyticsSection _cash() {
-    final shifts = e.get('shifts');
-    final receiptEvents = _receivingEvents();
-    final moves = e.get('movements');
-    final payments = e.get('cash_payments');
-    final receipts = payments.where((p) => p['payment_method'] == 'CASH' && _money(p, 'amount_tendered') > 0).toList();
-    int receiptsFor(Iterable<_Record> rows) => rows.fold(0, (sum, p) => sum + _money(p, 'amount_tendered') - _money(p, 'change_returned'));
-    final payIn = _sum(moves.where((m) => m['type'] == 'PAY_IN'), 'amount');
-    final payOut = _sum(moves.where((m) => m['type'] != 'PAY_IN'), 'amount');
-    final expected = _sum(shifts, 'opening_float') + receiptsFor(receipts) + payIn - payOut;
-    final counted = shifts.where((s) => s['counted_cash'] != null).toList();
-    final complete = shifts.isNotEmpty && counted.length == shifts.length;
-    return _section(AnalyticsFamily.cash, 'Cash and shifts', [
-      _metric('opening_float', 'Opening float', _sum(shifts, 'opening_float'), explanation: _globalBasis),
-      _metric('cash_receipts', 'Positive customer cash receipts', receiptsFor(receipts), explanation: 'Positive CASH tender minus change. Refund payment negatives excluded here because their PAY_OUT already reduces the drawer. COD rider handover uses PAY_IN once. $_globalBasis'),
-      _metric('cash_refunds', 'Explicit cash refunds', -_sum(payments.where((p) => p['payment_method'] == 'CASH' && _money(p, 'amount_tendered') < 0), 'amount_tendered'), explanation: 'Negative CASH tender rows shown for audit; drawer uses corresponding PAY_OUT only.'),
-      _metric('pay_in', 'Drawer pay-ins', payIn, explanation: 'Includes recorded rider settlement pouches; no second COD addition. $_globalBasis'),
-      _metric('pay_out', 'Drawer pay-outs', payOut, explanation: 'All non-PAY_IN recorded drawer outflows, including refunds/supplier settlements/drops.'),
-      _metric('expected_drawer', 'Expected drawer', expected, explanation: 'Float + positive customer cash receipts + PAY_IN - PAY_OUT; cash refund never subtracted twice. $_globalBasis'),
-      AnalyticsMetric(id: 'variance', label: 'Counted variance', value: complete ? _sum(counted, 'counted_cash') - expected : null, unit: AnalyticsUnit.paisa, explanation: 'Physical count minus expected across all selected shifts; missing blind count means unknown.', quality: shifts.isEmpty ? AnalyticsQuality.notApplicable : complete ? AnalyticsQuality.complete : AnalyticsQuality.missing, sampleCount: counted.length, populationCount: shifts.length),
-      _coverage('count_coverage', 'Counted shift coverage', counted.length, shifts.length, 'Shifts with a recorded blind count / selected shifts; open uncounted shifts remain unknown.'),
-      _metric('open_shifts', 'Open shifts', shifts.where((s) => s['status'] == 'OPEN').length, unit: AnalyticsUnit.count, explanation: _globalBasis),
-      _metric('unresolved_discrepancies', 'Unresolved discrepancies', shifts.where((s) => s['discrepancy_status'] == 'FLAGGED').length, unit: AnalyticsUnit.count, explanation: 'Selected shifts with stored FLAGGED review status.'),
-    ], [
-      ..._receivingEventRows(receiptEvents),
-      ...shifts.map((s) {
-        final shiftMoves = moves.where((m) => m['shift_id'] == s['id']);
-        final expectedShift = _money(s, 'opening_float') + receiptsFor(receipts.where((p) => p['shift_id'] == s['id'])) + _sum(shiftMoves.where((m) => m['type'] == 'PAY_IN'), 'amount') - _sum(shiftMoves.where((m) => m['type'] != 'PAY_IN'), 'amount');
-        return _row('shifts', s, {'kind': 'Shift reconciliation', 'shift_id': s['id'], 'cashier_id': s['staff_id'], 'status': s['status'], 'opening_paisa': _money(s, 'opening_float'), 'expected_paisa': expectedShift, 'counted_paisa': s['counted_cash'] == null ? null : _money(s, 'counted_cash'), 'variance_paisa': s['counted_cash'] == null ? null : _money(s, 'counted_cash') - expectedShift, 'review_status': s['discrepancy_status']});
-      }),
-      ...moves.map((m) => _row('cash_movements', m, {'kind': 'Drawer movement', 'shift_id': m['shift_id'], 'cashier_id': m['staff_id'], 'type': m['type'], 'category': _safeText(m['category']), 'amount_paisa': _money(m, 'amount'), 'created_at': m['created_at']})),
-      ...e.get('reports').map((r) => _row('report_runs', r, {'kind': 'Sealed Z-report provenance', 'business_day_id': r['business_day_id'], 'status': r['status'], 'hash': r['content_hash'], 'created_at': r['created_at']})),
-    ], ['event_kind', 'event_key', 'payment_source', 'payment_method', 'actual_at', 'recorded_at', 'receiving_business_day_id', 'receiving_shift_id', 'originating_business_day_id', 'originating_shift_id', 'order_id', 'tender_id', 'movement_id', 'recorded_by', 'approved_by', 'recorded_by_name_snapshot', 'shift_owner_name_snapshot', 'change_paisa', 'rounding_paisa', 'kind', 'business_day_id', 'shift_id', 'cashier_id', 'status', 'opening_paisa', 'expected_paisa', 'counted_paisa', 'variance_paisa', 'review_status', 'type', 'category', 'amount_paisa', 'hash', 'created_at'], [_globalBasis, 'Independent customer money event rows use receiving Business Day/Shift (or actual time in calendar mode); Shift/Cashier/method filters narrow those activity rows only. RIDER_HANDOVER counts the physical pouch once via its linked PAY_IN; COD_SETTLEMENT is contractual attribution, not a second money inflow or proof of customer-to-rider collection. Digital receipts are BANK, never drawer cash. Legacy payments without linked events have unknown timing/receiving attribution and remain order-cohort estimates in the legacy drawer metrics. Never add event rows to the linked tender/movement again. Shift rows are exploratory X-report inputs; sealed Z-report hashes remain original.']);
-  }
+  AnalyticsSection _cash() => _ShiftCashBridge(this).build();
 
   AnalyticsSection _expenses() {
     final out = e.get('movements').where((m) => m['type'] != 'PAY_IN').toList();
@@ -988,9 +955,9 @@ class _ReportBuilder {
   AnalyticsRow _row(String source, _Record record, Map<String, Object?> cells) {
     final detail = <String, Object?>{...cells};
     final shiftId = source == 'shifts' ? record['id'] : record['shift_id'];
-    final shift = [...e.get('shifts'), ...e.get('order_shifts'), ...e.get('event_shifts')].where((s) => s['id'] == shiftId).firstOrNull;
+    final shift = [...e.get('shifts'), ...e.get('order_shifts'), ...e.get('event_shifts'), ...e.get('bridge_shifts')].where((s) => s['id'] == shiftId).firstOrNull;
     final dayId = source == 'business_days' ? record['id'] : record['business_day_id'] ?? shift?['business_day_id'];
-    final day = [...e.get('days'), ...e.get('order_days'), ...e.get('event_days')].where((d) => d['id'] == dayId).firstOrNull;
+    final day = [...e.get('days'), ...e.get('order_days'), ...e.get('event_days'), ...e.get('bridge_days')].where((d) => d['id'] == dayId).firstOrNull;
     if (dayId != null) detail['business_day_id'] = dayId;
     if (shiftId != null) detail['shift_id'] = shiftId;
     if (day != null) {
@@ -1066,3 +1033,4 @@ class _ReportBuilder {
     } on FormatException { return 'Unreadable snapshot'; }
   }
 }
+
