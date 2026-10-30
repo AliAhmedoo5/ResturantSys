@@ -48,6 +48,7 @@ class _OrderWorkload {
         final rows = groups[i];
         final eligible = rows.where(_valid).toList();
         final orderIds = rows.map((r) => r['id']).toSet();
+        final cancelledIds = e.get('revisions').where((r) => r['action'] == 'CANCEL').map((r) => r['order_id']).toSet();
         final refunds = e.get('payments').where((p) => orderIds.contains(p['order_id']) && _money(p, 'amount_tendered') < 0);
         final countRank = 1 + counts.where((n) => n > counts[i]).length;
         final valueRank = 1 + values.where((n) => n > values[i]).length;
@@ -60,7 +61,7 @@ class _OrderWorkload {
             'eligible_orders': complete ? eligible.length : null,
             'recorded_value_paisa': complete ? values[i] : null,
             'average_ticket_paisa': complete && eligible.isNotEmpty ? values[i] / eligible.length : null,
-            'cancelled_orders': rows.where((r) => ['CANCELLED', 'VOIDED', 'REFUNDED'].contains(r['payment_status'])).length,
+            'cancelled_orders': rows.where((r) => cancelledIds.contains(r['id']) || ['CANCELLED', 'VOIDED', 'REFUNDED'].contains(r['payment_status'])).length,
             'refunds_paisa': -_sum(refunds, 'amount_tendered'),
             'count_rank': complete ? countRank : null,
             'value_rank': complete ? valueRank : null,
@@ -81,3 +82,4 @@ class _OrderWorkload {
     ];
   }
 }
+

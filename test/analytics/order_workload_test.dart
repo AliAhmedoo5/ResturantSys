@@ -39,6 +39,8 @@ void main() {
       cashierId: 2, diningType: DiningType.dineIn, items: [line],
       payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 100)]);
     await controller.cancelOrder(orderId: first.order.id, cashierId: 2, reason: 'Customer Cancelled', commandId: 'cancel-workload');
+    await controller.recordCashierRefund(orderId: first.order.id, shiftId: shift.id, cashierId: 2,
+      amountPaisa: 10000, method: PaymentMethod.cash, reason: 'Cancelled Order refund', commandId: 'workload-refund');
     final local = DateTime.now().toUtc().add(const Duration(hours: 5));
     final date = DateTime.utc(local.year, local.month, local.day);
     final snapshot = await AnalyticsService(database: db, authService: auth).load(
@@ -64,3 +66,4 @@ void main() {
     expect(() => daily.cells.clear(), throwsUnsupportedError);
   });
 }
+
