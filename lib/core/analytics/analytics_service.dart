@@ -100,28 +100,30 @@ class AnalyticsService {
     await read('physical_counts', 'stock_count_lines', 'SELECT x.*,c.status,c.reason,c.created_by,c.approved_by,c.posted_by,c.posted_at AS created_at FROM stock_count_lines x JOIN stock_counts c ON c.id=x.count_id WHERE ${_intervalScope(query, 'c.posted_at')} AND c.status=\'POSTED\'', intervalArgs);
     e.rows['physical_counts'] = e.get('physical_counts').map((row) => <String, Object?>{...row, 'recorded_estimated_cost_paisa': row['estimated_cost_paisa'], 'estimated_cost_paisa': StockCountValuation.paisa(row)}).toList();
     await read('waste', 'kitchen_wastage', 'SELECT x.id,x.staff_id,x.raw_ingredient_id,x.quantity,x.cost_loss,x.reason,x.created_at FROM kitchen_wastage x WHERE $interval', intervalArgs);
-    await read('all_mandi_purchases', 'mandi_procurements', 'SELECT id,raw_ingredient_id,traditional_unit,quantity,converted_quantity,total_cost,cost_per_recipe_unit,created_at FROM mandi_procurements ORDER BY created_at,id');
-    await read('all_waste', 'kitchen_wastage', 'SELECT id,staff_id,raw_ingredient_id,quantity,cost_loss,reason,created_at FROM kitchen_wastage ORDER BY created_at,id');
-    await read('all_inventory_movements', 'inventory_movements', 'SELECT id,ingredient_id,business_day_id,quantity_delta,balance_after,recorded_at FROM inventory_movements ORDER BY recorded_at,id');
+    final effectiveCutoff = query.live ? _karachi(e.now.toIso8601String())! : _karachi(analyticsWallClock(query.endDateExclusive).toIso8601String())!;
+    final effectiveCutoffStr = _sqlTime(effectiveCutoff);
+    await read('all_mandi_purchases', 'mandi_procurements', 'SELECT id,raw_ingredient_id,traditional_unit,quantity,converted_quantity,total_cost,cost_per_recipe_unit,created_at FROM mandi_procurements WHERE created_at <= ? ORDER BY created_at,id', [effectiveCutoffStr]);
+    await read('all_waste', 'kitchen_wastage', 'SELECT id,staff_id,raw_ingredient_id,quantity,cost_loss,reason,created_at FROM kitchen_wastage WHERE created_at <= ? ORDER BY created_at,id', [effectiveCutoffStr]);
+    await read('all_inventory_movements', 'inventory_movements', 'SELECT id,ingredient_id,business_day_id,quantity_delta,balance_after,recorded_at FROM inventory_movements WHERE recorded_at <= ? ORDER BY recorded_at,id', [effectiveCutoffStr]);
     if (tables.contains('order_cost_events')) {
-      await read('all_cost_events', 'order_cost_events', 'SELECT id,order_id,ingredient_id,revision,kind,quantity,unit_cost_rupees,cost_paisa,recorded_at FROM order_cost_events ORDER BY recorded_at,id');
+      await read('all_cost_events', 'order_cost_events', 'SELECT id,order_id,ingredient_id,revision,kind,quantity,unit_cost_rupees,cost_paisa,recorded_at FROM order_cost_events WHERE recorded_at <= ? ORDER BY recorded_at,id', [effectiveCutoffStr]);
     }
     if (tables.contains('stock_count_lines')) {
-      await read('all_physical_counts', 'stock_count_lines', "SELECT x.*,c.status,c.reason,c.posted_at AS created_at FROM stock_count_lines x JOIN stock_counts c ON c.id=x.count_id WHERE c.status='POSTED' ORDER BY c.posted_at,x.count_id");
+      await read('all_physical_counts', 'stock_count_lines', "SELECT x.*,c.status,c.reason,c.posted_at AS created_at FROM stock_count_lines x JOIN stock_counts c ON c.id=x.count_id WHERE c.status='POSTED' AND c.posted_at <= ? ORDER BY c.posted_at,x.count_id", [effectiveCutoffStr]);
     }
     await read('vendor_events', 'vendor_transactions', 'SELECT x.id,x.vendor_id,x.shift_id,x.staff_id,x.type,x.amount,COALESCE(x.amount_paisa,CAST(ROUND(x.amount*100) AS INTEGER)) amount_paisa,x.due_date,x.raw_ingredient_id,x.quantity,x.created_at FROM vendor_transactions x WHERE $interval', intervalArgs);
-    await read('all_vendor_transactions', 'vendor_transactions', 'SELECT id,vendor_id,shift_id,staff_id,type,amount,COALESCE(amount_paisa,CAST(ROUND(amount*100) AS INTEGER)) amount_paisa,due_date,raw_ingredient_id,quantity,created_at FROM vendor_transactions ORDER BY created_at,id');
+    await read('all_vendor_transactions', 'vendor_transactions', 'SELECT id,vendor_id,shift_id,staff_id,type,amount,COALESCE(amount_paisa,CAST(ROUND(amount*100) AS INTEGER)) amount_paisa,due_date,raw_ingredient_id,quantity,created_at FROM vendor_transactions WHERE created_at <= ? ORDER BY created_at,id', [effectiveCutoffStr]);
     await read('expense_entries', 'expense_entries', 'SELECT x.* FROM expense_entries x JOIN business_days b ON b.id=x.business_day_id WHERE $dayScope', dayArgs);
     await read('payroll_entries', 'payroll_entries', 'SELECT x.* FROM payroll_entries x WHERE $interval', intervalArgs);
     await read('payroll_balances', 'payroll_entries', 'SELECT employee_id AS id,SUM(payable_delta_paisa) payable_paisa,SUM(advance_delta_paisa) advance_paisa FROM payroll_entries GROUP BY employee_id');
     if (tables.contains('supplier_payment_allocations')) {
       await read('invoice_balances', 'vendor_transactions', "SELECT t.id,t.vendor_id,t.due_date,COALESCE(t.amount_paisa,CAST(ROUND(t.amount*100) AS INTEGER))-COALESCE(SUM(a.amount_paisa),0) due_paisa FROM vendor_transactions t LEFT JOIN supplier_payment_allocations a ON a.invoice_id=t.id WHERE t.type='PURCHASE_CREDIT' GROUP BY t.id");
-      await read('all_supplier_allocations', 'supplier_payment_allocations', 'SELECT a.id,a.payment_id,a.invoice_id,a.amount_paisa,COALESCE(a.created_at,t.created_at) AS created_at,t.vendor_id FROM supplier_payment_allocations a JOIN vendor_transactions t ON t.id=a.payment_id ORDER BY a.id');
+      await read('all_supplier_allocations', 'supplier_payment_allocations', 'SELECT a.id,a.payment_id,a.invoice_id,a.amount_paisa,COALESCE(a.created_at,t.created_at) AS created_at,t.vendor_id FROM supplier_payment_allocations a JOIN vendor_transactions t ON t.id=a.payment_id WHERE COALESCE(a.created_at,t.created_at) <= ? ORDER BY a.id', [effectiveCutoffStr]);
     } else {
       e.absent.add('supplier_payment_allocations');
     }
     if (tables.contains('supplier_opening_adjustments')) {
-      await read('supplier_opening_adjustments', 'supplier_opening_adjustments', 'SELECT * FROM supplier_opening_adjustments ORDER BY recorded_at,id');
+      await read('supplier_opening_adjustments', 'supplier_opening_adjustments', 'SELECT * FROM supplier_opening_adjustments WHERE recorded_at <= ? ORDER BY recorded_at,id', [effectiveCutoffStr]);
     } else {
       e.absent.add('supplier_opening_adjustments');
     }

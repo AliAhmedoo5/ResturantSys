@@ -119,7 +119,7 @@ void main() {
     final manager = staff.firstWhere((r) => r['role'] != 'CASHIER');
     final auth = AuthService(database: db)..session.login(Staff.fromMap(manager));
 
-    final day = await db.insert('business_days', {
+    await db.insert('business_days', {
       'opened_at': '2026-10-25 18:00:00',
       'status': 'OPEN',
       'opened_by_staff_id': manager['id'],
@@ -147,7 +147,7 @@ void main() {
     });
 
     // In-interval purchase on active vendor (due 2026-10-28 -> Current / not yet due at 2026-10-26)
-    final inv1 = await db.insert('vendor_transactions', {
+    await db.insert('vendor_transactions', {
       'vendor_id': activeVendor,
       'type': 'PURCHASE_CREDIT',
       'amount': 1000.0,
@@ -157,7 +157,7 @@ void main() {
     });
 
     // In-interval purchase on active vendor (due 2026-10-18 -> 8 days overdue at 2026-10-26 -> 8-30 days bucket)
-    final inv2 = await db.insert('vendor_transactions', {
+    await db.insert('vendor_transactions', {
       'vendor_id': activeVendor,
       'type': 'PURCHASE_CREDIT',
       'amount': 400.0,
@@ -377,9 +377,15 @@ void main() {
     expect(bridgeRow.cells['waste_qty'], equals(50.0));
     expect(bridgeRow.cells['returns_qty'], equals(20.0));
     expect(bridgeRow.cells['adjustments_qty'], equals(-10.0));
+    expect(bridgeRow.cells['unexplained_variance'], equals(0.0));
+    expect(bridgeRow.cells['reconciliation_status'], equals('Reconciled'));
     expect(bridgeRow.cells['ending_qty'], equals(1260.0));
     expect(bridgeRow.cells['unit'], equals('g'));
     expect(bridgeRow.cells['has_opening_evidence'], equals('Verified'));
+
+    // Verify procurement receipt row is exposed as contributor
+    final receiptRow = invSection.rows.firstWhere((r) => r.cells['ingredient_id'] == ingId && r.cells['kind'] == 'Procurement receipt');
+    expect(receiptRow.cells['quantity'], equals(500.0));
 
     // Check reconciliation: opening + receipts - consumption - waste + returns + adjustments = ending
     final calculatedEnding = (bridgeRow.cells['opening_qty'] as double) +

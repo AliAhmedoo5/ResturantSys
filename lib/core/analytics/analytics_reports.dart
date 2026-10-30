@@ -434,11 +434,12 @@ class _ReportBuilder {
           : (openingQty + totalMovementDelta);
 
       final domainDelta = receiptsQty - consumptionQty - wasteQty + returnsQty + countAdjustments;
-      final otherAdjustments = inMovements.isNotEmpty ? (totalMovementDelta - domainDelta) : 0.0;
-      final adjustmentsQty = countAdjustments + otherAdjustments;
+      final unexplainedVariance = inMovements.isNotEmpty ? (totalMovementDelta - domainDelta) : 0.0;
+      final adjustmentsQty = countAdjustments;
 
       final calculatedEnding = openingQty + receiptsQty - consumptionQty - wasteQty + returnsQty + adjustmentsQty;
-      if ((calculatedEnding - endingQty).abs() < 0.0001) {
+      final isReconciled = unexplainedVariance.abs() < 0.0001 && (calculatedEnding - endingQty).abs() < 0.0001;
+      if (isReconciled) {
         reconciledIngredientsCount++;
       }
 
@@ -457,7 +458,9 @@ class _ReportBuilder {
           'waste_qty': wasteQty,
           'returns_qty': returnsQty,
           'adjustments_qty': adjustmentsQty,
+          'unexplained_variance': unexplainedVariance,
           'ending_qty': endingQty,
+          'reconciliation_status': isReconciled ? 'Reconciled' : 'Discrepancy disclosed',
           'current_stock': currentStock,
           'threshold': threshold,
           'has_opening_evidence': hasOpeningEvidence ? 'Verified' : 'Missing opening evidence',
@@ -471,6 +474,29 @@ class _ReportBuilder {
     final rows = <AnalyticsRow>[
       ...bridgeRows,
       ...ingredients.map((i) => _row('raw_ingredients', i, {'kind': 'Current position', 'ingredient_id': i['id'], 'name': _safeText(i['name']), 'unit': i['storage_unit'], 'current_stock': i['current_stock'], 'threshold': i['low_stock_threshold'], 'as_of_balance': balances[i['id']]?['balance_after'], 'balance_evidence_at': balances[i['id']]?['recorded_at'], 'status': (i['current_stock'] as num) < 0 ? 'Negative' : (i['current_stock'] as num) <= (i['low_stock_threshold'] as num) ? 'Low' : 'Within threshold'})),
+      ...e.get('purchases').map((p) => _row('mandi_procurements', p, {
+        'kind': 'Procurement receipt',
+        'ingredient_id': p['raw_ingredient_id'],
+        'unit': p['traditional_unit'],
+        'quantity': p['converted_quantity'] ?? p['quantity'],
+        'spend_paisa': _money(p, 'total_cost'),
+        'recorded_at': p['created_at'],
+      })),
+      ...allCreditTxns.where((t) => t['raw_ingredient_id'] != null &&
+          (t['created_at'] as String).compareTo(intervalStart) >= 0 &&
+          (t['created_at'] as String).compareTo(cutoffTime) <= 0).map((t) => AnalyticsRow(
+        id: 'credit-delivery-${t['id']}',
+        sourceType: 'vendor_transactions',
+        sourceId: '${t['id']}',
+        cells: {
+          'kind': 'Credit delivery receipt',
+          'ingredient_id': t['raw_ingredient_id'],
+          'unit': t['unit_snapshot'] ?? '',
+          'quantity': t['quantity'],
+          'spend_paisa': t['amount_paisa'] ?? (t['amount'] != null ? ((t['amount'] as num) * 100).round() : 0),
+          'recorded_at': t['created_at'],
+        },
+      )),
       ...e.get('physical_counts').map((c) => AnalyticsRow(id: 'count-${c['count_id']}-${c['ingredient_id']}', sourceType: 'stock_count_lines', sourceId: '${c['count_id']}:${c['ingredient_id']}', cells: {
         'kind': 'Physical count', 'count_id': c['count_id'], 'ingredient_id': c['ingredient_id'], 'unit': c['unit'],
         'expected': c['expected'], 'counted': c['counted'], 'variance': c['variance'], 'estimated_cost_paisa': c['estimated_cost_paisa'], 'recorded_estimated_cost_paisa': c['recorded_estimated_cost_paisa'], 'valuation_policy': c['valuation_policy'],
@@ -505,11 +531,12 @@ class _ReportBuilder {
       _metric('physical_variance_cost', 'Estimated physical variance value', _integers(e.get('physical_counts'), 'estimated_cost_paisa'), explanation: 'Signed event-time count estimates; unknown rates prevent a complete total.', unavailable: e.get('physical_counts').any((c) => c['estimated_cost_paisa'] == null)),
     ], rows, [
       'kind', 'ingredient_id', 'name', 'unit', 'opening_qty', 'receipts_qty', 'consumption_qty', 'waste_qty',
-      'returns_qty', 'adjustments_qty', 'ending_qty', 'current_stock', 'threshold', 'has_opening_evidence',
-      'balance_evidence_at', 'recorded_cost_rate', 'as_of_balance', 'quantity_delta', 'balance_after', 'quantity',
-      'loss_paisa', 'count_id', 'expected', 'counted', 'variance', 'estimated_cost_paisa',
-      'recorded_estimated_cost_paisa', 'valuation_policy', 'movement_id', 'snapshot_sequence', 'created_by',
-      'approved_by', 'posted_by', 'reason', 'status', 'recorded_at'
+      'returns_qty', 'adjustments_qty', 'unexplained_variance', 'ending_qty', 'reconciliation_status',
+      'current_stock', 'threshold', 'has_opening_evidence', 'balance_evidence_at', 'recorded_cost_rate',
+      'as_of_balance', 'quantity_delta', 'balance_after', 'quantity', 'spend_paisa', 'loss_paisa', 'count_id',
+      'expected', 'counted', 'variance', 'estimated_cost_paisa', 'recorded_estimated_cost_paisa',
+      'valuation_policy', 'movement_id', 'snapshot_sequence', 'created_by', 'approved_by', 'posted_by',
+      'reason', 'status', 'recorded_at'
     ], [
       'Normalized stock bridges reconcile in each ingredient\'s base unit (g, ml, count); never sum quantities across different unit dimensions.',
       'Opening plus receipts minus consumption minus waste plus returns plus adjustments equals ending quantity without double counting.',
@@ -627,7 +654,7 @@ class _ReportBuilder {
           vUnknownDue += due;
         } else {
           final dueTrimmed = dueDateStr.trim().substring(0, 10);
-          if (dueTrimmed.compareTo(cutoffDate) >= 0) {
+          if (dueTrimmed.compareTo(cutoffDate) > 0) {
             vCurrent += due;
           } else {
             final dueDt = DateTime.tryParse(dueTrimmed);
@@ -700,8 +727,8 @@ class _ReportBuilder {
       _metric('khata_payments', 'Recorded supplier payments', totalPaymentsInRange, unit: AnalyticsUnit.paisa, explanation: 'Selected interval supplier settlements from cash drawer and external management accounts.'),
       _metric('khata_adjustments', 'Opening balance adjustments', totalAdjsInRange, unit: AnalyticsUnit.paisa, explanation: 'Net versioned opening balance adjustments in selected interval.'),
       _metric('khata_closing_payable', 'Vendor Khata closing payable', totalClosingPayable, unit: AnalyticsUnit.paisa, explanation: 'Opening + purchases + adjustments - payments reconciled at disclosed cutoff.'),
-      _metric('aging_current', 'Current (not yet due) payable', totalCurrent, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable with due date on or after disclosed cutoff.'),
-      _metric('aging_0_7', 'Payable overdue 0–7 days', totalDays0to7, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable 1 to 7 days past due date as of cutoff.'),
+      _metric('aging_current', 'Current (not yet due) payable', totalCurrent, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable with due date strictly after disclosed cutoff date.'),
+      _metric('aging_0_7', 'Payable overdue 0–7 days', totalDays0to7, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable 0 to 7 days past due date (including due today at cutoff).'),
       _metric('aging_8_30', 'Payable overdue 8–30 days', totalDays8to30, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable 8 to 30 days past due date as of cutoff.'),
       _metric('aging_31_60', 'Payable overdue 31–60 days', totalDays31to60, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable 31 to 60 days past due date as of cutoff.'),
       _metric('aging_over_60', 'Payable overdue over 60 days', totalOver60, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable more than 60 days past due date as of cutoff.'),

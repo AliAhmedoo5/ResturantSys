@@ -235,6 +235,8 @@ class _VendorKhataWorkspaceState extends State<VendorKhataWorkspace> {
           phone: result['phone'] as String,
           suppliedIngredients: result['supplied_ingredients'] as String?,
           openingBalance: result['opening_balance'] as double?,
+          managerId: widget.currentStaff?.id,
+          reason: result['reason'] as String?,
         );
       } else {
         final op = result['opening_balance'] as double? ?? vendor.openingBalance;

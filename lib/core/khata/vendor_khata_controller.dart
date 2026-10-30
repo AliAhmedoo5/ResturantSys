@@ -223,7 +223,10 @@ class VendorKhataController {
       if (PaisaEngine.rupeesToPaisa(openingBalance) < allocated) throw StateError('Opening payable cannot be reduced below its allocated payments.');
       final oldOpeningPaisa = PaisaEngine.rupeesToPaisa(existing.openingBalance);
       final newOpeningPaisa = PaisaEngine.rupeesToPaisa(openingBalance);
-      if (oldOpeningPaisa != newOpeningPaisa && managerId != null) {
+      if (oldOpeningPaisa != newOpeningPaisa) {
+        if (managerId == null) {
+          throw ArgumentError('Manager ID is required to adjust opening balance.');
+        }
         await database.insert('supplier_opening_adjustments', {
           'vendor_id': id,
           'opening_balance_paisa': newOpeningPaisa,
@@ -709,8 +712,11 @@ class VendorKhataController {
     required DateTime cutoff,
   }) async {
     final cutoffStr = _formatTimestamp(cutoff);
-    final vendorWhere = vendorId != null ? 'WHERE id = $vendorId' : '';
-    final vendors = await database.rawQuery('SELECT * FROM vendor_khata $vendorWhere');
+    final vendors = await database.rawQuery(
+      'SELECT * FROM vendor_khata '
+      '${vendorId != null ? "WHERE id = ?" : ""}',
+      vendorId != null ? [vendorId] : null,
+    );
 
     int totalOpeningPaisa = 0;
     int totalPurchasesPaisa = 0;
@@ -754,9 +760,9 @@ class VendorKhataController {
       );
       final paymentsPaisa = paymentRows.first['total'] as int;
 
-      final closingPaisa = effectiveOpeningPaisa + purchasesPaisa - paymentsPaisa;
+      final closingPaisa = initOpeningPaisa + purchasesPaisa + adjustmentDeltaPaisa - paymentsPaisa;
 
-      totalOpeningPaisa += effectiveOpeningPaisa;
+      totalOpeningPaisa += initOpeningPaisa;
       totalPurchasesPaisa += purchasesPaisa;
       totalPaymentsPaisa += paymentsPaisa;
       totalAdjustmentsPaisa += adjustmentDeltaPaisa;
@@ -766,7 +772,7 @@ class VendorKhataController {
         'vendor_id': vId,
         'name': v['name'],
         'is_archived': isArchived,
-        'opening_paisa': effectiveOpeningPaisa,
+        'opening_paisa': initOpeningPaisa,
         'purchases_paisa': purchasesPaisa,
         'payments_paisa': paymentsPaisa,
         'adjustments_paisa': adjustmentDeltaPaisa,
@@ -795,8 +801,11 @@ class VendorKhataController {
   }) async {
     final cutoffStr = _formatTimestamp(cutoff);
     final cutoffDate = cutoffStr.substring(0, 10);
-    final vendorWhere = vendorId != null ? 'WHERE id = $vendorId' : '';
-    final vendors = await database.rawQuery('SELECT * FROM vendor_khata $vendorWhere');
+    final vendors = await database.rawQuery(
+      'SELECT * FROM vendor_khata '
+      '${vendorId != null ? "WHERE id = ?" : ""}',
+      vendorId != null ? [vendorId] : null,
+    );
 
     int currentPaisa = 0;
     int days0to7Paisa = 0;
@@ -857,7 +866,7 @@ class VendorKhataController {
           unknownDuePaisa += due;
         } else {
           final dueTrimmed = dueDateStr.trim().substring(0, 10);
-          if (dueTrimmed.compareTo(cutoffDate) >= 0) {
+          if (dueTrimmed.compareTo(cutoffDate) > 0) {
             currentPaisa += due;
           } else {
             final dueDt = DateTime.parse(dueTrimmed);

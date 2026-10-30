@@ -305,12 +305,24 @@ void main() {
         staffId: testStaffId,
       );
 
-      // Correct opening balance from 10,000 to 12,000 (+2,000 delta)
+      // Modifying opening balance without managerId throws ArgumentError
+      expect(
+        () => khataController.updateVendor(
+          id: vendor.id,
+          name: 'Faisalabad Flour Mills (Pvt) Ltd',
+          phone: '03099998888',
+          openingBalance: 12000.0,
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+
+      // Correct opening balance from 10,000 to 12,000 (+2,000 delta) with supervisor managerId
       final updated = await khataController.updateVendor(
         id: vendor.id,
         name: 'Faisalabad Flour Mills (Pvt) Ltd',
         phone: '03099998888',
         openingBalance: 12000.0,
+        managerId: testSupervisorId,
       );
 
       expect(updated.openingBalance, equals(12000.0));

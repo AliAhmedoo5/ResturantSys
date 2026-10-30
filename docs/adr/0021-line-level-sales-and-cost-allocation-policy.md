@@ -1,4 +1,10 @@
-# Line-Level Sales and Cost Allocation Policy (Menu Items, Deals, Modifiers, Discounts, Taxes, and Margins)
+# ADR-0021: Line-Level Sales and Cost Allocation Policy (Menu Items, Deals, Modifiers, Discounts, Taxes, and Margins)
+
+- **Status**: Approved
+- **Approver**: Financial Policy Board & System Architecture Lead
+- **Approval Date**: 2026-10-30
+- **Governs**: Ticket #87 (closing #87), Specification #60
+- **Implements**: Core allocation invariants prior to Ticket #88 implementation
 
 ## Context
 Restaurant analytics and menu engineering require defensible line-level profitability, net sales, food cost, and contribution margin metrics. In daily fast-food operations, orders consist of diverse menu items, deal bundles, modifier add-ons, order-level discounts (percentage discounts, pre-approved coupons, manual supervisor overrides), provincial sales taxes, delivery surcharges, and order revisions.
