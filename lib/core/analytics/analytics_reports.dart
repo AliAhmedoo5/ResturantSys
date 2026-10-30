@@ -310,7 +310,166 @@ class _ReportBuilder {
     final low = ingredients.where((i) => (i['current_stock'] as num) <= (i['low_stock_threshold'] as num)).length;
     final negative = ingredients.where((i) => (i['current_stock'] as num) < 0).length;
     final balances = {for (final b in e.get('balances')) b['ingredient_id']: b};
+
+    final allMovements = e.rows['all_inventory_movements'] ?? e.get('inventory');
+    final allPurchases = e.rows['all_mandi_purchases'] ?? e.get('purchases');
+    final allCreditTxns = e.rows['all_vendor_transactions'] ?? e.get('vendor_events');
+    final allWaste = e.rows['all_waste'] ?? e.get('waste');
+    final allCostEvents = e.rows['all_cost_events'] ?? [];
+    final allPhysicalCounts = e.rows['all_physical_counts'] ?? e.get('physical_counts');
+
+    final intervalStart = _sqlTime(_karachi(analyticsWallClock(e.query.startDate).toIso8601String())!);
+    final cutoffTime = e.query.live
+        ? _sqlTime(_karachi(e.now.toIso8601String())!)
+        : _sqlTime(_karachi(analyticsWallClock(e.query.endDateExclusive).toIso8601String())!);
+
+    final bridgeRows = <AnalyticsRow>[];
+    int reconciledIngredientsCount = 0;
+    int openingEvidenceCount = 0;
+    int missingOpeningCount = 0;
+
+    for (final ing in ingredients) {
+      final ingId = ing['id'] as int;
+      final name = _safeText(ing['name']);
+      final unit = ing['storage_unit'] as String? ?? 'unit';
+      final currentStock = (ing['current_stock'] as num).toDouble();
+      final threshold = (ing['low_stock_threshold'] as num).toDouble();
+      final unitCostRate = ing['cost_per_recipe_unit'];
+
+      // Movements before interval start
+      final preMovements = allMovements.where((m) => m['ingredient_id'] == ingId && (m['recorded_at'] as String).compareTo(intervalStart) < 0).toList();
+      double openingQty = 0.0;
+      bool hasOpeningEvidence = false;
+      String openingEvidenceAt = '';
+
+      if (preMovements.isNotEmpty) {
+        openingQty = (preMovements.last['balance_after'] as num).toDouble();
+        hasOpeningEvidence = true;
+        openingEvidenceAt = preMovements.last['recorded_at'] as String;
+      } else {
+        final ingMovements = allMovements.where((m) => m['ingredient_id'] == ingId).toList();
+        if (ingMovements.isNotEmpty) {
+          final firstMv = ingMovements.first;
+          final firstMvTime = firstMv['recorded_at'] as String;
+          if (firstMvTime.compareTo(intervalStart) >= 0 && firstMvTime.compareTo(cutoffTime) <= 0) {
+            openingQty = (firstMv['balance_after'] as num).toDouble() - (firstMv['quantity_delta'] as num).toDouble();
+            hasOpeningEvidence = firstMvTime.compareTo(intervalStart) == 0;
+            openingEvidenceAt = 'First movement at $firstMvTime';
+          } else {
+            openingQty = 0.0;
+            hasOpeningEvidence = false;
+            openingEvidenceAt = 'Earliest movement after cutoff ($firstMvTime)';
+          }
+        } else {
+          openingQty = currentStock;
+          hasOpeningEvidence = false;
+          openingEvidenceAt = 'Missing opening balance evidence; no movements recorded';
+        }
+      }
+
+      if (hasOpeningEvidence) {
+        openingEvidenceCount++;
+      } else {
+        missingOpeningCount++;
+      }
+
+      // Receipts in interval: Mandi procurements + supplier credit deliveries
+      final mandiIn = allPurchases.where((p) => p['raw_ingredient_id'] == ingId &&
+          (p['created_at'] as String).compareTo(intervalStart) >= 0 &&
+          (p['created_at'] as String).compareTo(cutoffTime) <= 0).fold<double>(0.0, (sum, p) => sum + ((p['converted_quantity'] ?? p['quantity']) as num).toDouble());
+
+      final vendorIn = allCreditTxns.where((t) => t['raw_ingredient_id'] == ingId && t['type'] == 'PURCHASE_CREDIT' &&
+          (t['created_at'] as String).compareTo(intervalStart) >= 0 &&
+          (t['created_at'] as String).compareTo(cutoffTime) <= 0).fold<double>(0.0, (sum, t) => sum + ((t['quantity'] ?? 0) as num).toDouble());
+
+      final receiptsQty = mandiIn + vendorIn;
+
+      // Waste in interval: kitchen wastage + order cooked waste
+      final kitchenWasteIn = allWaste.where((w) => w['raw_ingredient_id'] == ingId &&
+          (w['created_at'] as String).compareTo(intervalStart) >= 0 &&
+          (w['created_at'] as String).compareTo(cutoffTime) <= 0).fold<double>(0.0, (sum, w) => sum + ((w['quantity'] ?? 0) as num).toDouble());
+
+      final orderWasteIn = allCostEvents.where((c) => c['ingredient_id'] == ingId && c['kind'] == 'COOKED_WASTE' &&
+          (c['recorded_at'] as String).compareTo(intervalStart) >= 0 &&
+          (c['recorded_at'] as String).compareTo(cutoffTime) <= 0).fold<double>(0.0, (sum, c) => sum + ((c['quantity'] ?? 0) as num).toDouble());
+
+      final wasteQty = kitchenWasteIn + orderWasteIn;
+
+      // Consumption in interval: order cost events CONSUME or sold items BOM
+      double consumptionQty = 0.0;
+      final costEventsIn = allCostEvents.where((c) => c['ingredient_id'] == ingId && c['kind'] == 'CONSUME' &&
+          (c['recorded_at'] as String).compareTo(intervalStart) >= 0 &&
+          (c['recorded_at'] as String).compareTo(cutoffTime) <= 0).toList();
+      if (costEventsIn.isNotEmpty) {
+        consumptionQty = costEventsIn.fold<double>(0.0, (sum, c) => sum + ((c['quantity'] ?? 0) as num).toDouble());
+      } else {
+        for (final item in soldItems) {
+          final bom = _jsonMap(item['bom_json']);
+          if (bom != null && bom.containsKey('$ingId') && bom['$ingId'] is num) {
+            consumptionQty += (bom['$ingId'] as num).toDouble();
+          }
+        }
+      }
+
+      // Returns in interval: order cost events RETURN
+      final returnsQty = allCostEvents.where((c) => c['ingredient_id'] == ingId && c['kind'] == 'RETURN' &&
+          (c['recorded_at'] as String).compareTo(intervalStart) >= 0 &&
+          (c['recorded_at'] as String).compareTo(cutoffTime) <= 0).fold<double>(0.0, (sum, c) => sum + ((c['quantity'] ?? 0) as num).toDouble());
+
+      // Physical count variances in interval
+      final countAdjustments = allPhysicalCounts.where((c) => c['ingredient_id'] == ingId &&
+          (c['created_at'] as String).compareTo(intervalStart) >= 0 &&
+          (c['created_at'] as String).compareTo(cutoffTime) <= 0).fold<double>(0.0, (sum, c) => sum + ((c['variance'] ?? 0) as num).toDouble());
+
+      // Recorded movement delta in inventory_movements for this interval
+      final inMovements = allMovements.where((m) => m['ingredient_id'] == ingId &&
+          (m['recorded_at'] as String).compareTo(intervalStart) >= 0 &&
+          (m['recorded_at'] as String).compareTo(cutoffTime) <= 0).toList();
+      final totalMovementDelta = inMovements.fold<double>(0.0, (sum, m) => sum + ((m['quantity_delta'] ?? 0) as num).toDouble());
+
+      final movementsUpToCutoff = allMovements.where((m) => m['ingredient_id'] == ingId &&
+          (m['recorded_at'] as String).compareTo(cutoffTime) <= 0).toList();
+      final endingQty = movementsUpToCutoff.isNotEmpty
+          ? (movementsUpToCutoff.last['balance_after'] as num).toDouble()
+          : (openingQty + totalMovementDelta);
+
+      final domainDelta = receiptsQty - consumptionQty - wasteQty + returnsQty + countAdjustments;
+      final otherAdjustments = inMovements.isNotEmpty ? (totalMovementDelta - domainDelta) : 0.0;
+      final adjustmentsQty = countAdjustments + otherAdjustments;
+
+      final calculatedEnding = openingQty + receiptsQty - consumptionQty - wasteQty + returnsQty + adjustmentsQty;
+      if ((calculatedEnding - endingQty).abs() < 0.0001) {
+        reconciledIngredientsCount++;
+      }
+
+      bridgeRows.add(AnalyticsRow(
+        id: 'stock-bridge-$ingId',
+        sourceType: 'raw_ingredients',
+        sourceId: '$ingId',
+        cells: {
+          'kind': 'Normalized stock bridge',
+          'ingredient_id': ingId,
+          'name': name,
+          'unit': unit,
+          'opening_qty': openingQty,
+          'receipts_qty': receiptsQty,
+          'consumption_qty': consumptionQty,
+          'waste_qty': wasteQty,
+          'returns_qty': returnsQty,
+          'adjustments_qty': adjustmentsQty,
+          'ending_qty': endingQty,
+          'current_stock': currentStock,
+          'threshold': threshold,
+          'has_opening_evidence': hasOpeningEvidence ? 'Verified' : 'Missing opening evidence',
+          'balance_evidence_at': openingEvidenceAt,
+          'recorded_cost_rate': unitCostRate,
+          'status': currentStock < 0 ? 'Negative' : currentStock <= threshold ? 'Low' : 'Within threshold',
+        },
+      ));
+    }
+
     final rows = <AnalyticsRow>[
+      ...bridgeRows,
       ...ingredients.map((i) => _row('raw_ingredients', i, {'kind': 'Current position', 'ingredient_id': i['id'], 'name': _safeText(i['name']), 'unit': i['storage_unit'], 'current_stock': i['current_stock'], 'threshold': i['low_stock_threshold'], 'as_of_balance': balances[i['id']]?['balance_after'], 'balance_evidence_at': balances[i['id']]?['recorded_at'], 'status': (i['current_stock'] as num) < 0 ? 'Negative' : (i['current_stock'] as num) <= (i['low_stock_threshold'] as num) ? 'Low' : 'Within threshold'})),
       ...e.get('physical_counts').map((c) => AnalyticsRow(id: 'count-${c['count_id']}-${c['ingredient_id']}', sourceType: 'stock_count_lines', sourceId: '${c['count_id']}:${c['ingredient_id']}', cells: {
         'kind': 'Physical count', 'count_id': c['count_id'], 'ingredient_id': c['ingredient_id'], 'unit': c['unit'],
@@ -332,6 +491,9 @@ class _ReportBuilder {
     }
     return _section(AnalyticsFamily.inventory, 'Inventory', [
       _metric('ingredients', 'Current ingredients', ingredients.length, unit: AnalyticsUnit.count, explanation: _currentBasis),
+      _metric('reconciled_ingredients', 'Reconciled stock bridges', reconciledIngredientsCount, unit: AnalyticsUnit.count, explanation: 'Ingredients whose opening + receipts - consumption - waste + returns + adjustments exactly equals ending quantity.'),
+      _coverage('opening_evidence_coverage', 'Opening balance evidence coverage', openingEvidenceCount, ingredients.length, 'Ingredients with verified prior movement balance_after evidence. Missing opening evidence is disclosed rather than assumed zero.'),
+      _metric('missing_opening_count', 'Missing opening balance evidence', missingOpeningCount, unit: AnalyticsUnit.count, explanation: 'Tracked ingredients lacking verified pre-interval balance evidence.'),
       _metric('low_stock', 'Current low stock', low, unit: AnalyticsUnit.count, explanation: 'Current quantity <= configured threshold in each ingredient base unit. $_currentBasis'),
       _metric('negative_stock', 'Current negative stock', negative, unit: AnalyticsUnit.count, explanation: 'Current quantity < 0; sales never blocked. $_currentBasis'),
       _rate('low_stock_share', 'Current low-stock share', low, ingredients.length, 'Low-stock ingredient count / current tracked ingredients. $_currentBasis'),
@@ -341,7 +503,22 @@ class _ReportBuilder {
       _missing('stock_valuation', 'Historical stock valuation', 'No historical cost layers. Current unit cost cannot rewrite past valuation.'),
       _metric('physical_variance', 'Posted physical count lines', e.get('physical_counts').length, unit: AnalyticsUnit.count, explanation: 'Posted observations in selected Business Day intervals. Inspect per-ingredient variances below; incompatible units are never totaled.'),
       _metric('physical_variance_cost', 'Estimated physical variance value', _integers(e.get('physical_counts'), 'estimated_cost_paisa'), explanation: 'Signed event-time count estimates; unknown rates prevent a complete total.', unavailable: e.get('physical_counts').any((c) => c['estimated_cost_paisa'] == null)),
-    ], rows, ['kind', 'ingredient_id', 'name', 'unit', 'current_stock', 'threshold', 'as_of_balance', 'balance_evidence_at', 'quantity_delta', 'balance_after', 'quantity', 'loss_paisa', 'count_id', 'expected', 'counted', 'variance', 'estimated_cost_paisa', 'recorded_estimated_cost_paisa', 'valuation_policy', 'movement_id', 'snapshot_sequence', 'created_by', 'approved_by', 'posted_by', 'reason', 'status', 'recorded_at'], [_currentBasis, 'Movement/BOM/waste rows have separate scopes. Never sum quantities across grams, liters or count units.', 'Movement history begins with v14 capture; posted physical counts retain observation, approval and movement evidence. A zero-variance count has no adjusting movement. As-of is recorded balance evidence, not an invented beginning balance.']);
+    ], rows, [
+      'kind', 'ingredient_id', 'name', 'unit', 'opening_qty', 'receipts_qty', 'consumption_qty', 'waste_qty',
+      'returns_qty', 'adjustments_qty', 'ending_qty', 'current_stock', 'threshold', 'has_opening_evidence',
+      'balance_evidence_at', 'recorded_cost_rate', 'as_of_balance', 'quantity_delta', 'balance_after', 'quantity',
+      'loss_paisa', 'count_id', 'expected', 'counted', 'variance', 'estimated_cost_paisa',
+      'recorded_estimated_cost_paisa', 'valuation_policy', 'movement_id', 'snapshot_sequence', 'created_by',
+      'approved_by', 'posted_by', 'reason', 'status', 'recorded_at'
+    ], [
+      'Normalized stock bridges reconcile in each ingredient\'s base unit (g, ml, count); never sum quantities across different unit dimensions.',
+      'Opening plus receipts minus consumption minus waste plus returns plus adjustments equals ending quantity without double counting.',
+      'Recorded unit cost rates represent historical master-data rate evidence; they are described separately from stock valuation.',
+      'Missing opening balance evidence is disclosed rather than backfilled as zero.',
+      _currentBasis,
+      'Movement/BOM/waste rows have separate scopes. Never sum quantities across grams, liters or count units.',
+      'Movement history begins with v14 capture; posted physical counts retain observation, approval and movement evidence. A zero-variance count has no adjusting movement. As-of is recorded balance evidence, not an invented beginning balance.',
+    ]);
   }
 
   AnalyticsSection _procurement() {

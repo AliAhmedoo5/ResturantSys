@@ -220,4 +220,183 @@ void main() {
     expect(archivedRow.cells['status'], 'Archived');
   });
 
+
+  test('Ingredient normalized-unit stock bridge reconciles opening, receipts, consumption, waste, returns, adjustments to ending quantity', () async {
+    final store = PosDatabase(factory: databaseFactoryFfi, customPath: inMemoryDatabasePath);
+    final db = await store.initialize();
+    addTearDown(store.close);
+
+    final staff = await db.query('staff');
+    final manager = staff.firstWhere((r) => r['role'] != 'CASHIER');
+    final auth = AuthService(database: db)..session.login(Staff.fromMap(manager));
+
+    final day = await db.insert('business_days', {
+      'opened_at': '2026-10-25 18:00:00',
+      'status': 'OPEN',
+      'opened_by_staff_id': manager['id'],
+    });
+
+    // 1. Create ingredient with base unit 'g'
+    final ingId = await db.insert('raw_ingredients', {
+      'name': 'Marinated Chicken',
+      'storage_unit': 'g',
+      'current_stock': 1260.0,
+      'low_stock_threshold': 200.0,
+      'cost_per_recipe_unit': 0.85,
+      'created_at': '2026-10-20 10:00:00',
+    });
+
+    // Initial movement before interval start (recorded opening balance = 1000g)
+    await db.insert('inventory_movements', {
+      'ingredient_id': ingId,
+      'business_day_id': day,
+      'quantity_delta': 1000.0,
+      'balance_after': 1000.0,
+      'recorded_at': '2026-10-24 12:00:00',
+    });
+
+    // Mandi procurement receipt (+500g) in interval
+    await db.insert('mandi_procurements', {
+      'raw_ingredient_id': ingId,
+      'traditional_unit': 'g',
+      'quantity': 500.0,
+      'converted_quantity': 500.0,
+      'total_cost': 425.0,
+      'cost_per_recipe_unit': 0.85,
+      'created_at': '2026-10-25 19:00:00',
+    });
+    await db.insert('inventory_movements', {
+      'ingredient_id': ingId,
+      'business_day_id': day,
+      'quantity_delta': 500.0,
+      'balance_after': 1500.0,
+      'recorded_at': '2026-10-25 19:00:00',
+    });
+
+    // Order dummy row
+    final orderId = await db.insert('orders', {
+      'business_day_id': day,
+      'token_number': 101,
+      'dining_type': 'DINE_IN',
+      'subtotal': 300,
+      'grand_total': 300,
+      'payment_status': 'SETTLED',
+      'created_at': '2026-10-25 20:00:00',
+    });
+
+    // Consumption via order_cost_events (-200g)
+    await db.insert('order_cost_events', {
+      'order_id': orderId,
+      'ingredient_id': ingId,
+      'revision': 1,
+      'kind': 'CONSUME',
+      'quantity': 200.0,
+      'unit_cost_rupees': 0.85,
+      'cost_paisa': 17000,
+      'recorded_at': '2026-10-25 20:15:00',
+    });
+    await db.insert('inventory_movements', {
+      'ingredient_id': ingId,
+      'business_day_id': day,
+      'quantity_delta': -200.0,
+      'balance_after': 1300.0,
+      'recorded_at': '2026-10-25 20:15:00',
+    });
+
+    // Kitchen wastage (-50g)
+    await db.insert('kitchen_wastage', {
+      'raw_ingredient_id': ingId,
+      'quantity': 50.0,
+      'cost_loss': 42.5,
+      'reason': 'Burnt during prep',
+      'created_at': '2026-10-25 21:00:00',
+    });
+    await db.insert('inventory_movements', {
+      'ingredient_id': ingId,
+      'business_day_id': day,
+      'quantity_delta': -50.0,
+      'balance_after': 1250.0,
+      'recorded_at': '2026-10-25 21:00:00',
+    });
+
+    // Order return (+20g)
+    await db.insert('order_cost_events', {
+      'order_id': orderId,
+      'ingredient_id': ingId,
+      'revision': 2,
+      'kind': 'RETURN',
+      'quantity': 20.0,
+      'unit_cost_rupees': 0.85,
+      'cost_paisa': 1700,
+      'recorded_at': '2026-10-25 21:30:00',
+    });
+    await db.insert('inventory_movements', {
+      'ingredient_id': ingId,
+      'business_day_id': day,
+      'quantity_delta': 20.0,
+      'balance_after': 1270.0,
+      'recorded_at': '2026-10-25 21:30:00',
+    });
+
+    // Posted stock count variance adjustment (-10g)
+    final countId = await db.insert('stock_counts', {
+      'status': 'POSTED',
+      'created_by': manager['id'],
+      'reason': 'Shift close audit',
+      'posted_at': '2026-10-25 22:00:00',
+      'created_at': '2026-10-25 21:50:00',
+    });
+    await db.insert('stock_count_lines', {
+      'count_id': countId,
+      'ingredient_id': ingId,
+      'expected': 1270.0,
+      'counted': 1260.0,
+      'variance': -10.0,
+      'unit': 'g',
+      'snapshot_sequence': 5,
+    });
+    await db.insert('inventory_movements', {
+      'ingredient_id': ingId,
+      'business_day_id': day,
+      'quantity_delta': -10.0,
+      'balance_after': 1260.0,
+      'recorded_at': '2026-10-25 22:00:00',
+    });
+
+    final query = AnalyticsQuery(
+      startDate: DateTime(2026, 10, 25),
+      endDateExclusive: DateTime(2026, 10, 26),
+    );
+    final snapshot = await AnalyticsService(database: db, authService: auth).load(query);
+    final invSection = snapshot.section(AnalyticsFamily.inventory);
+
+    final bridgeRow = invSection.rows.firstWhere((r) => r.cells['ingredient_id'] == ingId && r.cells['kind'] == 'Normalized stock bridge');
+    expect(bridgeRow.cells['opening_qty'], equals(1000.0));
+    expect(bridgeRow.cells['receipts_qty'], equals(500.0));
+    expect(bridgeRow.cells['consumption_qty'], equals(200.0));
+    expect(bridgeRow.cells['waste_qty'], equals(50.0));
+    expect(bridgeRow.cells['returns_qty'], equals(20.0));
+    expect(bridgeRow.cells['adjustments_qty'], equals(-10.0));
+    expect(bridgeRow.cells['ending_qty'], equals(1260.0));
+    expect(bridgeRow.cells['unit'], equals('g'));
+    expect(bridgeRow.cells['has_opening_evidence'], equals('Verified'));
+
+    // Check reconciliation: opening + receipts - consumption - waste + returns + adjustments = ending
+    final calculatedEnding = (bridgeRow.cells['opening_qty'] as double) +
+        (bridgeRow.cells['receipts_qty'] as double) -
+        (bridgeRow.cells['consumption_qty'] as double) -
+        (bridgeRow.cells['waste_qty'] as double) +
+        (bridgeRow.cells['returns_qty'] as double) +
+        (bridgeRow.cells['adjustments_qty'] as double);
+    expect(calculatedEnding, equals(1260.0));
+
+    // Verify stock valuation metric remains honestly missing (policy undecided until #90)
+    final valMetric = invSection.metrics.firstWhere((m) => m.id == 'stock_valuation');
+    expect(valMetric.quality, equals(AnalyticsQuality.missing));
+
+    // Reconciled ingredients metric
+    final recMetric = invSection.metrics.firstWhere((m) => m.id == 'reconciled_ingredients');
+    expect(recMetric.value, greaterThanOrEqualTo(1));
+  });
+
 }
