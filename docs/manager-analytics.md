@@ -15,7 +15,7 @@ Select **Overview** or one of the 13 report families:
 | Report | What to inspect |
 | --- | --- |
 | Sales | Recorded value, order volume, discounts, tax, delivery fees, rounding, received tenders and trends |
-| Order operations | Status counts, revisions, cancellations and refund exposure |
+| Order operations | Status counts, revisions, cancellations, refund exposure and separately labeled current Hold aging |
 | Delivery | Area activity, trips, delivery/return evidence, Collection Due and settlement exposure |
 | Customers | Known/guest coverage, repeat purchase rate, known-customer average ticket and masked customer activity |
 | Menu & deals | Recorded quantities and line values, popular and zero-selling catalog entries |
@@ -29,6 +29,22 @@ Select **Overview** or one of the 13 report families:
 | Control & audit | Recorded revision/token/rounding/report evidence and export/delivery health |
 
 Read each metric's explanation and quality state. **Missing data** is not zero. **Not applicable** indicates no applicable population or denominator. **Estimated** identifies incomplete evidence or approximate methodology. Coverage counts explain which records contribute to timing and rate statistics.
+
+In **Order operations**, current active Holds show their ID, owning Cashier,
+creation time, age at snapshot cutoff and stale classification. Open **Filters**
+and set **Hold stale after (minutes)**; the default is 30 minutes, and a Hold is
+stale at or above the selected threshold. The setting survives period/filter
+changes and is included in CSV, Excel and PDF snapshot metadata. Cashier filters
+scope Hold ownership; date/time, Shift, Dining Type and payment filters do not
+reconstruct historical Holds or assign them to a Business Day. Holds remain
+outside confirmed Order counts, Tokens, sales and workload charts.
+
+Only currently persisted Holds are available. Deleted/recalled lifecycle history
+is unavailable. Reporting excludes draft labels, items, customer contact and
+delivery content. Cashier names are labeled current; missing historical names
+are not inferred. New Hold creation timestamps retain UTC evidence; old naive
+timestamps retain the disclosed Asia/Karachi assumption. Unknown/future creation
+evidence has unavailable age and stale classification, with age coverage shown.
 
 Cashier and Shift filters describe the originating order cohort and owning/receiving drawer separately. Dining Type and payment filters narrow order/activity breakdowns only. A split-payment order must be counted once even if it has several tender rows. The report states where a filter applies: current stock, staff and supplier balances must not appear filtered by an unrelated order selection. Current balances remain labeled current when browsing historical activity.
 
