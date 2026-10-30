@@ -120,7 +120,7 @@ class AnalyticsService {
     await read('all_waste', 'kitchen_wastage', 'SELECT id,staff_id,raw_ingredient_id,quantity,cost_loss,reason,created_at FROM kitchen_wastage WHERE created_at <= ? ORDER BY created_at,id', [effectiveCutoffStr]);
     await read('all_inventory_movements', 'inventory_movements', 'SELECT id,ingredient_id,business_day_id,quantity_delta,balance_after,recorded_at FROM inventory_movements WHERE recorded_at <= ? ORDER BY recorded_at,id', [effectiveCutoffStr]);
     if (tables.contains('order_cost_events')) {
-      await read('all_cost_events', 'order_cost_events', 'SELECT id,order_id,ingredient_id,revision,kind,quantity,unit_cost_rupees,cost_paisa,recorded_at FROM order_cost_events WHERE recorded_at <= ? ORDER BY recorded_at,id', [effectiveCutoffStr]);
+      await read('all_cost_events', 'order_cost_events', 'SELECT id,order_id,ingredient_id,revision,kind,quantity,unit_cost_rupees,cost_paisa,recorded_at,classification FROM order_cost_events WHERE recorded_at <= ? ORDER BY recorded_at,id', [effectiveCutoffStr]);
     }
     if (tables.contains('stock_count_lines')) {
       await read('all_physical_counts', 'stock_count_lines', "SELECT x.*,c.status,c.reason,c.posted_at AS created_at FROM stock_count_lines x JOIN stock_counts c ON c.id=x.count_id WHERE c.status='POSTED' AND c.posted_at <= ? ORDER BY c.posted_at,x.count_id", [effectiveCutoffStr]);
