@@ -65,5 +65,70 @@ void main() {
     expect(csv, contains('eligible_orders'));
     expect(() => daily.cells.clear(), throwsUnsupportedError);
   });
+  test('count/value peaks retain chronological ties, same-date days and overnight calendar scope', () async {
+    final store = PosDatabase(factory: databaseFactoryFfi, customPath: inMemoryDatabasePath);
+    final db = await store.initialize();
+    addTearDown(store.close);
+    final auth = AuthService(database: db)..session.login(Staff.fromMap((await db.query('staff', where: 'id=1')).single));
+    addTearDown(auth.session.dispose);
+    // Historical import fixtures retain original timestamps; live domain commands
+    // above cover confirmation/cancellation/refund semantics without rewriting time.
+    final days = <int>[];
+    final shifts = <int>[];
+    for (final opening in ['2026-10-29T08:00:00+05:00', '2026-10-29T18:00:00+05:00', '2026-10-30T08:00:00+05:00']) {
+      final day = await db.insert('business_days', {'opened_at': opening, 'status': 'OPEN', 'opened_by_staff_id': 1});
+      days.add(day);
+      shifts.add(await db.insert('shifts', {'business_day_id': day, 'staff_id': 2,
+        'opened_at': opening, 'opening_float': 0, 'status': 'OPEN'}));
+    }
+    Future<int> order(int index, int token, int amount, String at) => db.insert('orders', {
+      'business_day_id': days[index], 'shift_id': shifts[index], 'cashier_id': 2,
+      'token_number': token, 'dining_type': 'TAKEAWAY', 'subtotal': amount,
+      'grand_total': amount, 'payment_status': 'SETTLED', 'created_at': at,
+    });
+    await order(0, 1, 10, '2026-10-29T10:00:00+05:00');
+    await order(0, 2, 10, '2026-10-29T10:30:00+05:00');
+    await order(1, 1, 500, '2026-10-29T20:00:00Z'); // 30 Oct 01:00 Karachi
+    await order(2, 1, 10, '2026-10-30T11:00:00+05:00');
+    await order(2, 2, 10, '2026-10-30T11:30:00+05:00');
+    final service = AnalyticsService(database: db, authService: auth);
+    final query = AnalyticsQuery(startDate: DateTime(2026, 10, 29), endDateExclusive: DateTime(2026, 10, 31));
+    final snapshot = await service.load(query);
+    final section = snapshot.section(AnalyticsFamily.orders);
+    final daily = section.rows.where((r) => r.cells['kind'] == 'Daily workload').toList();
+    expect(daily.map((r) => r.cells['business_day_id']), days);
+    expect(daily.map((r) => r.cells['confirmed_orders']), [2, 1, 2]);
+    expect(daily.map((r) => r.cells['count_peak']), [true, false, true]);
+    expect(daily.map((r) => r.cells['value_peak']), [false, true, false]);
+    final count = section.charts.singleWhere((c) => c.id == 'workload_days');
+    expect(count.points.map((p) => p.label), ['2026-10-29 · Business Day #${days[0]}',
+      '2026-10-30 · Business Day #${days[2]}', '2026-10-29 · Business Day #${days[1]}']);
+    expect(count.points.map((p) => p.value), [2, 2, 1]);
+    final value = section.charts.singleWhere((c) => c.id == 'value_days');
+    expect(value.points.map((p) => p.value), [50000, 2000, 2000]);
+    expect(value.points.first.rows.map((r) => r.sourceId), ['3']);
+    final hours = section.charts.singleWhere((c) => c.id == 'workload_hours');
+    expect(hours.points.take(2).map((p) => p.label), ['10:00', '11:00']);
+    final hourValue = section.charts.singleWhere((c) => c.id == 'value_hours');
+    expect(hourValue.points.first.label, '01:00');
+    expect(hourValue.points.first.value, 50000);
+    final calendar = await service.load(query.copyWith(timeBasis: AnalyticsTimeBasis.calendarTime));
+    final calendarRows = calendar.section(AnalyticsFamily.orders).rows.where((r) => r.cells['kind'] == 'Daily workload').toList();
+    expect(calendarRows.map((r) => r.cells['period']), ['2026-10-29', '2026-10-30']);
+    expect(calendarRows.map((r) => r.cells['confirmed_orders']), [2, 3]);
+    expect(calendarRows.map((r) => r.cells['recorded_value_paisa']), [2000, 52000]);
+    expect(calendar.section(AnalyticsFamily.orders).charts.singleWhere((c) => c.id == 'workload_days').points.first.value, 3);
+    final empty = await service.load(query.copyWith(startDate: DateTime(2020, 1, 1), endDateExclusive: DateTime(2020, 1, 2)));
+    final absentHours = empty.section(AnalyticsFamily.orders).rows.where((r) => r.cells['kind'] == 'Hourly workload');
+    expect(absentHours, hasLength(24));
+    expect(absentHours.every((r) => r.cells['confirmed_orders'] == null && r.cells['count_rank'] == null), isTrue);
+    final zero = section.rows.singleWhere((r) => r.cells['kind'] == 'Hourly workload' && r.cells['hour'] == 0);
+    expect(zero.cells['confirmed_orders'], 0);
+    expect(zero.cells['coverage'], 'Observed selected Order cohort');
+    final csv = AnalyticsExportService().csv(calendar, AnalyticsFamily.orders);
+    expect(csv, contains('calendarTime'));
+    expect(csv, contains('52000'));
+  });
 }
+
 
