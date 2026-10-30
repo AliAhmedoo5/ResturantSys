@@ -397,7 +397,10 @@ void main() {
     });
 
     test('Vendor Khata reconciles opening + purchases - payments to closing as of cutoff', () async {
-      await shiftController.openBusinessDay(openedByStaffId: testSupervisorId);
+      await shiftController.openBusinessDay(
+        openedByStaffId: testSupervisorId,
+        openedAt: DateTime(2026, 10, 10, 8),
+      );
       final vendor = await khataController.createVendor(
         name: 'Cutoff Reconciliation Supplier',
         phone: '03009998877',

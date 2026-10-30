@@ -351,10 +351,9 @@ void main() {
 
     // Posted stock count variance adjustment (-10g)
     final countId = await db.insert('stock_counts', {
-      'status': 'POSTED',
+      'status': 'DRAFT',
       'created_by': manager['id'],
       'reason': 'Shift close audit',
-      'posted_at': '2026-10-25 22:00:00',
       'created_at': '2026-10-25 21:50:00',
     });
     await db.insert('stock_count_lines', {
@@ -366,6 +365,10 @@ void main() {
       'unit': 'g',
       'snapshot_sequence': 5,
     });
+    await db.update('stock_counts', {
+      'status': 'POSTED',
+      'posted_at': '2026-10-25 22:00:00',
+    }, where: 'id = ?', whereArgs: [countId]);
     await db.insert('inventory_movements', {
       'ingredient_id': ingId,
       'business_day_id': day,
