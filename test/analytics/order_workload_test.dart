@@ -130,5 +130,3 @@ void main() {
     expect(csv, contains('52000'));
   });
 }
-
-

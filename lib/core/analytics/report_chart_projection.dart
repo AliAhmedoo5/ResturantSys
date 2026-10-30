@@ -270,4 +270,3 @@ class _Charts {
     return order != 0 ? order : a.label.compareTo(b.label);
   });
 }
-
