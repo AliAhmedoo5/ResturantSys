@@ -154,7 +154,7 @@ void main() {
       currentStock: 20,
       costPerRecipeUnit: 20, // 2000 paisa
     );
-    final packaging = await catalog.createRawIngredient(
+    await catalog.createRawIngredient(
       name: 'Takeaway packaging',
       storageUnit: StorageUnit.count,
       currentStock: 20,
@@ -232,6 +232,7 @@ void main() {
       orderId: checkout.order.id,
       cashierId: 2,
       reason: 'Kitchen burnt the food',
+      commandId: 'cmd-test-cogs-cancel',
     );
 
     final wasteEvents = await db.query(
@@ -395,7 +396,7 @@ void main() {
       currentStock: 50,
       costPerRecipeUnit: 40, // 4000 paisa
     );
-    final box = await catalog.createRawIngredient(
+    await catalog.createRawIngredient(
       name: 'Takeaway Packaging',
       storageUnit: StorageUnit.count,
       currentStock: 50,

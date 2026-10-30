@@ -24,6 +24,8 @@ import '../shifts/cash_movement.dart';
 import 'payment_method.dart';
 import 'token_status.dart';
 import 'order_status_event.dart';
+import 'order_allocation_engine.dart';
+import 'order_item_allocation.dart';
 
 export '../catalog/deal_draft.dart';
 
@@ -634,6 +636,16 @@ class OrderAndCheckoutController {
         ));
       }
 
+      await _recordOrderAllocations(
+        orderId: orderId,
+        revision: 0,
+        items: items,
+        orderItems: createdOrderItems,
+        totals: totals,
+        txn: txn,
+        now: now,
+      );
+
       // 4. Commit Order Payments
       final createdPayments = <OrderPayment>[];
       for (final tender in payments) {
@@ -877,6 +889,178 @@ class OrderAndCheckoutController {
     }
   }
 
+  Future<int?> _calculateBomCostPaisa(Map<int, double> ingredientQuantities, DatabaseExecutor executor) async {
+    if (ingredientQuantities.isEmpty) return 0;
+    var totalCostPaisa = 0;
+    for (final entry in ingredientQuantities.entries) {
+      if (entry.value <= 0) continue;
+      final ingRows = await executor.query(
+        PosDatabaseConstants.tableRawIngredients,
+        columns: ['cost_per_recipe_unit'],
+        where: 'id = ?',
+        whereArgs: [entry.key],
+      );
+      if (ingRows.isEmpty) continue;
+      final rate = (ingRows.first['cost_per_recipe_unit'] as num?)?.toDouble() ?? 0.0;
+      totalCostPaisa += (entry.value * rate * 100).round();
+    }
+    return totalCostPaisa;
+  }
+
+  Future<void> _recordOrderAllocations({
+    required int orderId,
+    required int revision,
+    required List<CartItem> items,
+    required List<OrderItem> orderItems,
+    required CartTotals totals,
+    required DatabaseExecutor txn,
+    required DateTime now,
+  }) async {
+    final formattedNow = _formatTimestamp(now);
+    final lineGrossList = items.map((i) => PaisaEngine.rupeesToPaisa(i.totalPrice)).toList();
+    final totalDiscountPaisa = PaisaEngine.rupeesToPaisa(totals.discountAmount);
+    final totalTaxPaisa = PaisaEngine.rupeesToPaisa(totals.taxAmount);
+
+    final lineDiscounts = OrderAllocationEngine.allocateDiscounts(
+      lineGrossPaisa: lineGrossList,
+      totalDiscountPaisa: totalDiscountPaisa,
+    );
+
+    final lineNetSales = <int>[];
+    for (var i = 0; i < items.length; i++) {
+      lineNetSales.add(lineGrossList[i] - lineDiscounts[i]);
+    }
+
+    final isTaxableList = items.map((i) {
+      if (i.menuItem != null) return i.menuItem!.taxRate > 0;
+      return true;
+    }).toList();
+
+    final lineTaxes = OrderAllocationEngine.allocateTaxCarveOut(
+      lineNetSalesPaisa: lineNetSales,
+      isTaxable: isTaxableList,
+      totalTaxPaisa: totalTaxPaisa,
+    );
+
+    for (var i = 0; i < items.length; i++) {
+      final cartItem = items[i];
+      final orderItem = orderItems[i];
+      final gross = lineGrossList[i];
+      final discount = lineDiscounts[i];
+      final net = lineNetSales[i];
+      final tax = lineTaxes[i];
+
+      if (cartItem.menuItem != null) {
+        final bom = await _lineBom(cartItem, txn);
+        final bomCost = await _calculateBomCostPaisa(bom, txn);
+        final margin = bomCost == null ? null : (net - bomCost);
+
+        await txn.insert(PosDatabaseConstants.tableOrderItemAllocations, {
+          'order_id': orderId,
+          'order_item_id': orderItem.id,
+          'revision': revision,
+          'line_kind': 'ITEM',
+          'entry_type': 'SALE',
+          'menu_item_id': cartItem.menuItem!.id,
+          'deal_id': null,
+          'component_menu_item_id': null,
+          'item_name_snapshot': cartItem.name,
+          'quantity': cartItem.quantity,
+          'gross_sales_paisa': gross,
+          'allocated_discount_paisa': discount,
+          'net_sales_paisa': net,
+          'tax_carve_out_paisa': tax,
+          'bom_recipe_cost_paisa': bomCost,
+          'contribution_margin_paisa': margin,
+          'recorded_at': formattedNow,
+        });
+      } else if (cartItem.deal != null) {
+        final standalonePrices = <int>[];
+        final componentBomCosts = <int?>[];
+
+        for (final choice in cartItem.selectedDealChoices) {
+          final menuRows = await txn.query(
+            PosDatabaseConstants.tableMenuItems,
+            columns: ['base_price'],
+            where: 'id = ?',
+            whereArgs: [choice.menuItemId],
+          );
+          final basePrice = menuRows.isNotEmpty ? (menuRows.first['base_price'] as num).toDouble() : 0.0;
+          final standalonePaisa = PaisaEngine.rupeesToPaisa(basePrice) + PaisaEngine.rupeesToPaisa(choice.upgradePrice);
+          standalonePrices.add(standalonePaisa);
+
+          final choiceBom = <int, double>{};
+          await _accumulateMenuItemDeductions(
+            menuItemId: choice.menuItemId,
+            quantity: cartItem.quantity,
+            selectedModifiers: cartItem.selectedModifiers.where((m) => m.menuItemId == null || m.menuItemId == choice.menuItemId).toList(),
+            deductions: choiceBom,
+            executor: txn,
+          );
+          final choiceBomCost = await _calculateBomCostPaisa(choiceBom, txn);
+          componentBomCosts.add(choiceBomCost);
+        }
+
+        final expanded = OrderAllocationEngine.expandDealComponents(
+          dealGrossPaisa: gross,
+          dealAllocatedDiscountPaisa: discount,
+          dealTaxCarveOutPaisa: tax,
+          componentStandalonePricesPaisa: standalonePrices,
+          componentBomCostsPaisa: componentBomCosts,
+        );
+
+        final totalDealBomCost = expanded.fold<int>(0, (sum, c) => sum + (c.bomRecipeCostPaisa ?? 0));
+        final dealMargin = net - totalDealBomCost;
+
+        // Insert Deal Parent
+        await txn.insert(PosDatabaseConstants.tableOrderItemAllocations, {
+          'order_id': orderId,
+          'order_item_id': orderItem.id,
+          'revision': revision,
+          'line_kind': 'DEAL_PARENT',
+          'entry_type': 'SALE',
+          'menu_item_id': null,
+          'deal_id': cartItem.deal!.id,
+          'component_menu_item_id': null,
+          'item_name_snapshot': cartItem.name,
+          'quantity': cartItem.quantity,
+          'gross_sales_paisa': gross,
+          'allocated_discount_paisa': discount,
+          'net_sales_paisa': net,
+          'tax_carve_out_paisa': tax,
+          'bom_recipe_cost_paisa': totalDealBomCost,
+          'contribution_margin_paisa': dealMargin,
+          'recorded_at': formattedNow,
+        });
+
+        // Insert Deal Components
+        for (var cIdx = 0; cIdx < expanded.length; cIdx++) {
+          final comp = expanded[cIdx];
+          final choice = cartItem.selectedDealChoices[cIdx];
+          await txn.insert(PosDatabaseConstants.tableOrderItemAllocations, {
+            'order_id': orderId,
+            'order_item_id': orderItem.id,
+            'revision': revision,
+            'line_kind': 'DEAL_COMPONENT',
+            'entry_type': 'SALE',
+            'menu_item_id': choice.menuItemId,
+            'deal_id': cartItem.deal!.id,
+            'component_menu_item_id': choice.menuItemId,
+            'item_name_snapshot': '${cartItem.name} (${choice.menuItemName})',
+            'quantity': cartItem.quantity,
+            'gross_sales_paisa': comp.grossSalesPaisa,
+            'allocated_discount_paisa': comp.allocatedDiscountPaisa,
+            'net_sales_paisa': comp.netSalesPaisa,
+            'tax_carve_out_paisa': comp.taxCarveOutPaisa,
+            'bom_recipe_cost_paisa': comp.bomRecipeCostPaisa,
+            'contribution_margin_paisa': comp.contributionMarginPaisa,
+            'recorded_at': formattedNow,
+          });
+        }
+      }
+    }
+  }
+
   // ===========================================================================
   // ORDER QUERIES
   // ===========================================================================
@@ -1049,6 +1233,23 @@ class OrderAndCheckoutController {
           'voided_at': formattedNow,
         },
       );
+
+      // 2b. Insert immutable contra-allocations (ADR-0021 Section 5)
+      final existingAllocs = await txn.query(
+        PosDatabaseConstants.tableOrderItemAllocations,
+        where: 'order_id = ? AND entry_type = "SALE"',
+        whereArgs: [orderId],
+      );
+      for (final row in existingAllocs) {
+        final original = OrderItemAllocation.fromMap(row);
+        final contra = OrderAllocationEngine.createContraAllocation(
+          original: original,
+          revision: order.currentRevision + 1,
+          quantityToReverse: original.quantity,
+          recordedAt: now,
+        );
+        await txn.insert(PosDatabaseConstants.tableOrderItemAllocations, contra.toMap());
+      }
 
       // 3. Reverses BOM ingredient consumption
       final reversals = <int, double>{};
@@ -1451,6 +1652,23 @@ class OrderAndCheckoutController {
           'command_id': commandId,
         },
       );
+
+      // Contra-allocations for cancelled order (ADR-0021 Section 5)
+      final existingAllocs = await txn.query(
+        PosDatabaseConstants.tableOrderItemAllocations,
+        where: 'order_id = ? AND entry_type = "SALE"',
+        whereArgs: [orderId],
+      );
+      for (final row in existingAllocs) {
+        final original = OrderItemAllocation.fromMap(row);
+        final contra = OrderAllocationEngine.createContraAllocation(
+          original: original,
+          revision: nextRevisionNo,
+          quantityToReverse: original.quantity,
+          recordedAt: now,
+        );
+        await txn.insert(PosDatabaseConstants.tableOrderItemAllocations, contra.toMap());
+      }
 
       final activeTripRows = await txn.rawQuery('''
         SELECT rt.id, rt.trip_name, rt.cash_expected_paisa, rto.status as stop_status
@@ -1914,6 +2132,35 @@ class OrderAndCheckoutController {
           'command_id': commandId,
         },
       );
+
+      // Contra-allocations for revised order (ADR-0021 Section 5)
+      final existingAllocs = await txn.query(
+        PosDatabaseConstants.tableOrderItemAllocations,
+        where: 'order_id = ? AND entry_type = "SALE"',
+        whereArgs: [orderId],
+      );
+      for (final row in existingAllocs) {
+        final original = OrderItemAllocation.fromMap(row);
+        final contra = OrderAllocationEngine.createContraAllocation(
+          original: original,
+          revision: nextRevisionNo,
+          quantityToReverse: original.quantity,
+          recordedAt: now,
+        );
+        await txn.insert(PosDatabaseConstants.tableOrderItemAllocations, contra.toMap());
+      }
+
+      if (action != 'CANCEL' && newItems.isNotEmpty) {
+        await _recordOrderAllocations(
+          orderId: orderId,
+          revision: nextRevisionNo,
+          items: newItems,
+          orderItems: createdOrderItems,
+          totals: totals,
+          txn: txn,
+          now: now,
+        );
+      }
 
       final activeTripRows = await txn.rawQuery('''
         SELECT rt.id, rt.trip_name, rt.cash_expected_paisa, rto.status as stop_status

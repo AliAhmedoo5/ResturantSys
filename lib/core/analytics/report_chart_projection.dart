@@ -66,6 +66,16 @@ class _Charts {
         section.rows.where((r) => r.cells['kind'] == 'Item/deal aggregate').toList(),
         'line_value_paisa', 'name', AnalyticsUnit.paisa,
         'Before order discount, tax and fee allocation · this is not item net revenue'),
+      if (section.rows.any((r) => r.cells['allocated_discount_paisa'] != null && (r.cells['allocated_discount_paisa'] as num) > 0))
+        ranked('menu_net_sales', 'Allocated net sales by item or deal',
+          section.rows.where((r) => r.cells['kind'] == 'Item/deal aggregate').toList(),
+          'net_sales_paisa', 'name', AnalyticsUnit.paisa,
+          'Net sales after proportional order-level discount allocation adhering to ADR-0021'),
+      if (section.rows.any((r) => r.cells['margin_paisa'] != null))
+        ranked('menu_margins', 'Item contribution margin',
+          section.rows.where((r) => r.cells['kind'] == 'Item/deal aggregate' && r.cells['margin_paisa'] != null).toList(),
+          'margin_paisa', 'name', AnalyticsUnit.paisa,
+          'Contribution margin based on event-time recipe BOM ingredient costing'),
     ],
     AnalyticsFamily.inventory => inventory(),
     AnalyticsFamily.procurement => [
