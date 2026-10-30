@@ -93,6 +93,7 @@ class AnalyticsService {
     if (eventDayIds.isNotEmpty) await read('event_days', 'business_days', 'SELECT id,opened_at,closed_at,status FROM business_days WHERE id IN (${List.filled(eventDayIds.length, '?').join(',')})', eventDayIds);
     if (eventShiftIds.isNotEmpty) await read('event_shifts', 'shifts', 'SELECT * FROM shifts WHERE id IN (${List.filled(eventShiftIds.length, '?').join(',')})', eventShiftIds);
     await read('items', 'order_items', 'SELECT x.id,x.order_id,x.menu_item_id,x.deal_id,x.name,x.quantity,x.unit_price,x.total_price,x.modifiers_json,x.deal_choices_json,x.bom_json FROM order_items x $joinedOrder', orderArgs);
+    await read('allocations', 'order_item_allocations', 'SELECT x.* FROM order_item_allocations x $joinedOrder', orderArgs);
     await read('revisions', 'order_revisions', 'SELECT x.id,x.order_id,x.revision_no,x.action,x.reason,x.cashier_id,x.created_at_utc,x.money_delta_paisa FROM order_revisions x $joinedOrder', orderArgs);
     await read('cost_coverage', 'order_cost_coverage', 'SELECT x.* FROM order_cost_coverage x $joinedOrder', orderArgs);
     await read('cost_events', 'order_cost_events', 'SELECT x.* FROM order_cost_events x $joinedOrder', orderArgs);
@@ -122,23 +123,43 @@ class AnalyticsService {
     }
     final interval = _intervalScope(query, 'x.created_at');
     final intervalArgs = [...dayArgs, _sqlTime(_karachi(e.now.toIso8601String())!.add(const Duration(seconds: 1)))];
-    await read('purchases', 'mandi_procurements', 'SELECT x.id,x.raw_ingredient_id,x.traditional_unit,x.quantity,x.converted_quantity,x.total_cost,x.cost_per_recipe_unit,x.created_at FROM mandi_procurements x WHERE $interval', intervalArgs);
+    final mandiCols = tables.contains('mandi_procurements')
+        ? (await txn.rawQuery("PRAGMA table_info(mandi_procurements)")).map((c) => c['name'] as String).toSet()
+        : <String>{};
+    final mandiVendorId = mandiCols.contains('vendor_id') ? 'x.vendor_id' : 'NULL AS vendor_id';
+    final mandiTxnId = mandiCols.contains('vendor_transaction_id') ? 'x.vendor_transaction_id' : 'NULL AS vendor_transaction_id';
+    await read('purchases', 'mandi_procurements', 'SELECT x.id,x.raw_ingredient_id,x.traditional_unit,x.quantity,x.converted_quantity,x.total_cost,x.cost_per_recipe_unit,x.created_at,$mandiVendorId,$mandiTxnId FROM mandi_procurements x WHERE $interval', intervalArgs);
     await read('physical_counts', 'stock_count_lines', 'SELECT x.*,c.status,c.reason,c.created_by,c.approved_by,c.posted_by,c.posted_at AS created_at FROM stock_count_lines x JOIN stock_counts c ON c.id=x.count_id WHERE ${_intervalScope(query, 'c.posted_at')} AND c.status=\'POSTED\'', intervalArgs);
     e.rows['physical_counts'] = e.get('physical_counts').map((row) => <String, Object?>{...row, 'recorded_estimated_cost_paisa': row['estimated_cost_paisa'], 'estimated_cost_paisa': StockCountValuation.paisa(row)}).toList();
     await read('waste', 'kitchen_wastage', 'SELECT x.id,x.staff_id,x.raw_ingredient_id,x.quantity,x.cost_loss,x.reason,x.created_at FROM kitchen_wastage x WHERE $interval', intervalArgs);
     final effectiveCutoff = query.live ? _karachi(e.now.toIso8601String())! : _karachi(analyticsWallClock(query.endDateExclusive).toIso8601String())!;
     final effectiveCutoffStr = _sqlTime(effectiveCutoff);
-    await read('all_mandi_purchases', 'mandi_procurements', 'SELECT id,raw_ingredient_id,traditional_unit,quantity,converted_quantity,total_cost,cost_per_recipe_unit,created_at FROM mandi_procurements WHERE created_at <= ? ORDER BY created_at,id', [effectiveCutoffStr]);
+    await read('all_mandi_purchases', 'mandi_procurements', 'SELECT id,raw_ingredient_id,traditional_unit,quantity,converted_quantity,total_cost,cost_per_recipe_unit,created_at,${mandiCols.contains('vendor_id') ? 'vendor_id' : 'NULL AS vendor_id'},${mandiCols.contains('vendor_transaction_id') ? 'vendor_transaction_id' : 'NULL AS vendor_transaction_id'} FROM mandi_procurements WHERE created_at <= ? ORDER BY created_at,id', [effectiveCutoffStr]);
     await read('all_waste', 'kitchen_wastage', 'SELECT id,staff_id,raw_ingredient_id,quantity,cost_loss,reason,created_at FROM kitchen_wastage WHERE created_at <= ? ORDER BY created_at,id', [effectiveCutoffStr]);
     await read('all_inventory_movements', 'inventory_movements', 'SELECT id,ingredient_id,business_day_id,quantity_delta,balance_after,recorded_at FROM inventory_movements WHERE recorded_at <= ? ORDER BY recorded_at,id', [effectiveCutoffStr]);
     if (tables.contains('order_cost_events')) {
-      await read('all_cost_events', 'order_cost_events', 'SELECT id,order_id,ingredient_id,revision,kind,quantity,unit_cost_rupees,cost_paisa,recorded_at FROM order_cost_events WHERE recorded_at <= ? ORDER BY recorded_at,id', [effectiveCutoffStr]);
+      await read('all_cost_events', 'order_cost_events', 'SELECT id,order_id,ingredient_id,revision,kind,quantity,unit_cost_rupees,cost_paisa,recorded_at,classification FROM order_cost_events WHERE recorded_at <= ? ORDER BY recorded_at,id', [effectiveCutoffStr]);
     }
     if (tables.contains('stock_count_lines')) {
       await read('all_physical_counts', 'stock_count_lines', "SELECT x.*,c.status,c.reason,c.posted_at AS created_at FROM stock_count_lines x JOIN stock_counts c ON c.id=x.count_id WHERE c.status='POSTED' AND c.posted_at <= ? ORDER BY c.posted_at,x.count_id", [effectiveCutoffStr]);
     }
-    await read('vendor_events', 'vendor_transactions', 'SELECT x.id,x.vendor_id,x.shift_id,x.staff_id,x.type,x.amount,COALESCE(x.amount_paisa,CAST(ROUND(x.amount*100) AS INTEGER)) amount_paisa,x.due_date,x.raw_ingredient_id,x.quantity,x.created_at FROM vendor_transactions x WHERE $interval', intervalArgs);
-    await read('all_vendor_transactions', 'vendor_transactions', 'SELECT id,vendor_id,shift_id,staff_id,type,amount,COALESCE(amount_paisa,CAST(ROUND(amount*100) AS INTEGER)) amount_paisa,due_date,raw_ingredient_id,quantity,created_at FROM vendor_transactions WHERE created_at <= ? ORDER BY created_at,id', [effectiveCutoffStr]);
+    final vendorCols = tables.contains('vendor_transactions')
+        ? (await txn.rawQuery("PRAGMA table_info(vendor_transactions)")).map((c) => c['name'] as String).toSet()
+        : <String>{};
+    final vendorProcId = vendorCols.contains('procurement_id') ? 'x.procurement_id' : 'NULL AS procurement_id';
+    final vendorUnit = vendorCols.contains('unit_snapshot') ? 'x.unit_snapshot' : 'NULL AS unit_snapshot';
+    final vendorIngName = vendorCols.contains('ingredient_name_snapshot') ? 'x.ingredient_name_snapshot' : 'NULL AS ingredient_name_snapshot';
+    await read('vendor_events', 'vendor_transactions', 'SELECT x.id,x.vendor_id,x.shift_id,x.staff_id,x.type,x.amount,COALESCE(x.amount_paisa,CAST(ROUND(x.amount*100) AS INTEGER)) amount_paisa,x.due_date,x.raw_ingredient_id,x.quantity,x.created_at,$vendorProcId,$vendorUnit,$vendorIngName,x.reference_slip,x.notes FROM vendor_transactions x WHERE $interval', intervalArgs);
+    await read('all_vendor_transactions', 'vendor_transactions', 'SELECT id,vendor_id,shift_id,staff_id,type,amount,COALESCE(amount_paisa,CAST(ROUND(amount*100) AS INTEGER)) amount_paisa,due_date,raw_ingredient_id,quantity,created_at,${vendorCols.contains('procurement_id') ? 'procurement_id' : 'NULL AS procurement_id'},${vendorCols.contains('unit_snapshot') ? 'unit_snapshot' : 'NULL AS unit_snapshot'},${vendorCols.contains('ingredient_name_snapshot') ? 'ingredient_name_snapshot' : 'NULL AS ingredient_name_snapshot'} FROM vendor_transactions WHERE created_at <= ? ORDER BY created_at,id', [effectiveCutoffStr]);
+    if (tables.contains('procurement_vendor_links')) {
+      await read('procurement_links', 'procurement_vendor_links', 'SELECT * FROM procurement_vendor_links');
+    }
+    if (tables.contains('supplier_receipt_evidence')) {
+      await read('all_receipt_evidence', 'supplier_receipt_evidence', 'SELECT * FROM supplier_receipt_evidence WHERE recorded_at <= ? ORDER BY recorded_at, id', [effectiveCutoffStr]);
+      await read('interval_receipt_evidence', 'supplier_receipt_evidence', 'SELECT x.* FROM supplier_receipt_evidence x WHERE ${_intervalScope(query, 'x.recorded_at')} ORDER BY x.recorded_at, x.id', intervalArgs);
+    } else {
+      e.absent.add('supplier_receipt_evidence');
+    }
     await read('expense_entries', 'expense_entries', 'SELECT x.* FROM expense_entries x JOIN business_days b ON b.id=x.business_day_id WHERE $dayScope', dayArgs);
     await read('payroll_entries', 'payroll_entries', 'SELECT x.* FROM payroll_entries x WHERE $interval', intervalArgs);
     // Earned months survive late posting and later settlement. Never constrain
@@ -167,6 +188,12 @@ class AnalyticsService {
     await read('delivery_audit', 'report_delivery_audit', 'SELECT x.id,x.staff_id,x.action,x.created_at FROM report_delivery_audit x WHERE $interval', intervalArgs);
     await read('configuration_audit', 'configuration_audit', 'SELECT x.id,x.actor_id,x.kind,x.before_json,x.after_json,x.created_at,s.name AS actor_name FROM configuration_audit x LEFT JOIN staff s ON s.id=x.actor_id WHERE $interval', intervalArgs);
     await read('operations_audit', 'operations_audit', 'SELECT x.id,x.manager_id,x.entity,x.entity_id,x.action,x.detail,x.created_at,s.name AS manager_name FROM operations_audit x LEFT JOIN staff s ON s.id=x.manager_id WHERE $interval', intervalArgs);
+    if (tables.contains('backup_attempts')) {
+      await read('backup_attempts', 'backup_attempts', 'SELECT x.*, s.name AS manager_name FROM backup_attempts x LEFT JOIN staff s ON s.id=x.manager_id WHERE $interval ORDER BY x.created_at DESC, x.id DESC', intervalArgs);
+      await read('all_backup_attempts', 'backup_attempts', 'SELECT x.*, s.name AS manager_name FROM backup_attempts x LEFT JOIN staff s ON s.id=x.manager_id WHERE x.created_at <= ? ORDER BY x.created_at DESC, x.id DESC', [effectiveCutoffStr]);
+    } else {
+      e.absent.add('backup_attempts');
+    }
     await read('token_audit', 'checkout_token_audit', 'SELECT x.id,x.order_id,x.token_number,x.action,x.payment_status,x.revision,x.recorded_at FROM checkout_token_audit x $joinedOrder', orderArgs);
     await read('rounding', 'rounding_variance_ledger', 'SELECT x.id,x.order_id,x.shift_id,x.cash_rounding_paisa,x.created_at FROM rounding_variance_ledger x $joinedOrder', orderArgs);
     await read('stock_alerts', 'checkout_stock_alerts', 'SELECT x.order_id,x.ingredient_id,x.stock_at_checkout,x.created_at FROM checkout_stock_alerts x $joinedOrder', orderArgs);

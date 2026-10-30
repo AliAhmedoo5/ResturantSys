@@ -7,9 +7,11 @@ import 'operations_schema.dart';
 import 'feature_gaps_schema.dart';
 import 'historical_cost_schema.dart';
 import 'payment_events_schema.dart';
-
 import 'historical_corrections_schema.dart';
 import 'reporting_identity_schema.dart';
+import 'menu_allocations_schema.dart';
+import 'supplier_receipt_evidence_schema.dart';
+import 'backup_attempts_schema.dart';
 import '../delivery/delivery_controller.dart';
 
 /// Embedded SQLite database manager for the Restaurant POS system.
@@ -140,6 +142,9 @@ class PosDatabase {
     await createPaymentEventsSchema(db);
 
     await createReportingIdentitySchema(db);
+    await createMenuAllocationsSchema(db);
+    await createSupplierReceiptEvidenceSchema(db);
+    await createBackupAttemptsSchema(db);
     await createHistoricalCorrectionsSchema(db);
   }
 
@@ -463,6 +468,9 @@ class PosDatabase {
     if (oldVersion < 22) await createPaymentEventsSchema(db);
 
     if (oldVersion < 23) await createReportingIdentitySchema(db);
+    if (oldVersion < 24) await createMenuAllocationsSchema(db);
+    if (oldVersion < 25) await createSupplierReceiptEvidenceSchema(db);
+    if (oldVersion < 26) await createBackupAttemptsSchema(db);
     if (oldVersion < 27) await createHistoricalCorrectionsSchema(db);
   }
 

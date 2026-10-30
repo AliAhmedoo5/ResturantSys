@@ -36,6 +36,34 @@ destination receives the same archive. If that destination is unavailable, the
 primary copy is retained and the result reports a warning. Check the reported
 paths rather than assuming a disconnected USB drive has received a copy.
 
+## Durable backup attempt history and health
+
+Every backup attempt—whether initiated interactively (`MANUAL`), automatically
+by Business Day Z-Close (`Z_CLOSE`), or on a background schedule (`SCHEDULED`)—is
+persisted immediately to an immutable SQLite table: `backup_attempts`.
+
+Each record captures:
+- `attempted_at`: ISO-8601 timestamp of the backup request.
+- `initiator`: `MANUAL`, `SCHEDULED`, or `Z_CLOSE`.
+- `manager_id`: Authenticated staff account ID for interactive attempts (null for scheduled).
+- `primary_status`: Target-specific primary result (`SUCCESS`, `FAILED`, `SKIPPED`).
+- `primary_path`: Completed archive path on the primary disk.
+- `secondary_status`: Target-specific secondary result (`SUCCESS`, `WARNING`, `FAILED`, `NOT_CONFIGURED`, `SKIPPED`).
+- `secondary_path`: Completed copy path on external USB drive or share.
+- `verification_status`: Integrity and archive verification outcome (`VERIFIED`, `FAILED`, `UNVERIFIED`).
+- `failure_category`: Safe classification enum (`NONE`, `STORAGE_UNAVAILABLE`, `MEDIA_CORRUPTED`, `DESTINATION_INVALID`, `PERMISSION_DENIED`, `DATABASE_ERROR`, `UNKNOWN`).
+- `failure_message`: Sanitized, confidential-safe failure or warning description.
+
+SQLite triggers enforce append-only immutability; `UPDATE` and `DELETE` operations
+are aborted. Failed attempts and secondary destination warnings are preserved rather
+than overwritten or masked.
+
+Configured local or secondary paths in `system_settings` are never treated as
+evidence of backup completion. Manager Analytics (`AnalyticsFamily.audit`) and the
+Manager Portal display last verified backup age and health metrics directly from
+durable SQLite evidence, never inferring history from directory listings or files
+on disk.
+
 The recovery tests extract the ZIP into a fresh temporary directory, open its
 database with SQLite, check schema version and integrity, and read saved records
 and media. They also exercise backup creation while the live WAL database is in

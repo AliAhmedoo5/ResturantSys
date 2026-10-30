@@ -550,6 +550,8 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
       'average_ticket' => Icons.bar_chart_rounded,
       'negative_stock' => Icons.inventory_2_outlined,
       'expected_drawer' => Icons.point_of_sale_rounded,
+      'food_cogs' => Icons.restaurant_outlined,
+      'packaging_cogs' => Icons.inventory_2_outlined,
       _ => switch (metric.unit) {
       AnalyticsUnit.paisa => Icons.account_balance_wallet_outlined,
       AnalyticsUnit.percent => Icons.percent_rounded,
