@@ -316,6 +316,7 @@ void main() {
     // Kitchen wastage (-50g)
     await db.insert('kitchen_wastage', {
       'raw_ingredient_id': ingId,
+      'staff_id': manager['id'],
       'quantity': 50.0,
       'cost_loss': 42.5,
       'reason': 'Burnt during prep',
