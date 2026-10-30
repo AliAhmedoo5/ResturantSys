@@ -1,0 +1,47 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:resturant_sys/core/database/pos_database.dart';
+import 'package:resturant_sys/core/auth/auth_service.dart';
+import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
+import 'package:resturant_sys/core/analytics/historical_corrections.dart';
+
+void main() {
+  setUpAll(sqfliteFfiInit);
+  test('Manager appends reconciled payout and contra entry without changing sealed evidence', () async {
+    final store = PosDatabase(factory: databaseFactoryFfi, customPath: inMemoryDatabasePath);
+    final db = await store.initialize();
+    addTearDown(store.close);
+    final auth = AuthService(database: db);
+    final manager = (await auth.authenticateAndLogin('1234'))!;
+    final cashier = (await db.query('staff', where: "role='CASHIER'")).first['id'] as int;
+    final shifts = ShiftAndCashController(database: db);
+    final day = await shifts.openBusinessDay(openedByStaffId: manager.id);
+    final shift = await shifts.openShift(staffId: cashier, openingFloat: 100);
+    await shifts.closeShift(shiftId: shift.id, staffId: cashier, countedCash: 65);
+    await shifts.closeBusinessDay(closedByStaffId: manager.id);
+    final service = HistoricalCorrections(database: db, auth: auth);
+    final before = await service.load(day.id);
+    final id = await service.append(managerPin: '1234', businessDayId: day.id,
+      shiftId: shift.id, type: HistoricalCorrectionType.drawerPayout,
+      deltaPaisa: -3500, evidenceKey: 'supplier-slip-41', reason: 'Late verified supplier payout slip',
+      reconciled: true, eventTime: DateTime.now().toUtc().subtract(const Duration(seconds: 1)));
+    final adjusted = await service.load(day.id);
+    expect(adjusted.originalVariancePaisa, -3500);
+    expect(adjusted.adjustedVariancePaisa, 0);
+    expect(adjusted.originalSnapshotJson, before.originalSnapshotJson);
+    expect(adjusted.originalHash, before.originalHash);
+    expect(before.entries, isEmpty);
+    expect(adjusted.entries.single['id'], id);
+    expect(await db.query('cash_movements'), isEmpty);
+    await expectLater(service.append(managerPin: '1234', businessDayId: day.id,
+      shiftId: shift.id, type: HistoricalCorrectionType.drawerPayout,
+      deltaPaisa: -3500, evidenceKey: 'supplier-slip-41', reason: 'Duplicate slip', reconciled: true), throwsA(isA<StateError>()));
+    await service.reverse(id, managerPin: '1234', reason: 'Wrong slip');
+    expect((await service.load(day.id)).adjustedVariancePaisa, -3500);
+    expect(adjusted.adjustedVariancePaisa, 0);
+    final oldCutoff = await service.load(day.id, cutoff: DateTime.parse(adjusted.entries.single['recorded_at'] as String));
+    expect(oldCutoff.entries, hasLength(1));
+    expect(oldCutoff.toAnalyticsSnapshot().section(AnalyticsFamily.cash).notes.join(), contains('cutoff'));
+    expect(oldCutoff.csv(), contains('Original sealed'));
+  });
+}
