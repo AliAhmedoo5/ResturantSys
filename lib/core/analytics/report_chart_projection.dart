@@ -105,6 +105,44 @@ class _Charts {
       metrics('profit_components', 'Revenue, cost and operating result',
         ['recognized_revenue', 'cogs', 'gross_profit', 'net_profit'], AnalyticsUnit.paisa,
         'Selected Business Days · overlapping measures, never add these bars together'),
+      ReportChartData(
+        id: 'cogs_classification',
+        title: 'COGS by classification',
+        scope: 'Selected order cohort · realized COGS separated into food and packaging',
+        unit: AnalyticsUnit.paisa,
+        points: [
+          point('Food COGS',
+            source('order_cost_events').where((r) => r.cells['classification'] == 'FOOD' && orderCostSign(r.cells['kind']) != 0).toList(),
+            'cost_paisa', signedReturns: true),
+          point('Packaging COGS',
+            source('order_cost_events').where((r) => r.cells['classification'] == 'PACKAGING' && orderCostSign(r.cells['kind']) != 0).toList(),
+            'cost_paisa', signedReturns: true),
+          if (source('order_cost_events').any((r) => r.cells['classification'] == 'UNCLASSIFIED'))
+            point('Legacy Unclassified COGS',
+              source('order_cost_events').where((r) => r.cells['classification'] == 'UNCLASSIFIED' && orderCostSign(r.cells['kind']) != 0).toList(),
+              'cost_paisa', signedReturns: true),
+        ],
+      ),
+      ReportChartData(
+        id: 'cogs_dining_type',
+        title: 'COGS by Dining Type',
+        scope: 'Selected order cohort · food and packaging COGS by dining channel',
+        unit: AnalyticsUnit.paisa,
+        points: [
+          for (final dt in ['DINE_IN', 'TAKEAWAY', 'DELIVERY']) ...[
+            point('${_diningLabel(dt)} · Food',
+              source('order_cost_events').where((r) => r.cells['dining_type'] == dt && r.cells['classification'] == 'FOOD' && orderCostSign(r.cells['kind']) != 0).toList(),
+              'cost_paisa', signedReturns: true),
+            point('${_diningLabel(dt)} · Packaging',
+              source('order_cost_events').where((r) => r.cells['dining_type'] == dt && r.cells['classification'] == 'PACKAGING' && orderCostSign(r.cells['kind']) != 0).toList(),
+              'cost_paisa', signedReturns: true),
+            if (source('order_cost_events').any((r) => r.cells['dining_type'] == dt && r.cells['classification'] == 'UNCLASSIFIED'))
+              point('${_diningLabel(dt)} · Unclassified',
+                source('order_cost_events').where((r) => r.cells['dining_type'] == dt && r.cells['classification'] == 'UNCLASSIFIED' && orderCostSign(r.cells['kind']) != 0).toList(),
+                'cost_paisa', signedReturns: true),
+          ],
+        ],
+      ),
       dated('cost_dates', 'Recorded COGS postings by date',
         source('order_cost_events').where((r) => orderCostSign(r.cells['kind']) != 0).toList(),
         'cost_paisa', 'created_at',
@@ -231,6 +269,12 @@ class _Charts {
   }
 
   static num? number(Object? value) => value is num && value.isFinite ? value : null;
+  static String _diningLabel(String dt) => switch (dt) {
+    'DINE_IN' => 'Dine-In',
+    'TAKEAWAY' => 'Takeaway',
+    'DELIVERY' => 'Delivery',
+    _ => dt,
+  };
   static List<ReportChartPoint> _rank(List<ReportChartPoint> points) => points..sort((a, b) {
     final order = (b.value?.abs() ?? -1).compareTo(a.value?.abs() ?? -1);
     return order != 0 ? order : a.label.compareTo(b.label);
