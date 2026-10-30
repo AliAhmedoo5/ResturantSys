@@ -13,6 +13,7 @@ Future<void> createHistoricalCorrectionsSchema(DatabaseExecutor db) async {
     manager_name_snapshot TEXT NOT NULL, reason TEXT NOT NULL CHECK(length(reason)>=10),
     source_reference TEXT NOT NULL,
     reverses_correction_id INTEGER UNIQUE REFERENCES historical_corrections(id),
+    original_source_table TEXT, original_source_id INTEGER,
     metric TEXT NOT NULL
   )''');
   await db.execute('CREATE INDEX IF NOT EXISTS corrections_day_cutoff ON historical_corrections(affected_business_day_id,recorded_at)');

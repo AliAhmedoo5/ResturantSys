@@ -38,7 +38,7 @@ class _HistoricalCorrectionsWorkspaceState extends State<HistoricalCorrectionsWo
   Future<void> _append({int? reverseId})async{
     if(!mounted||_day==null||!_authorized)return;
     final form=GlobalKey<FormState>();
-    final fields={for(final key in ['pin','amount','shift','order','source','reason','event'])key:TextEditingController()};
+    final fields={for(final key in ['pin','amount','shift','order','source','reason','event','sourceTable','sourceId'])key:TextEditingController()};
     var kind=HistoricalCorrectionType.collection;
     var payment='DRAWER_CASH';
     var reconciled=false,saving=false;
@@ -48,7 +48,7 @@ class _HistoricalCorrectionsWorkspaceState extends State<HistoricalCorrectionsWo
         obscureText:key=='pin',decoration:InputDecoration(labelText:label),validator:(v){
           if(!optional&&(v??'').trim().isEmpty)return 'Required';
           if(key=='reason'&&(v??'').trim().length<10)return 'Use at least 10 characters';
-          if(['amount','shift','order'].contains(key)&&(v??'').isNotEmpty&&int.tryParse(v!)==null)return 'Enter Integer Paisa or a whole ID';
+          if(['amount','shift','order','sourceId'].contains(key)&&(v??'').isNotEmpty&&int.tryParse(v!)==null)return 'Enter Integer Paisa or a whole ID';
           if(key=='event'){try{parseActualEventTime(v);}catch(e){return '$e';}}
           return null;
         }));
@@ -66,6 +66,7 @@ class _HistoricalCorrectionsWorkspaceState extends State<HistoricalCorrectionsWo
             DropdownButtonFormField<String>(initialValue:payment,decoration:const InputDecoration(labelText:'Payment Source'),
               items:[for(final source in ['DRAWER_CASH','BANK_DIGITAL','OWNER_FUNDS'])DropdownMenuItem(value:source,child:Text(source))],onChanged:(v)=>update(()=>payment=v!)),
             field('event','Actual Event Time (Pakistan YYYY-MM-DD HH:MM)'),field('source','Unique source evidence reference'),
+            field('sourceTable','Original evidence table (optional)',optional:true),field('sourceId','Original evidence ID (optional)',optional:true),
             CheckboxListTile(value:reconciled,onChanged:(v)=>update(()=>reconciled=v??false),title:const Text('I verified this evidence and reconciled that the physical effect was not posted elsewhere.')),
           ],
           field('reason','Business reason'),field('pin','Your Manager PIN'),
@@ -79,6 +80,7 @@ class _HistoricalCorrectionsWorkspaceState extends State<HistoricalCorrectionsWo
             else{await widget.service.append(managerPin:fields['pin']!.text,businessDayId:_day!,
               shiftId:int.tryParse(fields['shift']!.text),orderId:int.tryParse(fields['order']!.text),type:kind,
               deltaPaisa:int.parse(fields['amount']!.text),evidenceKey:fields['source']!.text,reason:fields['reason']!.text,
+              sourceTable:fields['sourceTable']!.text.trim().isEmpty?null:fields['sourceTable']!.text.trim(),sourceId:int.tryParse(fields['sourceId']!.text),
               reconciled:reconciled,eventTime:parseActualEventTime(fields['event']!.text),paymentSource:payment);}
             if(dialog.mounted)Navigator.pop(dialog);
           }catch(e){if(dialog.mounted)update((){error='$e';saving=false;});}

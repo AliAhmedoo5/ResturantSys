@@ -31,8 +31,8 @@ void main(){
       type:HistoricalCorrectionType.collection,deltaPaisa:250000,evidenceKey:'pouch-1042',reason:'Verified courier pouch',
       reconciled:true,eventTime:DateTime.utc(2026,10,20,12));
     final snapshot=await service.load(day.id);
-    expect(snapshot.originalCashReceiptsPaisa,0);
-    expect(snapshot.adjustedCashReceiptsPaisa,250000);
+    expect(snapshot.originalCashReceiptsPaisa,isNull);
+    expect(snapshot.adjustedCashReceiptsPaisa,isNull);
     expect(snapshot.originalCollectionDuePaisa,250000);
     expect(snapshot.adjustedCollectionDuePaisa,0);
     await expectLater(service.append(managerPin:'1234',businessDayId:day.id,orderId:order,

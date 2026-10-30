@@ -39,7 +39,7 @@ class HistoricalCorrections {
   Future<int> append({required String managerPin, required int businessDayId,
     int? shiftId, int? orderId, required HistoricalCorrectionType type,
     required int deltaPaisa, required String evidenceKey, required String reason,
-    required bool reconciled, DateTime? eventTime, String paymentSource = 'DRAWER_CASH'}) async {
+    required bool reconciled, DateTime? eventTime, String paymentSource = 'DRAWER_CASH', String? sourceTable, int? sourceId}) async {
     final actor = await _verify(managerPin);
     if (!reconciled || reason.trim().length < 10 || evidenceKey.trim().isEmpty || deltaPaisa == 0 ||
         deltaPaisa.abs() > 9000000000000000 || eventTime == null ||
@@ -57,9 +57,29 @@ class HistoricalCorrections {
       if (opened == null || closed == null || eventTime.toUtc().isBefore(opened) || eventTime.toUtc().isAfter(closed)) {
         throw StateError('Actual Event Time must belong to the affected closed Business Day.');
       }
-      final duplicate = await txn.query('historical_corrections', where: 'source_reference=? AND reverses_correction_id IS NULL', whereArgs: [evidenceKey.trim()]);
+      final canonicalReference = evidenceKey.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+      final duplicate = await txn.query('historical_corrections', where: 'correction_key=?', whereArgs: ['evidence:$canonicalReference']);
       if (duplicate.isNotEmpty) throw StateError('This physical evidence has already been recorded. Use a new replacement reference after reversal.');
       if ((await txn.query('payment_events', where: 'event_key=?', whereArgs: [evidenceKey.trim()])).isNotEmpty) throw StateError('This physical effect already exists in the payment ledger.');
+      if ((sourceTable == null) != (sourceId == null)) throw StateError('Supply both original evidence table and ID.');
+      if (sourceTable != null) {
+        const allowed = ['orders','vendor_transactions','payroll_entries','expense_entries','cash_movements','order_payments','payment_events'];
+        if (!allowed.contains(sourceTable)) throw StateError('Unsupported original evidence type.');
+        final sources = await txn.query(sourceTable, where:'id=?', whereArgs:[sourceId]);
+        if (sources.isEmpty) throw StateError('Original source evidence is unavailable.');
+        final source = sources.single;
+        if (sourceTable == 'orders') {
+          if (source['business_day_id'] != businessDayId || (orderId != null && sourceId != orderId)) throw StateError('Original Order evidence does not match the affected Business Day.');
+        } else {
+          // A retained physical posting cannot be posted a second time as a correction.
+          // Accrual/delivery documents are allowed only as nonphysical supporting evidence.
+          final nonphysical = sourceTable == 'vendor_transactions' && source['type'] == 'CREDIT_DELIVERY' ||
+            sourceTable == 'payroll_entries' && source['source'] == 'NONE';
+          if (!nonphysical || (await txn.query('payment_events',where:'source_table=? AND source_id=?',whereArgs:[sourceTable,sourceId])).isNotEmpty) {
+            throw StateError('This original source already records a physical financial effect.');
+          }
+        }
+      }
       if (shiftId != null) {
         final shifts = await txn.query('shifts', where: "id=? AND business_day_id=? AND status='CLOSED'", whereArgs: [shiftId,businessDayId]);
         if (shifts.isEmpty) throw StateError('Affected Shift must belong to the closed Business Day.');
@@ -74,6 +94,10 @@ class HistoricalCorrections {
         if (deltaPaisa + (prior.single['net'] as int) > (orders.single['due'] as int)) throw StateError('Collection exceeds the unreconciled original amount.');
         target = 'ORDER_PAYMENT'; code = 'LATE_PAYMENT_COLLECTION'; metric = 'collection';
       } else {
+        if (type == HistoricalCorrectionType.refund) {
+          final orders = orderId == null ? <Map<String,Object?>>[] : await txn.query('orders',where:'id=? AND business_day_id=?',whereArgs:[orderId,businessDayId]);
+          if (orders.isEmpty) throw StateError('Late refund requires its original Order in the affected Business Day.');
+        }
         if (deltaPaisa >= 0) throw StateError('Historical disbursements require a negative amount.');
         if (paymentSource == 'DRAWER_CASH' && shiftId == null) throw StateError('Drawer reconciliation requires the affected closed Shift.');
         if (type == HistoricalCorrectionType.drawerPayout) { target = 'VENDOR_TRANSACTION'; code = 'LATE_VENDOR_PAYMENT'; }
@@ -83,12 +107,13 @@ class HistoricalCorrections {
       }
       final staff = (await txn.query('staff', where: 'id=?', whereArgs: [actor])).single;
       return txn.insert('historical_corrections', {
-        'correction_key': evidenceKey.trim(), 'affected_business_day_id':businessDayId,
+        'correction_key': 'evidence:$canonicalReference', 'affected_business_day_id':businessDayId,
         'affected_shift_id':shiftId, 'target_entity_type':target, 'target_entity_id':orderId,
         'correction_type':code, 'delta_amount_paisa':deltaPaisa, 'payment_source':paymentSource,
         'event_time':eventTime.toUtc().toIso8601String(), 'recorded_at':clock().toUtc().toIso8601String(),
         'recorded_by_staff_id':actor, 'manager_name_snapshot':staff['name'],
         'reason':reason.trim(), 'source_reference':evidenceKey.trim(), 'metric':metric,
+        'original_source_table':sourceTable, 'original_source_id':sourceId,
       });
     });
   }
@@ -119,28 +144,30 @@ class HistoricalCorrections {
       if (reports.isEmpty) throw StateError('Original sealed report unavailable; historical values remain unknown.');
       final entries = await txn.query('historical_corrections', where:'affected_business_day_id=? AND recorded_at<=?', whereArgs:[dayId,limit.toIso8601String()], orderBy:'recorded_at,id');
       return HistoricalCorrectionSnapshot(dayId, actor, limit, reports.single['snapshot_json'] as String,
-        reports.single['content_hash'] as String, reports.single['created_at'] as String, entries);
+        reports.single['content_hash'] as String, reports.single['created_at'] as String, entries,
+        (await txn.rawQuery('PRAGMA user_version')).single.values.first as int);
     });
   }
 }
 
 class HistoricalCorrectionSnapshot {
-  HistoricalCorrectionSnapshot(this.dayId,this.actorId,this.cutoff,this.originalSnapshotJson,this.originalHash,this.originalRecordedAt,List<Map<String,Object?>> entries)
+  HistoricalCorrectionSnapshot(this.dayId,this.actorId,this.cutoff,this.originalSnapshotJson,this.originalHash,this.originalRecordedAt,List<Map<String,Object?>> entries,this.sourceSchemaVersion)
     : entries = List.unmodifiable(entries.map((r)=>Map<String,Object?>.unmodifiable(r)));
-  final int dayId,actorId;
+  final int dayId,actorId,sourceSchemaVersion;
   final DateTime cutoff;
   final String originalSnapshotJson,originalHash,originalRecordedAt;
   final List<Map<String,Object?>> entries;
   List<dynamic> get _sections => (jsonDecode(originalSnapshotJson) as Map<String,dynamic>)['sections'] as List<dynamic>;
-  int get originalCollectionDuePaisa {
+  int? get originalCollectionDuePaisa {
     final rows = (_sections.first as Map<String,dynamic>)['rows'] as List<dynamic>;
-    return ((rows.cast<List<dynamic>>().where((r)=>r.first=='Collection Due').firstOrNull?[1] as num?) ?? 0).toInt();
+    return (rows.cast<List<dynamic>>().where((r)=>r.first=='Collection Due').firstOrNull?[1] as num?)?.toInt();
   }
-  int get originalCashReceiptsPaisa {
+  int? get originalCashReceiptsPaisa {
     final rows = (_sections.first as Map<String,dynamic>)['rows'] as List<dynamic>;
-    return rows.cast<List<dynamic>>().where((r)=>r.first=='Tender CASH (collected)').fold<int>(0,(sum,r)=>sum+(r[1] as num).toInt());
+    return (rows.cast<List<dynamic>>().where((r)=>r.first=='Tender CASH (collected)').firstOrNull?[1] as num?)?.toInt();
   }
-  int get adjustedCashReceiptsPaisa => originalCashReceiptsPaisa + entries.where((r)=>r['metric']=='collection' && r['payment_source']=='DRAWER_CASH').fold<int>(0,(sum,r)=>sum+(r['delta_amount_paisa'] as int));
+  int? get adjustedCashReceiptsPaisa => originalCashReceiptsPaisa == null ? null : originalCashReceiptsPaisa! +
+    entries.where((r)=>r['payment_source']=='DRAWER_CASH' && (r['metric']=='collection' || r['target_entity_type']=='ORDER_PAYMENT')).fold<int>(0,(sum,r)=>sum+(r['delta_amount_paisa'] as int));
   int? get originalVariancePaisa {
     final section = _sections.cast<Map<String,dynamic>>().where((s)=>s['title']=='Shift Handover Audit').firstOrNull;
     if (section == null) return null;
@@ -149,7 +176,7 @@ class HistoricalCorrectionSnapshot {
     return rows.fold<int>(0,(sum,r)=>sum+((r as List<dynamic>)[6] as num).toInt());
   }
   int _sum(String metric) => entries.where((r)=>r['metric']==metric).fold(0,(sum,r)=>sum+(r['delta_amount_paisa'] as int));
-  int get adjustedCollectionDuePaisa => originalCollectionDuePaisa-_sum('collection');
+  int? get adjustedCollectionDuePaisa => originalCollectionDuePaisa == null ? null : originalCollectionDuePaisa!-_sum('collection');
   int? get adjustedVariancePaisa => originalVariancePaisa == null ? null : originalVariancePaisa!-_sum('variance');
   AnalyticsSnapshot toAnalyticsSnapshot({bool adjusted = true}) {
     const columns = [AnalyticsColumn(key:'sealed_evidence',label:'Original sealed evidence'),AnalyticsColumn(key:'basis',label:'Basis'), AnalyticsColumn(key:'measure',label:'Measure'),
@@ -157,7 +184,7 @@ class HistoricalCorrectionSnapshot {
       AnalyticsColumn(key:'recorded_at',label:'Recorded at'), AnalyticsColumn(key:'manager_name_snapshot',label:'Manager'),
       AnalyticsColumn(key:'reason',label:'Reason'), AnalyticsColumn(key:'source_reference',label:'Evidence reference'),
       AnalyticsColumn(key:'target_entity_type',label:'Original evidence type'), AnalyticsColumn(key:'target_entity_id',label:'Original evidence ID'),
-      AnalyticsColumn(key:'affected_shift_id',label:'Affected Shift'), AnalyticsColumn(key:'reverses_correction_id',label:'Reverses correction')];
+      AnalyticsColumn(key:'affected_shift_id',label:'Affected Shift'), AnalyticsColumn(key:'reverses_correction_id',label:'Reverses correction'), AnalyticsColumn(key:'original_source_table',label:'Original source table'), AnalyticsColumn(key:'original_source_id',label:'Original source ID')];
     final rows = <AnalyticsRow>[];
     void value(String basis,String measure,int? amount) => rows.add(AnalyticsRow(id:'$basis:$measure',sourceType:'report_runs',cells:{'basis':basis,'measure':measure,'amount':amount}));
     var sealedRow = 0;
@@ -177,13 +204,18 @@ class HistoricalCorrectionSnapshot {
       value('Correction-adjusted','Cash receipts',adjustedCashReceiptsPaisa);
       value('Correction-adjusted','Collection Due',adjustedCollectionDuePaisa);
       value('Correction-adjusted','Drawer variance',adjustedVariancePaisa);
+      for (final source in ['DRAWER_CASH','BANK_DIGITAL','OWNER_FUNDS']) {
+        final disbursements=entries.where((r)=>r['payment_source']==source && r['metric']!='collection').fold<int>(0,(sum,r)=>sum-(r['delta_amount_paisa'] as int));
+        value('Adjustment bridge','$source additional disbursements',disbursements);
+      }
     }
     return AnalyticsSnapshot(query:AnalyticsQuery(startDate:DateTime(2000),endDateExclusive:DateTime(2200)),
-      generatedAt:cutoff, generatedByStaffId:actorId, businessDayIds:[dayId], sections:[AnalyticsSection(family:AnalyticsFamily.cash,
+      generatedAt:cutoff, generatedByStaffId:actorId, sourceSchemaVersion:sourceSchemaVersion, reportVersion:'historical-corrections-v1', businessDayIds:[dayId], sections:[AnalyticsSection(family:AnalyticsFamily.cash,
         title:adjusted ? 'Original sealed and correction-adjusted bridge' : 'Original sealed report',columns:columns,rows:rows,
         notes:['Business Day #$dayId; correction cutoff ${cutoff.toIso8601String()} (recorded_at inclusive).',
           'Original sealed hash $originalHash; original recording timestamp $originalRecordedAt.',
           'Original X/Z reports, balances and recording timestamps remain unchanged. Amounts are Integer Paisa.',
+          'Missing sealed measures stay unknown, including omitted Cash receipt baselines. Known Collection Due can still reconcile independently.',
           'External disbursements are evidence only; they do not change drawer variance. Unknown Event Times are never inferred.'])]);
   }
   String csv() => AnalyticsExportService().csv(toAnalyticsSnapshot(),AnalyticsFamily.cash);
