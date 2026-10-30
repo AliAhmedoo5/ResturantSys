@@ -147,7 +147,7 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
                 spacing: WarmCounterSpacing.space8,
                 runSpacing: WarmCounterSpacing.space8,
                 children: [
-                  for (final method in PaymentMethod.values.where((method) => (widget.allowCod || method != PaymentMethod.cod)))
+                  for (final method in PaymentMethod.values.where((method) => method != PaymentMethod.digitalWallet && (widget.allowCod || method != PaymentMethod.cod)))
                     _buildTenderTab(method, method.displayName, method == PaymentMethod.cash ? Icons.payments_rounded : Icons.credit_card_rounded),
                 ],
               ),
@@ -252,6 +252,7 @@ class _TenderCheckoutDialogState extends State<TenderCheckoutDialog> {
         return _buildCashTenderBody();
       case PaymentMethod.jazzCash:
       case PaymentMethod.easypaisa:
+      case PaymentMethod.digitalWallet:
       case PaymentMethod.bankTransfer:
       case PaymentMethod.card:
         return _buildElectronicTenderBody(_selectedMethod);

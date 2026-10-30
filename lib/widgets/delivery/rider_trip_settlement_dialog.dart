@@ -245,7 +245,7 @@ class _RiderTripSettlementDialogState extends State<RiderTripSettlementDialog> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('Counted minus dispatch estimate:', style: TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
+                          const Expanded(child: Text('Counted minus dispatch estimate:', style: TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText))),
                           Text(
                             _variancePaisa == 0
                                 ? 'Exact (Rs. 0)'
