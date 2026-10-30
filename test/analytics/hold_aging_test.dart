@@ -38,6 +38,8 @@ void main() {
     expect(row.sourceId, '$hold');
     expect(row.cells['cashier_id'], 2);
     expect(row.cells['age_minutes'], isNonNegative);
+    expect(row.cells['age_minutes'], lessThan(1));
+    expect(row.cells['created_at_source'].toString(), endsWith('Z'));
     expect(row.cells['created_at'], contains('Asia/Karachi'));
     expect(row.cells['business_day_id'], isNull);
     expect(row.cells['shift_id'], isNull);
@@ -52,5 +54,35 @@ void main() {
     expect(report.rows.where((r) => r.sourceType == 'held_carts'), hasLength(1));
     auth.session.lock();
     await expectLater(service.load(query), throwsStateError);
+  });
+
+  test('configured stale minutes change current Hold classification and survive query copies and exports', () async {
+    final store = PosDatabase(factory: databaseFactoryFfi, customPath: inMemoryDatabasePath);
+    final db = await store.initialize();
+    addTearDown(store.close);
+    final orders = OrderAndCheckoutController(database: db);
+    final hold = await orders.holdCart(cashierId: 2, label: 'Synthetic draft',
+      items: [CartItem(menuItem: const MenuItem(id: 987, categoryId: 1, name: 'Draft', basePrice: 100))],
+      diningType: DiningType.takeaway);
+    // Synthetic retained historical creation evidence for a thirty-minute Hold.
+    await db.update('held_carts', {'created_at': DateTime.now().toUtc().subtract(const Duration(minutes: 30)).toIso8601String()}, where: 'id=?', whereArgs: [hold]);
+    final manager = (await db.query('staff', where: 'id=1')).single;
+    final auth = AuthService(database: db)..session.login(Staff.fromMap(manager));
+    final service = AnalyticsService(database: db, authService: auth);
+    final query = AnalyticsQuery(startDate: DateTime(2020), endDateExclusive: DateTime(2020, 2),
+      holdStaleMinutes: 15, cashierId: 2, shiftId: 999, diningType: 'DELIVERY', paymentMethod: 'CARD');
+    final stale = await service.load(query);
+    final current = stale.section(AnalyticsFamily.orders).rows.singleWhere((r) => r.sourceType == 'held_carts');
+    expect(current.cells['aging_status'], 'Stale');
+    expect(current.cells['stale_threshold_minutes'], 15);
+    final relaxed = query.copyWith(holdStaleMinutes: 60);
+    expect(relaxed.copyWith(live: true).holdStaleMinutes, 60);
+    expect(relaxed, isNot(query));
+    final fresh = await service.load(relaxed);
+    expect(fresh.section(AnalyticsFamily.orders).metrics.singleWhere((m) => m.id == 'stale_holds').value, 0);
+    expect(stale.section(AnalyticsFamily.orders).metrics.singleWhere((m) => m.id == 'stale_holds').value, 1);
+    expect(AnalyticsExportService().csv(stale, AnalyticsFamily.orders), contains('hold_stale_threshold_minutes,15'));
+    expect((await service.load(query.copyWith(cashierId: 999))).section(AnalyticsFamily.orders).metrics.singleWhere((m) => m.id == 'active_holds').value, 0);
+    expect(() => query.copyWith(holdStaleMinutes: 0), throwsArgumentError);
   });
 }
