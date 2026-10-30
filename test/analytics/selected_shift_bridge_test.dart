@@ -78,5 +78,39 @@ void main() {
     expect(closed.metrics.singleWhere((m) => m.id == 'variance').value, -1000);
     expect(value('variance'), isNull, reason: 'Earlier snapshot remains immutable');
   });
+
+  test('unlinked historical lookalikes remain separate evidence and withhold complete cash', () async {
+    final store = PosDatabase(factory: databaseFactoryFfi, customPath: inMemoryDatabasePath);
+    final db = await store.initialize();
+    addTearDown(store.close);
+    final staff = await db.query('staff');
+    final manager = staff.firstWhere((r) => r['role'] != 'CASHIER');
+    final cashierId = staff.firstWhere((r) => r['role'] == 'CASHIER')['id'] as int;
+    final shifts = ShiftAndCashController(database: db);
+    final day = await shifts.openBusinessDay(openedByStaffId: manager['id'] as int);
+    final shift = await shifts.openShift(staffId: cashierId, openingFloat: 100);
+    // Imported historical records intentionally have no receiving-event link.
+    final order = await db.insert('orders', {'business_day_id': day.id, 'shift_id': shift.id,
+      'cashier_id': cashierId, 'token_number': 1, 'dining_type': 'TAKEAWAY',
+      'subtotal': 100, 'grand_total': 100, 'payment_status': 'SETTLED',
+      'created_at': DateTime.now().toUtc().toIso8601String()});
+    for (var i = 0; i < 2; i++) {
+      await db.insert('order_payments', {'order_id': order, 'payment_method': 'CASH',
+        'amount_tendered': 50, 'change_returned': 0});
+      await shifts.recordCashMovement(shiftId: shift.id, staffId: cashierId,
+        type: CashMovementType.payIn, amount: 50, category: 'General', notes: 'Distinct physical entry');
+    }
+    final auth = AuthService(database: db)..session.login(Staff.fromMap(manager));
+    final snapshot = await AnalyticsService(database: db, authService: auth).load(
+      AnalyticsQuery(startDate: DateTime(2020), endDateExclusive: DateTime(2100), shiftId: shift.id));
+    final cash = snapshot.section(AnalyticsFamily.cash);
+    expect(cash.rows.where((r) => r.cells['kind'] == 'Cash coverage gap'), hasLength(2));
+    expect(cash.rows.where((r) => r.cells['kind'] == 'Physical cash effect'), hasLength(2));
+    expect(cash.metrics.singleWhere((m) => m.id == 'evidenced_balance').value, 20000);
+    expect(cash.metrics.singleWhere((m) => m.id == 'expected_drawer').value, isNull);
+    expect(cash.metrics.singleWhere((m) => m.id == 'expected_drawer').quality, AnalyticsQuality.missing);
+    expect(cash.charts.singleWhere((c) => c.id == 'shift_cash').points.first.value, isNull);
+    expect(AnalyticsExportService().csv(snapshot, AnalyticsFamily.cash), contains('Receiving Shift and actual time unavailable'));
+  });
 }
 
