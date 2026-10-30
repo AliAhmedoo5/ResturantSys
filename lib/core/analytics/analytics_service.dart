@@ -11,6 +11,7 @@ import 'analytics_models.dart';
 part 'analytics_reports.dart';
 part 'finance_timeline.dart';
 part 'customer_report_details.dart';
+part 'shift_cash_bridge.dart';
 typedef _Record = Map<String, Object?>;
 
 /// Consistent, authorized reads. Computation runs after releasing SQLite.
@@ -86,6 +87,18 @@ class AnalyticsService {
     await read('shifts', 'shifts', 'SELECT s.* FROM shifts s JOIN business_days b ON b.id=s.business_day_id WHERE $dayScope', dayArgs);
     await read('cash_payments', 'order_payments', "SELECT p.*,COALESCE(pe.shift_id,o.shift_id) AS shift_id FROM order_payments p JOIN orders o ON o.id=p.order_id LEFT JOIN payment_events pe ON pe.tender_id=p.id JOIN business_days b ON b.id=COALESCE(pe.business_day_id,o.business_day_id) WHERE $dayScope AND (pe.id IS NOT NULL OR o.payment_status IN ('SETTLED','REFUND_PENDING','CANCELLED','REFUNDED'))", dayArgs);
     await read('movements', 'cash_movements', 'SELECT m.id,m.shift_id,m.staff_id,m.type,m.amount,m.category,m.approved_by,m.created_at FROM cash_movements m JOIN shifts s ON s.id=m.shift_id JOIN business_days b ON b.id=s.business_day_id WHERE $dayScope', dayArgs);
+    // A selected drawer is reconciled over its entire Shift. Calendar buckets
+    // and order-only filters never turn a balance into partial cash activity.
+    final bridgeScope = query.shiftId == null ? dayScope : 's.id=?';
+    final bridgeArgs = query.shiftId == null ? dayArgs : <Object?>[query.shiftId];
+    await read('bridge_shifts', 'shifts', 'SELECT s.* FROM shifts s JOIN business_days b ON b.id=s.business_day_id WHERE $bridgeScope${query.cashierId == null ? '' : ' AND s.staff_id=?'}', [...bridgeArgs, if (query.cashierId != null) query.cashierId]);
+    final bridgeIds = e.get('bridge_shifts').map((s) => s['id']).toList();
+    if (bridgeIds.isNotEmpty) {
+      final slots = List.filled(bridgeIds.length, '?').join(',');
+      await read('bridge_movements', 'cash_movements', 'SELECT * FROM cash_movements WHERE shift_id IN ($slots)', bridgeIds);
+      await read('bridge_payments', 'order_payments', 'SELECT p.*,o.shift_id AS originating_shift_id FROM order_payments p JOIN orders o ON o.id=p.order_id WHERE o.shift_id IN ($slots) OR p.id IN (SELECT tender_id FROM payment_events WHERE shift_id IN ($slots))', [...bridgeIds, ...bridgeIds]);
+      await read('bridge_days', 'business_days', 'SELECT DISTINCT b.* FROM business_days b JOIN shifts s ON s.business_day_id=b.id WHERE s.id IN ($slots)', bridgeIds);
+    }
     await read('trips', 'rider_trips', 'SELECT t.* FROM rider_trips t JOIN business_days b ON b.id=t.business_day_id WHERE $dayScope', dayArgs);
     await read('attempts', 'rider_trip_orders', 'SELECT x.id,x.order_id,x.trip_id,x.status,x.delivered_at,x.returned_at,t.dispatched_at,t.rider_staff_id FROM rider_trip_orders x JOIN rider_trips t ON t.id=x.trip_id $joinedOrder', orderArgs);
     await read('ingredients', 'raw_ingredients', 'SELECT id,name,storage_unit,current_stock,low_stock_threshold,cost_per_recipe_unit FROM raw_ingredients');

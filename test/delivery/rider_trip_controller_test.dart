@@ -232,7 +232,9 @@ void main() {
       final bank = events.singleWhere((r) => r.cells['order_id'] == digitalOrder.id);
       expect(bank.cells['payment_source'], 'BANK');
       expect(bank.cells['movement_id'], isNull);
-      expect(cash.metrics.singleWhere((m) => m.id == 'expected_drawer').value, 570000);
+      expect(cash.metrics.singleWhere((m) => m.id == 'expected_drawer').value, 70000);
+      expect(cash.metrics.singleWhere((m) => m.id == 'rider_handovers').value, 70000);
+      expect(cash.rows.where((r) => r.cells['kind'] == 'Physical cash effect'), hasLength(1));
       expect((await orderController.getOrder(cashOrder.id)).shiftId, shiftId);
       final csv = AnalyticsExportService().csv(snapshot, AnalyticsFamily.cash);
       expect(csv, contains('RIDER_HANDOVER'));
