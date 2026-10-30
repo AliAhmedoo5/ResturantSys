@@ -199,5 +199,3 @@ class _WeekdayOrderPeaks {
     }
     return result;
   }}
-
-

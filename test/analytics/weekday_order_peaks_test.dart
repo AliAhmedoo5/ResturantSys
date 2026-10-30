@@ -108,5 +108,16 @@ void main() {
     final coveredZero = overnightOnly.section(AnalyticsFamily.orders).rows.singleWhere((r) => r.cells['kind'] == 'Weekday/hour workload' && r.cells['weekday'] == 4 && r.cells['hour'] == 0);
     expect(coveredZero.cells['confirmed_orders'], 0);
     expect(coveredZero.cells['contributing_business_day_ids'], '$day');
+    final shifts = ShiftAndCashController(database: db);
+    final zeroDay = await shifts.openBusinessDay(openedByStaffId: 1, openedAt: DateTime.parse('2026-09-23T18:00:00+05:00'));
+    await shifts.closeBusinessDay(closedByStaffId: 1, closedAt: DateTime.parse('2026-09-24T02:00:00+05:00'));
+    final emptyOvernight = await service.load(query.copyWith(timeBasis: AnalyticsTimeBasis.calendarTime,
+      startDate: DateTime(2026, 9, 24), endDateExclusive: DateTime(2026, 9, 25)));
+    final observedHours = emptyOvernight.section(AnalyticsFamily.orders).rows.where((r) => r.cells['kind'] == 'Weekday/hour workload');
+    final zeroHour = observedHours.singleWhere((r) => r.cells['weekday'] == 4 && r.cells['hour'] == 1);
+    expect(zeroHour.cells['confirmed_orders'], 0, reason: 'A prior-date zero-order Business Day still supplies observed overnight calendar coverage');
+    expect(zeroHour.cells['contributing_business_day_ids'], '${zeroDay.id}');
+    expect(observedHours.singleWhere((r) => r.cells['weekday'] == 4 && r.cells['hour'] == 2).cells['confirmed_orders'], isNull,
+      reason: 'Closure is exclusive; later calendar hours are not observed zeros');
   });
 }
