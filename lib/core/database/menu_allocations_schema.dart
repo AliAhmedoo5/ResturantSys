@@ -9,7 +9,7 @@ Future<void> createMenuAllocationsSchema(DatabaseExecutor db) async {
     CREATE TABLE IF NOT EXISTS ${PosDatabaseConstants.tableOrderItemAllocations} (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       order_id INTEGER NOT NULL REFERENCES ${PosDatabaseConstants.tableOrders}(id),
-      order_item_id INTEGER REFERENCES ${PosDatabaseConstants.tableOrderItems}(id),
+      order_item_id INTEGER,
       revision INTEGER NOT NULL DEFAULT 0,
       line_kind TEXT NOT NULL CHECK(line_kind IN ('ITEM', 'DEAL_PARENT', 'DEAL_COMPONENT')),
       entry_type TEXT NOT NULL CHECK(entry_type IN ('SALE', 'CONTRA')),
