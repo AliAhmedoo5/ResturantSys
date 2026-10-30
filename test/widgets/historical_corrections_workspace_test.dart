@@ -45,10 +45,10 @@ void main() {
     await tester.tap(find.byType(DropdownButtonFormField<int>));await tester.pumpAndSettle();
     await tester.tap(find.text('Business Day #1').last);await tester.pumpAndSettle();
     expect(find.textContaining('synthetic-sealed-hash'),findsOneWidget);
-    expect(find.textContaining('Correction-adjusted · Collection Due · 250000 paisa'),findsOneWidget);
+    expect(find.textContaining('Correction-adjusted Â· Collection Due Â· 250000 paisa'),findsOneWidget);
     expect(find.text('CSV (this report)'),findsOneWidget);
     await tester.tap(find.text('Original sealed').first);await tester.pumpAndSettle();
-    expect(find.textContaining('Correction-adjusted · Collection Due'),findsNothing);
+    expect(find.textContaining('Correction-adjusted Â· Collection Due'),findsNothing);
     auth.session.lock();await tester.pumpAndSettle();
     expect(find.textContaining('synthetic-sealed-hash'),findsNothing);
     expect(find.text('Manager session required.'),findsOneWidget);
