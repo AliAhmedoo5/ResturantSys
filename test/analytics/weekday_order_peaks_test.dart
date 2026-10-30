@@ -109,8 +109,8 @@ void main() {
     expect(coveredZero.cells['confirmed_orders'], 0);
     expect(coveredZero.cells['contributing_business_day_ids'], '$day');
     final shifts = ShiftAndCashController(database: db);
-    final zeroDay = await shifts.openBusinessDay(openedByStaffId: 1, openedAt: DateTime.parse('2026-09-23T18:00:00+05:00'));
-    await shifts.closeBusinessDay(closedByStaffId: 1, closedAt: DateTime.parse('2026-09-24T02:00:00+05:00'));
+    final zeroDay = await shifts.openBusinessDay(openedByStaffId: 1, openedAt: DateTime(2026, 9, 23, 18));
+    await shifts.closeBusinessDay(closedByStaffId: 1, closedAt: DateTime(2026, 9, 24, 2));
     final emptyOvernight = await service.load(query.copyWith(timeBasis: AnalyticsTimeBasis.calendarTime,
       startDate: DateTime(2026, 9, 24), endDateExclusive: DateTime(2026, 9, 25)));
     final observedHours = emptyOvernight.section(AnalyticsFamily.orders).rows.where((r) => r.cells['kind'] == 'Weekday/hour workload');
