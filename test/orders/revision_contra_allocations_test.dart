@@ -50,9 +50,6 @@ void main() {
       final burger = await catalog.createMenuItem(categoryId: cat.id, name: 'Burger', basePrice: 400);
       final fries = await catalog.createMenuItem(categoryId: cat.id, name: 'Fries', basePrice: 200);
       final drink = await catalog.createMenuItem(categoryId: cat.id, name: 'Drink', basePrice: 100);
-      await catalog.toggleMenuItemActive(burger.id, true);
-      await catalog.toggleMenuItemActive(fries.id, true);
-      await catalog.toggleMenuItemActive(drink.id, true);
 
       final meat = await catalog.createRawIngredient(name: 'Meat', storageUnit: StorageUnit.count, currentStock: 100, costPerRecipeUnit: 150);
       final potato = await catalog.createRawIngredient(name: 'Potato', storageUnit: StorageUnit.count, currentStock: 100, costPerRecipeUnit: 50);
@@ -61,6 +58,10 @@ void main() {
       await catalog.addOrUpdateRecipeItem(menuItemId: burger.id, rawIngredientId: meat.id, quantity: 1.0);
       await catalog.addOrUpdateRecipeItem(menuItemId: fries.id, rawIngredientId: potato.id, quantity: 1.0);
       await catalog.addOrUpdateRecipeItem(menuItemId: drink.id, rawIngredientId: syrup.id, quantity: 1.0);
+
+      await catalog.toggleMenuItemActive(burger.id, true);
+      await catalog.toggleMenuItemActive(fries.id, true);
+      await catalog.toggleMenuItemActive(drink.id, true);
 
       // Checkout initial order: 2x Burger (PKR 800) + 1x Fries (PKR 200) = PKR 1000
       final checkout = await orders.checkoutOrder(
@@ -188,7 +189,6 @@ void main() {
     test('sale-time BOM costing resolves ingredient unit cost from ingredient_cost_history at order creation time', () async {
       final cat = await catalog.createCategory(name: 'Meals', displayOrder: 1, colorHex: '#FFFFFF');
       final meal = await catalog.createMenuItem(categoryId: cat.id, name: 'Special Meal', basePrice: 500);
-      await catalog.toggleMenuItemActive(meal.id, true);
 
       // Create ingredient with initial rate 50 PKR (5,000 paisa)
       final ingredient = await catalog.createRawIngredient(
@@ -198,6 +198,7 @@ void main() {
         costPerRecipeUnit: 50.0,
       );
       await catalog.addOrUpdateRecipeItem(menuItemId: meal.id, rawIngredientId: ingredient.id, quantity: 1.0);
+      await catalog.toggleMenuItemActive(meal.id, true);
 
       // Historic entry in ingredient_cost_history was recorded by trigger
       final historyBefore = await db.query('ingredient_cost_history', where: 'ingredient_id = ?', whereArgs: [ingredient.id]);
