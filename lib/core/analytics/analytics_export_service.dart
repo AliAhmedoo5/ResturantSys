@@ -143,9 +143,10 @@ class AnalyticsExportService {
     ['dining_type', s.query.diningType], ['payment_method', s.query.paymentMethod],
     ['time_basis', s.query.timeBasis.name],
     ['grouping', s.query.grouping.name],
+    ['hold_stale_threshold_minutes', s.query.holdStaleMinutes],
     ['bucket_definitions', 'Asia/Karachi; start inclusive, end exclusive; Business Day weekday = assigned opening date; calendar weekday = actual creation date; weeks start Monday; months = local calendar months.'],
     ['non_order_scope', 'Shifts/trips and non-order ledgers retain Business Day scope; current stock is current.'],
-    ['filter_scope', 'Order filters apply to order-derived datasets only; each section discloses its scope.'],
+    ['filter_scope', 'Order cohorts, receiving/owning drawers and current Hold ownership have distinct scopes; each section discloses applicable filters. Current Holds use Cashier ownership only and ignore historical date/Shift/order predicates.'],
     for (final note in s.notes) ['snapshot_note', note],
   ];
 

@@ -27,7 +27,7 @@ class _ReportBuilder {
       if (e.query.live && !e.get('days').any((d) => d['status'] == 'OPEN')) 'No Business Day is currently open. Historical reporting remains available.',
     ]);
     return AnalyticsSnapshot(query: e.query, generatedAt: e.now, generatedByStaffId: e.actor, sourceSchemaVersion: e.sourceSchemaVersion, businessDayIds: {...e.get('days').map((d) => d['id'] as int), ...e.get('order_days').map((d) => d['id'] as int), ...e.get('event_days').map((d) => d['id'] as int)}.toList(), sections: [overview, ...sections], notes: [
-      'Analytics formula version 2; PKR; Order time basis: ${e.query.timeBasis.name}; grouping: ${e.query.grouping.name}; Asia/Karachi (UTC+05:00). Start inclusive; end exclusive. Business Day weekday uses assigned opening date; calendar weekday uses actual creation date. Weeks start Monday; months use local calendar months.',
+      'Analytics formula version 3; PKR; Order time basis: ${e.query.timeBasis.name}; grouping: ${e.query.grouping.name}; Asia/Karachi (UTC+05:00). Start inclusive; end exclusive. Business Day weekday uses assigned opening date; calendar weekday uses actual creation date. Weeks start Monday; months use local calendar months.',
       'Non-order ledgers and drawer reconciliation retain Business Day opening-date scope. Calendar Order activity does not change their scope or Order assignments.',
 
       'Exploratory view over current committed local records. Immutable sealed Z-reports retain their original content hash and revision.',
@@ -1047,5 +1047,6 @@ class _ReportBuilder {
     } on FormatException { return 'Unreadable snapshot'; }
   }
 }
+
 
 
