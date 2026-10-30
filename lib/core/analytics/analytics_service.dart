@@ -12,6 +12,7 @@ part 'analytics_reports.dart';
 part 'finance_timeline.dart';
 part 'customer_report_details.dart';
 part 'shift_cash_bridge.dart';
+part 'hold_aging.dart';
 typedef _Record = Map<String, Object?>;
 
 /// Consistent, authorized reads. Computation runs after releasing SQLite.
@@ -56,6 +57,9 @@ class AnalyticsService {
     const fields = 'o.id,o.business_day_id,o.shift_id,o.cashier_id,o.token_number,o.dining_type,o.subtotal,o.discount_amount,o.discount_id,o.tax_amount,o.grand_total,o.payment_status,o.token_status,o.cash_rounding_paisa,o.delivery_area_id,o.delivery_area_name_snapshot,o.delivery_fee_paisa,o.customer_phone,o.created_at,$outstandingCollectionPaisaSql AS collection_due_paisa';
     final orderFrom = 'FROM orders o JOIN business_days b ON b.id=o.business_day_id WHERE $orderScope';
     await read('orders', 'orders', 'SELECT $fields $orderFrom ORDER BY o.id', orderArgs);
+    // Current Holds have no Business Day/Shift assignment or retained deleted
+    // lifecycle. Never read private draft content into reporting evidence.
+    await read('active_holds', 'held_carts', 'SELECT id,cashier_id,created_at FROM held_carts${query.cashierId == null ? '' : ' WHERE cashier_id=?'} ORDER BY created_at,id', [if (query.cashierId != null) query.cashierId]);
     await read('order_days', 'business_days', 'SELECT DISTINCT b.id,b.opened_at,b.closed_at,b.status FROM business_days b JOIN orders o ON o.business_day_id=b.id WHERE $orderScope ORDER BY b.opened_at,b.id', orderArgs);
     await read('order_shifts', 'shifts', 'SELECT DISTINCT s.* FROM shifts s JOIN orders o ON o.shift_id=s.id JOIN business_days b ON b.id=o.business_day_id WHERE $orderScope ORDER BY s.id', orderArgs);
     final joinedOrder = 'JOIN orders o ON o.id=x.order_id JOIN business_days b ON b.id=o.business_day_id WHERE $orderScope';

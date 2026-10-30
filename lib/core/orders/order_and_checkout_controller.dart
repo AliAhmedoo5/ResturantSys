@@ -252,7 +252,7 @@ class OrderAndCheckoutController {
         await txn.delete('held_carts', where: 'id = ? AND cashier_id = ?', whereArgs: [previousHoldId, cashierId]);
       }
       return txn.insert('held_carts', {'cashier_id': cashierId, 'label': label.trim(),
-        'created_at': DateTime.now().toIso8601String(), 'payload': jsonEncode({
+        'created_at': DateTime.now().toUtc().toIso8601String(), 'payload': jsonEncode({
           'items': items.map(encodeDraftLine).toList(), 'dining_type': diningType.code,
           'customer_id': customerId, 'discount_id': discountId, 'discount_ids': discountIds,
           'delivery': delivery == null ? null : {'area_id': delivery.areaId, 'fee': delivery.quotedFeePaisa,

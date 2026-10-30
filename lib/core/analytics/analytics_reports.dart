@@ -143,7 +143,7 @@ class _ReportBuilder {
       exposure += math.max(0, retained - due);
     }
     final metrics = <AnalyticsMetric>[
-      _metric('committed_orders', 'Committed orders', orders.length, unit: AnalyticsUnit.count, explanation: 'All selected committed orders, including cancellation states; no historical in-memory holds.'),
+      _metric('committed_orders', 'Committed orders', orders.length, unit: AnalyticsUnit.count, explanation: 'All selected committed Orders, including cancellation states. Persisted current Holds are unconfirmed drafts outside Orders, Tokens and revenue.'),
       _metric('revised_orders', 'Orders revised', revisedIds.length, unit: AnalyticsUnit.count, explanation: 'Distinct selected order IDs with append-only revision evidence.'),
       _metric('revision_events', 'Revision events', revisions.length, unit: AnalyticsUnit.count, explanation: 'Revision events, separate from distinct revised order count.'),
       _metric('revision_delta', 'Revision price delta', _integers(revisions, 'money_delta_paisa'), explanation: 'Sum append-only revision money deltas for selected order cohort; event dates may differ.'),
@@ -152,7 +152,8 @@ class _ReportBuilder {
       _metric('refunds', 'Explicit refunds', -_sum(refunds, 'amount_tendered'), explanation: 'Negative payment records only; cancellation does not itself disburse cash.'),
       _metric('refund_exposure', 'Retained funds above current payable', exposure, explanation: 'Per order max(0, net collected - current payable), using zero payable for cancelled/refunded orders. This is exposure, not a completed refund.'),
       _missing('prep_time', 'Preparation time', 'No persisted confirmed/preparing/ready lifecycle timestamps. Current state cannot establish historical durations.', unit: AnalyticsUnit.minutes),
-      _missing('held_history', 'Historical holds', 'Holds are in memory and cannot be reconstructed as historical records.', unit: AnalyticsUnit.count),
+      ..._HoldAging(e).metrics,
+      _missing('held_history', 'Historical Holds', 'Current Holds are persisted. Complete deleted/recalled Hold lifecycle history is unavailable; current rows cannot reconstruct a historical population.', unit: AnalyticsUnit.count),
     ];
     for (final key in ['payment_status', 'token_status']) {
       for (final group in _group(orders, key).entries) {
@@ -160,9 +161,10 @@ class _ReportBuilder {
       }
     }
     return _section(AnalyticsFamily.orders, 'Order operations', metrics, [
+      ..._HoldAging(e).rows,
       ...orders.map((o) => _row('orders', o, {'order_id': o['id'], 'business_day_id': o['business_day_id'], 'cashier_id': o['cashier_id'], 'shift_id': o['shift_id'], 'token': o['token_number'], 'dining_type': o['dining_type'], 'payment_status': o['payment_status'], 'token_status': o['token_status'], 'recorded_value_paisa': _money(o, 'grand_total'), 'collection_due_paisa': o['payment_status'] == 'COLLECTION_DUE' ? o['collection_due_paisa'] : 0, 'created_at': o['created_at'], 'assigned_business_date': _karachi(daysById[o['business_day_id']]?['opened_at']) == null ? null : _sqlDate(_karachi(daysById[o['business_day_id']]!['opened_at'])!)})),
       ...revisions.map((r) => _row('order_revisions', r, {'order_id': r['order_id'], 'revision': r['revision_no'], 'action': r['action'], 'reason': _safeText(r['reason']), 'cashier_id': r['cashier_id'], 'delta_paisa': r['money_delta_paisa'], 'created_at': r['created_at_utc']})),
-    ], ['order_id', 'business_day_id', 'assigned_business_date', 'token', 'cashier_id', 'shift_id', 'dining_type', 'payment_status', 'token_status', 'recorded_value_paisa', 'collection_due_paisa', 'action', 'revision', 'delta_paisa', 'reason', 'created_at'], [_orderBasis, 'Order and revision source rows are separate kinds. Their counts/amounts must not be added together.']);
+    ], ['order_id', 'business_day_id', 'assigned_business_date', 'token', 'cashier_id', 'shift_id', 'dining_type', 'payment_status', 'token_status', 'recorded_value_paisa', 'collection_due_paisa', 'action', 'revision', 'delta_paisa', 'reason', 'created_at'], [_orderBasis, 'Order and revision source rows are separate kinds. Their counts/amounts must not be added together.', ..._HoldAging(e).notes]);
   }
 
   AnalyticsSection _delivery() {
