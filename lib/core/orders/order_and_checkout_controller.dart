@@ -252,7 +252,7 @@ class OrderAndCheckoutController {
         await txn.delete('held_carts', where: 'id = ? AND cashier_id = ?', whereArgs: [previousHoldId, cashierId]);
       }
       return txn.insert('held_carts', {'cashier_id': cashierId, 'label': label.trim(),
-        'created_at': DateTime.now().toIso8601String(), 'payload': jsonEncode({
+        'created_at': DateTime.now().toUtc().toIso8601String(), 'payload': jsonEncode({
           'items': items.map(encodeDraftLine).toList(), 'dining_type': diningType.code,
           'customer_id': customerId, 'discount_id': discountId, 'discount_ids': discountIds,
           'delivery': delivery == null ? null : {'area_id': delivery.areaId, 'fee': delivery.quotedFeePaisa,
@@ -1171,8 +1171,8 @@ class OrderAndCheckoutController {
   /// Retrieves the immutable void audit record for a voided order, if any.
   Future<OrderVoid?> getOrderVoid(int orderId) async {
     final rows = await database.rawQuery('''
-      SELECT ov.*, 
-             s1.name as supervisor_name, 
+      SELECT ov.*,
+             s1.name as supervisor_name,
              s2.name as cashier_name
       FROM ${PosDatabaseConstants.tableOrderVoids} ov
       LEFT JOIN ${PosDatabaseConstants.tableStaff} s1 ON ov.voided_by_supervisor_id = s1.id

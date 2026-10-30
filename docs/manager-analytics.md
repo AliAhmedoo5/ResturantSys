@@ -15,7 +15,7 @@ Select **Overview** or one of the 13 report families:
 | Report | What to inspect |
 | --- | --- |
 | Sales | Recorded value, order volume, discounts, tax, delivery fees, rounding, received tenders and trends |
-| Order operations | Status counts, revisions, cancellations and refund exposure |
+| Order operations | Status counts, revisions, cancellations, refund exposure and separately labeled current Hold aging |
 | Delivery | Area activity, trips, delivery/return evidence, Collection Due and settlement exposure |
 | Customers | Known/guest coverage, repeat purchase rate, known-customer average ticket and masked customer activity |
 | Menu & deals | Recorded quantities and line values, popular and zero-selling catalog entries |
@@ -29,6 +29,22 @@ Select **Overview** or one of the 13 report families:
 | Control & audit | Recorded revision/token/rounding/report evidence and export/delivery health |
 
 Read each metric's explanation and quality state. **Missing data** is not zero. **Not applicable** indicates no applicable population or denominator. **Estimated** identifies incomplete evidence or approximate methodology. Coverage counts explain which records contribute to timing and rate statistics.
+
+In **Order operations**, current active Holds show their ID, owning Cashier,
+creation time, age at snapshot cutoff and stale classification. Open **Filters**
+and set **Hold stale after (minutes)**; the default is 30 minutes, and a Hold is
+stale at or above the selected threshold. The setting survives period/filter
+changes and is included in CSV, Excel and PDF snapshot metadata. Cashier filters
+scope Hold ownership; date/time, Shift, Dining Type and payment filters do not
+reconstruct historical Holds or assign them to a Business Day. Holds remain
+outside confirmed Order counts, Tokens, sales and workload charts.
+
+Only currently persisted Holds are available. Deleted/recalled lifecycle history
+is unavailable. Reporting excludes draft labels, items, customer contact and
+delivery content. Cashier names are labeled current; missing historical names
+are not inferred. New Hold creation timestamps retain UTC evidence; old naive
+timestamps retain the disclosed Asia/Karachi assumption. Unknown/future creation
+evidence has unavailable age and stale classification, with age coverage shown.
 
 Cashier and Shift filters describe the originating order cohort and owning/receiving drawer separately. Dining Type and payment filters narrow order/activity breakdowns only. A split-payment order must be counted once even if it has several tender rows. The report states where a filter applies: current stock, staff and supplier balances must not appear filtered by an unrelated order selection. Current balances remain labeled current when browsing historical activity.
 
@@ -79,6 +95,19 @@ Schema 23 captures names atomically at source insertion in an append-only identi
 Audit Timestamp means immutable recording evidence; Event Time means actual occurrence. New money events retain explicit UTC recording time and preserve actual event time independently. Reports convert either known instant for Asia/Karachi display while exporting the source string. Existing naive local fields are preserved, never rewritten as supposedly known UTC history.
 
 COD receiving attribution and evidence limits: see [COD settlement evidence](cod-settlement-evidence.md).
+
+## Busiest Order days and hours
+
+Order operations now includes separate **Busiest by confirmed Orders** and **Highest recorded value** charts for days and hours. Every confirmed Order contributes once to workload, even after cancellation or a refund. Holds and append-only Order Revisions add no Orders. Select a bar to inspect its exact contributing Order rows. Daily and hourly tables describe the same cohort in different ways and must not be added together.
+
+Business Day mode preserves each assigned Business Day ID, including separate days opened on the same date and opened days with no Orders. Calendar mode uses actual Order creation dates in Asia/Karachi; an overnight Order may move to the next calendar date without changing its assigned Business Day. Daily workload rankings remain daily when Sales uses weekly or monthly grouping. Hours always mean the actual Asia/Karachi creation clock hour across the selected Order cohort.
+
+All 24 clock-hour rows remain visible. Zero means the observed selected cohort contains no Orders at that hour; it does not assert that the restaurant traded for an entire hour. Missing source coverage is unavailable. Missing creation times withhold hourly counts, values and ranks rather than assigning those Orders to an invented hour. Historical Business Days that were never opened are not fabricated.
+
+Count and value have independent ranks. Every tied peak has rank 1; ties follow chronological order, with same-date Business Days ordered by ID. Current eligible value preserves the Sales definition: grand total including Collection Due, excluding CANCELLED, VOIDED and REFUNDED states. REFUND_PENDING remains eligible under the existing definition. Average ticket divides by the corresponding eligible Order count, never the workload count; an empty eligible population has no average. Cancellation/refund Order counts and explicit refund amounts remain separate from workload and value.
+
+The source table and CSV/XLSX/PDF carry the same bucket values, eligible denominators, ranks, tied-peak flags, Order IDs, time basis, value basis and coverage explanation as the charts. Refund amounts describe the selected originating Order cohort, not actual receipt-event timing. Use the payment timeline for actual money movement.
+
 # Selected Shift cash bridge
 
 Cashier and Shift filters select the owning/receiving drawer in **Cash & shifts**.
@@ -105,5 +134,3 @@ Manual Cash Movements retain their physical effect but disclose unavailable
 independent actual time. Actor, owner, source links, Karachi times and original
 timestamp evidence travel with the snapshot into CSV, Excel and PDF exports.
 Existing sealed X/Z reports remain unchanged.
-
-

@@ -41,6 +41,7 @@ class _Charts {
         'Filtered committed orders · current stored status, including cancellations'),
       count('dining_mix', 'Orders by Dining Type', source('orders'), 'dining_type',
         'Filtered committed orders · revisions are not counted again'),
+      ...workload(),
     ],
     AnalyticsFamily.delivery => [
       count('attempt_outcomes', 'Delivery attempt outcomes', source('rider_trip_orders'), 'status',
@@ -100,6 +101,9 @@ class _Charts {
         'Current staff directory · includes active and inactive profiles'),
       metrics('salary_accruals', 'Posted salary accruals', ['labor_cost'], AnalyticsUnit.paisa,
         'Selected-day accrual postings and reversals · salary payments are not another expense'),
+      metrics('earned_payroll', 'Earned salary and settlement',
+        ['earned_salary', 'earned_paid', 'earned_recovered', 'earned_unpaid', 'earned_advances'], AnalyticsUnit.paisa,
+        'Whole earned months · settlement as of snapshot cutoff · overlapping balances, do not add bars'),
     ],
     AnalyticsFamily.profitability => [
       metrics('profit_components', 'Revenue, cost and operating result',
@@ -119,6 +123,36 @@ class _Charts {
     ],
   };
 
+  List<ReportChartData> workload() {
+    final details = source('orders');
+    final result = <ReportChartData>[];
+    for (final kind in ['Daily workload', 'Hourly workload']) {
+      final buckets = section.rows.where((r) => r.cells['kind'] == kind).toList();
+      if (buckets.isEmpty) continue;
+      for (final value in [false, true]) {
+        final rankedBuckets = [...buckets];
+        // Stable chronological tie order is explicit, independent of sort stability.
+        rankedBuckets.sort((a, b) {
+          final key = value ? 'value_rank' : 'count_rank';
+          final rank = ((a.cells[key] as int?) ?? 999999).compareTo((b.cells[key] as int?) ?? 999999);
+          return rank != 0 ? rank : buckets.indexOf(a).compareTo(buckets.indexOf(b));
+        });
+        result.add(ReportChartData(
+          id: '${value ? 'value' : 'workload'}_${kind == 'Daily workload' ? 'days' : 'hours'}',
+          title: '${value ? 'Highest recorded value' : 'Busiest by confirmed Orders'} · ${kind == 'Daily workload' ? 'days' : 'hours'}',
+          scope: '${buckets.first.cells['time_basis']} · Asia/Karachi · completed periods ranked with chronological ties; incomplete periods shown separately',
+          note: '${value ? buckets.first.cells['value_basis'] : 'Confirmed Orders include cancellations/refunds. Holds and Order Revisions add no Orders.'} Incomplete periods retain observed activity to cutoff without completed-period ranks. Unobserved future hours have unavailable totals, not reliable zeros. Calendar elapsed time does not imply contributing Business Days are closed.',
+          unit: value ? AnalyticsUnit.paisa : AnalyticsUnit.count,
+          points: [for (final bucket in rankedBuckets) ReportChartPoint(
+            '${bucket.cells['period']}${bucket.cells['period_complete'] == false ? ' · Incomplete' : ''}', number(bucket.cells[value ? 'recorded_value_paisa' : 'confirmed_orders']),
+            explanation: '${bucket.cells['period_status'] ?? bucket.cells['coverage']}; cutoff ${bucket.cells['coverage_cutoff'] ?? 'unavailable'}; rank ${bucket.cells[value ? 'value_rank' : 'count_rank'] ?? 'unavailable (incomplete period)'}',
+            quality: bucket.cells['coverage'] == 'Unavailable coverage' ? AnalyticsQuality.missing : bucket.cells['period_complete'] == false ? AnalyticsQuality.estimated : AnalyticsQuality.complete,
+            rows: details.where((r) => '${bucket.cells[value ? 'eligible_order_ids' : 'order_ids']}'.split(',').contains(r.sourceId)).toList(),
+          )]));
+      }
+    }
+    return result;
+  }
   List<ReportChartData> inventory() {
     final positions = section.rows.where((r) => r.cells['kind'] == 'Current position').toList();
     final units = positions.map((r) => r.cells['unit']?.toString()).whereType<String>()

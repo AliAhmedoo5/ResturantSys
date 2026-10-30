@@ -9,9 +9,12 @@ import '../inventory/stock_count_valuation.dart';
 import 'analytics_models.dart';
 
 part 'analytics_reports.dart';
+part 'order_workload.dart';
 part 'finance_timeline.dart';
 part 'customer_report_details.dart';
+part 'earned_payroll.dart';
 part 'shift_cash_bridge.dart';
+part 'hold_aging.dart';
 typedef _Record = Map<String, Object?>;
 
 /// Consistent, authorized reads. Computation runs after releasing SQLite.
@@ -56,6 +59,9 @@ class AnalyticsService {
     const fields = 'o.id,o.business_day_id,o.shift_id,o.cashier_id,o.token_number,o.dining_type,o.subtotal,o.discount_amount,o.discount_id,o.tax_amount,o.grand_total,o.payment_status,o.token_status,o.cash_rounding_paisa,o.delivery_area_id,o.delivery_area_name_snapshot,o.delivery_fee_paisa,o.customer_phone,o.created_at,$outstandingCollectionPaisaSql AS collection_due_paisa';
     final orderFrom = 'FROM orders o JOIN business_days b ON b.id=o.business_day_id WHERE $orderScope';
     await read('orders', 'orders', 'SELECT $fields $orderFrom ORDER BY o.id', orderArgs);
+    // Current Holds have no Business Day/Shift assignment or retained deleted
+    // lifecycle. Never read private draft content into reporting evidence.
+    await read('active_holds', 'held_carts', 'SELECT id,cashier_id,created_at FROM held_carts${query.cashierId == null ? '' : ' WHERE cashier_id=?'} ORDER BY created_at,id', [if (query.cashierId != null) query.cashierId]);
     await read('first_purchases', 'orders', "SELECT o.id,o.customer_phone,o.created_at FROM orders o WHERE o.customer_phone IS NOT NULL AND o.customer_phone != '' AND o.payment_status NOT IN ('CANCELLED','VOIDED','REFUNDED') ORDER BY o.id");
     await read('order_days', 'business_days', 'SELECT DISTINCT b.id,b.opened_at,b.closed_at,b.status FROM business_days b JOIN orders o ON o.business_day_id=b.id WHERE $orderScope ORDER BY b.opened_at,b.id', orderArgs);
     await read('order_shifts', 'shifts', 'SELECT DISTINCT s.* FROM shifts s JOIN orders o ON o.shift_id=s.id JOIN business_days b ON b.id=o.business_day_id WHERE $orderScope ORDER BY s.id', orderArgs);
@@ -129,6 +135,9 @@ class AnalyticsService {
     await read('all_vendor_transactions', 'vendor_transactions', 'SELECT id,vendor_id,shift_id,staff_id,type,amount,COALESCE(amount_paisa,CAST(ROUND(amount*100) AS INTEGER)) amount_paisa,due_date,raw_ingredient_id,quantity,created_at FROM vendor_transactions WHERE created_at <= ? ORDER BY created_at,id', [effectiveCutoffStr]);
     await read('expense_entries', 'expense_entries', 'SELECT x.* FROM expense_entries x JOIN business_days b ON b.id=x.business_day_id WHERE $dayScope', dayArgs);
     await read('payroll_entries', 'payroll_entries', 'SELECT x.* FROM payroll_entries x WHERE $interval', intervalArgs);
+    // Earned months survive late posting and later settlement. Never constrain
+    // this evidence to the posting window or substitute current salary rates.
+    await read('all_payroll_entries', 'payroll_entries', 'SELECT * FROM payroll_entries ORDER BY id');
     await read('payroll_balances', 'payroll_entries', 'SELECT employee_id AS id,SUM(payable_delta_paisa) payable_paisa,SUM(advance_delta_paisa) advance_paisa FROM payroll_entries GROUP BY employee_id');
     if (tables.contains('supplier_payment_allocations')) {
       await read('invoice_balances', 'vendor_transactions', "SELECT t.id,t.vendor_id,t.due_date,COALESCE(t.amount_paisa,CAST(ROUND(t.amount*100) AS INTEGER))-COALESCE(SUM(a.amount_paisa),0) due_paisa FROM vendor_transactions t LEFT JOIN supplier_payment_allocations a ON a.invoice_id=t.id WHERE t.type='PURCHASE_CREDIT' GROUP BY t.id");
