@@ -64,8 +64,6 @@ Future<void> createSupplierReceiptEvidenceSchema(DatabaseExecutor db) async {
   await db.execute("CREATE TRIGGER IF NOT EXISTS supplier_receipt_evidence_no_delete BEFORE DELETE ON supplier_receipt_evidence BEGIN SELECT RAISE(ABORT, 'Supplier receipt evidence is immutable'); END");
 
   // Reporting identity snapshot triggers if reporting_identity_snapshots exists
-  final tables = (await db.rawQuery("SELECT name FROM sqlite_master WHERE type='table'"))
-      .map((row) => row['name']).toSet();
   if (tables.contains('reporting_identity_snapshots')) {
     await db.execute('''CREATE TRIGGER IF NOT EXISTS reporting_name_supplier_receipt_evidence_recorded_by
       AFTER INSERT ON supplier_receipt_evidence WHEN NEW.recorded_by IS NOT NULL
