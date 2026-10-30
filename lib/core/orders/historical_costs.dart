@@ -45,8 +45,6 @@ class HistoricalCosts {
       final val = row['is_packaging'];
       if (val == 1 || val == true || val == '1' || val == 'true') return 'PACKAGING';
     }
-    final name = (row['name'] as String? ?? '').toLowerCase();
-    if (name.contains('packaging') || name.contains('takeaway')) return 'PACKAGING';
     return 'FOOD';
   }
 

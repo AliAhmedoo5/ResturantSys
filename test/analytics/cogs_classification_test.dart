@@ -258,6 +258,7 @@ void main() {
       storageUnit: StorageUnit.count,
       currentStock: 50,
       costPerRecipeUnit: 8,
+      category: 'PACKAGING',
     );
     await catalog.setRecipeForMenuItem(menuItemId: item.id, items: [(rawIngredientId: box.id, quantity: 1.0)]);
     await catalog.toggleMenuItemActive(item.id, true);
