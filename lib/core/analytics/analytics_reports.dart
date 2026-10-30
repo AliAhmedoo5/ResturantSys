@@ -170,6 +170,16 @@ class _ReportBuilder {
     final attempts = e.get('attempts');
     final delivered = attempts.where((a) => a['status'] == 'DELIVERED').toList();
     final returned = attempts.where((a) => a['status'] == 'RETURNED').toList();
+    final attemptsByOrder = <int, List<_Record>>{};
+    for (final a in attempts) {
+      final orderId = a['order_id'];
+      if (orderId is int) {
+        attemptsByOrder.putIfAbsent(orderId, () => []).add(a);
+      }
+    }
+    final uniqueAttemptedOrders = attemptsByOrder.keys.length;
+    final reattemptedOrders = attemptsByOrder.values.where((list) => list.length > 1).length;
+    final totalReattempts = attempts.length - uniqueAttemptedOrders;
     final times = <double>[];
     for (final a in delivered) {
       final dispatch = _karachi(a['dispatched_at']);
@@ -178,23 +188,57 @@ class _ReportBuilder {
     }
     times.sort();
     final trips = e.get('trips');
-    final due = _integers(valid.where((o) => o['payment_status'] == 'COLLECTION_DUE'), 'collection_due_paisa');
+    final allTrips = e.get('all_trips');
+    final settledTripIds = allTrips.where((t) => t['status'] == 'SETTLED').map((t) => t['id']).toSet();
+    final allEvents = e.get('payment_events');
+    final activeCollections = allEvents.where((p) => p['kind'] == 'RIDER_COLLECTION' && !settledTripIds.contains(p['settlement_id'])).toList();
+    final riderHeldCash = _integers(activeCollections, 'amount_paisa');
+    final due = valid.where((o) => o['payment_status'] == 'COLLECTION_DUE').fold<int>(0, (sum, o) {
+      final orderDue = (o['collection_due_paisa'] as int?) ?? 0;
+      final collectedForOrder = activeCollections
+          .where((p) => p['order_id'] == o['id'])
+          .fold<int>(0, (s, p) => s + ((p['amount_paisa'] as int?) ?? 0));
+      return sum + (orderDue > collectedForOrder ? orderDue - collectedForOrder : 0);
+    });
+    final receivingEvents = _receivingEvents();
+    final handovers = receivingEvents.where((p) => p['kind'] == 'RIDER_HANDOVER');
+    final acceptedDrawerCash = _integers(handovers, 'amount_paisa');
+    final shortages = receivingEvents.where((p) => p['kind'] == 'RIDER_SHORTAGE');
+    final riderShortages = _integers(shortages, 'amount_paisa');
     final metrics = <AnalyticsMetric>[
       _metric('delivery_orders', 'Delivery orders', deliveredOrders.length, unit: AnalyticsUnit.count, explanation: 'Eligible DELIVERY orders in filtered order cohort.'),
       _metric('delivery_fees', 'Recorded delivery fees', _integers(deliveredOrders, 'delivery_fee_paisa'), explanation: 'Eligible filtered delivery order fee snapshots.'),
-      _metric('collection_due', 'Collection Due (selected cohort)', due, explanation: 'Remaining payable less net tenders for current COLLECTION_DUE eligible orders within the selected cohort; delivery does not imply collection.'),
+      _metric('collection_due', 'Collection Due (customer debt)', due, explanation: 'Remaining payable less net tenders for uncollected COLLECTION_DUE eligible orders; delivery does not imply collection.'),
       _metric('all_collection_due', 'Collection Due (all outstanding)', _integers(e.get('all_due'), 'collection_due_paisa'), explanation: 'Current installation-wide COLLECTION_DUE orders across all Business Days; date/order filters do not apply.'),
+      _metric('rider_held_cash', 'Rider-held cash (verified liability)', riderHeldCash, explanation: 'Confirmed customer collections held by riders prior to cashier drawer handover; distinct from drawer cash and customer debt.'),
+      _metric('accepted_drawer_cash', 'Accepted rider drawer cash', acceptedDrawerCash, explanation: 'Actual physical currency accepted from rider pouch handovers into cashier drawers.'),
+      _metric('rider_shortages', 'Rider settlement shortage', riderShortages, explanation: 'Recorded settlement cash shortages against expected cash.'),
       _metric('trips', 'Trips (whole selected days)', trips.length, unit: AnalyticsUnit.count, explanation: _globalBasis),
       _metric('unsettled_exposure', 'Unsettled expected COD (selected days)', _integers(trips.where((t) => ['DISPATCHED', 'RETURNED'].contains(t['status'])), 'cash_expected_paisa'), explanation: 'Expected COD in unsettled trips selected by trip Business Day, all orders. Exposure is not proof of customer collection or rider debt.'),
-      _metric('all_unsettled_exposure', 'Unsettled expected COD (all outstanding)', _integers(e.get('all_trips'), 'cash_expected_paisa'), explanation: 'Current global expected COD for DISPATCHED/RETURNED trips; not verified cash collected.'),
+      _metric('all_unsettled_exposure', 'Unsettled expected COD (all outstanding)', _integers(allTrips.where((t) => ['DISPATCHED', 'RETURNED'].contains(t['status'])), 'cash_expected_paisa'), explanation: 'Current global expected COD for DISPATCHED/RETURNED trips; not verified cash collected.'),
+      _metric('unique_attempted_orders', 'Unique delivery orders attempted', uniqueAttemptedOrders, unit: AnalyticsUnit.count, explanation: 'Distinct Order IDs with at least one dispatched delivery attempt.'),
+      _metric('reattempted_orders', 'Reattempted orders', reattemptedOrders, unit: AnalyticsUnit.count, explanation: 'Distinct Order IDs with more than one dispatched attempt.'),
+      _metric('total_reattempts', 'Total delivery reattempts', totalReattempts, unit: AnalyticsUnit.count, explanation: 'Attempts dispatched beyond the initial run (total attempts minus unique attempted orders).'),
+      _rate('reattempt_rate', 'Delivery reattempt rate', reattemptedOrders, uniqueAttemptedOrders, 'Orders with >1 attempt / unique attempted orders.'),
       _metric('delivered_attempts', 'Delivered attempts', delivered.length, unit: AnalyticsUnit.count, explanation: 'Filtered order delivery-attempt rows with DELIVERED status.'),
       _metric('returned_attempts', 'Returned attempts', returned.length, unit: AnalyticsUnit.count, explanation: 'Filtered returned attempts, not final failed orders; later redelivery may succeed.'),
       _rate('returned_attempt_rate', 'Returned-attempt rate', returned.length, attempts.length, 'Returned attempt rows / dispatched attempt rows in selected filtered order cohort; not final failure rate.'),
       _duration('travel_mean', 'Mean travel time', times.isEmpty ? null : times.reduce((a, b) => a + b) / times.length, times.length, delivered.length),
       _duration('travel_median', 'Median travel time', _percentile(times, .5), times.length, delivered.length),
       _duration('travel_p90', '90th percentile travel', _percentile(times, .9), times.length, delivered.length),
-      _missing('rider_verified_debt', 'Verified rider cash debt', 'Expected COD does not establish actual customer collection. No separate confirmed-collected-but-unremitted ledger exists.'),
     ];
+    String reasonFor(Object? raw) {
+      if (raw is String && raw.trim().isNotEmpty) return _safeText(raw.trim());
+      return 'Absent historical reason evidence';
+    }
+    final returnReasons = <String, int>{};
+    for (final a in returned) {
+      final reason = reasonFor(a['notes']);
+      returnReasons[reason] = (returnReasons[reason] ?? 0) + 1;
+    }
+    for (final entry in returnReasons.entries) {
+      metrics.add(_metric('return_reason_${entry.key.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_]'), '_')}', 'Return reason: ${entry.key}', entry.value, unit: AnalyticsUnit.count, explanation: 'Returned attempts attributed to recorded reason. Legacy attempts without notes disclose absent historical evidence.'));
+    }
     for (final group in _group(deliveredOrders, 'delivery_area_name_snapshot').entries) {
       metrics.add(_metric('area_${group.key}', '${group.key} delivery orders', group.value.length, unit: AnalyticsUnit.count, explanation: 'Eligible filtered order count by transaction-time area snapshot.'));
     }
@@ -202,8 +246,25 @@ class _ReportBuilder {
       ..._receivingEventRows(_receivingEvents().where((p) => p['settlement_id'] != null)),
       ...deliveredOrders.map((o) => _row('orders', o, {'order_id': o['id'], 'area': o['delivery_area_name_snapshot'] ?? 'Unknown area', 'fee_paisa': o['delivery_fee_paisa'], 'payment_status': o['payment_status']})),
       ...trips.map((t) => _row('rider_trips', t, {'trip_id': t['id'], 'rider_id': t['rider_staff_id'], 'shift_id': t['shift_id'], 'status': t['status'], 'selected_order_load': attempts.where((a) => a['trip_id'] == t['id']).length, 'expected_paisa': t['cash_expected_paisa'], 'counted_paisa': t['cash_collected_paisa'], 'dispatched_at': t['dispatched_at'], 'settled_at': t['settled_at_utc']})),
-      ...attempts.map((a) => _row('rider_trip_orders', a, {'order_id': a['order_id'], 'trip_id': a['trip_id'], 'rider_id': a['rider_staff_id'], 'status': a['status'], 'dispatched_at': a['dispatched_at'], 'delivered_at': a['delivered_at'], 'returned_at': a['returned_at']})),
-    ], ['order_id', 'trip_id', 'rider_id', 'shift_id', 'selected_order_load', 'area', 'fee_paisa', 'payment_status', 'status', 'expected_paisa', 'counted_paisa', 'dispatched_at', 'delivered_at', 'returned_at', 'settled_at'], ['Order/attempt rows and selected-order load use order filters; trip rows and trip exposure use whole selected Business Days. All-outstanding measures explicitly ignore date/order filters.', 'Settlement event rows use receiving Shift/Business Day or actual calendar time, independently of the originating Order cohort. Counted handover is one linked custody transfer; COD settlement value is not verified customer collection. Legacy settled trips without events have unavailable receiving Shift, actors and immutable recording time. Do not sum settlement attribution, digital receipt and counted pouch rows.', 'Travel excludes invalid/missing timestamps and reports coverage. Percentiles interpolate sorted valid minutes. No final failure/reattempt or unrecorded failure-reason inference.']);
+      ...attempts.map((a) {
+        final orderAttempts = attemptsByOrder[a['order_id']] ?? const <_Record>[];
+        final isReattempt = orderAttempts.isNotEmpty && a['id'] != orderAttempts.first['id'];
+        final reason = a['status'] == 'RETURNED' ? reasonFor(a['notes']) : null;
+        return _row('rider_trip_orders', a, {
+          'kind': 'Delivery attempt',
+          'order_id': a['order_id'],
+          'trip_id': a['trip_id'],
+          'rider_id': a['rider_staff_id'],
+          'area': a['delivery_area_name_snapshot'] ?? 'Unknown area',
+          'status': a['status'],
+          'is_reattempt': isReattempt ? 'Yes' : 'No',
+          'return_reason': reason ?? 'N/A',
+          'dispatched_at': a['dispatched_at'],
+          'delivered_at': a['delivered_at'],
+          'returned_at': a['returned_at'],
+        });
+      }),
+    ], ['kind', 'order_id', 'trip_id', 'rider_id', 'shift_id', 'selected_order_load', 'area', 'fee_paisa', 'payment_status', 'status', 'is_reattempt', 'return_reason', 'expected_paisa', 'counted_paisa', 'dispatched_at', 'delivered_at', 'returned_at', 'settled_at'], ['Order/attempt rows and selected-order load use order filters; trip rows and trip exposure use whole selected Business Days. All-outstanding measures explicitly ignore date/order filters.', 'Settlement event rows use receiving Shift/Business Day or actual calendar time, independently of the originating Order cohort. Counted handover is one linked custody transfer; COD settlement value is not verified customer collection. Legacy settled trips without events have unavailable receiving Shift, actors, confirmed collections and immutable recording time. Do not sum settlement attribution, digital receipt, rider-held collections and counted pouch rows.', 'Returned attempts are delivery run outcomes, not final order failures. Reattempts represent subsequent dispatch runs for the same order. Legacy returned attempts without recorded notes disclose absent historical reason evidence rather than inferring reasons. Delivered status is not proof of payment collection.', 'Confirmed customer collections held by riders are distinct from customer debt and cashier drawer cash. Expected pouch cash is exposure, not verified debt until independently confirmed.', 'Travel excludes invalid/missing timestamps and reports coverage. Percentiles interpolate sorted valid minutes. No final failure/reattempt or unrecorded failure-reason inference.']);
   }
 
   AnalyticsSection _customers() {
@@ -217,32 +278,83 @@ class _ReportBuilder {
     }
     final repeat = groups.values.where((list) => list.length >= 2).length;
     final knownValue = groups.values.fold<int>(0, (sum, list) => sum + _sum(list, 'grand_total'));
+    final lifetimeFirstOrders = <String, _Record>{};
+    for (final order in e.get('first_purchases')) {
+      final phone = _phone(order['customer_phone']);
+      if (phone != null) {
+        final existing = lifetimeFirstOrders[phone];
+        if (existing == null) {
+          lifetimeFirstOrders[phone] = order;
+        } else {
+          final existingTime = _karachi(existing['created_at']);
+          final thisTime = _karachi(order['created_at']);
+          if (thisTime != null && (existingTime == null || thisTime.isBefore(existingTime))) {
+            lifetimeFirstOrders[phone] = order;
+          }
+        }
+      }
+    }
+    var firstTimeCount = 0;
+    var returningCount = 0;
     final rows = <AnalyticsRow>[];
     for (final entry in groups.entries) {
       final customer = 'Customer •••${entry.key.substring(entry.key.length - 4)}';
       final value = _sum(entry.value, 'grand_total');
+      final firstLifetime = lifetimeFirstOrders[entry.key];
+      final firstLifetimeTime = _karachi(firstLifetime?['created_at']);
+      final earliestInCohort = entry.value
+          .map((o) => _karachi(o['created_at']))
+          .whereType<DateTime>()
+          .fold<DateTime?>(null, (earliest, t) => earliest == null || t.isBefore(earliest) ? t : earliest);
+      final String classification;
+      if (firstLifetimeTime != null && earliestInCohort != null) {
+        if (firstLifetimeTime.isBefore(earliestInCohort)) {
+          classification = 'Returning';
+          returningCount++;
+        } else {
+          classification = 'First-time';
+          firstTimeCount++;
+        }
+      } else {
+        classification = 'Unavailable';
+      }
+      final firstOrderAtSource = firstLifetime != null ? firstLifetime['created_at'] : null;
+      final firstOrderAtFormatted = firstOrderAtSource != null ? analyticsTimestamp(firstOrderAtSource) : 'Unavailable';
+
       rows.add(AnalyticsRow(id: 'customer-${entry.value.first['id']}', sourceType: 'orders',
         sourceId: entry.value.map((order) => order['id']).join(','), cells: {
-          'kind': 'Customer aggregate', 'customer': customer, 'orders_in_range': entry.value.length,
+          'kind': 'Customer aggregate', 'customer': customer,
+          'orders_in_range': entry.value.length,
           'recorded_value_paisa': value, 'average_ticket_paisa': value / entry.value.length,
+          'area': entry.value.first['delivery_area_name_snapshot'],
+          'history_classification': classification,
+          'first_order_at': firstOrderAtFormatted,
+          if (firstOrderAtSource != null) 'first_order_at_source': firstOrderAtSource,
         }));
       rows.addAll(entry.value.map((order) => _row('orders', order, {
-        'kind': 'Order history', 'customer': customer, 'order_id': order['id'],
+        'kind': 'Order history', 'customer': customer,
+        'order_id': order['id'],
         'orders_in_range': entry.value.length, 'recorded_value_paisa': _money(order, 'grand_total'),
-        'area': order['delivery_area_name_snapshot'], 'created_at': order['created_at'],
+        'area': order['delivery_area_name_snapshot'],
+        'history_classification': classification,
+        'first_order_at': firstOrderAtSource,
+        'created_at': order['created_at'],
       })));
     }
     return _section(AnalyticsFamily.customers, 'Customers', [
       _metric('known_customers', 'Known phone identities', groups.length, unit: AnalyticsUnit.count, explanation: 'Distinct normalized known phone proxies in eligible filtered orders; not guaranteed distinct people.'),
+      _metric('first_time_customers', 'First-time customers', firstTimeCount, unit: AnalyticsUnit.count, explanation: 'Known phone identities whose very first eligible purchase across available history occurred within the selected range.'),
+      _metric('returning_customers', 'Returning customers', returningCount, unit: AnalyticsUnit.count, explanation: 'Known phone identities who purchased in this period and had an earlier eligible purchase prior to this range.'),
       _metric('known_orders', 'Orders with known phone', knownOrders, unit: AnalyticsUnit.count, explanation: 'Eligible filtered orders with usable normalized phone identity.'),
       _average('known_customer_average_ticket', 'Known-customer average ticket', knownValue, knownOrders,
         AnalyticsUnit.paisa, 'Recorded eligible known-phone order value / eligible known-phone order count. Guests and cancelled/voided/refunded orders excluded; includes Collection Due. Denominator shown; this is order-weighted, not an average of customer means.'),
-      _metric('guest_orders', 'Guest/unknown orders', valid.length - knownOrders, unit: AnalyticsUnit.count, explanation: 'Eligible orders without usable known phone; excluded from repeat denominator.'),
+      _metric('guest_orders', 'Guest/unknown orders', valid.length - knownOrders, unit: AnalyticsUnit.count, explanation: 'Eligible orders without usable known phone; excluded from repeat and history classification.'),
       _rate('identity_coverage', 'Known identity coverage', knownOrders, valid.length, 'Known phone orders / eligible filtered orders.'),
       _rate('repeat_rate', 'Repeat-customer rate', repeat, groups.length, 'Known normalized phone proxies with at least two eligible selected orders / proxies with at least one. Guests excluded.'),
-      _metric('single_order_customers', 'Single-order phone identities', groups.length - repeat, unit: AnalyticsUnit.count, explanation: 'One eligible order within selected range; cannot be called a new lifetime customer.'),
-    ], rows, ['kind', 'customer', 'order_id', 'orders_in_range', 'recorded_value_paisa', 'average_ticket_paisa', 'area', 'created_at'], [
+      _metric('single_order_customers', 'Single-order phone identities', groups.length - repeat, unit: AnalyticsUnit.count, explanation: 'One eligible order within selected range; distinct from first-time/returning lifetime classification.'),
+    ], rows, ['kind', 'customer', 'order_id', 'orders_in_range', 'recorded_value_paisa', 'average_ticket_paisa', 'area', 'history_classification', 'first_order_at', 'created_at'], [
       _orderBasis,
+      'Customer classification distinguishes first-time customers (whose first eligible purchase occurred in this selected window) from returning customers (who had an eligible purchase prior to this window across all available history). Earlier installation boundaries limit historical depth; guest orders without phone numbers cannot be classified.',
       'Phone normalization removes separators and unifies +92/0092/92 mobile prefixes with local 0. Shared numbers and masked suffix collisions are possible. Raw phones, names and addresses are excluded.',
       'Customer aggregate rows show each known identity’s eligible recorded value / its eligible order count, with all contributing order source IDs. Order history rows are a separate view; do not sum these different row kinds together. No known orders makes average ticket Not applicable.',
     ]);
@@ -779,7 +891,7 @@ class _ReportBuilder {
   List<_Record> _receivingEvents() {
     final receivingIds = e.get('days').map((d) => d['id']).toSet();
     final receiptEvents = e.get('payment_events').where((p) {
-      if (!['RECEIPT', 'REFUND', 'RIDER_HANDOVER', 'COD_SETTLEMENT'].contains(p['kind'])) return false;
+      if (!['RECEIPT', 'REFUND', 'RIDER_HANDOVER', 'COD_SETTLEMENT', 'RIDER_COLLECTION', 'RIDER_SHORTAGE'].contains(p['kind'])) return false;
       if (e.query.timeBasis == AnalyticsTimeBasis.calendarTime) {
         final actual = _karachi(p['actual_at']);
         if (actual == null || actual.isBefore(analyticsWallClock(e.query.startDate)) || !actual.isBefore(analyticsWallClock(e.query.endDateExclusive))) return false;
@@ -793,7 +905,16 @@ class _ReportBuilder {
 
   List<AnalyticsRow> _receivingEventRows(Iterable<_Record> receiptEvents) => [
       ...receiptEvents.map((p) => _row('payment_events', p, {
-        'kind': p['kind'] == 'RIDER_HANDOVER' ? 'Counted rider custody transfer' : p['kind'] == 'COD_SETTLEMENT' ? 'Order settlement attribution (not collected cash)' : 'Independent customer money event', 'event_kind': p['kind'],
+        'kind': p['kind'] == 'RIDER_HANDOVER'
+            ? 'Counted rider custody transfer (drawer cash)'
+            : p['kind'] == 'COD_SETTLEMENT'
+                ? 'Order settlement attribution (not collected cash)'
+                : p['kind'] == 'RIDER_COLLECTION'
+                    ? 'Confirmed customer collection (rider-held cash)'
+                    : p['kind'] == 'RIDER_SHORTAGE'
+                        ? 'Rider settlement shortage'
+                        : 'Independent customer money event',
+        'event_kind': p['kind'],
         'event_key': p['event_key'], 'amount_paisa': p['amount_paisa'],
         'payment_source': p['payment_source'], 'payment_method': p['payment_method'],
         'actual_at': p['actual_at'], 'recorded_at': p['recorded_at'],
@@ -802,7 +923,11 @@ class _ReportBuilder {
         'originating_business_day_id': p['originating_business_day_id'], 'originating_shift_id': p['originating_shift_id'],
         'order_id': p['order_id'], 'tender_id': p['tender_id'], 'movement_id': p['movement_id'],
         'settlement_id': p['settlement_id'], 'trip_id': p['settlement_id'],
-        if (p['settlement_id'] != null) 'customer_collection_evidence': 'Customer-to-rider collection evidence unavailable; delivery and expected pouch are insufficient proof',
+        if (p['settlement_id'] != null) 'customer_collection_evidence': p['kind'] == 'RIDER_COLLECTION'
+            ? 'Confirmed customer collection recorded'
+            : p['kind'] == 'RIDER_SHORTAGE'
+                ? 'Rider settlement shortage recorded'
+                : 'Customer-to-rider collection evidence unavailable; delivery and expected pouch are insufficient proof',
         if (p['kind'] == 'COD_SETTLEMENT') 'value_basis': 'Remaining contractual Order settlement, not allocated physical pouch cash',
         'recorded_by': p['recorded_by'], 'approved_by': p['approved_by'],
         'recorded_by_name_snapshot': p['recorded_by_name_snapshot'], 'shift_owner_name_snapshot': p['shift_owner_name_snapshot'],
@@ -810,40 +935,7 @@ class _ReportBuilder {
       })),
   ];
 
-  AnalyticsSection _cash() {
-    final shifts = e.get('shifts');
-    final receiptEvents = _receivingEvents();
-    final moves = e.get('movements');
-    final payments = e.get('cash_payments');
-    final receipts = payments.where((p) => p['payment_method'] == 'CASH' && _money(p, 'amount_tendered') > 0).toList();
-    int receiptsFor(Iterable<_Record> rows) => rows.fold(0, (sum, p) => sum + _money(p, 'amount_tendered') - _money(p, 'change_returned'));
-    final payIn = _sum(moves.where((m) => m['type'] == 'PAY_IN'), 'amount');
-    final payOut = _sum(moves.where((m) => m['type'] != 'PAY_IN'), 'amount');
-    final expected = _sum(shifts, 'opening_float') + receiptsFor(receipts) + payIn - payOut;
-    final counted = shifts.where((s) => s['counted_cash'] != null).toList();
-    final complete = shifts.isNotEmpty && counted.length == shifts.length;
-    return _section(AnalyticsFamily.cash, 'Cash and shifts', [
-      _metric('opening_float', 'Opening float', _sum(shifts, 'opening_float'), explanation: _globalBasis),
-      _metric('cash_receipts', 'Positive customer cash receipts', receiptsFor(receipts), explanation: 'Positive CASH tender minus change. Refund payment negatives excluded here because their PAY_OUT already reduces the drawer. COD rider handover uses PAY_IN once. $_globalBasis'),
-      _metric('cash_refunds', 'Explicit cash refunds', -_sum(payments.where((p) => p['payment_method'] == 'CASH' && _money(p, 'amount_tendered') < 0), 'amount_tendered'), explanation: 'Negative CASH tender rows shown for audit; drawer uses corresponding PAY_OUT only.'),
-      _metric('pay_in', 'Drawer pay-ins', payIn, explanation: 'Includes recorded rider settlement pouches; no second COD addition. $_globalBasis'),
-      _metric('pay_out', 'Drawer pay-outs', payOut, explanation: 'All non-PAY_IN recorded drawer outflows, including refunds/supplier settlements/drops.'),
-      _metric('expected_drawer', 'Expected drawer', expected, explanation: 'Float + positive customer cash receipts + PAY_IN - PAY_OUT; cash refund never subtracted twice. $_globalBasis'),
-      AnalyticsMetric(id: 'variance', label: 'Counted variance', value: complete ? _sum(counted, 'counted_cash') - expected : null, unit: AnalyticsUnit.paisa, explanation: 'Physical count minus expected across all selected shifts; missing blind count means unknown.', quality: shifts.isEmpty ? AnalyticsQuality.notApplicable : complete ? AnalyticsQuality.complete : AnalyticsQuality.missing, sampleCount: counted.length, populationCount: shifts.length),
-      _coverage('count_coverage', 'Counted shift coverage', counted.length, shifts.length, 'Shifts with a recorded blind count / selected shifts; open uncounted shifts remain unknown.'),
-      _metric('open_shifts', 'Open shifts', shifts.where((s) => s['status'] == 'OPEN').length, unit: AnalyticsUnit.count, explanation: _globalBasis),
-      _metric('unresolved_discrepancies', 'Unresolved discrepancies', shifts.where((s) => s['discrepancy_status'] == 'FLAGGED').length, unit: AnalyticsUnit.count, explanation: 'Selected shifts with stored FLAGGED review status.'),
-    ], [
-      ..._receivingEventRows(receiptEvents),
-      ...shifts.map((s) {
-        final shiftMoves = moves.where((m) => m['shift_id'] == s['id']);
-        final expectedShift = _money(s, 'opening_float') + receiptsFor(receipts.where((p) => p['shift_id'] == s['id'])) + _sum(shiftMoves.where((m) => m['type'] == 'PAY_IN'), 'amount') - _sum(shiftMoves.where((m) => m['type'] != 'PAY_IN'), 'amount');
-        return _row('shifts', s, {'kind': 'Shift reconciliation', 'shift_id': s['id'], 'cashier_id': s['staff_id'], 'status': s['status'], 'opening_paisa': _money(s, 'opening_float'), 'expected_paisa': expectedShift, 'counted_paisa': s['counted_cash'] == null ? null : _money(s, 'counted_cash'), 'variance_paisa': s['counted_cash'] == null ? null : _money(s, 'counted_cash') - expectedShift, 'review_status': s['discrepancy_status']});
-      }),
-      ...moves.map((m) => _row('cash_movements', m, {'kind': 'Drawer movement', 'shift_id': m['shift_id'], 'cashier_id': m['staff_id'], 'type': m['type'], 'category': _safeText(m['category']), 'amount_paisa': _money(m, 'amount'), 'created_at': m['created_at']})),
-      ...e.get('reports').map((r) => _row('report_runs', r, {'kind': 'Sealed Z-report provenance', 'business_day_id': r['business_day_id'], 'status': r['status'], 'hash': r['content_hash'], 'created_at': r['created_at']})),
-    ], ['event_kind', 'event_key', 'payment_source', 'payment_method', 'actual_at', 'recorded_at', 'receiving_business_day_id', 'receiving_shift_id', 'originating_business_day_id', 'originating_shift_id', 'order_id', 'tender_id', 'movement_id', 'recorded_by', 'approved_by', 'recorded_by_name_snapshot', 'shift_owner_name_snapshot', 'change_paisa', 'rounding_paisa', 'kind', 'business_day_id', 'shift_id', 'cashier_id', 'status', 'opening_paisa', 'expected_paisa', 'counted_paisa', 'variance_paisa', 'review_status', 'type', 'category', 'amount_paisa', 'hash', 'created_at'], [_globalBasis, 'Independent customer money event rows use receiving Business Day/Shift (or actual time in calendar mode); Shift/Cashier/method filters narrow those activity rows only. RIDER_HANDOVER counts the physical pouch once via its linked PAY_IN; COD_SETTLEMENT is contractual attribution, not a second money inflow or proof of customer-to-rider collection. Digital receipts are BANK, never drawer cash. Legacy payments without linked events have unknown timing/receiving attribution and remain order-cohort estimates in the legacy drawer metrics. Never add event rows to the linked tender/movement again. Shift rows are exploratory X-report inputs; sealed Z-report hashes remain original.']);
-  }
+  AnalyticsSection _cash() => _ShiftCashBridge(this).build();
 
   AnalyticsSection _expenses() {
     final out = e.get('movements').where((m) => m['type'] != 'PAY_IN').toList();
@@ -922,7 +1014,69 @@ class _ReportBuilder {
     ], ['kind', 'order_id', 'ingredient_id', 'revision', 'quantity', 'unit_cost_rupees', 'cost_paisa', 'source_event_id', 'recorded_loss_paisa', 'reason', 'created_at'], [policy, 'Unknown costs remain null. Current purchase rates never rewrite earlier cost events. No invented pre-upgrade profit.', 'Recorded net result uses posting periods; it does not assert that all expenses or earned salary have been entered. Order filters withhold net result because overhead cannot be allocated reliably.']);
   }
 
+  static const _safeConfigKeys = {
+    'name', 'code', 'rate_paisa', 'percentage', 'min_order_paisa', 'max_discount_paisa',
+    'is_active', 'is_percent', 'active', 'archived', 'database', 'theme', 'printer_name',
+    'paper_width', 'tax_rate', 'delivery_fee', 'delivery_fee_paisa', 'currency',
+    'business_name', 'address', 'phone', 'ntn', 'strn', 'header', 'footer',
+    'backup_path', 'auto_backup', 'retention_days', 'sound_enabled', 'id',
+  };
+
+  static String _safeConfigSummary(String? kind, String? beforeJson, String? afterJson) {
+    final cleanKind = _safeText(kind ?? 'CONFIG');
+    try {
+      final before = beforeJson != null ? jsonDecode(beforeJson) : null;
+      final after = afterJson != null ? jsonDecode(afterJson) : null;
+      final changedKeys = <String>{};
+      if (after is Map) {
+        for (final k in after.keys) {
+          final sk = '$k';
+          final lower = sk.toLowerCase();
+          if (['pin', 'pin_hash', 'password', 'salt', 'secret', 'token'].any((s) => lower.contains(s))) continue;
+          final isSafe = _safeConfigKeys.contains(lower) || RegExp(r'^(key_[a-z0-9_]+)$', caseSensitive: false).hasMatch(sk);
+          if (!isSafe) continue;
+          if (before is Map) {
+            if (before[k] != after[k]) changedKeys.add(sk);
+          } else {
+            changedKeys.add(sk);
+          }
+        }
+      }
+      if (changedKeys.isEmpty) {
+        return '$cleanKind settings updated';
+      }
+      return '$cleanKind updated: ${changedKeys.join(', ')}';
+    } catch (_) {
+      return '$cleanKind configuration change';
+    }
+  }
+
+  static String _safeOperationsSummary(String? action, String? detailJson) {
+    final cleanAction = _safeText(action ?? 'ACTION');
+    try {
+      final detail = detailJson != null ? jsonDecode(detailJson) : null;
+      if (detail is Map) {
+        final safePairs = <String>[];
+        for (final entry in detail.entries) {
+          final k = '${entry.key}'.toLowerCase();
+          if (['pin', 'pin_hash', 'password', 'secret', 'token'].contains(k)) continue;
+          if (['category', 'reason', 'amount_paisa', 'due_date', 'shift_id', 'employee_id', 'role', 'department', 'status', 'rate_paisa'].contains(k)) {
+            safePairs.add('${entry.key}: ${_safeText(entry.value)}');
+          }
+        }
+        if (safePairs.isNotEmpty) {
+          return '$cleanAction (${safePairs.join(', ')})';
+        }
+      }
+      return cleanAction;
+    } catch (_) {
+      return cleanAction;
+    }
+  }
+
   AnalyticsSection _audit() {
+    final configEvents = e.get('configuration_audit');
+    final opsEvents = e.get('operations_audit');
     final rows = <AnalyticsRow>[
       ...e.get('revisions').map((r) => _row('order_revisions', r, {'kind': 'Order revision', 'order_id': r['order_id'], 'action': r['action'], 'reason': _safeText(r['reason']), 'staff_id': r['cashier_id'], 'delta_paisa': r['money_delta_paisa'], 'created_at': r['created_at_utc']})),
       ...e.get('token_audit').map((a) => _row('checkout_token_audit', a, {'kind': 'Immutable token audit', 'order_id': a['order_id'], 'token': a['token_number'], 'action': a['action'], 'status': a['payment_status'], 'revision': a['revision'], 'created_at': a['recorded_at']})),
@@ -931,6 +1085,20 @@ class _ReportBuilder {
       ...e.get('outbox').map((r) => _row('report_outbox', r, {'kind': 'Report delivery', 'business_day_id': r['business_day_id'], 'channel': r['channel'], 'status': r['status'], 'attempts': r['retry_count'], 'created_at': r['created_at']})),
       ...e.get('delivery_audit').map((r) => _row('report_delivery_audit', r, {'kind': 'Delivery audit', 'action': r['action'], 'staff_id': r['staff_id'], 'created_at': r['created_at']})),
       ...e.get('stock_alerts').map((a) => AnalyticsRow(id: 'checkout-alert-${a['order_id']}-${a['ingredient_id']}', sourceType: 'checkout_stock_alerts', sourceId: '${a['order_id']}:${a['ingredient_id']}', cells: {'kind': 'Checkout stock alert', 'order_id': a['order_id'], 'ingredient_id': a['ingredient_id'], 'stock_at_checkout': a['stock_at_checkout'], 'created_at': a['created_at']})),
+      ...configEvents.map((c) => _row('configuration_audit', c, {
+        'kind': 'Configuration audit',
+        'action': c['kind'],
+        'staff_id': c['actor_id'],
+        'reason': _safeConfigSummary(c['kind'] as String?, c['before_json'] as String?, c['after_json'] as String?),
+        'created_at': c['created_at'],
+      })),
+      ...opsEvents.map((o) => _row('operations_audit', o, {
+        'kind': 'Operations audit',
+        'action': '${o['entity']}:${o['action']}',
+        'staff_id': o['manager_id'],
+        'reason': _safeOperationsSummary(o['action'] as String?, o['detail'] as String?),
+        'created_at': o['created_at'],
+      })),
     ];
     return _section(AnalyticsFamily.audit, 'Control and audit', [
       _metric('revision_events', 'Revision audit events', e.get('revisions').length, unit: AnalyticsUnit.count, explanation: 'Append-only revision evidence for filtered selected orders.'),
@@ -939,9 +1107,11 @@ class _ReportBuilder {
       _metric('report_runs', 'Sealed report runs', e.get('reports').length, unit: AnalyticsUnit.count, explanation: 'Stored selected-day report snapshots with original content hash and revision 1.'),
       _metric('failed_exports', 'Report exports awaiting completion', e.get('reports').where((r) => r['status'] != 'READY').length, unit: AnalyticsUnit.count, explanation: 'Selected-day report runs not READY; includes pending/generating rather than claiming all are permanent failures.'),
       _metric('delivery_attention', 'Report delivery requiring attention', e.get('outbox').where((r) => ['FAILED', 'AMBIGUOUS'].contains(r['status'])).length, unit: AnalyticsUnit.count, explanation: 'Selected-day outbox FAILED/AMBIGUOUS records; no recipient, payload, endpoint or credential projection.'),
-      _missing('security_events', 'Security/configuration audit', 'No broad login-failure, PIN-reset/configuration audit event ledger exists.', unit: AnalyticsUnit.count),
+      _metric('configuration_audit_events', 'Configuration audit events', configEvents.length, unit: AnalyticsUnit.count, explanation: 'Recorded configuration and settings change events within selected interval; safe allowlisted changes projected without raw payloads or secrets.'),
+      _metric('operations_audit_events', 'Operations audit events', opsEvents.length, unit: AnalyticsUnit.count, explanation: 'Recorded management operations and finance adjustments within selected interval.'),
+      _missing('authentication_event_history', 'Authentication and security event history', 'Login failures, session expirations and PIN reset audit history have no persisted event ledger; configuration and operations audits are projected above.', unit: AnalyticsUnit.count),
       _missing('backup_history', 'Historical successful backups', 'Current settings are not evidence of historical backup success.', unit: AnalyticsUnit.count),
-    ], rows, ['kind', 'business_day_id', 'order_id', 'shift_id', 'ingredient_id', 'token', 'revision', 'action', 'reason', 'staff_id', 'delta_paisa', 'hash', 'channel', 'status', 'attempts', 'stock_at_checkout', 'created_at'], ['Order revisions/tokens/rounding/checkout alerts use filtered order cohort. Report runs/outbox use whole selected Business Days. Delivery audit uses selected actual intervals.', 'Immutable Z-report provenance is shown; this explorer never rewrites snapshots. Sensitive payloads, errors, recipients, credentials and raw customer contact fields are excluded.']);
+    ], rows, ['kind', 'business_day_id', 'order_id', 'shift_id', 'ingredient_id', 'token', 'revision', 'action', 'reason', 'staff_id', 'delta_paisa', 'hash', 'channel', 'status', 'attempts', 'stock_at_checkout', 'created_at'], ['Order revisions/tokens/rounding/checkout alerts use filtered order cohort. Report runs/outbox use whole selected Business Days. Delivery audit uses selected actual intervals.', 'Configuration and operations audits project authorized management actions with safe field allowlisting. Raw JSON, credentials, PIN hashes, passwords and sensitive customer data are strictly excluded. Authentication events (login failures, PIN resets) have no persistent event ledger and remain disclosed as missing.', 'Immutable Z-report provenance is shown; this explorer never rewrites snapshots. Sensitive payloads, errors, recipients, credentials and raw customer contact fields are excluded.']);
   }
 
   AnalyticsMetric _metric(String id, String label, num value, {AnalyticsUnit unit = AnalyticsUnit.paisa, String? explanation, num? previous, bool unavailable = false, AnalyticsQuality unavailableQuality = AnalyticsQuality.notApplicable}) {
@@ -988,9 +1158,9 @@ class _ReportBuilder {
   AnalyticsRow _row(String source, _Record record, Map<String, Object?> cells) {
     final detail = <String, Object?>{...cells};
     final shiftId = source == 'shifts' ? record['id'] : record['shift_id'];
-    final shift = [...e.get('shifts'), ...e.get('order_shifts'), ...e.get('event_shifts')].where((s) => s['id'] == shiftId).firstOrNull;
+    final shift = [...e.get('shifts'), ...e.get('order_shifts'), ...e.get('event_shifts'), ...e.get('bridge_shifts')].where((s) => s['id'] == shiftId).firstOrNull;
     final dayId = source == 'business_days' ? record['id'] : record['business_day_id'] ?? shift?['business_day_id'];
-    final day = [...e.get('days'), ...e.get('order_days'), ...e.get('event_days')].where((d) => d['id'] == dayId).firstOrNull;
+    final day = [...e.get('days'), ...e.get('order_days'), ...e.get('event_days'), ...e.get('bridge_days')].where((d) => d['id'] == dayId).firstOrNull;
     if (dayId != null) detail['business_day_id'] = dayId;
     if (shiftId != null) detail['shift_id'] = shiftId;
     if (day != null) {
@@ -1016,7 +1186,7 @@ class _ReportBuilder {
     }
     if (source == 'orders') identity('order_cashier', record['cashier_id'], 'staff');
     if (source != 'shifts' && source != 'staff' && source != 'orders') {
-      final actor = record['recorded_by'] ?? record['manager_id'] ?? record['staff_id'] ?? record['cashier_id'];
+      final actor = record['recorded_by'] ?? record['manager_id'] ?? record['staff_id'] ?? record['cashier_id'] ?? record['actor_id'];
       identity('recorded_by', actor, 'staff', retained: record['recorded_by_name_snapshot'] as String?);
       identity('approved_by', record['approved_by'], 'staff');
     }
@@ -1066,3 +1236,4 @@ class _ReportBuilder {
     } on FormatException { return 'Unreadable snapshot'; }
   }
 }
+
