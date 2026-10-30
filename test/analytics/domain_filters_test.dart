@@ -3,6 +3,8 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:resturant_sys/core/analytics/analytics_models.dart';
 import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
 import 'package:resturant_sys/core/catalog/storage_unit.dart';
+import 'package:resturant_sys/core/catalog/discount_preset.dart';
+import 'package:resturant_sys/core/catalog/discount_rules.dart';
 import 'package:resturant_sys/core/orders/cart_item.dart';
 import 'package:resturant_sys/core/orders/dining_type.dart';
 import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
@@ -86,6 +88,7 @@ void main() {
     final report = snapshot.section(AnalyticsFamily.procurement);
     expect(report.metrics.singleWhere((m) => m.id == 'supplier_acquisition_value').value, 40000);
     expect(report.metrics.singleWhere((m) => m.id == 'purchase_spend').value, 0);
+    expect(report.charts.singleWhere((c) => c.id == 'supplier_acquisition_dates').points.single.value, 40000);
     expect(report.rows.where((r) => r.cells['kind'] == 'Supplier credit acquisition').single.sourceId, '${selected.id}');
     expect(report.notes.join(' '), contains('supplier unknown'));
     expect(snapshot.section(AnalyticsFamily.suppliers).rows.where((r) => r.sourceType == 'vendor_transactions').every((r) => r.cells['supplier_id'] == supplier.id), isTrue);
@@ -136,6 +139,19 @@ void main() {
       cashierId: cashierId, diningType: DiningType.takeaway,
       items: [CartItem(menuItem: await catalog.getMenuItem(meal.id))],
       payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 200)]);
+    final discounts = <DiscountPreset>[];
+    for (final name in ['First saving', 'Second saving']) {
+      final preset = await catalog.createDiscountPreset(name: name, type: DiscountType.flat, value: 10);
+      await catalog.saveManagedDiscount(managerId: manager['id'] as int, preset: DiscountPreset(
+        id: preset.id, name: name, type: DiscountType.flat, value: 10, isActive: true,
+        rules: const DiscountRules(stackable: true)));
+      discounts.add(preset);
+    }
+    await orders.checkoutOrder(businessDayId: day.id, shiftId: shift.id,
+      cashierId: cashierId, diningType: DiningType.takeaway,
+      items: [CartItem(menuItem: await catalog.getMenuItem(meal.id))],
+      discountIds: discounts.map((d) => d.id).toList(),
+      payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 180)]);
     final auth = AuthService(database: db)..session.login(Staff.fromMap(manager));
     final service = AnalyticsService(database: db, authService: auth);
     final query = AnalyticsQuery(startDate: DateTime(2020), endDateExclusive: DateTime(2100), live: true,
@@ -148,9 +164,11 @@ void main() {
     final menu = snapshot.section(AnalyticsFamily.menu);
     expect(menu.metrics.singleWhere((m) => m.id == 'line_value').value, 10000);
     expect(menu.charts.singleWhere((c) => c.id == 'menu_value').points.single.value, 10000);
-    expect(snapshot.section(AnalyticsFamily.cash).metrics.singleWhere((m) => m.id == 'expected_drawer').value, 50000);
+    expect(snapshot.section(AnalyticsFamily.cash).metrics.singleWhere((m) => m.id == 'expected_drawer').value, 68000);
     expect(await service.loadCustomerDetails(query.copyWith(domainFilters: {AnalyticsDimension.menuItem: '${tea.id}', AnalyticsDimension.customerSegment: 'known'})), isEmpty);
     expect(AnalyticsExportService().csv(snapshot, AnalyticsFamily.menu), contains('Selected tea'));
+    final secondary = await service.load(query.copyWith(domainFilters: {AnalyticsDimension.discount: '${discounts.last.id}'}));
+    expect(secondary.section(AnalyticsFamily.sales).metrics.singleWhere((m) => m.id == 'recorded_value').value, 18000);
   });
 
 }
