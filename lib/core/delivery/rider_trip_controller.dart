@@ -227,6 +227,86 @@ class RiderTripController {
     });
   }
 
+  /// Captures authorized confirmed customer collection before trip settlement.
+  ///
+  /// Retains collection-before-handover separation: cash is verified collected
+  /// by the rider (rider-held cash), but has not yet entered the cashier till.
+  Future<void> confirmCustomerCollection({
+    required int tripId,
+    required int orderId,
+    required int cashierStaffId,
+    int? amountPaisa,
+    DateTime? confirmedAt,
+  }) async {
+    final trip = await getTrip(tripId);
+    if (trip.isSettled || trip.isCancelled) {
+      throw StateError('Cannot confirm collection on Trip #$tripId: Trip is ${trip.status.displayName}.');
+    }
+
+    final staffRows = await database.query(
+      PosDatabaseConstants.tableStaff,
+      where: 'id = ? AND is_active = 1 AND login_enabled = 1',
+      whereArgs: [cashierStaffId],
+      limit: 1,
+    );
+    if (staffRows.isEmpty) {
+      throw StateError('Staff ID #$cashierStaffId is not authorized to confirm collections.');
+    }
+    final staffRole = StaffRole.fromCode(staffRows.first['role'] as String);
+    if (staffRole != StaffRole.cashier && !staffRole.isManager) {
+      throw StateError('Authorization error: Only cashiers or managers can record confirmed collections.');
+    }
+
+    final recordedAt = DateTime.now().toUtc();
+    final now = (confirmedAt ?? recordedAt).toUtc();
+
+    await database.transaction((txn) async {
+      final tripOrderRows = await txn.query(
+        PosDatabaseConstants.tableRiderTripOrders,
+        where: 'trip_id = ? AND order_id = ?',
+        whereArgs: [tripId, orderId],
+      );
+      if (tripOrderRows.isEmpty) {
+        throw StateError('Order #$orderId is not part of Trip #$tripId.');
+      }
+      if (tripOrderRows.first['status'] != 'DELIVERED') {
+        throw StateError('Customer collection can only be confirmed for delivered orders.');
+      }
+
+      final orderRows = await txn.rawQuery('''
+        SELECT o.id, o.grand_total, $outstandingCollectionPaisaSql AS remaining_paisa
+        FROM orders o
+        WHERE o.id = ?
+      ''', [orderId]);
+      if (orderRows.isEmpty) {
+        throw StateError('Order #$orderId not found.');
+      }
+
+      final remaining = (orderRows.single['remaining_paisa'] as num).toInt();
+      final collectionAmount = amountPaisa ?? remaining;
+      if (collectionAmount <= 0) {
+        throw ArgumentError('Collection amount must be positive.');
+      }
+
+      await PaymentEvent.record(
+        txn,
+        eventKey: 'trip-$tripId-order-$orderId-collection',
+        kind: 'RIDER_COLLECTION',
+        amountPaisa: collectionAmount,
+        paymentSource: 'RIDER_HELD',
+        paymentMethod: 'COD',
+        recordedBy: cashierStaffId,
+        recordedAt: recordedAt,
+        actualAt: now,
+        businessDayId: trip.businessDayId,
+        orderId: orderId,
+        settlementId: tripId,
+        sourceTable: 'rider_trip_orders',
+        sourceId: tripId,
+      );
+    });
+  }
+
   /// Marks an order as returned undelivered.
   ///
   /// Returned orders remain editable until the trip is settled.
@@ -504,6 +584,17 @@ class RiderTripController {
         recordedBy: cashierStaffId, recordedAt: recordedAt, actualAt: now,
         businessDayId: shift.businessDayId, shiftId: shiftId,
         movementId: movementId, settlementId: tripId, sourceTable: 'rider_trips', sourceId: tripId);
+
+      final totalCashPaisa = cashOrders.fold<int>(0, (sum, r) => sum + (r['remaining_paisa'] as num).toInt());
+      final shortagePaisa = totalCashPaisa - cashCountedPaisa;
+      if (shortagePaisa > 0) {
+        await PaymentEvent.record(txn, eventKey: 'trip-$tripId-shortage',
+          kind: 'RIDER_SHORTAGE', amountPaisa: shortagePaisa,
+          paymentSource: 'RIDER_HELD', paymentMethod: 'COD',
+          recordedBy: cashierStaffId, recordedAt: recordedAt, actualAt: now,
+          businessDayId: shift.businessDayId, settlementId: tripId,
+          sourceTable: 'rider_trips', sourceId: tripId);
+      }
 
       // 3. Mark rider trip as SETTLED
       await txn.update(
