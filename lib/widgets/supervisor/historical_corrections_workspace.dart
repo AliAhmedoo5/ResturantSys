@@ -112,6 +112,7 @@ class _HistoricalCorrectionsWorkspaceState extends State<HistoricalCorrectionsWo
         const SizedBox(height:12),AnalyticsExportActions(snapshot:report,family:AnalyticsFamily.cash,canExport:()=>mounted&&_authorized&&identical(snapshot,_snapshot)),
         for(final row in section.rows)Card(child:Padding(padding:const EdgeInsets.all(12),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
           Text('${row.cells['basis']} · ${row.cells['measure']} · ${row.cells['amount']??'Unknown'} paisa'),
+          if(row.cells['sealed_evidence'] != null) SelectableText('${row.cells['sealed_evidence']}'),
           if(row.sourceType=='historical_corrections')...[
             SelectableText('Correction #${row.sourceId}; ${row.cells['manager_name_snapshot']}; recorded ${row.cells['recorded_at']}; actual ${row.cells['event_time']??'Unknown'}'),
             SelectableText('Evidence ${row.cells['source_reference']}; ${row.cells['target_entity_type']} #${row.cells['target_entity_id']??'Unknown'}; Shift #${row.cells['affected_shift_id']??'Unknown'}'),
@@ -123,4 +124,5 @@ class _HistoricalCorrectionsWorkspaceState extends State<HistoricalCorrectionsWo
     ]);
   }
 }
+
 

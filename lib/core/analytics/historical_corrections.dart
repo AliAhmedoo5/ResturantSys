@@ -51,6 +51,12 @@ class HistoricalCorrections {
       if (await _authorize(txn) != actor) throw StateError('Session changed.');
       final days = await txn.query('business_days', where: "id=? AND status='CLOSED'", whereArgs: [businessDayId]);
       if (days.isEmpty) throw StateError('Only closed Business Days accept historical corrections.');
+      DateTime? instant(Object? value) => analyticsKarachiTime(value)?.subtract(const Duration(hours: 5));
+      final opened = instant(days.single['opened_at']);
+      final closed = instant(days.single['closed_at']);
+      if (opened == null || closed == null || eventTime.toUtc().isBefore(opened) || eventTime.toUtc().isAfter(closed)) {
+        throw StateError('Actual Event Time must belong to the affected closed Business Day.');
+      }
       final duplicate = await txn.query('historical_corrections', where: 'source_reference=? AND reverses_correction_id IS NULL', whereArgs: [evidenceKey.trim()]);
       if (duplicate.isNotEmpty) throw StateError('This physical evidence has already been recorded. Use a new replacement reference after reversal.');
       if ((await txn.query('payment_events', where: 'event_key=?', whereArgs: [evidenceKey.trim()])).isNotEmpty) throw StateError('This physical effect already exists in the payment ledger.');
@@ -130,6 +136,11 @@ class HistoricalCorrectionSnapshot {
     final rows = (_sections.first as Map<String,dynamic>)['rows'] as List<dynamic>;
     return ((rows.cast<List<dynamic>>().where((r)=>r.first=='Collection Due').firstOrNull?[1] as num?) ?? 0).toInt();
   }
+  int get originalCashReceiptsPaisa {
+    final rows = (_sections.first as Map<String,dynamic>)['rows'] as List<dynamic>;
+    return rows.cast<List<dynamic>>().where((r)=>r.first=='Tender CASH (collected)').fold<int>(0,(sum,r)=>sum+(r[1] as num).toInt());
+  }
+  int get adjustedCashReceiptsPaisa => originalCashReceiptsPaisa + entries.where((r)=>r['metric']=='collection' && r['payment_source']=='DRAWER_CASH').fold<int>(0,(sum,r)=>sum+(r['delta_amount_paisa'] as int));
   int? get originalVariancePaisa {
     final section = _sections.cast<Map<String,dynamic>>().where((s)=>s['title']=='Shift Handover Audit').firstOrNull;
     if (section == null) return null;
@@ -141,7 +152,7 @@ class HistoricalCorrectionSnapshot {
   int get adjustedCollectionDuePaisa => originalCollectionDuePaisa-_sum('collection');
   int? get adjustedVariancePaisa => originalVariancePaisa == null ? null : originalVariancePaisa!-_sum('variance');
   AnalyticsSnapshot toAnalyticsSnapshot({bool adjusted = true}) {
-    const columns = [AnalyticsColumn(key:'basis',label:'Basis'), AnalyticsColumn(key:'measure',label:'Measure'),
+    const columns = [AnalyticsColumn(key:'sealed_evidence',label:'Original sealed evidence'),AnalyticsColumn(key:'basis',label:'Basis'), AnalyticsColumn(key:'measure',label:'Measure'),
       AnalyticsColumn(key:'amount',label:'Amount',unit:AnalyticsUnit.paisa), AnalyticsColumn(key:'event_time',label:'Actual Event Time'),
       AnalyticsColumn(key:'recorded_at',label:'Recorded at'), AnalyticsColumn(key:'manager_name_snapshot',label:'Manager'),
       AnalyticsColumn(key:'reason',label:'Reason'), AnalyticsColumn(key:'source_reference',label:'Evidence reference'),
@@ -149,12 +160,21 @@ class HistoricalCorrectionSnapshot {
       AnalyticsColumn(key:'affected_shift_id',label:'Affected Shift'), AnalyticsColumn(key:'reverses_correction_id',label:'Reverses correction')];
     final rows = <AnalyticsRow>[];
     void value(String basis,String measure,int? amount) => rows.add(AnalyticsRow(id:'$basis:$measure',sourceType:'report_runs',cells:{'basis':basis,'measure':measure,'amount':amount}));
+    var sealedRow = 0;
+    for (final section in _sections.cast<Map<String,dynamic>>()) {
+      final headers = (section['headers'] as List<dynamic>).join(' | ');
+      for (final row in section['rows'] as List<dynamic>) {
+        rows.add(AnalyticsRow(id:'sealed:${sealedRow++}',sourceType:'report_runs',cells:{'basis':'Original sealed','measure':section['title'],'sealed_evidence':'$headers :: ' + (row as List<dynamic>).join(' | ')}));
+      }
+    }
+    value('Original sealed','Cash receipts',originalCashReceiptsPaisa);
     value('Original sealed','Collection Due',originalCollectionDuePaisa);
     value('Original sealed','Drawer variance',originalVariancePaisa);
     if (adjusted) {
       for (final entry in entries) {
         rows.add(AnalyticsRow(id:'correction:${entry['id']}',sourceType:'historical_corrections',sourceId:'${entry['id']}',cells:{...entry,'basis':'Adjustment bridge','measure':entry['correction_type'],'amount':entry['delta_amount_paisa']}));
       }
+      value('Correction-adjusted','Cash receipts',adjustedCashReceiptsPaisa);
       value('Correction-adjusted','Collection Due',adjustedCollectionDuePaisa);
       value('Correction-adjusted','Drawer variance',adjustedVariancePaisa);
     }
@@ -168,4 +188,6 @@ class HistoricalCorrectionSnapshot {
   }
   String csv() => AnalyticsExportService().csv(toAnalyticsSnapshot(),AnalyticsFamily.cash);
 }
+
+
 

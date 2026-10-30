@@ -15,16 +15,16 @@ void main() {
     final manager = (await auth.authenticateAndLogin('1234'))!;
     final cashier = (await db.query('staff', where: "role='CASHIER'")).first['id'] as int;
     final shifts = ShiftAndCashController(database: db);
-    final day = await shifts.openBusinessDay(openedByStaffId: manager.id);
+    final day = await shifts.openBusinessDay(openedByStaffId: manager.id, openedAt: DateTime(2026,10,1));
     final shift = await shifts.openShift(staffId: cashier, openingFloat: 100);
     await shifts.closeShift(shiftId: shift.id, staffId: cashier, countedCash: 65);
-    await shifts.closeBusinessDay(closedByStaffId: manager.id);
+    await shifts.closeBusinessDay(closedByStaffId: manager.id, closedAt: DateTime(2026,10,20));
     final service = HistoricalCorrections(database: db, auth: auth);
     final before = await service.load(day.id);
     final id = await service.append(managerPin: '1234', businessDayId: day.id,
       shiftId: shift.id, type: HistoricalCorrectionType.drawerPayout,
       deltaPaisa: -3500, evidenceKey: 'supplier-slip-41', reason: 'Late verified supplier payout slip',
-      reconciled: true, eventTime: DateTime.now().toUtc().subtract(const Duration(seconds: 1)));
+      reconciled: true, eventTime: DateTime.utc(2026,10,10,12));
     final adjusted = await service.load(day.id);
     expect(adjusted.originalVariancePaisa, -3500);
     expect(adjusted.adjustedVariancePaisa, 0);
@@ -45,4 +45,5 @@ void main() {
     expect(oldCutoff.csv(), contains('Original sealed'));
   });
 }
+
 
