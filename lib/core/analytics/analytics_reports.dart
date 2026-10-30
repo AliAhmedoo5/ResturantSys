@@ -188,12 +188,26 @@ class _ReportBuilder {
     }
     times.sort();
     final trips = e.get('trips');
-    final due = _integers(valid.where((o) => o['payment_status'] == 'COLLECTION_DUE'), 'collection_due_paisa');
+    final settledTripIds = trips.where((t) => t['status'] == 'SETTLED').map((t) => t['id']).toSet();
+    final allEvents = e.get('payment_events');
+    final activeCollections = allEvents.where((p) => p['kind'] == 'RIDER_COLLECTION' && !settledTripIds.contains(p['settlement_id'])).toList();
+    final riderHeldCash = _integers(activeCollections, 'amount_paisa');
+    final collectedOrderIds = activeCollections.map((p) => p['order_id']).toSet();
+    final uncollectedDueOrders = valid.where((o) => o['payment_status'] == 'COLLECTION_DUE' && !collectedOrderIds.contains(o['id']));
+    final due = _integers(uncollectedDueOrders, 'collection_due_paisa');
+    final receivingEvents = _receivingEvents();
+    final handovers = receivingEvents.where((p) => p['kind'] == 'RIDER_HANDOVER');
+    final acceptedDrawerCash = _integers(handovers, 'amount_paisa');
+    final shortages = receivingEvents.where((p) => p['kind'] == 'RIDER_SHORTAGE');
+    final riderShortages = _integers(shortages, 'amount_paisa');
     final metrics = <AnalyticsMetric>[
       _metric('delivery_orders', 'Delivery orders', deliveredOrders.length, unit: AnalyticsUnit.count, explanation: 'Eligible DELIVERY orders in filtered order cohort.'),
       _metric('delivery_fees', 'Recorded delivery fees', _integers(deliveredOrders, 'delivery_fee_paisa'), explanation: 'Eligible filtered delivery order fee snapshots.'),
-      _metric('collection_due', 'Collection Due (selected cohort)', due, explanation: 'Remaining payable less net tenders for current COLLECTION_DUE eligible orders within the selected cohort; delivery does not imply collection.'),
+      _metric('collection_due', 'Collection Due (customer debt)', due, explanation: 'Remaining payable less net tenders for uncollected COLLECTION_DUE eligible orders; delivery does not imply collection.'),
       _metric('all_collection_due', 'Collection Due (all outstanding)', _integers(e.get('all_due'), 'collection_due_paisa'), explanation: 'Current installation-wide COLLECTION_DUE orders across all Business Days; date/order filters do not apply.'),
+      _metric('rider_held_cash', 'Rider-held cash (verified liability)', riderHeldCash, explanation: 'Confirmed customer collections held by riders prior to cashier drawer handover; distinct from drawer cash and customer debt.'),
+      _metric('accepted_drawer_cash', 'Accepted rider drawer cash', acceptedDrawerCash, explanation: 'Actual physical currency accepted from rider pouch handovers into cashier drawers.'),
+      _metric('rider_shortages', 'Rider settlement shortage', riderShortages, explanation: 'Recorded settlement cash shortages against expected cash.'),
       _metric('trips', 'Trips (whole selected days)', trips.length, unit: AnalyticsUnit.count, explanation: _globalBasis),
       _metric('unsettled_exposure', 'Unsettled expected COD (selected days)', _integers(trips.where((t) => ['DISPATCHED', 'RETURNED'].contains(t['status'])), 'cash_expected_paisa'), explanation: 'Expected COD in unsettled trips selected by trip Business Day, all orders. Exposure is not proof of customer collection or rider debt.'),
       _metric('all_unsettled_exposure', 'Unsettled expected COD (all outstanding)', _integers(e.get('all_trips'), 'cash_expected_paisa'), explanation: 'Current global expected COD for DISPATCHED/RETURNED trips; not verified cash collected.'),
@@ -207,7 +221,6 @@ class _ReportBuilder {
       _duration('travel_mean', 'Mean travel time', times.isEmpty ? null : times.reduce((a, b) => a + b) / times.length, times.length, delivered.length),
       _duration('travel_median', 'Median travel time', _percentile(times, .5), times.length, delivered.length),
       _duration('travel_p90', '90th percentile travel', _percentile(times, .9), times.length, delivered.length),
-      _missing('rider_verified_debt', 'Verified rider cash debt', 'Expected COD does not establish actual customer collection. No separate confirmed-collected-but-unremitted ledger exists.'),
     ];
     final returnReasons = <String, int>{};
     for (final a in returned) {
@@ -250,7 +263,7 @@ class _ReportBuilder {
           'returned_at': a['returned_at'],
         });
       }),
-    ], ['kind', 'order_id', 'trip_id', 'rider_id', 'shift_id', 'selected_order_load', 'area', 'fee_paisa', 'payment_status', 'status', 'is_reattempt', 'return_reason', 'expected_paisa', 'counted_paisa', 'dispatched_at', 'delivered_at', 'returned_at', 'settled_at'], ['Order/attempt rows and selected-order load use order filters; trip rows and trip exposure use whole selected Business Days. All-outstanding measures explicitly ignore date/order filters.', 'Settlement event rows use receiving Shift/Business Day or actual calendar time, independently of the originating Order cohort. Counted handover is one linked custody transfer; COD settlement value is not verified customer collection. Legacy settled trips without events have unavailable receiving Shift, actors and immutable recording time. Do not sum settlement attribution, digital receipt and counted pouch rows.', 'Returned attempts are delivery run outcomes, not final order failures. Reattempts represent subsequent dispatch runs for the same order. Legacy returned attempts without recorded notes disclose absent historical reason evidence rather than inferring reasons. Delivered status is not proof of payment collection.', 'Travel excludes invalid/missing timestamps and reports coverage. Percentiles interpolate sorted valid minutes. No final failure/reattempt or unrecorded failure-reason inference.']);
+    ], ['kind', 'order_id', 'trip_id', 'rider_id', 'shift_id', 'selected_order_load', 'area', 'fee_paisa', 'payment_status', 'status', 'is_reattempt', 'return_reason', 'expected_paisa', 'counted_paisa', 'dispatched_at', 'delivered_at', 'returned_at', 'settled_at'], ['Order/attempt rows and selected-order load use order filters; trip rows and trip exposure use whole selected Business Days. All-outstanding measures explicitly ignore date/order filters.', 'Settlement event rows use receiving Shift/Business Day or actual calendar time, independently of the originating Order cohort. Counted handover is one linked custody transfer; COD settlement value is not verified customer collection. Legacy settled trips without events have unavailable receiving Shift, actors, confirmed collections and immutable recording time. Do not sum settlement attribution, digital receipt, rider-held collections and counted pouch rows.', 'Returned attempts are delivery run outcomes, not final order failures. Reattempts represent subsequent dispatch runs for the same order. Legacy returned attempts without recorded notes disclose absent historical reason evidence rather than inferring reasons. Delivered status is not proof of payment collection.', 'Confirmed customer collections held by riders are distinct from customer debt and cashier drawer cash. Expected pouch cash is exposure, not verified debt until independently confirmed.', 'Travel excludes invalid/missing timestamps and reports coverage. Percentiles interpolate sorted valid minutes. No final failure/reattempt or unrecorded failure-reason inference.']);
   }
 
   AnalyticsSection _customers() {
@@ -826,7 +839,7 @@ class _ReportBuilder {
   List<_Record> _receivingEvents() {
     final receivingIds = e.get('days').map((d) => d['id']).toSet();
     final receiptEvents = e.get('payment_events').where((p) {
-      if (!['RECEIPT', 'REFUND', 'RIDER_HANDOVER', 'COD_SETTLEMENT'].contains(p['kind'])) return false;
+      if (!['RECEIPT', 'REFUND', 'RIDER_HANDOVER', 'COD_SETTLEMENT', 'RIDER_COLLECTION', 'RIDER_SHORTAGE'].contains(p['kind'])) return false;
       if (e.query.timeBasis == AnalyticsTimeBasis.calendarTime) {
         final actual = _karachi(p['actual_at']);
         if (actual == null || actual.isBefore(analyticsWallClock(e.query.startDate)) || !actual.isBefore(analyticsWallClock(e.query.endDateExclusive))) return false;
@@ -840,7 +853,16 @@ class _ReportBuilder {
 
   List<AnalyticsRow> _receivingEventRows(Iterable<_Record> receiptEvents) => [
       ...receiptEvents.map((p) => _row('payment_events', p, {
-        'kind': p['kind'] == 'RIDER_HANDOVER' ? 'Counted rider custody transfer' : p['kind'] == 'COD_SETTLEMENT' ? 'Order settlement attribution (not collected cash)' : 'Independent customer money event', 'event_kind': p['kind'],
+        'kind': p['kind'] == 'RIDER_HANDOVER'
+            ? 'Counted rider custody transfer (drawer cash)'
+            : p['kind'] == 'COD_SETTLEMENT'
+                ? 'Order settlement attribution (not collected cash)'
+                : p['kind'] == 'RIDER_COLLECTION'
+                    ? 'Confirmed customer collection (rider-held cash)'
+                    : p['kind'] == 'RIDER_SHORTAGE'
+                        ? 'Rider settlement shortage'
+                        : 'Independent customer money event',
+        'event_kind': p['kind'],
         'event_key': p['event_key'], 'amount_paisa': p['amount_paisa'],
         'payment_source': p['payment_source'], 'payment_method': p['payment_method'],
         'actual_at': p['actual_at'], 'recorded_at': p['recorded_at'],
@@ -849,7 +871,11 @@ class _ReportBuilder {
         'originating_business_day_id': p['originating_business_day_id'], 'originating_shift_id': p['originating_shift_id'],
         'order_id': p['order_id'], 'tender_id': p['tender_id'], 'movement_id': p['movement_id'],
         'settlement_id': p['settlement_id'], 'trip_id': p['settlement_id'],
-        if (p['settlement_id'] != null) 'customer_collection_evidence': 'Customer-to-rider collection evidence unavailable; delivery and expected pouch are insufficient proof',
+        if (p['settlement_id'] != null) 'customer_collection_evidence': p['kind'] == 'RIDER_COLLECTION'
+            ? 'Confirmed customer collection recorded'
+            : p['kind'] == 'RIDER_SHORTAGE'
+                ? 'Rider settlement shortage recorded'
+                : 'Customer-to-rider collection evidence unavailable; delivery and expected pouch are insufficient proof',
         if (p['kind'] == 'COD_SETTLEMENT') 'value_basis': 'Remaining contractual Order settlement, not allocated physical pouch cash',
         'recorded_by': p['recorded_by'], 'approved_by': p['approved_by'],
         'recorded_by_name_snapshot': p['recorded_by_name_snapshot'], 'shift_owner_name_snapshot': p['shift_owner_name_snapshot'],
