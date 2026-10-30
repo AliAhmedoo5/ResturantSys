@@ -468,6 +468,9 @@ void main() {
       expect(find.byType(RiderTripSettlementDialog), findsOneWidget);
       expect(find.text('Rider Trip Settlement'), findsOneWidget);
       expect(find.text('Expected COD Cash (Pouch):'), findsOneWidget);
+      expect(find.byKey(const ValueKey('rider_settlement_actual_time')), findsOneWidget);
+      expect(find.byKey(ValueKey('rider_digital_reference_${order.id}')), findsOneWidget);
+
 
       // Confirm settlement
       final confirmBtn = find.byKey(const ValueKey('confirm_settlement_btn'));

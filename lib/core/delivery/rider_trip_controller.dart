@@ -4,6 +4,7 @@ import '../database/pos_database_constants.dart';
 import '../orders/dining_type.dart';
 import '../orders/order.dart';
 import '../orders/paisa_engine.dart';
+import '../payments/payment_event.dart';
 import '../orders/token_status.dart';
 import '../shifts/cash_movement.dart';
 import '../shifts/shift.dart';
@@ -420,81 +421,68 @@ class RiderTripController {
       throw StateError('Rider settlement must remain in the trip Business Day.');
     }
 
-    final now = settledAt ?? DateTime.now();
-    final formattedNow = _formatTimestamp(now);
-    final utcNowIso = now.toUtc().toIso8601String();
+    final recordedAt = DateTime.now().toUtc();
+    final now = (settledAt ?? recordedAt).toUtc();
+    final formattedNow = now.toIso8601String();
+    final utcNowIso = now.toIso8601String();
 
     return await database.transaction((txn) async {
+      // Recheck the lock under the write transaction; two submissions cannot post twice.
+      final current = await txn.query('rider_trips', where: 'id=?', whereArgs: [tripId]);
+      if (current.single['status'] == 'SETTLED' || current.single['status'] == 'CANCELLED') {
+        throw StateError('Trip is already settled or cancelled.');
+      }
+      final actor = await txn.query('staff', where: "id=? AND role='CASHIER' AND is_active=1 AND login_enabled=1", whereArgs: [cashierStaffId]);
+      final receiving = await txn.query('shifts', where: "id=? AND staff_id=? AND status='OPEN'", whereArgs: [shiftId, cashierStaffId]);
+      if (actor.isEmpty || receiving.isEmpty || receiving.single['business_day_id'] != trip.businessDayId) {
+        throw StateError('An active Cashier-owned receiving Shift in the trip Business Day is required.');
+      }
       // 1. Transition delivered COD orders to SETTLED
       final deliveredCodOrders = await txn.rawQuery('''
-        SELECT o.id, o.grand_total
+        SELECT o.id, o.grand_total, $outstandingCollectionPaisaSql AS remaining_paisa
         FROM ${PosDatabaseConstants.tableRiderTripOrders} rto
         JOIN ${PosDatabaseConstants.tableOrders} o ON rto.order_id = o.id
         WHERE rto.trip_id = ? AND rto.status = 'DELIVERED' AND o.payment_status = 'COLLECTION_DUE'
       ''', [tripId]);
 
-      for (final row in deliveredCodOrders) {
-        final orderId = row['id'] as int;
-        final grandTotal = (row['grand_total'] as num).toDouble();
-        final grandTotalPaisa = PaisaEngine.rupeesToPaisa(grandTotal);
-
-        await txn.update(
-          PosDatabaseConstants.tableOrders,
-          {'payment_status': 'SETTLED'},
-          where: 'id = ?',
-          whereArgs: [orderId],
-        );
-
-        final digitalRef = digitalWalletReferences?[orderId];
-        final refCode = digitalRef != null && digitalRef.trim().isNotEmpty
-            ? digitalRef.trim()
-            : 'TRIP-$tripId';
-        final paymentMethod = digitalRef != null && digitalRef.trim().isNotEmpty
-            ? 'DIGITAL_WALLET'
-            : 'COD';
-
-        // Update or insert order payment row reflecting settled payment
-        final existingPayment = await txn.query(
-          PosDatabaseConstants.tableOrderPayments,
-          where: 'order_id = ? AND payment_method IN (\'COD\', \'DIGITAL_WALLET\')',
-          whereArgs: [orderId],
-        );
-
-        if (existingPayment.isNotEmpty) {
-          await txn.update(
-            PosDatabaseConstants.tableOrderPayments,
-            {
-              'payment_method': paymentMethod,
-              'amount_tendered': grandTotal,
-              'amount_tendered_paisa': grandTotalPaisa,
-              'change_returned': 0.0,
-              'change_returned_paisa': 0,
-              'reference_code': refCode,
-            },
-            where: 'id = ?',
-            whereArgs: [existingPayment.first['id']],
-          );
-        } else {
-          await txn.insert(
-            PosDatabaseConstants.tableOrderPayments,
-            {
-              'order_id': orderId,
-              'payment_method': paymentMethod,
-              'amount_tendered': grandTotal,
-              'amount_tendered_paisa': grandTotalPaisa,
-              'change_returned': 0.0,
-              'change_returned_paisa': 0,
-              'reference_code': refCode,
-            },
-          );
+      final dueIds = deliveredCodOrders.map((r) => r['id']).toSet();
+      for (final entry in (digitalWalletReferences ?? <int, String>{}).entries) {
+        if (!dueIds.contains(entry.key) || entry.value.trim().isEmpty) {
+          throw ArgumentError('Digital references must confirm a delivered Collection Due Order on this trip.');
         }
       }
+      final cashOrders = deliveredCodOrders.where((r) => !(digitalWalletReferences?.containsKey(r['id']) ?? false));
+      if (cashCountedPaisa > 0 && cashOrders.isEmpty) {
+        throw StateError('Direct digital settlement cannot deposit drawer cash.');
+      }
+      for (final row in deliveredCodOrders) {
+        final orderId = row['id'] as int;
+        final remaining = (row['remaining_paisa'] as num).toInt();
+        final digital = digitalWalletReferences?.containsKey(orderId) ?? false;
+        final paymentMethod = digital ? 'DIGITAL_WALLET' : 'COD';
+        // Preserve existing partial receipts and their immutable event/tender links.
+        final tender = await txn.insert('order_payments', {
+          'order_id': orderId, 'payment_method': paymentMethod,
+          'amount_tendered': PaisaEngine.paisaToRupees(remaining),
+          'amount_tendered_paisa': remaining, 'change_returned': 0,
+          'change_returned_paisa': 0,
+          'reference_code': digital ? digitalWalletReferences![orderId]!.trim() : 'TRIP-$tripId',
+        });
+        await PaymentEvent.record(txn, eventKey: 'trip-$tripId-order-$orderId',
+          kind: digital ? 'RECEIPT' : 'COD_SETTLEMENT', amountPaisa: remaining,
+          paymentSource: digital ? 'BANK' : 'RIDER_UNVERIFIED', paymentMethod: paymentMethod,
+          recordedBy: cashierStaffId, recordedAt: recordedAt, actualAt: now,
+          businessDayId: shift.businessDayId, shiftId: shiftId, orderId: orderId,
+          tenderId: tender, settlementId: tripId, sourceTable: 'rider_trips', sourceId: tripId);
+        await txn.update('orders', {'payment_status': 'SETTLED'}, where: 'id=?', whereArgs: [orderId]);
+      }
 
+      int? movementId;
       // 2. Deposit counted physical cash into cashier shift drawer via cash_movements
       if (cashCountedPaisa > 0) {
         final cashRupees = PaisaEngine.paisaToRupees(cashCountedPaisa);
         final defaultNotes = 'Rider Trip #$tripId (${trip.tripName}) settlement pouch cash: Rs. ${cashRupees.toStringAsFixed(2)}';
-        await txn.insert(
+        movementId = await txn.insert(
           PosDatabaseConstants.tableCashMovements,
           {
             'shift_id': shiftId,
@@ -508,6 +496,14 @@ class RiderTripController {
           },
         );
       }
+
+      // One counted pouch is custody evidence, never an invented allocation to Orders.
+      await PaymentEvent.record(txn, eventKey: 'trip-$tripId-handover',
+        kind: 'RIDER_HANDOVER', amountPaisa: cashCountedPaisa,
+        paymentSource: 'DRAWER', paymentMethod: 'COD',
+        recordedBy: cashierStaffId, recordedAt: recordedAt, actualAt: now,
+        businessDayId: shift.businessDayId, shiftId: shiftId,
+        movementId: movementId, settlementId: tripId, sourceTable: 'rider_trips', sourceId: tripId);
 
       // 3. Mark rider trip as SETTLED
       await txn.update(

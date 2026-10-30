@@ -77,3 +77,5 @@ Known source timestamps display `+05:00 [Asia/Karachi]`; matching `_source` colu
 Schema 23 captures names atomically at source insertion in an append-only identity evidence table. It preserves Shift-owner Cashier separately from the recording and approval actors, supplier, employee and expense category identities. Current names are labeled separately; an unknown transaction-time name is marked unavailable. Migration does not backfill current names into old financial history or modify original sealed reports. Existing expense category snapshots remain authoritative. Stable source and identity IDs survive renames and staff/supplier archival.
 
 Audit Timestamp means immutable recording evidence; Event Time means actual occurrence. New money events retain explicit UTC recording time and preserve actual event time independently. Reports convert either known instant for Asia/Karachi display while exporting the source string. Existing naive local fields are preserved, never rewritten as supposedly known UTC history.
+
+COD receiving attribution and evidence limits: see [COD settlement evidence](cod-settlement-evidence.md).
