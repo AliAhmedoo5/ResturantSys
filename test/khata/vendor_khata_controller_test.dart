@@ -383,5 +383,132 @@ void main() {
       expect(statement.entries[2].debitAmount, equals(0.0));
       expect(statement.entries[2].runningBalance, equals(11000.0));
     });
+
+    test('Vendor Khata reconciles opening + purchases - payments to closing as of cutoff', () async {
+      final vendor = await khataController.createVendor(
+        name: 'Cutoff Reconciliation Supplier',
+        phone: '03009998877',
+        openingBalance: 500.0, // 50,000 paisa
+      );
+
+      final t1 = DateTime(2026, 10, 20, 10);
+      final t2 = DateTime(2026, 10, 22, 12);
+      final t3 = DateTime(2026, 10, 24, 15);
+      final tCutoff = DateTime(2026, 10, 25, 23, 59, 59);
+      final tFuture = DateTime(2026, 10, 27, 10);
+
+      // In-cutoff purchase (PKR 1,000 = 100,000 paisa)
+      await khataController.recordCreditDelivery(
+        vendorId: vendor.id,
+        amount: 1000.0,
+        referenceSlip: 'INV-101',
+        staffId: testStaffId,
+        createdAt: t1,
+        dueDate: DateTime(2026, 10, 28), // Current (not yet due at cutoff)
+      );
+
+      // In-cutoff purchase (PKR 600 = 60,000 paisa, overdue by 10 days at cutoff)
+      await khataController.recordCreditDelivery(
+        vendorId: vendor.id,
+        amount: 600.0,
+        referenceSlip: 'INV-102',
+        staffId: testStaffId,
+        createdAt: t2,
+        dueDate: DateTime(2026, 10, 15), // 10 days overdue -> 8-30 days bucket
+      );
+
+      // In-cutoff partial payment (PKR 400 = 40,000 paisa against opening balance)
+      await khataController.recordSettlementPayment(
+        vendorId: vendor.id,
+        amount: 400.0,
+        paymentSource: VendorPaymentSource.paidOutsideDrawer,
+        referenceSlip: 'PAY-01',
+        staffId: testStaffId,
+        createdAt: t3,
+      );
+
+      // Future purchase AFTER cutoff (PKR 2,000 = 200,000 paisa) - must NOT be included in cutoff
+      await khataController.recordCreditDelivery(
+        vendorId: vendor.id,
+        amount: 2000.0,
+        referenceSlip: 'INV-FUTURE',
+        staffId: testStaffId,
+        createdAt: tFuture,
+      );
+
+      // Reconcile as-of cutoff
+      final rec = await khataController.reconcileCutoff(
+        vendorId: vendor.id,
+        cutoff: tCutoff,
+      );
+
+      expect(rec['opening_paisa'], equals(50000));
+      expect(rec['purchases_paisa'], equals(160000)); // 100,000 + 60,000
+      expect(rec['payments_paisa'], equals(40000));
+      expect(rec['closing_paisa'], equals(170000)); // 50,000 + 160,000 - 40,000
+
+      // Aging buckets as of cutoff
+      final aging = await khataController.calculateAgingBuckets(
+        vendorId: vendor.id,
+        cutoff: tCutoff,
+      );
+
+      expect(aging['total_outstanding_paisa'], equals(170000));
+      expect(aging['current_paisa'], equals(100000)); // INV-101 due 28 Oct >= 25 Oct
+      expect(aging['days_8_30_paisa'], equals(60000)); // INV-102 due 15 Oct -> 10 days overdue
+      expect(aging['unknown_due_paisa'], equals(10000)); // 50,000 opening - 40,000 paid = 10,000 remaining undated
+      expect(aging['days_0_7_paisa'], equals(0));
+      expect(aging['days_31_60_paisa'], equals(0));
+      expect(aging['over_60_paisa'], equals(0));
+
+      // Sum of buckets strictly equals total outstanding
+      final bucketSum = (aging['current_paisa'] as int) +
+          (aging['days_0_7_paisa'] as int) +
+          (aging['days_8_30_paisa'] as int) +
+          (aging['days_31_60_paisa'] as int) +
+          (aging['over_60_paisa'] as int) +
+          (aging['unknown_due_paisa'] as int);
+      expect(bucketSum, equals(rec['closing_paisa']));
+    });
+
+    test('Opening adjustments record immutable history and update versioned cutoff', () async {
+      final vendor = await khataController.createVendor(
+        name: 'Adjusted Opening Vendor',
+        phone: '03112223344',
+        openingBalance: 100.0, // 10,000 paisa
+      );
+
+      // Manager updates opening balance to 300.0 (30,000 paisa)
+      await khataController.updateVendor(
+        id: vendor.id,
+        name: vendor.name,
+        phone: vendor.phone,
+        openingBalance: 300.0,
+        managerId: testSupervisorId,
+        reason: 'Initial ledger audit reconciliation',
+      );
+
+      final adjustments = await db.query(
+        'supplier_opening_adjustments',
+        where: 'vendor_id = ?',
+        whereArgs: [vendor.id],
+      );
+      expect(adjustments.length, equals(1));
+      expect(adjustments.first['previous_balance_paisa'], equals(10000));
+      expect(adjustments.first['opening_balance_paisa'], equals(30000));
+      expect(adjustments.first['manager_id'], equals(testSupervisorId));
+      expect(adjustments.first['reason'], equals('Initial ledger audit reconciliation'));
+
+      // Verify trigger prevents updating opening adjustment
+      expect(
+        () => db.update(
+          'supplier_opening_adjustments',
+          {'reason': 'Hacked reason'},
+          where: 'id = ?',
+          whereArgs: [adjustments.first['id']],
+        ),
+        throwsA(isA<DatabaseException>()),
+      );
+    });
   });
 }
