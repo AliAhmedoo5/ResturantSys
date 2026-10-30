@@ -62,6 +62,7 @@ class AnalyticsService {
     // Current Holds have no Business Day/Shift assignment or retained deleted
     // lifecycle. Never read private draft content into reporting evidence.
     await read('active_holds', 'held_carts', 'SELECT id,cashier_id,created_at FROM held_carts${query.cashierId == null ? '' : ' WHERE cashier_id=?'} ORDER BY created_at,id', [if (query.cashierId != null) query.cashierId]);
+    await read('first_purchases', 'orders', "SELECT o.id,o.customer_phone,o.created_at FROM orders o WHERE o.customer_phone IS NOT NULL AND o.customer_phone != '' AND o.payment_status NOT IN ('CANCELLED','VOIDED','REFUNDED') ORDER BY o.id");
     await read('order_days', 'business_days', 'SELECT DISTINCT b.id,b.opened_at,b.closed_at,b.status FROM business_days b JOIN orders o ON o.business_day_id=b.id WHERE $orderScope ORDER BY b.opened_at,b.id', orderArgs);
     await read('order_shifts', 'shifts', 'SELECT DISTINCT s.* FROM shifts s JOIN orders o ON o.shift_id=s.id JOIN business_days b ON b.id=o.business_day_id WHERE $orderScope ORDER BY s.id', orderArgs);
     final joinedOrder = 'JOIN orders o ON o.id=x.order_id JOIN business_days b ON b.id=o.business_day_id WHERE $orderScope';
@@ -106,7 +107,7 @@ class AnalyticsService {
       await read('bridge_days', 'business_days', 'SELECT DISTINCT b.* FROM business_days b JOIN shifts s ON s.business_day_id=b.id WHERE s.id IN ($slots)', bridgeIds);
     }
     await read('trips', 'rider_trips', 'SELECT t.* FROM rider_trips t JOIN business_days b ON b.id=t.business_day_id WHERE $dayScope', dayArgs);
-    await read('attempts', 'rider_trip_orders', 'SELECT x.id,x.order_id,x.trip_id,x.status,x.delivered_at,x.returned_at,t.dispatched_at,t.rider_staff_id FROM rider_trip_orders x JOIN rider_trips t ON t.id=x.trip_id $joinedOrder', orderArgs);
+    await read('attempts', 'rider_trip_orders', 'SELECT x.id,x.order_id,x.trip_id,x.status,x.assigned_at,x.delivered_at,x.returned_at,x.notes,t.dispatched_at,t.rider_staff_id,o.delivery_area_id,o.delivery_area_name_snapshot FROM rider_trip_orders x JOIN rider_trips t ON t.id=x.trip_id $joinedOrder ORDER BY x.id', orderArgs);
     await read('ingredients', 'raw_ingredients', 'SELECT id,name,storage_unit,current_stock,low_stock_threshold,cost_per_recipe_unit FROM raw_ingredients');
     await read('inventory', 'inventory_movements', 'SELECT m.* FROM inventory_movements m JOIN business_days b ON b.id=m.business_day_id WHERE $dayScope', dayArgs);
     final cutoff = e.get('days').map((d) => _karachi(d['closed_at']) ?? _karachi(e.now.toIso8601String())!).fold<DateTime?>(null, (latest, time) => latest == null || time.isAfter(latest) ? time : latest);
@@ -158,11 +159,13 @@ class AnalyticsService {
     await read('reports', 'report_runs', 'SELECT r.id,r.business_day_id,r.content_hash,r.created_by,r.created_at,r.status FROM report_runs r JOIN business_days b ON b.id=r.business_day_id WHERE $dayScope', dayArgs);
     await read('outbox', 'report_outbox', 'SELECT r.id,r.business_day_id,r.channel,r.status,r.retry_count,r.created_at FROM report_outbox r JOIN business_days b ON b.id=r.business_day_id WHERE $dayScope', dayArgs);
     await read('delivery_audit', 'report_delivery_audit', 'SELECT x.id,x.staff_id,x.action,x.created_at FROM report_delivery_audit x WHERE $interval', intervalArgs);
+    await read('configuration_audit', 'configuration_audit', 'SELECT x.id,x.actor_id,x.kind,x.before_json,x.after_json,x.created_at,s.name AS actor_name FROM configuration_audit x LEFT JOIN staff s ON s.id=x.actor_id WHERE $interval', intervalArgs);
+    await read('operations_audit', 'operations_audit', 'SELECT x.id,x.manager_id,x.entity,x.entity_id,x.action,x.detail,x.created_at,s.name AS manager_name FROM operations_audit x LEFT JOIN staff s ON s.id=x.manager_id WHERE $interval', intervalArgs);
     await read('token_audit', 'checkout_token_audit', 'SELECT x.id,x.order_id,x.token_number,x.action,x.payment_status,x.revision,x.recorded_at FROM checkout_token_audit x $joinedOrder', orderArgs);
     await read('rounding', 'rounding_variance_ledger', 'SELECT x.id,x.order_id,x.shift_id,x.cash_rounding_paisa,x.created_at FROM rounding_variance_ledger x $joinedOrder', orderArgs);
     await read('stock_alerts', 'checkout_stock_alerts', 'SELECT x.order_id,x.ingredient_id,x.stock_at_checkout,x.created_at FROM checkout_stock_alerts x $joinedOrder', orderArgs);
     await read('all_due', 'orders', "SELECT o.id,$outstandingCollectionPaisaSql AS collection_due_paisa FROM orders o WHERE o.payment_status='COLLECTION_DUE'");
-    await read('all_trips', 'rider_trips', "SELECT id,cash_expected_paisa FROM rider_trips WHERE status IN ('DISPATCHED','RETURNED')");
+    await read('all_trips', 'rider_trips', 'SELECT id,status,cash_expected_paisa FROM rider_trips');
     if (!query.live) {
       final duration = query.timeBasis == AnalyticsTimeBasis.calendarTime ? query.endDateExclusive.difference(query.startDate) : _date(query.endDateExclusive).difference(_date(query.startDate));
       final prior = query.copyWith(startDate: query.startDate.subtract(duration), endDateExclusive: query.startDate);
