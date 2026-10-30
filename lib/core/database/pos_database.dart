@@ -8,6 +8,7 @@ import 'feature_gaps_schema.dart';
 import 'historical_cost_schema.dart';
 import 'payment_events_schema.dart';
 
+import 'historical_corrections_schema.dart';
 import 'reporting_identity_schema.dart';
 import '../delivery/delivery_controller.dart';
 
@@ -139,6 +140,7 @@ class PosDatabase {
     await createPaymentEventsSchema(db);
 
     await createReportingIdentitySchema(db);
+    await createHistoricalCorrectionsSchema(db);
   }
 
   Future<void> _createOperationalAccountingTables(DatabaseExecutor executor) async {
@@ -461,6 +463,7 @@ class PosDatabase {
     if (oldVersion < 22) await createPaymentEventsSchema(db);
 
     if (oldVersion < 23) await createReportingIdentitySchema(db);
+    if (oldVersion < 24) await createHistoricalCorrectionsSchema(db);
   }
 
   Future<void> _upgradeToVersion18(DatabaseExecutor db) async {
@@ -1131,3 +1134,4 @@ class PosDatabase {
     }
   }
 }
+
