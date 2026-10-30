@@ -279,7 +279,7 @@ void main() {
     test('Settlement preserves partial receipts and appends only the remaining balance', () async {
       final order = await createTestDeliveryOrder(phone: '03001112222', isCod: true);
       await orderController.recordCashierReceipt(orderId: order.id, shiftId: shiftId,
-        cashierId: cashierId, amountPaisa: 20000, method: PaymentMethod.digitalWallet,
+        cashierId: cashierId, amountPaisa: 20000, method: PaymentMethod.bankTransfer,
         commandId: 'partial-before-trip', referenceCode: 'PRIVATE-REFERENCE');
       final trip = await riderTripController.createRiderTrip(riderStaffId: riderStaffId,
         shiftId: shiftId, businessDayId: businessDayId, tripName: 'Partial receipt', orderIds: [order.id]);
