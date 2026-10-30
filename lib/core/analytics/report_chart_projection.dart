@@ -41,7 +41,7 @@ class _Charts {
         'Filtered committed orders · current stored status, including cancellations'),
       count('dining_mix', 'Orders by Dining Type', source('orders'), 'dining_type',
         'Filtered committed orders · revisions are not counted again'),
-      ...workload(),
+      ...workload(), ...weekdayPeaks(), ...recurringPeaks(),
     ],
     AnalyticsFamily.delivery => [
       count('attempt_outcomes', 'Delivery attempt outcomes', source('rider_trip_orders'), 'status',
@@ -150,6 +150,37 @@ class _Charts {
             rows: details.where((r) => '${bucket.cells[value ? 'eligible_order_ids' : 'order_ids']}'.split(',').contains(r.sourceId)).toList(),
           )]));
       }
+    }
+    return result;
+  }
+  List<ReportChartData> weekdayPeaks() {
+    final buckets = section.rows.where((r) => r.cells['kind'] == 'Weekday comparison').toList();
+    if (buckets.isEmpty) return [];
+    final sorted = [...buckets]..sort((a, b) {
+      final rank = ((b.cells['orders_per_completed_day'] as num?) ?? -1).compareTo((a.cells['orders_per_completed_day'] as num?) ?? -1);
+      return rank != 0 ? rank : (a.cells['weekday'] as int).compareTo(b.cells['weekday'] as int);
+    });
+    return [ReportChartData(id: 'weekday_average', title: 'Orders per completed Business Day by operational weekday',
+      scope: 'Operational weekday · Asia/Karachi · open days separate', unit: AnalyticsUnit.decimal,
+      note: 'Completed confirmed Orders / completed Business Days, including opened zero-order days. No denominator means unavailable. Order-only filters restrict numerator, not opened-day denominator. Equal averages retain Monday-to-Sunday ties.',
+      points: [for (final row in sorted) ReportChartPoint('${row.cells['period']}', number(row.cells['orders_per_completed_day']),
+        quality: row.cells['orders_per_completed_day'] == null ? AnalyticsQuality.missing : AnalyticsQuality.complete,
+        explanation: '${row.cells['completed_confirmed_orders']} / ${row.cells['completed_business_days']} completed days; aggregate ${row.cells['confirmed_orders']}; open ${row.cells['open_confirmed_orders']} Orders / ${row.cells['open_business_days']} days', rows: [row])])];
+  }
+  List<ReportChartData> recurringPeaks() {
+    final result = <ReportChartData>[];
+    for (final kind in ['Weekly workload', 'Monthly workload', 'Calendar weekday total']) {
+      final rows = section.rows.where((r) => r.cells['kind'] == kind).toList();
+      if (rows.isEmpty) continue;
+      result.add(ReportChartData(id: kind == 'Weekly workload' ? 'workload_weeks' : kind == 'Monthly workload' ? 'workload_months' : 'calendar_weekdays',
+        title: kind == 'Calendar weekday total' ? 'Actual Calendar weekday totals' : '$kind trend',
+        scope: '${rows.first.cells['weekday_basis']} · Asia/Karachi · Monday-start weeks / local calendar months',
+        unit: AnalyticsUnit.count,
+        note: 'Selected observed evidence only. Incomplete/clipped periods are labeled; unopened Business Days are not fabricated. Exact bucket boundaries, source IDs and coverage are retained in source details and exports.',
+        points: [for (final row in rows) ReportChartPoint('${row.cells['period']}${row.cells['period_complete'] == false ? ' · Incomplete' : ''}', number(row.cells['confirmed_orders']),
+          explanation: '${row.cells['coverage']}; ${row.cells['period_start'] ?? row.cells['period']} to ${row.cells['period_end_exclusive'] ?? 'selected range'} exclusive',
+          quality: row.cells['confirmed_orders'] == null ? AnalyticsQuality.missing : row.cells['period_complete'] == false ? AnalyticsQuality.estimated : AnalyticsQuality.complete,
+          rows: [row])]));
     }
     return result;
   }
