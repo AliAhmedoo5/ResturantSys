@@ -90,7 +90,7 @@ class HistoricalCorrections {
         if (deltaPaisa <= 0 || orderId == null) throw StateError('Late collection requires a positive amount and original Order.');
         final orders = await txn.rawQuery("SELECT o.*, $outstandingCollectionPaisaSql AS due FROM orders o WHERE o.id=? AND o.business_day_id=? AND o.payment_status='COLLECTION_DUE'", [orderId,businessDayId]);
         if (orders.isEmpty || (shiftId != null && orders.single['shift_id'] != shiftId)) throw StateError('Original Collection Due Order does not match.');
-        final prior = await txn.rawQuery("SELECT COALESCE(SUM(delta_amount_paisa),0) AS net FROM historical_corrections WHERE target_entity_type='ORDER_PAYMENT' AND target_entity_id=?", [orderId]);
+        final prior = await txn.rawQuery("SELECT COALESCE(SUM(delta_amount_paisa),0) AS net FROM historical_corrections WHERE metric='collection' AND target_entity_id=?", [orderId]);
         if (deltaPaisa + (prior.single['net'] as int) > (orders.single['due'] as int)) throw StateError('Collection exceeds the unreconciled original amount.');
         target = 'ORDER_PAYMENT'; code = 'LATE_PAYMENT_COLLECTION'; metric = 'collection';
       } else {
@@ -98,7 +98,7 @@ class HistoricalCorrections {
           final orders = orderId == null ? <Map<String,Object?>>[] : await txn.query('orders',where:'id=? AND business_day_id=?',whereArgs:[orderId,businessDayId]);
           if (orders.isEmpty) throw StateError('Late refund requires its original Order in the affected Business Day.');
         }
-        if (deltaPaisa >= 0) throw StateError('Historical disbursements require a negative amount.');
+        if (deltaPaisa >= 0 && type != HistoricalCorrectionType.discrepancyExplanation) throw StateError('Historical disbursements require a negative amount.');
         if (paymentSource == 'DRAWER_CASH' && shiftId == null) throw StateError('Drawer reconciliation requires the affected closed Shift.');
         if (type == HistoricalCorrectionType.drawerPayout) { target = 'VENDOR_TRANSACTION'; code = 'LATE_VENDOR_PAYMENT'; }
         if (type == HistoricalCorrectionType.expense) { target = 'EXPENSE_ENTRY'; code = 'LATE_EXPENSE'; }
@@ -157,13 +157,13 @@ class HistoricalCorrectionSnapshot {
   final DateTime cutoff;
   final String originalSnapshotJson,originalHash,originalRecordedAt;
   final List<Map<String,Object?>> entries;
-  List<dynamic> get _sections => (jsonDecode(originalSnapshotJson) as Map<String,dynamic>)['sections'] as List<dynamic>;
+  List<dynamic> get _sections => (jsonDecode(originalSnapshotJson) as Map<String,dynamic>)['sections'] as List<dynamic>? ?? const <dynamic>[];
   int? get originalCollectionDuePaisa {
-    final rows = (_sections.first as Map<String,dynamic>)['rows'] as List<dynamic>;
+    final rows = (_sections.firstOrNull as Map<String,dynamic>?)?['rows'] as List<dynamic>? ?? const <dynamic>[];
     return (rows.cast<List<dynamic>>().where((r)=>r.first=='Collection Due').firstOrNull?[1] as num?)?.toInt();
   }
   int? get originalCashReceiptsPaisa {
-    final rows = (_sections.first as Map<String,dynamic>)['rows'] as List<dynamic>;
+    final rows = (_sections.firstOrNull as Map<String,dynamic>?)?['rows'] as List<dynamic>? ?? const <dynamic>[];
     return (rows.cast<List<dynamic>>().where((r)=>r.first=='Tender CASH (collected)').firstOrNull?[1] as num?)?.toInt();
   }
   int? get adjustedCashReceiptsPaisa => originalCashReceiptsPaisa == null ? null : originalCashReceiptsPaisa! +
