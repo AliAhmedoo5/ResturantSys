@@ -10,6 +10,7 @@ import 'analytics_models.dart';
 
 part 'analytics_reports.dart';
 part 'order_workload.dart';
+part 'weekday_order_peaks.dart';
 part 'finance_timeline.dart';
 part 'customer_report_details.dart';
 part 'earned_payroll.dart';
@@ -57,6 +58,11 @@ class AnalyticsService {
       e.rows[key] = await txn.rawQuery(sql, args);
     }
     await read('days', 'business_days', 'SELECT b.id,b.opened_at,b.closed_at,b.status FROM business_days b WHERE $dayScope ORDER BY b.opened_at', dayArgs);
+    if (query.timeBasis == AnalyticsTimeBasis.calendarTime) {
+      await read('peak_coverage_days', 'business_days',
+        "SELECT b.id,b.opened_at,b.closed_at,b.status FROM business_days b WHERE ${_localSql('b.opened_at')} < ? AND (b.closed_at IS NULL OR ${_localSql('b.closed_at')} > ?) ORDER BY b.opened_at,b.id",
+        [_sqlTime(analyticsWallClock(query.endDateExclusive)), _sqlTime(analyticsWallClock(query.startDate))]);
+    }
     const fields = 'o.id,o.business_day_id,o.shift_id,o.cashier_id,o.token_number,o.dining_type,o.subtotal,o.discount_amount,o.discount_id,o.tax_amount,o.grand_total,o.payment_status,o.token_status,o.cash_rounding_paisa,o.delivery_area_id,o.delivery_area_name_snapshot,o.delivery_fee_paisa,o.customer_phone,o.created_at,$outstandingCollectionPaisaSql AS collection_due_paisa';
     final orderFrom = 'FROM orders o JOIN business_days b ON b.id=o.business_day_id WHERE $orderScope';
     await read('orders', 'orders', 'SELECT $fields $orderFrom ORDER BY o.id', orderArgs);
