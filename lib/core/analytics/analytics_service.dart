@@ -9,6 +9,7 @@ import '../inventory/stock_count_valuation.dart';
 import 'analytics_models.dart';
 
 part 'analytics_reports.dart';
+part 'order_workload.dart';
 part 'finance_timeline.dart';
 part 'customer_report_details.dart';
 typedef _Record = Map<String, Object?>;
@@ -192,3 +193,4 @@ String _localSql(String column, {bool dateOnly = false}) {
   return "CASE WHEN $column LIKE '%Z' OR substr($column,-6,1) IN ('+','-') THEN $function($column,'+5 hours') ELSE $function($column) END";
 }
 DateTime? _karachi(Object? raw) => analyticsKarachiTime(raw);
+
