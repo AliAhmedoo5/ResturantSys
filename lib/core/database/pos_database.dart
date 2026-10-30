@@ -463,7 +463,7 @@ class PosDatabase {
     if (oldVersion < 22) await createPaymentEventsSchema(db);
 
     if (oldVersion < 23) await createReportingIdentitySchema(db);
-    if (oldVersion < 24) await createHistoricalCorrectionsSchema(db);
+    if (oldVersion < 27) await createHistoricalCorrectionsSchema(db);
   }
 
   Future<void> _upgradeToVersion18(DatabaseExecutor db) async {
