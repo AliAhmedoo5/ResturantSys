@@ -917,6 +917,22 @@ class _ReportBuilder {
     final selectedDaysCount = e.get('days').isNotEmpty ? e.get('days').length : 1;
     final purchaseFrequency = unifiedPurchaseCount / selectedDaysCount;
 
+    // Supplier purchase counts for per-supplier frequency projection
+    final purchasesBySupplier = <int?, int>{};
+    for (final p in purchases) {
+      final pId = p['id'] as int;
+      final matchedTxn = linkedMandiToTxn[pId];
+      final vendorId = p['vendor_id'] as int? ?? matchedTxn?['vendor_id'] as int?;
+      purchasesBySupplier[vendorId] = (purchasesBySupplier[vendorId] ?? 0) + 1;
+    }
+    for (final t in creditPurchases) {
+      final tId = t['id'] as int;
+      if (!linkedTxnToMandi.containsKey(tId)) {
+        final vendorId = t['vendor_id'] as int?;
+        purchasesBySupplier[vendorId] = (purchasesBySupplier[vendorId] ?? 0) + 1;
+      }
+    }
+
     // 2. Receipt punctuality evaluation from evidence
     // Group all evidence by root commitment to handle amendments append-only
     final commitmentsByRoot = <int, List<_Record>>{};
@@ -1058,6 +1074,7 @@ class _ReportBuilder {
         'unit_cost_rupees_per_base_unit': p['cost_per_recipe_unit'],
         'unit_price_paisa': unitPricePaisa,
         'is_linked': isLinked,
+        'purchase_frequency': (purchasesBySupplier[vendorId] ?? 1) / selectedDaysCount,
         'promised_at': null,
         'actual_at': null,
         'delay_minutes': null,
@@ -1093,6 +1110,7 @@ class _ReportBuilder {
         'unit_cost_rupees_per_base_unit': (qty != null && qty > 0) ? (spend / 100.0) / qty : null,
         'unit_price_paisa': unitPricePaisa,
         'is_linked': false,
+        'purchase_frequency': (purchasesBySupplier[vendorId] ?? 1) / selectedDaysCount,
         'promised_at': null,
         'actual_at': null,
         'delay_minutes': null,
@@ -1119,6 +1137,7 @@ class _ReportBuilder {
         'unit_cost_rupees_per_base_unit': null,
         'unit_price_paisa': null,
         'is_linked': null,
+        'purchase_frequency': purchasesBySupplier[c.vendorId] != null ? purchasesBySupplier[c.vendorId]! / selectedDaysCount : null,
         'promised_at': c.effectivePromisedAt,
         'actual_at': c.effectiveActualAt,
         'delay_minutes': c.delayMinutes,
@@ -1208,6 +1227,13 @@ class _ReportBuilder {
           unit: AnalyticsUnit.decimal,
           explanation: 'Average unified acquisition events per selected Business Day ($unifiedPurchaseCount purchases / $selectedDaysCount days).',
         ),
+        _metric(
+          'distinct_suppliers',
+          'Active suppliers',
+          purchasesBySupplier.keys.where((k) => k != null).length,
+          unit: AnalyticsUnit.count,
+          explanation: 'Distinct vendors and wholesale suppliers with recorded acquisitions in selected interval.',
+        ),
         punctualityMetric,
         _metric(
           'valid_punctuality_sample',
@@ -1250,7 +1276,7 @@ class _ReportBuilder {
         'kind', 'purchase_id', 'vendor_transaction_id', 'supplier_id', 'supplier_name',
         'ingredient_id', 'ingredient_name', 'purchase_unit', 'purchase_quantity',
         'base_quantity', 'base_unit', 'spend_paisa', 'unit_cost_rupees_per_base_unit',
-        'unit_price_paisa', 'is_linked', 'promised_at', 'actual_at', 'delay_minutes',
+        'unit_price_paisa', 'is_linked', 'purchase_frequency', 'promised_at', 'actual_at', 'delay_minutes',
         'punctuality_status', 'amendment_count', 'created_at'
       ],
       [
@@ -1763,9 +1789,10 @@ class _ReportBuilder {
     if (allVerifiedBackups.isNotEmpty) {
       final lastTimeStr = allVerifiedBackups.first['attempted_at'] as String?;
       if (lastTimeStr != null) {
-        final lastTime = DateTime.tryParse(lastTimeStr);
+        final lastTime = analyticsKarachiTime(lastTimeStr);
+        final currentKarachi = analyticsKarachiTime(e.now.toIso8601String()) ?? e.now;
         if (lastTime != null) {
-          final diff = e.now.difference(lastTime).inMinutes;
+          final diff = currentKarachi.difference(lastTime).inMinutes;
           lastVerifiedAgeMinutes = diff >= 0 ? diff.toDouble() : 0.0;
         }
       }
