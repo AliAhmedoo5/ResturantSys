@@ -63,6 +63,40 @@ class SnapshotService implements AnalyticsService {
 }
 
 void main() {
+  testWidgets('Hold stale threshold survives period selection and clearing order filters', (tester) async {
+    tester.view.physicalSize = const Size(1366, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    AnalyticsQuery? requested;
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: ManagerAnalyticsWorkspace(
+      service: SnapshotService(onLoad: (query) async {
+        requested = query;
+        return SnapshotService.fixture(query);
+      }),
+    ))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('analytics_filters_toggle')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const ValueKey('analytics_hold_stale_minutes')));
+    await tester.tap(find.byKey(const ValueKey('analytics_hold_stale_minutes')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('60 minutes').last);
+    await tester.pumpAndSettle();
+    expect(requested!.holdStaleMinutes, 60);
+    await tester.ensureVisible(find.byKey(const ValueKey('analytics_period')));
+    await tester.tap(find.byKey(const ValueKey('analytics_period')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Previous day').last);
+    await tester.pumpAndSettle();
+    expect(requested!.holdStaleMinutes, 60);
+    await tester.ensureVisible(find.text('Clear'));
+    await tester.tap(find.text('Clear'));
+    await tester.pumpAndSettle();
+    expect(requested!.holdStaleMinutes, 60);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Order time basis survives period and grouping changes', (tester) async {
     final queries = <AnalyticsQuery>[];
     await tester.pumpWidget(MaterialApp(home: Scaffold(body: ManagerAnalyticsWorkspace(
