@@ -1,0 +1,66 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:resturant_sys/core/analytics/analytics_models.dart';
+import 'package:resturant_sys/core/analytics/analytics_service.dart';
+import 'package:resturant_sys/core/analytics/analytics_export_service.dart';
+import 'package:resturant_sys/core/auth/auth_service.dart';
+import 'package:resturant_sys/core/auth/staff.dart';
+import 'package:resturant_sys/core/database/pos_database.dart';
+import 'package:resturant_sys/core/finance/operations_controller.dart';
+import 'package:resturant_sys/core/shifts/cash_movement.dart';
+import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
+
+void main() {
+  setUpAll(sqfliteFfiInit);
+  test('selected Shift reconciles each linked expense once and ignores order-only filters', () async {
+    final store = PosDatabase(factory: databaseFactoryFfi, customPath: inMemoryDatabasePath);
+    final db = await store.initialize();
+    addTearDown(store.close);
+    final staff = await db.query('staff');
+    final manager = staff.firstWhere((r) => r['role'] != 'CASHIER');
+    final cashier = staff.firstWhere((r) => r['role'] == 'CASHIER');
+    final managerId = manager['id'] as int;
+    final cashierId = cashier['id'] as int;
+    final shifts = ShiftAndCashController(database: db);
+    await shifts.openBusinessDay(openedByStaffId: managerId);
+    final earlier = await shifts.openShift(staffId: cashierId, openingFloat: 200);
+    await shifts.closeShift(shiftId: earlier.id, staffId: cashierId, countedCash: 200);
+    final selected = await shifts.openShift(staffId: cashierId, openingFloat: 1000);
+    final operations = OperationsController(db);
+    final category = await operations.saveCategory(managerId: managerId, name: 'Utilities');
+    for (final request in ['bill-one', 'bill-two']) {
+      await operations.postExpense(managerId: managerId, categoryId: category,
+        amountPaisa: 12000, description: 'Same value distinct bills', source: FundingSource.drawer,
+        shiftId: selected.id, reason: 'Paid', requestKey: request);
+    }
+    await operations.postExpense(managerId: managerId, categoryId: category,
+      amountPaisa: 7000, description: 'Bank bill', source: FundingSource.bank,
+      reason: 'Paid externally', requestKey: 'external');
+    await shifts.recordCashMovement(shiftId: selected.id, staffId: cashierId,
+      type: CashMovementType.payIn, amount: 50, category: 'General', notes: 'Extra float');
+    final auth = AuthService(database: db)..session.login(Staff.fromMap(manager));
+    final service = AnalyticsService(database: db, authService: auth);
+    final query = AnalyticsQuery(startDate: DateTime(2020), endDateExclusive: DateTime(2100),
+      live: true, shiftId: selected.id, cashierId: cashierId,
+      diningType: 'DELIVERY', paymentMethod: 'CARD');
+    final snapshot = await service.load(query);
+    final report = snapshot.section(AnalyticsFamily.cash);
+    num? value(String id) => report.metrics.singleWhere((m) => m.id == id).value;
+    expect(value('opening_float'), 100000);
+    expect(value('expected_drawer'), 81000);
+    expect(value('variance'), isNull);
+    expect(value('cash_expenses'), 24000);
+    expect(report.rows.where((r) => r.cells['kind'] == 'Shift reconciliation'), hasLength(1));
+    final effects = report.rows.where((r) => r.cells['kind'] == 'Physical cash effect');
+    expect(effects.map((r) => r.cells['amount_paisa']), unorderedEquals([-12000, -12000, 5000]));
+    expect(effects.where((r) => r.cells['component'] == 'expenses').every(
+      (r) => r.cells['recorded_by_id'] == managerId && r.cells['shift_owner_id'] == cashierId), isTrue);
+    final csv = AnalyticsExportService().csv(snapshot, AnalyticsFamily.cash);
+    expect(csv, contains('Physical cash effect'));
+    expect(csv, contains('81000'));
+    await shifts.closeShift(shiftId: selected.id, staffId: cashierId, countedCash: 800);
+    final closed = (await service.load(query)).section(AnalyticsFamily.cash);
+    expect(closed.metrics.singleWhere((m) => m.id == 'variance').value, -1000);
+    expect(value('variance'), isNull, reason: 'Earlier snapshot remains immutable');
+  });
+}
