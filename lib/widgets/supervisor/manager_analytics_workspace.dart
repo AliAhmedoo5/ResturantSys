@@ -834,4 +834,3 @@ String _sourceLabel(AnalyticsRow row) {
       ? '${row.sourceType} • ${ids.length} records'
       : '${row.sourceType} #$source';
 }
-

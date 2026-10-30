@@ -124,5 +124,3 @@ class _ShiftCashBridge {
     ]);
   }
 }
-
-

@@ -40,12 +40,16 @@ void main() {
       payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 100)]);
     final service = AnalyticsService(database: db, authService: auth);
     final query = AnalyticsQuery(startDate: DateTime(2020), endDateExclusive: DateTime(2100));
+    final legacyOpen = await db.insert('business_days', {'opened_at': '2020-01-02T08:00:00+05:00',
+      'status': 'OPEN', 'opened_by_staff_id': 1});
     final snapshot = await service.load(query);
     final section = snapshot.section(AnalyticsFamily.orders);
     final daily = section.rows.where((r) => r.cells['kind'] == 'Daily workload');
     final closed = daily.singleWhere((r) => r.cells['business_day_id'] == completed.id);
     final partial = daily.singleWhere((r) => r.cells['business_day_id'] == open.id);
     expect(closed.cells['period_complete'], isTrue);
+    expect(daily.singleWhere((r) => r.cells['business_day_id'] == legacyOpen).cells['period_complete'], isFalse,
+      reason: 'An old opening date does not establish Business Day closure');
     expect(partial.cells['period_complete'], isFalse);
     expect(partial.cells['period_status'], contains('Open Business Day'));
     expect(partial.cells['confirmed_orders'], 1);
@@ -111,7 +115,7 @@ void main() {
     expect(daily.cells['order_ids'], '1,2');
     final hourly = section.rows.where((r) => r.cells['kind'] == 'Hourly workload').toList();
     expect(hourly, hasLength(24));
-    expect(hourly.fold<int>(0, (sum, r) => sum + (r.cells['confirmed_orders'] as int)), 2);
+    expect(hourly.fold<int>(0, (sum, r) => sum + (r.cells['confirmed_orders'] as int? ?? 0)), 2);
     final chart = section.charts.singleWhere((c) => c.id == 'workload_hours');
     expect(chart.points.fold<num>(0, (sum, p) => sum + (p.value ?? 0)), 2);
     expect(chart.points.expand((p) => p.rows).map((r) => r.sourceId).toSet(), {'1', '2'});
@@ -131,11 +135,15 @@ void main() {
     // above cover confirmation/cancellation/refund semantics without rewriting time.
     final days = <int>[];
     final shifts = <int>[];
-    for (final opening in ['2026-10-29T08:00:00+05:00', '2026-10-29T18:00:00+05:00', '2026-10-30T08:00:00+05:00']) {
-      final day = await db.insert('business_days', {'opened_at': opening, 'status': 'OPEN', 'opened_by_staff_id': 1});
+    for (final period in [
+      (opened: '2026-10-29T08:00:00+05:00', closed: '2026-10-29T12:00:00+05:00'),
+      (opened: '2026-10-29T18:00:00+05:00', closed: '2026-10-30T02:00:00+05:00'),
+      (opened: '2026-10-30T08:00:00+05:00', closed: '2026-10-30T12:00:00+05:00'),
+    ]) {
+      final day = await db.insert('business_days', {'opened_at': period.opened, 'closed_at': period.closed, 'status': 'CLOSED', 'opened_by_staff_id': 1});
       days.add(day);
       shifts.add(await db.insert('shifts', {'business_day_id': day, 'staff_id': 2,
-        'opened_at': opening, 'opening_float': 0, 'status': 'OPEN'}));
+        'opened_at': period.opened, 'closed_at': period.closed, 'opening_float': 0, 'status': 'CLOSED'}));
     }
     Future<int> order(int index, int token, int amount, String at) => db.insert('orders', {
       'business_day_id': days[index], 'shift_id': shifts[index], 'cashier_id': 2,
@@ -173,7 +181,8 @@ void main() {
     expect(calendarRows.map((r) => r.cells['period']), ['2026-10-29', '2026-10-30']);
     expect(calendarRows.map((r) => r.cells['confirmed_orders']), [2, 3]);
     expect(calendarRows.map((r) => r.cells['recorded_value_paisa']), [2000, 52000]);
-    expect(calendar.section(AnalyticsFamily.orders).charts.singleWhere((c) => c.id == 'workload_days').points.first.value, 3);
+    final currentCalendar = calendar.section(AnalyticsFamily.orders).charts.singleWhere((c) => c.id == 'workload_days').points.singleWhere((p) => p.label.startsWith('2026-10-30'));
+    expect(currentCalendar.value, 3);
     final empty = await service.load(query.copyWith(startDate: DateTime(2020, 1, 1), endDateExclusive: DateTime(2020, 1, 2)));
     final absentHours = empty.section(AnalyticsFamily.orders).rows.where((r) => r.cells['kind'] == 'Hourly workload');
     expect(absentHours, hasLength(24));
