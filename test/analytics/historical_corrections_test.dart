@@ -36,7 +36,7 @@ void main() {
     await expectLater(service.append(managerPin: '1234', businessDayId: day.id,
       shiftId: shift.id, type: HistoricalCorrectionType.drawerPayout,
       deltaPaisa: -3500, evidenceKey: 'supplier-slip-41', reason: 'Duplicate slip', reconciled: true), throwsA(isA<StateError>()));
-    await service.reverse(id, managerPin: '1234', reason: 'Wrong slip');
+    await service.reverse(id, managerPin: '1234', reason: 'Wrong supplier slip');
     expect((await service.load(day.id)).adjustedVariancePaisa, -3500);
     expect(adjusted.adjustedVariancePaisa, 0);
     final oldCutoff = await service.load(day.id, cutoff: DateTime.parse(adjusted.entries.single['recorded_at'] as String));
@@ -45,3 +45,4 @@ void main() {
     expect(oldCutoff.csv(), contains('Original sealed'));
   });
 }
+

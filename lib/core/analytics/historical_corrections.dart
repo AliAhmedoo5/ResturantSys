@@ -125,17 +125,17 @@ class HistoricalCorrectionSnapshot {
   final DateTime cutoff;
   final String originalSnapshotJson,originalHash,originalRecordedAt;
   final List<Map<String,Object?>> entries;
-  List<dynamic> get _sections => (jsonDecode(originalSnapshotJson) as Map<String,dynamic>)['sections'] as List;
+  List<dynamic> get _sections => (jsonDecode(originalSnapshotJson) as Map<String,dynamic>)['sections'] as List<dynamic>;
   int get originalCollectionDuePaisa {
-    final rows = (_sections.first as Map)['rows'] as List;
-    return ((rows.cast<List>().where((r)=>r.first=='Collection Due').firstOrNull?[1] as num?) ?? 0).toInt();
+    final rows = (_sections.first as Map<String,dynamic>)['rows'] as List<dynamic>;
+    return ((rows.cast<List<dynamic>>().where((r)=>r.first=='Collection Due').firstOrNull?[1] as num?) ?? 0).toInt();
   }
   int? get originalVariancePaisa {
-    final section = _sections.cast<Map>().where((s)=>s['title']=='Shift Handover Audit').firstOrNull;
+    final section = _sections.cast<Map<String,dynamic>>().where((s)=>s['title']=='Shift Handover Audit').firstOrNull;
     if (section == null) return null;
-    final rows = section['rows'] as List;
-    if (rows.any((r)=>(r as List)[6] is! num)) return null;
-    return rows.fold<int>(0,(sum,r)=>sum+((r as List)[6] as num).toInt());
+    final rows = section['rows'] as List<dynamic>;
+    if (rows.any((r)=>(r as List<dynamic>)[6] is! num)) return null;
+    return rows.fold<int>(0,(sum,r)=>sum+((r as List<dynamic>)[6] as num).toInt());
   }
   int _sum(String metric) => entries.where((r)=>r['metric']==metric).fold(0,(sum,r)=>sum+(r['delta_amount_paisa'] as int));
   int get adjustedCollectionDuePaisa => originalCollectionDuePaisa-_sum('collection');
@@ -168,3 +168,4 @@ class HistoricalCorrectionSnapshot {
   }
   String csv() => AnalyticsExportService().csv(toAnalyticsSnapshot(),AnalyticsFamily.cash);
 }
+

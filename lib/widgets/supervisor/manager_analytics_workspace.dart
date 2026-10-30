@@ -1,3 +1,5 @@
+import 'historical_corrections_workspace.dart';
+import '../../core/analytics/historical_corrections.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:intl/intl.dart';
@@ -315,6 +317,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
           ConstrainedBox(constraints: const BoxConstraints(maxWidth: 240),
             child: widget.exportActionsBuilder!(context, snapshot, _family)),
       ]),
+      Align(alignment: Alignment.centerLeft, child: TextButton.icon(icon: const Icon(Icons.history), label: const Text('Historical corrections'), onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => Scaffold(appBar: AppBar(title: const Text('Historical corrections')), body: HistoricalCorrectionsWorkspace(service: HistoricalCorrections(database: widget.service.database, auth: widget.service.authService))))))),
       const SizedBox(height: 18),
       Container(padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(color: StreetFoodMafiaColors.darkNavy,
@@ -834,3 +837,4 @@ String _sourceLabel(AnalyticsRow row) {
       ? '${row.sourceType} • ${ids.length} records'
       : '${row.sourceType} #$source';
 }
+
