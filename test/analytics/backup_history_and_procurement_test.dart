@@ -5,7 +5,6 @@ import 'package:resturant_sys/core/analytics/analytics_service.dart';
 import 'package:resturant_sys/core/analytics/analytics_time.dart';
 import 'package:resturant_sys/core/auth/auth_service.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
-import 'package:resturant_sys/core/database/backup_attempts_schema.dart';
 import 'package:resturant_sys/core/database/pos_database.dart';
 
 void main() {
@@ -118,7 +117,7 @@ void main() {
     });
 
     test('procurement section projects purchase_frequency and distinct_suppliers matching exports', () async {
-      final dayId = await db.insert('business_days', {
+      await db.insert('business_days', {
         'opened_at': '2026-10-30 00:00:00',
         'closed_at': '2026-10-30 23:59:59',
         'status': 'CLOSED',

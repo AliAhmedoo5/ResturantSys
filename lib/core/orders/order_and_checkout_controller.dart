@@ -1139,7 +1139,6 @@ class OrderAndCheckoutController {
       int netQty = 0;
       int netGross = 0;
       int netDiscount = 0;
-      int netNetSales = 0;
       int netTax = 0;
       int? netBom;
       int? netMargin;
@@ -1149,7 +1148,6 @@ class OrderAndCheckoutController {
         netQty += a.quantity;
         netGross += a.grossSalesPaisa;
         netDiscount += a.allocatedDiscountPaisa;
-        netNetSales += a.netSalesPaisa;
         netTax += a.taxCarveOutPaisa;
         if (a.bomRecipeCostPaisa != null) {
           hasBom = true;
@@ -2300,7 +2298,6 @@ class OrderAndCheckoutController {
                 menuItem: ni.menuItem,
                 deal: ni.deal,
                 quantity: addedQty,
-                unitPrice: ni.unitPrice,
                 selectedModifiers: ni.selectedModifiers,
                 selectedDealChoices: ni.selectedDealChoices,
               );
