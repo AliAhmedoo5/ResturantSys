@@ -10,7 +10,11 @@ class AnalyticsDomainFilters extends StatelessWidget {
   final ValueChanged<AnalyticsQuery> onChanged;
 
   @override
-  Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+  Widget build(BuildContext context) => ExpansionTile(
+    key: const ValueKey('analytics_domain_filters'),
+    tilePadding: EdgeInsets.zero, title: const Text('Domain filters'),
+    subtitle: Text('${query.domainFilters.length} selected - ${query.fundingStream ?? 'all funding streams'}'),
+    children: [Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
     const Text('Domain filters • inspect each report’s scope notes'),
     const SizedBox(height: 8),
     Wrap(spacing: 8, runSpacing: 8, children: [
@@ -39,7 +43,7 @@ class AnalyticsDomainFilters extends StatelessWidget {
       'Known/guest segments describe phone identity coverage; lifetime loyalty remains unavailable. '
       'Whole drawers and unrelated current balances retain their labeled scope.',
       style: TextStyle(fontSize: 12))),
-  ]);
+  ])]);
 
   Widget _picker(AnalyticsDimension dimension) {
     final selected = query.domainFilters[dimension];

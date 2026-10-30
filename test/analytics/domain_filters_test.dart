@@ -65,6 +65,9 @@ void main() {
     final khata = VendorKhataController(database: db);
     final supplier = await khata.createVendor(name: 'Selected supplier', phone: '03001112233');
     final other = await khata.createVendor(name: 'Other supplier', phone: '03009998877');
+    for (final vendor in [supplier, other]) {
+      await khata.setSuppliedItems(managerId: managerId, vendorId: vendor.id, ingredientIds: {flour.id});
+    }
     final selected = await khata.recordCreditDelivery(vendorId: supplier.id, amount: 400,
       rawIngredientId: flour.id, quantity: 5, staffId: managerId, requestKey: 'selected');
     await khata.recordCreditDelivery(vendorId: other.id, amount: 300,
@@ -90,7 +93,7 @@ void main() {
     addTearDown(store.close);
     final manager = (await db.query('staff')).firstWhere((r) => r['role'] != 'CASHIER');
     final managerId = manager['id'] as int;
-    await ShiftAndCashController(database: db).openBusinessDay(openedByStaffId: managerId);
+    await ShiftAndCashController(database: db).openBusinessDay(openedByStaffId: managerId, openedAt: DateTime.utc(2026, 8, 31, 8));
     final operations = OperationsController(db);
     final category = await operations.saveCategory(managerId: managerId, name: 'Late bank expense');
     await operations.postExpense(managerId: managerId, categoryId: category, amountPaisa: 9000,
