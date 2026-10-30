@@ -165,11 +165,18 @@ void main() {
 
       final rowA = customerRows.firstWhere((r) => (r.cells['customer'] as String).endsWith('2233'));
       expect(rowA.cells['history_classification'], 'Returning');
-      expect(rowA.cells['first_order_date'], contains('2026-10-20'));
+      expect(rowA.cells['first_order_at'], contains('2026-10-20'));
+      expect(rowA.cells['first_order_at_source'], contains('2026-10-20'));
 
       final rowB = customerRows.firstWhere((r) => (r.cells['customer'] as String).endsWith('8877'));
       expect(rowB.cells['history_classification'], 'First-time');
-      expect(rowB.cells['first_order_date'], contains('2026-10-25'));
+      expect(rowB.cells['first_order_at'], contains('2026-10-25'));
+      expect(rowB.cells['first_order_at_source'], contains('2026-10-25'));
+
+      // Verify order history rows also carry standardized first_order_at with source provenance
+      final orderHistoryRows = customerSection.rows.where((r) => r.cells['kind'] == 'Order history').toList();
+      expect(orderHistoryRows.first.cells['first_order_at'], contains('+05:00 [Asia/Karachi]'));
+      expect(orderHistoryRows.first.cells['first_order_at_source'], isNotNull);
 
       // Verify safe masking
       expect(customerSection.rows.map((r) => r.cells.toString()).join(), isNot(contains('03001112233')));

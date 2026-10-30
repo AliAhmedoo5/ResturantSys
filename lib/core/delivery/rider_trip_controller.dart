@@ -253,8 +253,8 @@ class RiderTripController {
       throw StateError('Staff ID #$cashierStaffId is not authorized to confirm collections.');
     }
     final staffRole = StaffRole.fromCode(staffRows.first['role'] as String);
-    if (staffRole != StaffRole.cashier && !staffRole.isManager) {
-      throw StateError('Authorization error: Only cashiers or managers can record confirmed collections.');
+    if (staffRole != StaffRole.cashier) {
+      throw StateError('Authorization error: Only active cashiers can record confirmed collections.');
     }
 
     final recordedAt = DateTime.now().toUtc();

@@ -31,7 +31,7 @@ void main() {
       expect(saved.grandTotal,example.due/100);
       final auth = AuthService(database:db)..session.login(Staff.fromMap((await db.query('staff',where:'id=1')).single));
       final snapshot = await AnalyticsService(database:db,authService:auth).load(AnalyticsQuery(startDate:DateTime(2020),endDateExclusive:DateTime(2100),live:true));
-      final event = snapshot.section(AnalyticsFamily.cash).rows.singleWhere((r)=>r.cells['event_key']=='receipt-final');
+      final event = snapshot.section(AnalyticsFamily.cash).rows.singleWhere((r) => r.sourceType == 'payment_events' && r.cells['event_key'] == 'receipt-final');
       expect(event.cells['amount_paisa'],example.finalCash);
       expect(event.cells['rounding_paisa'],example.delta);
       expect(event.cells['change_paisa'],0);

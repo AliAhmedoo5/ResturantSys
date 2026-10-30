@@ -188,13 +188,18 @@ class _ReportBuilder {
     }
     times.sort();
     final trips = e.get('trips');
-    final settledTripIds = trips.where((t) => t['status'] == 'SETTLED').map((t) => t['id']).toSet();
+    final allTrips = e.get('all_trips');
+    final settledTripIds = allTrips.where((t) => t['status'] == 'SETTLED').map((t) => t['id']).toSet();
     final allEvents = e.get('payment_events');
     final activeCollections = allEvents.where((p) => p['kind'] == 'RIDER_COLLECTION' && !settledTripIds.contains(p['settlement_id'])).toList();
     final riderHeldCash = _integers(activeCollections, 'amount_paisa');
-    final collectedOrderIds = activeCollections.map((p) => p['order_id']).toSet();
-    final uncollectedDueOrders = valid.where((o) => o['payment_status'] == 'COLLECTION_DUE' && !collectedOrderIds.contains(o['id']));
-    final due = _integers(uncollectedDueOrders, 'collection_due_paisa');
+    final due = valid.where((o) => o['payment_status'] == 'COLLECTION_DUE').fold<int>(0, (sum, o) {
+      final orderDue = (o['collection_due_paisa'] as int?) ?? 0;
+      final collectedForOrder = activeCollections
+          .where((p) => p['order_id'] == o['id'])
+          .fold<int>(0, (s, p) => s + ((p['amount_paisa'] as int?) ?? 0));
+      return sum + (orderDue > collectedForOrder ? orderDue - collectedForOrder : 0);
+    });
     final receivingEvents = _receivingEvents();
     final handovers = receivingEvents.where((p) => p['kind'] == 'RIDER_HANDOVER');
     final acceptedDrawerCash = _integers(handovers, 'amount_paisa');
@@ -210,7 +215,7 @@ class _ReportBuilder {
       _metric('rider_shortages', 'Rider settlement shortage', riderShortages, explanation: 'Recorded settlement cash shortages against expected cash.'),
       _metric('trips', 'Trips (whole selected days)', trips.length, unit: AnalyticsUnit.count, explanation: _globalBasis),
       _metric('unsettled_exposure', 'Unsettled expected COD (selected days)', _integers(trips.where((t) => ['DISPATCHED', 'RETURNED'].contains(t['status'])), 'cash_expected_paisa'), explanation: 'Expected COD in unsettled trips selected by trip Business Day, all orders. Exposure is not proof of customer collection or rider debt.'),
-      _metric('all_unsettled_exposure', 'Unsettled expected COD (all outstanding)', _integers(e.get('all_trips'), 'cash_expected_paisa'), explanation: 'Current global expected COD for DISPATCHED/RETURNED trips; not verified cash collected.'),
+      _metric('all_unsettled_exposure', 'Unsettled expected COD (all outstanding)', _integers(allTrips.where((t) => ['DISPATCHED', 'RETURNED'].contains(t['status'])), 'cash_expected_paisa'), explanation: 'Current global expected COD for DISPATCHED/RETURNED trips; not verified cash collected.'),
       _metric('unique_attempted_orders', 'Unique delivery orders attempted', uniqueAttemptedOrders, unit: AnalyticsUnit.count, explanation: 'Distinct Order IDs with at least one dispatched delivery attempt.'),
       _metric('reattempted_orders', 'Reattempted orders', reattemptedOrders, unit: AnalyticsUnit.count, explanation: 'Distinct Order IDs with more than one dispatched attempt.'),
       _metric('total_reattempts', 'Total delivery reattempts', totalReattempts, unit: AnalyticsUnit.count, explanation: 'Attempts dispatched beyond the initial run (total attempts minus unique attempted orders).'),
@@ -222,12 +227,13 @@ class _ReportBuilder {
       _duration('travel_median', 'Median travel time', _percentile(times, .5), times.length, delivered.length),
       _duration('travel_p90', '90th percentile travel', _percentile(times, .9), times.length, delivered.length),
     ];
+    String reasonFor(Object? raw) {
+      if (raw is String && raw.trim().isNotEmpty) return _safeText(raw.trim());
+      return 'Absent historical reason evidence';
+    }
     final returnReasons = <String, int>{};
     for (final a in returned) {
-      final rawNotes = a['notes'] as String?;
-      final reason = (rawNotes != null && rawNotes.trim().isNotEmpty)
-          ? _safeText(rawNotes.trim())
-          : 'Absent historical reason evidence';
+      final reason = reasonFor(a['notes']);
       returnReasons[reason] = (returnReasons[reason] ?? 0) + 1;
     }
     for (final entry in returnReasons.entries) {
@@ -243,12 +249,7 @@ class _ReportBuilder {
       ...attempts.map((a) {
         final orderAttempts = attemptsByOrder[a['order_id']] ?? const <_Record>[];
         final isReattempt = orderAttempts.isNotEmpty && a['id'] != orderAttempts.first['id'];
-        final rawNotes = a['notes'] as String?;
-        final reason = a['status'] == 'RETURNED'
-            ? (rawNotes != null && rawNotes.trim().isNotEmpty
-                ? _safeText(rawNotes.trim())
-                : 'Absent historical reason evidence')
-            : null;
+        final reason = a['status'] == 'RETURNED' ? reasonFor(a['notes']) : null;
         return _row('rider_trip_orders', a, {
           'kind': 'Delivery attempt',
           'order_id': a['order_id'],
@@ -295,43 +296,49 @@ class _ReportBuilder {
     }
     var firstTimeCount = 0;
     var returningCount = 0;
-    for (final entry in groups.entries) {
-      final firstLifetime = lifetimeFirstOrders[entry.key];
-      final firstLifetimeTime = _karachi(firstLifetime?['created_at']);
-      final earliestInCohort = entry.value.map((o) => _karachi(o['created_at'])).whereType<DateTime>().fold<DateTime?>(null, (earliest, t) => earliest == null || t.isBefore(earliest) ? t : earliest);
-      final isReturning = firstLifetimeTime != null && earliestInCohort != null && firstLifetimeTime.isBefore(earliestInCohort);
-      if (isReturning) {
-        returningCount++;
-      } else {
-        firstTimeCount++;
-      }
-    }
     final rows = <AnalyticsRow>[];
     for (final entry in groups.entries) {
       final customer = 'Customer •••${entry.key.substring(entry.key.length - 4)}';
       final value = _sum(entry.value, 'grand_total');
       final firstLifetime = lifetimeFirstOrders[entry.key];
       final firstLifetimeTime = _karachi(firstLifetime?['created_at']);
-      final earliestInCohort = entry.value.map((o) => _karachi(o['created_at'])).whereType<DateTime>().fold<DateTime?>(null, (earliest, t) => earliest == null || t.isBefore(earliest) ? t : earliest);
-      final isReturning = firstLifetimeTime != null && earliestInCohort != null && firstLifetimeTime.isBefore(earliestInCohort);
-      final classification = isReturning ? 'Returning' : 'First-time';
-      final firstOrderDateStr = firstLifetimeTime != null ? _sqlTime(firstLifetimeTime) : 'Unknown';
+      final earliestInCohort = entry.value
+          .map((o) => _karachi(o['created_at']))
+          .whereType<DateTime>()
+          .fold<DateTime?>(null, (earliest, t) => earliest == null || t.isBefore(earliest) ? t : earliest);
+      final String classification;
+      if (firstLifetimeTime != null && earliestInCohort != null) {
+        if (firstLifetimeTime.isBefore(earliestInCohort)) {
+          classification = 'Returning';
+          returningCount++;
+        } else {
+          classification = 'First-time';
+          firstTimeCount++;
+        }
+      } else {
+        classification = 'Unavailable';
+      }
+      final firstOrderAtSource = firstLifetimeTime != null ? firstLifetime?['created_at'] : null;
+      final firstOrderAtFormatted = firstOrderAtSource != null ? analyticsTimestamp(firstOrderAtSource) : 'Unavailable';
 
       rows.add(AnalyticsRow(id: 'customer-${entry.value.first['id']}', sourceType: 'orders',
         sourceId: entry.value.map((order) => order['id']).join(','), cells: {
           'kind': 'Customer aggregate', 'customer': customer,
-          'history_classification': classification,
-          'first_order_date': firstOrderDateStr,
           'orders_in_range': entry.value.length,
           'recorded_value_paisa': value, 'average_ticket_paisa': value / entry.value.length,
+          'area': entry.value.first['delivery_area_name_snapshot'],
+          'history_classification': classification,
+          'first_order_at': firstOrderAtFormatted,
+          if (firstOrderAtSource != null) 'first_order_at_source': firstOrderAtSource,
         }));
       rows.addAll(entry.value.map((order) => _row('orders', order, {
         'kind': 'Order history', 'customer': customer,
-        'history_classification': classification,
-        'first_order_date': firstOrderDateStr,
         'order_id': order['id'],
         'orders_in_range': entry.value.length, 'recorded_value_paisa': _money(order, 'grand_total'),
-        'area': order['delivery_area_name_snapshot'], 'created_at': order['created_at'],
+        'area': order['delivery_area_name_snapshot'],
+        'history_classification': classification,
+        'first_order_at': firstOrderAtSource,
+        'created_at': order['created_at'],
       })));
     }
     return _section(AnalyticsFamily.customers, 'Customers', [
@@ -345,7 +352,7 @@ class _ReportBuilder {
       _rate('identity_coverage', 'Known identity coverage', knownOrders, valid.length, 'Known phone orders / eligible filtered orders.'),
       _rate('repeat_rate', 'Repeat-customer rate', repeat, groups.length, 'Known normalized phone proxies with at least two eligible selected orders / proxies with at least one. Guests excluded.'),
       _metric('single_order_customers', 'Single-order phone identities', groups.length - repeat, unit: AnalyticsUnit.count, explanation: 'One eligible order within selected range; distinct from first-time/returning lifetime classification.'),
-    ], rows, ['kind', 'customer', 'history_classification', 'first_order_date', 'order_id', 'orders_in_range', 'recorded_value_paisa', 'average_ticket_paisa', 'area', 'created_at'], [
+    ], rows, ['kind', 'customer', 'order_id', 'orders_in_range', 'recorded_value_paisa', 'average_ticket_paisa', 'area', 'history_classification', 'first_order_at', 'created_at'], [
       _orderBasis,
       'Customer classification distinguishes first-time customers (whose first eligible purchase occurred in this selected window) from returning customers (who had an eligible purchase prior to this window across all available history). Earlier installation boundaries limit historical depth; guest orders without phone numbers cannot be classified.',
       'Phone normalization removes separators and unifies +92/0092/92 mobile prefixes with local 0. Shared numbers and masked suffix collisions are possible. Raw phones, names and addresses are excluded.',
@@ -1007,6 +1014,14 @@ class _ReportBuilder {
     ], ['kind', 'order_id', 'ingredient_id', 'revision', 'quantity', 'unit_cost_rupees', 'cost_paisa', 'source_event_id', 'recorded_loss_paisa', 'reason', 'created_at'], [policy, 'Unknown costs remain null. Current purchase rates never rewrite earlier cost events. No invented pre-upgrade profit.', 'Recorded net result uses posting periods; it does not assert that all expenses or earned salary have been entered. Order filters withhold net result because overhead cannot be allocated reliably.']);
   }
 
+  static const _safeConfigKeys = {
+    'name', 'code', 'rate_paisa', 'percentage', 'min_order_paisa', 'max_discount_paisa',
+    'is_active', 'is_percent', 'active', 'archived', 'database', 'theme', 'printer_name',
+    'paper_width', 'tax_rate', 'delivery_fee', 'delivery_fee_paisa', 'currency',
+    'business_name', 'address', 'phone', 'ntn', 'strn', 'header', 'footer',
+    'backup_path', 'auto_backup', 'retention_days', 'sound_enabled', 'id',
+  };
+
   static String _safeConfigSummary(String? kind, String? beforeJson, String? afterJson) {
     final cleanKind = _safeText(kind ?? 'CONFIG');
     try {
@@ -1016,7 +1031,10 @@ class _ReportBuilder {
       if (after is Map) {
         for (final k in after.keys) {
           final sk = '$k';
-          if (['pin', 'pin_hash', 'password', 'salt', 'secret', 'token'].contains(sk.toLowerCase())) continue;
+          final lower = sk.toLowerCase();
+          if (['pin', 'pin_hash', 'password', 'salt', 'secret', 'token'].any((s) => lower.contains(s))) continue;
+          final isSafe = _safeConfigKeys.contains(lower) || RegExp(r'^(key_[a-z0-9_]+)$', caseSensitive: false).hasMatch(sk);
+          if (!isSafe) continue;
           if (before is Map) {
             if (before[k] != after[k]) changedKeys.add(sk);
           } else {
@@ -1168,7 +1186,7 @@ class _ReportBuilder {
     }
     if (source == 'orders') identity('order_cashier', record['cashier_id'], 'staff');
     if (source != 'shifts' && source != 'staff' && source != 'orders') {
-      final actor = record['recorded_by'] ?? record['manager_id'] ?? record['staff_id'] ?? record['cashier_id'];
+      final actor = record['recorded_by'] ?? record['manager_id'] ?? record['staff_id'] ?? record['cashier_id'] ?? record['actor_id'];
       identity('recorded_by', actor, 'staff', retained: record['recorded_by_name_snapshot'] as String?);
       identity('approved_by', record['approved_by'], 'staff');
     }

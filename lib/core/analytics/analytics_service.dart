@@ -156,7 +156,7 @@ class AnalyticsService {
     await read('rounding', 'rounding_variance_ledger', 'SELECT x.id,x.order_id,x.shift_id,x.cash_rounding_paisa,x.created_at FROM rounding_variance_ledger x $joinedOrder', orderArgs);
     await read('stock_alerts', 'checkout_stock_alerts', 'SELECT x.order_id,x.ingredient_id,x.stock_at_checkout,x.created_at FROM checkout_stock_alerts x $joinedOrder', orderArgs);
     await read('all_due', 'orders', "SELECT o.id,$outstandingCollectionPaisaSql AS collection_due_paisa FROM orders o WHERE o.payment_status='COLLECTION_DUE'");
-    await read('all_trips', 'rider_trips', "SELECT id,cash_expected_paisa FROM rider_trips WHERE status IN ('DISPATCHED','RETURNED')");
+    await read('all_trips', 'rider_trips', 'SELECT id,status,cash_expected_paisa FROM rider_trips');
     if (!query.live) {
       final duration = query.timeBasis == AnalyticsTimeBasis.calendarTime ? query.endDateExclusive.difference(query.startDate) : _date(query.endDateExclusive).difference(_date(query.startDate));
       final prior = query.copyWith(startDate: query.startDate.subtract(duration), endDateExclusive: query.startDate);

@@ -199,5 +199,20 @@ void main() {
       expect(csv, contains('Rider-held cash'));
       expect(csv, contains('Rider settlement shortage'));
     });
+
+    test('Manager credentials are hard-blocked from confirming customer collections', () async {
+      await expectLater(
+        riderTripController.confirmCustomerCollection(
+          tripId: 1,
+          orderId: 2,
+          cashierStaffId: 1, // Manager staff ID
+        ),
+        throwsA(isA<StateError>().having(
+          (e) => e.message,
+          'message',
+          contains('Only active cashiers can record confirmed collections'),
+        )),
+      );
+    });
   });
 }

@@ -93,6 +93,8 @@ void main() {
       expect(configRows.length, 1);
       expect(configRows.single.cells['action'], 'SHORTCUTS');
       expect(configRows.single.cells['reason'], contains('KEY_F1'));
+      expect(configRows.single.cells['recorded_by_id'], 1);
+      expect(configRows.single.cells['recorded_by_name_current'], isNotEmpty);
       // Secret pin_hash MUST NOT be leaked
       expect(configRows.single.cells['reason'], isNot(contains('LEAKED_SECRET_HASH_999')));
 
