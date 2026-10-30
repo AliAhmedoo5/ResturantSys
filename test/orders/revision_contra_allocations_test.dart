@@ -221,11 +221,7 @@ void main() {
 
       // Later, supplier prices increase: ingredient updated to 90 PKR
       await catalog.updateRawIngredient(
-        ingredientId: ingredient.id,
-        name: 'Special Ingredient',
-        storageUnit: StorageUnit.count,
-        lowStockThreshold: 10,
-        costPerRecipeUnit: 90.0,
+        ingredient.copyWith(costPerRecipeUnit: 90.0),
       );
 
       // Future rate is recorded in history
