@@ -1110,7 +1110,11 @@ class OrderAndCheckoutController {
     required DatabaseExecutor txn,
     required DateTime now,
     Set<int>? targetOrderItemIds,
+    Set<int>? targetMenuItemIds,
+    Set<int>? targetDealIds,
     Map<int, int>? partialReversals,
+    Map<int, int>? partialMenuItemReversals,
+    Map<int, int>? partialDealReversals,
   }) async {
     final rows = await txn.query(
       PosDatabaseConstants.tableOrderItemAllocations,
@@ -1132,7 +1136,11 @@ class OrderAndCheckoutController {
       final baseAlloc = lineRows.firstWhere((a) => a.entryType == 'SALE', orElse: () => lineRows.first);
       final orderItemId = baseAlloc.orderItemId;
 
-      if (targetOrderItemIds != null && (orderItemId == null || !targetOrderItemIds.contains(orderItemId))) {
+      final matchesTarget = (targetOrderItemIds == null && targetMenuItemIds == null && targetDealIds == null) ||
+          (targetOrderItemIds != null && orderItemId != null && targetOrderItemIds.contains(orderItemId)) ||
+          (targetMenuItemIds != null && baseAlloc.menuItemId != null && targetMenuItemIds.contains(baseAlloc.menuItemId)) ||
+          (targetDealIds != null && baseAlloc.dealId != null && targetDealIds.contains(baseAlloc.dealId));
+      if (!matchesTarget) {
         continue;
       }
 
@@ -1165,6 +1173,16 @@ class OrderAndCheckoutController {
       int qtyToReverse = netQty;
       if (partialReversals != null && orderItemId != null && partialReversals.containsKey(orderItemId)) {
         final req = partialReversals[orderItemId]!;
+        if (req < netQty) {
+          qtyToReverse = req;
+        }
+      } else if (partialMenuItemReversals != null && baseAlloc.menuItemId != null && partialMenuItemReversals.containsKey(baseAlloc.menuItemId)) {
+        final req = partialMenuItemReversals[baseAlloc.menuItemId]!;
+        if (req < netQty) {
+          qtyToReverse = req;
+        }
+      } else if (partialDealReversals != null && baseAlloc.dealId != null && partialDealReversals.containsKey(baseAlloc.dealId)) {
+        final req = partialDealReversals[baseAlloc.dealId]!;
         if (req < netQty) {
           qtyToReverse = req;
         }
@@ -2005,7 +2023,11 @@ class OrderAndCheckoutController {
       final linesToInsert = <Map<String, Object?>>[];
       final matchedItemIndices = <int>{};
       final removedOrderItemIds = <int>{};
+      final removedMenuItemIds = <int>{};
+      final removedDealIds = <int>{};
       final partialReversals = <int, int>{};
+      final partialMenuItemReversals = <int, int>{};
+      final partialDealReversals = <int, int>{};
 
       for (final oldItem in oldOrderItems) {
         final matchIdx = newItems.indexWhere((ni) =>
@@ -2015,6 +2037,8 @@ class OrderAndCheckoutController {
 
         if (matchIdx == -1) {
           removedOrderItemIds.add(oldItem.id);
+          if (oldItem.menuItemId != null) removedMenuItemIds.add(oldItem.menuItemId!);
+          if (oldItem.dealId != null) removedDealIds.add(oldItem.dealId!);
           final itemBom = oldItem.decodedBom ?? await _computeBOMForOrderItem(oldItem, txn);
           final disposition = isUnstartedPrep ? 'RESTOCK_RAW' : 'WASTED_COOKED';
           linesToInsert.add({
@@ -2040,6 +2064,14 @@ class OrderAndCheckoutController {
               final reduction = oldQty - newQty;
               partialReversals[oldItem.id] = reduction;
               removedOrderItemIds.add(oldItem.id);
+              if (oldItem.menuItemId != null) {
+                removedMenuItemIds.add(oldItem.menuItemId!);
+                partialMenuItemReversals[oldItem.menuItemId!] = reduction;
+              }
+              if (oldItem.dealId != null) {
+                removedDealIds.add(oldItem.dealId!);
+                partialDealReversals[oldItem.dealId!] = reduction;
+              }
             }
             final priceDelta = PaisaEngine.rupeesToPaisa(matchedNew.totalPrice) - PaisaEngine.rupeesToPaisa(oldItem.totalPrice);
             final itemBom = await _lineBom(matchedNew, txn);
@@ -2266,14 +2298,18 @@ class OrderAndCheckoutController {
       );
 
       // Contra-allocations for removed/reduced lines only (ADR-0021 Section 5)
-      if (removedOrderItemIds.isNotEmpty) {
+      if (removedOrderItemIds.isNotEmpty || removedMenuItemIds.isNotEmpty || removedDealIds.isNotEmpty) {
         await _recordContraAllocations(
           orderId: orderId,
           revision: nextRevisionNo,
           txn: txn,
           now: now,
-          targetOrderItemIds: removedOrderItemIds,
+          targetOrderItemIds: removedOrderItemIds.isNotEmpty ? removedOrderItemIds : null,
+          targetMenuItemIds: removedMenuItemIds.isNotEmpty ? removedMenuItemIds : null,
+          targetDealIds: removedDealIds.isNotEmpty ? removedDealIds : null,
           partialReversals: partialReversals.isNotEmpty ? partialReversals : null,
+          partialMenuItemReversals: partialMenuItemReversals.isNotEmpty ? partialMenuItemReversals : null,
+          partialDealReversals: partialDealReversals.isNotEmpty ? partialDealReversals : null,
         );
       }
 
