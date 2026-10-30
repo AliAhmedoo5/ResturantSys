@@ -10,7 +10,7 @@ void main() {
   setUpAll(sqfliteFfiInit);
   testWidgets('correction workspace explains evidence and blocks anonymous sessions', (tester) async {
     final store = PosDatabase(factory:databaseFactoryFfi,customPath:inMemoryDatabasePath);
-    final db = await store.initialize();
+    final db = (await tester.runAsync(store.initialize))!;
     addTearDown(store.close);
     await tester.pumpWidget(MaterialApp(home:Scaffold(body:HistoricalCorrectionsWorkspace(
       service:HistoricalCorrections(database:db,auth:AuthService(database:db))))));
@@ -19,3 +19,4 @@ void main() {
     expect(find.text('Append correction'),findsNothing);
   });
 }
+

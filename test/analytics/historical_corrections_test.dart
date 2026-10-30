@@ -30,9 +30,15 @@ void main() {
     expect(adjusted.adjustedVariancePaisa, 0);
     expect(adjusted.originalSnapshotJson, before.originalSnapshotJson);
     expect(adjusted.originalHash, before.originalHash);
+    expect(adjusted.originalRecordedAt, before.originalRecordedAt);
+    expect(adjusted.toAnalyticsSnapshot().sourceSchemaVersion, await db.getVersion());
+    expect(adjusted.toAnalyticsSnapshot().reportVersion, 'historical-corrections-v1');
     expect(before.entries, isEmpty);
     expect(adjusted.entries.single['id'], id);
-    expect(await db.query('cash_movements'), isEmpty);
+    final originalShift = await shifts.getShift(shift.id);
+    expect(originalShift.expectedCash, 100);
+    expect(originalShift.discrepancy, -35);
+    expect((await shifts.generateXReport(shift.id)).cashMovements, isEmpty);
     await expectLater(service.append(managerPin: '1234', businessDayId: day.id,
       shiftId: shift.id, type: HistoricalCorrectionType.drawerPayout,
       deltaPaisa: -3500, evidenceKey: 'supplier-slip-41', reason: 'Duplicate slip', reconciled: true), throwsA(isA<StateError>()));
@@ -45,3 +51,4 @@ void main() {
     expect(oldCutoff.csv(), contains('Original sealed'));
   });
 }
+
