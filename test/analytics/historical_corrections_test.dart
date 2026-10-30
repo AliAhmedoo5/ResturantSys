@@ -42,6 +42,13 @@ void main() {
     await expectLater(service.append(managerPin: '1234', businessDayId: day.id,
       shiftId: shift.id, type: HistoricalCorrectionType.drawerPayout,
       deltaPaisa: -3500, evidenceKey: 'supplier-slip-41', reason: 'Duplicate slip', reconciled: true), throwsA(isA<StateError>()));
+    await expectLater(service.append(managerPin: '1234', businessDayId: day.id, shiftId: shift.id,
+      type: HistoricalCorrectionType.drawerPayout, deltaPaisa: -3500, evidenceKey: 'SUPPLIER-SLIP-41',
+      reason: 'Same physical supplier slip', reconciled: true, eventTime: DateTime.utc(2026,10,10,12)), throwsStateError);
+    await expectLater(service.append(managerPin: '1234', businessDayId: day.id, shiftId: shift.id,
+      type: HistoricalCorrectionType.drawerPayout, deltaPaisa: -3500, evidenceKey: 'different-reference',
+      sourceTable: 'cash_movements', sourceId: 987654, reason: 'Unknown original evidence', reconciled: true,
+      eventTime: DateTime.utc(2026,10,10,12)), throwsStateError);
     await service.reverse(id, managerPin: '1234', reason: 'Wrong supplier slip');
     expect((await service.load(day.id)).adjustedVariancePaisa, -3500);
     expect(adjusted.adjustedVariancePaisa, 0);
@@ -51,4 +58,5 @@ void main() {
     expect(oldCutoff.csv(), contains('Original sealed'));
   });
 }
+
 
