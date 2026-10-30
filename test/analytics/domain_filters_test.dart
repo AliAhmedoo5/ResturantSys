@@ -86,10 +86,10 @@ void main() {
       AnalyticsQuery(startDate: DateTime(2020), endDateExclusive: DateTime(2100), live: true,
         domainFilters: {AnalyticsDimension.supplier: '${supplier.id}', AnalyticsDimension.ingredient: '${flour.id}'}));
     final report = snapshot.section(AnalyticsFamily.procurement);
-    expect(report.metrics.singleWhere((m) => m.id == 'supplier_acquisition_value').value, 40000);
+    expect(report.metrics.singleWhere((m) => m.id == 'unified_spend').value, 40000);
     expect(report.metrics.singleWhere((m) => m.id == 'purchase_spend').value, 0);
     expect(report.charts.singleWhere((c) => c.id == 'supplier_acquisition_dates').points.single.value, 40000);
-    expect(report.rows.where((r) => r.cells['kind'] == 'Supplier credit acquisition').single.sourceId, '${selected.id}');
+    expect(report.rows.where((r) => r.cells['kind'] == 'Supplier credit delivery').single.sourceId, '${selected.id}');
     expect(report.notes.join(' '), contains('supplier unknown'));
     expect(snapshot.section(AnalyticsFamily.suppliers).rows.where((r) => r.sourceType == 'vendor_transactions').every((r) => r.cells['supplier_id'] == supplier.id), isTrue);
     expect(AnalyticsExportService().csv(snapshot, AnalyticsFamily.procurement), contains('Selected supplier'));
@@ -150,7 +150,7 @@ void main() {
     await orders.checkoutOrder(businessDayId: day.id, shiftId: shift.id,
       cashierId: cashierId, diningType: DiningType.takeaway,
       items: [CartItem(menuItem: await catalog.getMenuItem(meal.id))],
-      discountIds: discounts.map((d) => d.id).toList(),
+      discounts: discounts,
       payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 180)]);
     final auth = AuthService(database: db)..session.login(Staff.fromMap(manager));
     final service = AnalyticsService(database: db, authService: auth);
