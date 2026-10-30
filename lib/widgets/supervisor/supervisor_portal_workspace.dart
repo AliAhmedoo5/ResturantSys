@@ -319,12 +319,20 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
         orderBy: 'attempted_at DESC, id DESC',
         limit: 5,
       );
+
+      final verifiedRows = await db.query(
+        'backup_attempts',
+        where: "verification_status = 'VERIFIED' AND primary_status = 'SUCCESS'",
+        orderBy: 'attempted_at DESC, id DESC',
+        limit: 1,
+      );
+      final lastVerified = verifiedRows.isNotEmpty ? verifiedRows.first : null;
+
       if (mounted) {
         setState(() {
           _recentBackupAttempts = allAttempts;
           _lastAttempt = allAttempts.isNotEmpty ? allAttempts.first : null;
-          _lastVerifiedBackup = allAttempts.where((a) =>
-            a['verification_status'] == 'VERIFIED' && a['primary_status'] == 'SUCCESS').firstOrNull;
+          _lastVerifiedBackup = lastVerified;
         });
       }
     } catch (_) {}

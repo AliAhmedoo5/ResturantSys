@@ -470,7 +470,17 @@ class PosDatabase {
     if (oldVersion < 23) await createReportingIdentitySchema(db);
     if (oldVersion < 24) await createMenuAllocationsSchema(db);
     if (oldVersion < 25) await createSupplierReceiptEvidenceSchema(db);
-    if (oldVersion < 26) await createBackupAttemptsSchema(db);
+    if (oldVersion < 26) {
+      await createBackupAttemptsSchema(db);
+      final ingredientColumns = await db.rawQuery('PRAGMA table_info(raw_ingredients)');
+      if (ingredientColumns.isNotEmpty && !ingredientColumns.any((c) => c['name'] == 'category')) {
+        await db.execute('ALTER TABLE raw_ingredients ADD COLUMN category TEXT');
+      }
+      final costColumns = await db.rawQuery('PRAGMA table_info(order_cost_events)');
+      if (costColumns.isNotEmpty && !costColumns.any((c) => c['name'] == 'classification')) {
+        await db.execute('ALTER TABLE order_cost_events ADD COLUMN classification TEXT');
+      }
+    }
     if (oldVersion < 27) await createHistoricalCorrectionsSchema(db);
   }
 
