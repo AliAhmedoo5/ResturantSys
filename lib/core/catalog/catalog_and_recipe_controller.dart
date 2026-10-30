@@ -276,6 +276,7 @@ class CatalogAndRecipeController with _DealCatalog {
     double currentStock = 0.0,
     double lowStockThreshold = 0.0,
     double costPerRecipeUnit = 0.0,
+    String? category,
   }) async {
     final now = _formatTimestamp(DateTime.now());
     final id = await database.insert(
@@ -286,6 +287,7 @@ class CatalogAndRecipeController with _DealCatalog {
         'current_stock': currentStock,
         'low_stock_threshold': lowStockThreshold,
         'cost_per_recipe_unit': costPerRecipeUnit,
+        if (category != null) 'category': category.trim().toUpperCase(),
         'created_at': now,
       },
     );
@@ -297,6 +299,7 @@ class CatalogAndRecipeController with _DealCatalog {
       currentStock: currentStock,
       lowStockThreshold: lowStockThreshold,
       costPerRecipeUnit: costPerRecipeUnit,
+      category: category?.trim().toUpperCase(),
       createdAt: DateTime.parse(now),
     );
   }
@@ -310,6 +313,7 @@ class CatalogAndRecipeController with _DealCatalog {
         'current_stock': ingredient.currentStock,
         'low_stock_threshold': ingredient.lowStockThreshold,
         'cost_per_recipe_unit': ingredient.costPerRecipeUnit,
+        if (ingredient.category != null) 'category': ingredient.category!.trim().toUpperCase(),
       },
       where: 'id = ?',
       whereArgs: [ingredient.id],

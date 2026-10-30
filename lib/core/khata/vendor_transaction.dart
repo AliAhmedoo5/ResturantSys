@@ -63,6 +63,7 @@ class VendorTransaction {
     this.rawIngredientName,
     this.staffName,
     this.dueDate,
+    this.procurementId,
   });
 
   final int id;
@@ -80,6 +81,7 @@ class VendorTransaction {
   final String? rawIngredientName;
   final String? staffName;
   final DateTime? dueDate;
+  final int? procurementId;
 
   bool get isCreditDelivery => type == VendorTransactionType.purchaseCredit;
   bool get isPayment =>
@@ -107,6 +109,7 @@ class VendorTransaction {
       rawIngredientName: rawIngredientName ?? map['raw_ingredient_name'] as String?,
       staffName: staffName ?? map['staff_name'] as String?,
       dueDate: DateTime.tryParse(map['due_date'] as String? ?? ''),
+      procurementId: map['procurement_id'] as int?,
     );
   }
 
@@ -124,6 +127,7 @@ class VendorTransaction {
       'quantity': quantity,
       'created_at': createdAt.toIso8601String(),
       'due_date': dueDate?.toIso8601String().substring(0,10),
+      'procurement_id': procurementId,
     };
   }
 }

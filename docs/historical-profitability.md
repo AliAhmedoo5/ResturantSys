@@ -14,6 +14,23 @@ This is an event-time acquisition-rate policy, not FIFO or weighted-average
 stock valuation. The underlying unit rates retain decimal precision; extended
 money is rounded once into integer paisa.
 
+### Food and packaging classification
+
+Each recorded cost event snapshots the ingredient's classification (`FOOD` vs
+`PACKAGING`) at event recording time. Takeaway and Delivery automatic packaging
+materials and items classified or named as packaging snapshot `PACKAGING`, while
+recipe materials snapshot `FOOD`. Revisions and returns faithfully preserve this
+classification by copying it directly from the originating source lot.
+
+Modifying or renaming an ingredient later never rewrites historical cost
+event rows, preserving immutable historical evidence. Legacy pre-upgrade cost
+events without stored classification remain explicitly disclosed as `UNCLASSIFIED`
+rather than retroactively guessed.
+
+Profitability reporting reconciles food COGS, packaging COGS, and legacy unclassified
+COGS to combined realized COGS down to the integer paisa across all reports, visual
+charts, and exports, separated by Order and Dining Type (Dine-In, Takeaway, Delivery).
+
 Revisions consume additions at their event-time rate. Raw returns release the
 original order's cost lots, newest first, and retain references to those original
 events. Exhausting a lot releases its exact remaining paisa. Cooked removals

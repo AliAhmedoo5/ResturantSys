@@ -36,6 +36,11 @@ class ProcurementAndWastageController {
     required double quantity,
     required double totalCost,
     String? notes,
+    int? vendorId,
+    int? vendorTransactionId,
+    DateTime? promisedAt,
+    DateTime? actualAt,
+    int? staffId,
   }) async {
     if (quantity <= 0) {
       throw ArgumentError('Purchased quantity must be greater than zero.');
@@ -88,8 +93,38 @@ class ProcurementAndWastageController {
           'cost_per_recipe_unit': costPerRecipeUnit,
           'notes': notes?.trim(),
           'created_at': formattedNow,
+          'vendor_id': vendorId,
+          'vendor_transaction_id': vendorTransactionId,
         },
       );
+
+      // 5. Stable linking if vendorTransactionId is provided
+      if (vendorTransactionId != null) {
+        await txn.rawInsert('''INSERT INTO procurement_vendor_links(procurement_id, vendor_transaction_id, created_at)
+          VALUES(?, ?, ?) ON CONFLICT(procurement_id, vendor_transaction_id) DO NOTHING''',
+          [id, vendorTransactionId, formattedNow]);
+        await txn.rawUpdate(
+          'UPDATE vendor_transactions SET procurement_id = ? WHERE id = ?',
+          [id, vendorTransactionId],
+        );
+      }
+
+      // 6. Record receipt evidence if vendorId and promised/actual timestamps provided
+      if (vendorId != null && (promisedAt != null || actualAt != null)) {
+        final recordingStaff = staffId ?? authService?.session.currentStaff?.id ??
+            (await txn.query('staff', columns: ['id'], where: 'role != ?', whereArgs: ['CASHIER'], limit: 1)).firstOrNull?['id'] as int? ?? 1;
+        await txn.insert('supplier_receipt_evidence', {
+          'vendor_id': vendorId,
+          'ingredient_id': rawIngredientId,
+          'procurement_id': id,
+          'vendor_transaction_id': vendorTransactionId,
+          'promised_at': promisedAt == null ? null : _formatTimestamp(promisedAt),
+          'actual_at': actualAt == null ? null : _formatTimestamp(actualAt),
+          'recorded_at': formattedNow,
+          'recorded_by': recordingStaff,
+          'notes': notes?.trim(),
+        });
+      }
 
       return MandiProcurement(
         id: id,
@@ -103,6 +138,8 @@ class ProcurementAndWastageController {
         storageUnit: ingredient.storageUnit,
         notes: notes?.trim(),
         createdAt: now,
+        vendorId: vendorId,
+        vendorTransactionId: vendorTransactionId,
       );
     });
   }
