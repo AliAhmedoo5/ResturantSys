@@ -65,4 +65,48 @@ void main() {
     expect(AnalyticsExportService().csv(snapshot, AnalyticsFamily.orders), contains('orders per completed day'));
     expect(() => active.cells.clear(), throwsUnsupportedError);
   });
+  test('overnight weekdays, observed hours and week/month buckets follow selected time basis', () async {
+    final store = PosDatabase(factory: databaseFactoryFfi, customPath: inMemoryDatabasePath);
+    final db = await store.initialize();
+    addTearDown(store.close);
+    final auth = AuthService(database: db)..session.login(Staff.fromMap((await db.query('staff', where: 'id=1')).single));
+    addTearDown(auth.session.dispose);
+    // Retained historical import evidence; no mutation of sealed recording times.
+    final day = await db.insert('business_days', {'opened_at': '2026-09-30T18:00:00+05:00', 'status': 'OPEN', 'opened_by_staff_id': 1});
+    final shift = await db.insert('shifts', {'business_day_id': day, 'staff_id': 2,
+      'opened_at': '2026-09-30T18:00:00+05:00', 'closed_at': '2026-10-01T02:00:00+05:00', 'opening_float': 0, 'status': 'CLOSED'});
+    await db.insert('orders', {'business_day_id': day, 'shift_id': shift, 'cashier_id': 2,
+      'token_number': 1, 'dining_type': 'TAKEAWAY', 'subtotal': 100, 'grand_total': 100,
+      'payment_status': 'SETTLED', 'created_at': '2026-09-30T20:00:00Z'});
+    await db.update('business_days', {'status': 'CLOSED', 'closed_at': '2026-10-01T02:00:00+05:00'}, where: 'id=?', whereArgs: [day]);
+    final service = AnalyticsService(database: db, authService: auth);
+    final query = AnalyticsQuery(startDate: DateTime(2026, 9, 1), endDateExclusive: DateTime(2026, 11, 1));
+    final operational = await service.load(query);
+    final rows = operational.section(AnalyticsFamily.orders).rows;
+    final matrix = rows.where((r) => r.cells['kind'] == 'Weekday/hour workload');
+    expect(matrix, hasLength(168));
+    expect(matrix.singleWhere((r) => r.cells['weekday'] == 3 && r.cells['hour'] == 1).cells['confirmed_orders'], 1);
+    expect(matrix.singleWhere((r) => r.cells['weekday'] == 3 && r.cells['hour'] == 0).cells['confirmed_orders'], 0);
+    expect(matrix.singleWhere((r) => r.cells['weekday'] == 2 && r.cells['hour'] == 0).cells['confirmed_orders'], isNull);
+    final week = rows.singleWhere((r) => r.cells['kind'] == 'Weekly workload');
+    expect(week.cells['period_start'], '2026-09-28');
+    expect(week.cells['period_end_exclusive'], '2026-10-05');
+    expect(rows.singleWhere((r) => r.cells['kind'] == 'Monthly workload').cells['period_start'], '2026-09-01');
+    final calendar = await service.load(query.copyWith(timeBasis: AnalyticsTimeBasis.calendarTime));
+    final calendarRows = calendar.section(AnalyticsFamily.orders).rows;
+    final thursday = calendarRows.singleWhere((r) => r.cells['kind'] == 'Calendar weekday total' && r.cells['weekday'] == 4);
+    expect(thursday.cells['confirmed_orders'], 1);
+    expect(thursday.cells['orders_per_completed_day'], isNull);
+    expect(calendarRows.singleWhere((r) => r.cells['kind'] == 'Weekday/hour workload' && r.cells['weekday'] == 4 && r.cells['hour'] == 1).cells['confirmed_orders'], 1);
+    expect(calendarRows.singleWhere((r) => r.cells['kind'] == 'Monthly workload' && r.cells['period_start'] == '2026-10-01').cells['confirmed_orders'], 1);
+    final csv = AnalyticsExportService().csv(calendar, AnalyticsFamily.orders);
+    expect(csv, contains('2026-10-05'));
+    expect(csv, contains('Calendar weekday'));
+    expect(calendar.section(AnalyticsFamily.orders).charts.any((c) => c.id == 'workload_weeks'), isTrue);
+    final overnightOnly = await service.load(query.copyWith(timeBasis: AnalyticsTimeBasis.calendarTime,
+      startDate: DateTime(2026, 10, 1), endDateExclusive: DateTime(2026, 10, 2)));
+    final coveredZero = overnightOnly.section(AnalyticsFamily.orders).rows.singleWhere((r) => r.cells['kind'] == 'Weekday/hour workload' && r.cells['weekday'] == 4 && r.cells['hour'] == 0);
+    expect(coveredZero.cells['confirmed_orders'], 0);
+    expect(coveredZero.cells['contributing_business_day_ids'], '$day');
+  });
 }
