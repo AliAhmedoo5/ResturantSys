@@ -59,7 +59,6 @@ void main() {
     expect(partialPoint.label, contains('Incomplete'));
     expect(partialPoint.quality, AnalyticsQuality.estimated);
     final local = snapshot.generatedAt.toUtc().add(const Duration(hours: 5));
-    final today = DateTime(local.year, local.month, local.day);
     final operationalDate = DateTime(open.openedAt.year, open.openedAt.month, open.openedAt.day);
     final active = await service.load(query.copyWith(startDate: operationalDate, endDateExclusive: operationalDate.add(const Duration(days: 1))));
     final nextHour = (local.hour + 1) % 24;
