@@ -1007,7 +1007,58 @@ class _ReportBuilder {
     ], ['kind', 'order_id', 'ingredient_id', 'revision', 'quantity', 'unit_cost_rupees', 'cost_paisa', 'source_event_id', 'recorded_loss_paisa', 'reason', 'created_at'], [policy, 'Unknown costs remain null. Current purchase rates never rewrite earlier cost events. No invented pre-upgrade profit.', 'Recorded net result uses posting periods; it does not assert that all expenses or earned salary have been entered. Order filters withhold net result because overhead cannot be allocated reliably.']);
   }
 
+  static String _safeConfigSummary(String? kind, String? beforeJson, String? afterJson) {
+    final cleanKind = _safeText(kind ?? 'CONFIG');
+    try {
+      final before = beforeJson != null ? jsonDecode(beforeJson) : null;
+      final after = afterJson != null ? jsonDecode(afterJson) : null;
+      final changedKeys = <String>{};
+      if (after is Map) {
+        for (final k in after.keys) {
+          final sk = '$k';
+          if (['pin', 'pin_hash', 'password', 'salt', 'secret', 'token'].contains(sk.toLowerCase())) continue;
+          if (before is Map) {
+            if (before[k] != after[k]) changedKeys.add(sk);
+          } else {
+            changedKeys.add(sk);
+          }
+        }
+      }
+      if (changedKeys.isEmpty) {
+        return '$cleanKind settings updated';
+      }
+      return '$cleanKind updated: ${changedKeys.join(', ')}';
+    } catch (_) {
+      return '$cleanKind configuration change';
+    }
+  }
+
+  static String _safeOperationsSummary(String? action, String? detailJson) {
+    final cleanAction = _safeText(action ?? 'ACTION');
+    try {
+      final detail = detailJson != null ? jsonDecode(detailJson) : null;
+      if (detail is Map) {
+        final safePairs = <String>[];
+        for (final entry in detail.entries) {
+          final k = '${entry.key}'.toLowerCase();
+          if (['pin', 'pin_hash', 'password', 'secret', 'token'].contains(k)) continue;
+          if (['category', 'reason', 'amount_paisa', 'due_date', 'shift_id', 'employee_id', 'role', 'department', 'status', 'rate_paisa'].contains(k)) {
+            safePairs.add('${entry.key}: ${_safeText(entry.value)}');
+          }
+        }
+        if (safePairs.isNotEmpty) {
+          return '$cleanAction (${safePairs.join(', ')})';
+        }
+      }
+      return cleanAction;
+    } catch (_) {
+      return cleanAction;
+    }
+  }
+
   AnalyticsSection _audit() {
+    final configEvents = e.get('configuration_audit');
+    final opsEvents = e.get('operations_audit');
     final rows = <AnalyticsRow>[
       ...e.get('revisions').map((r) => _row('order_revisions', r, {'kind': 'Order revision', 'order_id': r['order_id'], 'action': r['action'], 'reason': _safeText(r['reason']), 'staff_id': r['cashier_id'], 'delta_paisa': r['money_delta_paisa'], 'created_at': r['created_at_utc']})),
       ...e.get('token_audit').map((a) => _row('checkout_token_audit', a, {'kind': 'Immutable token audit', 'order_id': a['order_id'], 'token': a['token_number'], 'action': a['action'], 'status': a['payment_status'], 'revision': a['revision'], 'created_at': a['recorded_at']})),
@@ -1016,6 +1067,20 @@ class _ReportBuilder {
       ...e.get('outbox').map((r) => _row('report_outbox', r, {'kind': 'Report delivery', 'business_day_id': r['business_day_id'], 'channel': r['channel'], 'status': r['status'], 'attempts': r['retry_count'], 'created_at': r['created_at']})),
       ...e.get('delivery_audit').map((r) => _row('report_delivery_audit', r, {'kind': 'Delivery audit', 'action': r['action'], 'staff_id': r['staff_id'], 'created_at': r['created_at']})),
       ...e.get('stock_alerts').map((a) => AnalyticsRow(id: 'checkout-alert-${a['order_id']}-${a['ingredient_id']}', sourceType: 'checkout_stock_alerts', sourceId: '${a['order_id']}:${a['ingredient_id']}', cells: {'kind': 'Checkout stock alert', 'order_id': a['order_id'], 'ingredient_id': a['ingredient_id'], 'stock_at_checkout': a['stock_at_checkout'], 'created_at': a['created_at']})),
+      ...configEvents.map((c) => _row('configuration_audit', c, {
+        'kind': 'Configuration audit',
+        'action': c['kind'],
+        'staff_id': c['actor_id'],
+        'reason': _safeConfigSummary(c['kind'] as String?, c['before_json'] as String?, c['after_json'] as String?),
+        'created_at': c['created_at'],
+      })),
+      ...opsEvents.map((o) => _row('operations_audit', o, {
+        'kind': 'Operations audit',
+        'action': '${o['entity']}:${o['action']}',
+        'staff_id': o['manager_id'],
+        'reason': _safeOperationsSummary(o['action'] as String?, o['detail'] as String?),
+        'created_at': o['created_at'],
+      })),
     ];
     return _section(AnalyticsFamily.audit, 'Control and audit', [
       _metric('revision_events', 'Revision audit events', e.get('revisions').length, unit: AnalyticsUnit.count, explanation: 'Append-only revision evidence for filtered selected orders.'),
@@ -1024,9 +1089,11 @@ class _ReportBuilder {
       _metric('report_runs', 'Sealed report runs', e.get('reports').length, unit: AnalyticsUnit.count, explanation: 'Stored selected-day report snapshots with original content hash and revision 1.'),
       _metric('failed_exports', 'Report exports awaiting completion', e.get('reports').where((r) => r['status'] != 'READY').length, unit: AnalyticsUnit.count, explanation: 'Selected-day report runs not READY; includes pending/generating rather than claiming all are permanent failures.'),
       _metric('delivery_attention', 'Report delivery requiring attention', e.get('outbox').where((r) => ['FAILED', 'AMBIGUOUS'].contains(r['status'])).length, unit: AnalyticsUnit.count, explanation: 'Selected-day outbox FAILED/AMBIGUOUS records; no recipient, payload, endpoint or credential projection.'),
-      _missing('security_events', 'Security/configuration audit', 'No broad login-failure, PIN-reset/configuration audit event ledger exists.', unit: AnalyticsUnit.count),
+      _metric('configuration_audit_events', 'Configuration audit events', configEvents.length, unit: AnalyticsUnit.count, explanation: 'Recorded configuration and settings change events within selected interval; safe allowlisted changes projected without raw payloads or secrets.'),
+      _metric('operations_audit_events', 'Operations audit events', opsEvents.length, unit: AnalyticsUnit.count, explanation: 'Recorded management operations and finance adjustments within selected interval.'),
+      _missing('authentication_event_history', 'Authentication and security event history', 'Login failures, session expirations and PIN reset audit history have no persisted event ledger; configuration and operations audits are projected above.', unit: AnalyticsUnit.count),
       _missing('backup_history', 'Historical successful backups', 'Current settings are not evidence of historical backup success.', unit: AnalyticsUnit.count),
-    ], rows, ['kind', 'business_day_id', 'order_id', 'shift_id', 'ingredient_id', 'token', 'revision', 'action', 'reason', 'staff_id', 'delta_paisa', 'hash', 'channel', 'status', 'attempts', 'stock_at_checkout', 'created_at'], ['Order revisions/tokens/rounding/checkout alerts use filtered order cohort. Report runs/outbox use whole selected Business Days. Delivery audit uses selected actual intervals.', 'Immutable Z-report provenance is shown; this explorer never rewrites snapshots. Sensitive payloads, errors, recipients, credentials and raw customer contact fields are excluded.']);
+    ], rows, ['kind', 'business_day_id', 'order_id', 'shift_id', 'ingredient_id', 'token', 'revision', 'action', 'reason', 'staff_id', 'delta_paisa', 'hash', 'channel', 'status', 'attempts', 'stock_at_checkout', 'created_at'], ['Order revisions/tokens/rounding/checkout alerts use filtered order cohort. Report runs/outbox use whole selected Business Days. Delivery audit uses selected actual intervals.', 'Configuration and operations audits project authorized management actions with safe field allowlisting. Raw JSON, credentials, PIN hashes, passwords and sensitive customer data are strictly excluded. Authentication events (login failures, PIN resets) have no persistent event ledger and remain disclosed as missing.', 'Immutable Z-report provenance is shown; this explorer never rewrites snapshots. Sensitive payloads, errors, recipients, credentials and raw customer contact fields are excluded.']);
   }
 
   AnalyticsMetric _metric(String id, String label, num value, {AnalyticsUnit unit = AnalyticsUnit.paisa, String? explanation, num? previous, bool unavailable = false, AnalyticsQuality unavailableQuality = AnalyticsQuality.notApplicable}) {

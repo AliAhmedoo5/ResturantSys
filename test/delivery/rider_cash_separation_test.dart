@@ -15,7 +15,6 @@ import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
 import 'package:resturant_sys/core/orders/payment_method.dart';
 import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
 import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
-import 'package:resturant_sys/core/catalog/storage_unit.dart';
 
 void main() {
   setUpAll(() {
@@ -73,57 +72,51 @@ void main() {
         'created_at': DateTime.now().toIso8601String(),
       });
 
-      final areaId = await deliveryController.createArea(name: 'Gulberg Main', deliveryFee: 100.0);
-      gulbergArea = (await deliveryController.getAreas()).firstWhere((a) => a.id == areaId);
-
+      final category = await catalogController.createCategory(name: 'Pizza');
       final pizzaItem = await catalogController.createMenuItem(
+        categoryId: category.id,
         name: 'Fajita Pizza',
-        price: 1000.0,
-        categoryId: 1,
-        costPrice: 400.0,
+        basePrice: 1000.0,
+      );
+      await catalogController.toggleMenuItemActive(pizzaItem.id, true);
+
+      gulbergArea = await deliveryController.saveArea(
+        staffId: 1,
+        name: 'Gulberg Main',
+        code: 'GULM',
+        deliveryFeePaisa: 10000,
+        minOrderPaisa: 50000,
       );
 
       Future<int> checkoutOrder(String phone) async {
-        final order = await orderController.createOrder(
+        final result = await orderController.checkoutOrder(
           businessDayId: businessDayId,
           shiftId: shiftId,
           cashierId: cashierId,
           diningType: DiningType.delivery,
-          customerPhone: phone,
-          items: [
-            CartItem(
-              menuItem: pizzaItem,
-              quantity: 1,
-              appliedPrice: 1000.0,
-              storageUnit: StorageUnit.pieces,
-            ),
-          ],
-        );
-        await deliveryController.attachDeliveryDetails(
-          orderId: order.id,
-          details: DeliveryDetails(
-            phone: phone,
-            customerName: 'Customer',
-            fullAddress: 'Gulberg Main Blvd',
+          items: [CartItem(menuItem: pizzaItem, quantity: 1)],
+          payments: const [PaymentTender(method: PaymentMethod.cod, amountTendered: 0.0)],
+          delivery: DeliveryDetails(
             areaId: gulbergArea.id,
+            quotedFeePaisa: gulbergArea.deliveryFeePaisa,
+            phone: phone,
+            customerName: 'Customer $phone',
+            fullAddress: 'Gulberg Main Blvd',
           ),
         );
-        await orderController.checkout(
-          orderId: order.id,
-          tenders: [PaymentTender(method: PaymentMethod.cod, amount: 1100.0)], // 1000 + 100 fee
-        );
-        return order.id;
+        return result.order.id;
       }
 
-      // Order 1: 1100.0 (110000 paisa)
+      // Order 1: 1000 + 100 fee = 110000 paisa
       final order1 = await checkoutOrder('03011112233');
-      // Order 2: 1100.0 (110000 paisa)
+      // Order 2: 1000 + 100 fee = 110000 paisa
       final order2 = await checkoutOrder('03022223344');
 
       final trip = await riderTripController.createRiderTrip(
         businessDayId: businessDayId,
         shiftId: shiftId,
         riderStaffId: riderStaffId,
+        tripName: 'Trip 1',
         orderIds: [order1, order2],
       );
 
@@ -165,9 +158,7 @@ void main() {
       expect(metric('rider_held_cash').value, 110000, reason: 'Order 1 is confirmed collected, held by rider');
       expect(metric('accepted_drawer_cash').value, 0, reason: 'No cash handed over to drawer yet');
 
-      // Now settle trip with counted cash: Rider hands over Rs. 1000 (100000 paisa)
-      // Confirm collection for order 2 at settlement or settle with shortage
-      // Let's settle trip 1: counted cash 100000 paisa (Rs. 1000)
+      // Now settle trip with counted cash: Rider hands over Rs. 2000 (200000 paisa)
       // Since order 2 was COD, settle converts order 2 to settled.
       // Expected COD was 220000 paisa, counted is 200000 paisa -> shortage of 20000 paisa.
       await riderTripController.settleRiderTrip(

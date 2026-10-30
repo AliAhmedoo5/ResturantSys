@@ -15,7 +15,6 @@ import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
 import 'package:resturant_sys/core/orders/payment_method.dart';
 import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
 import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
-import 'package:resturant_sys/core/catalog/storage_unit.dart';
 
 void main() {
   setUpAll(() {
@@ -76,55 +75,42 @@ void main() {
         'created_at': DateTime.now().toIso8601String(),
       });
 
-      // Create delivery area
-      final areaId = await deliveryController.createArea(name: 'Gulberg III', deliveryFee: 150.0);
-      gulbergArea = (await deliveryController.getAreas()).firstWhere((a) => a.id == areaId);
-
-      // Create a menu item
+      // Create category and menu item
+      final category = await catalogController.createCategory(name: 'Burgers');
       final burgerItem = await catalogController.createMenuItem(
+        categoryId: category.id,
         name: 'Zinger Burger',
-        price: 500.0,
-        categoryId: 1,
-        costPrice: 200.0,
+        basePrice: 500.0,
+      );
+      await catalogController.toggleMenuItemActive(burgerItem.id, true);
+
+      // Create delivery area
+      gulbergArea = await deliveryController.saveArea(
+        staffId: 1,
+        name: 'Gulberg III',
+        code: 'GUL3',
+        deliveryFeePaisa: 15000,
+        minOrderPaisa: 50000,
       );
 
       // Helper to checkout delivery orders
       Future<int> checkoutDeliveryOrder({required String phone, required String customerName}) async {
-        final order = await orderController.createOrder(
+        final result = await orderController.checkoutOrder(
           businessDayId: businessDayId,
           shiftId: shiftId,
           cashierId: cashierId,
           diningType: DiningType.delivery,
-          customerPhone: phone,
-          customerName: customerName,
-          items: [
-            CartItem(
-              menuItem: burgerItem,
-              quantity: 1,
-              appliedPrice: 500.0,
-              storageUnit: StorageUnit.pieces,
-            ),
-          ],
-        );
-        await deliveryController.attachDeliveryDetails(
-          orderId: order.id,
-          details: DeliveryDetails(
+          items: [CartItem(menuItem: burgerItem, quantity: 1)],
+          payments: const [PaymentTender(method: PaymentMethod.cod, amountTendered: 0.0)],
+          delivery: DeliveryDetails(
+            areaId: gulbergArea.id,
+            quotedFeePaisa: gulbergArea.deliveryFeePaisa,
             phone: phone,
             customerName: customerName,
             fullAddress: 'House 12, Street 4, Gulberg III',
-            areaId: gulbergArea.id,
           ),
         );
-        await orderController.checkout(
-          orderId: order.id,
-          tenders: [
-            PaymentTender(
-              method: PaymentMethod.cod,
-              amount: 650.0, // 500 + 150 delivery
-            ),
-          ],
-        );
-        return order.id;
+        return result.order.id;
       }
 
       // Order 1: Will be returned on Trip 1, then re-attempted and delivered on Trip 2
@@ -137,6 +123,7 @@ void main() {
         businessDayId: businessDayId,
         shiftId: shiftId,
         riderStaffId: riderStaffId,
+        tripName: 'Trip 1',
         orderIds: [order1],
       );
 
@@ -152,6 +139,7 @@ void main() {
         businessDayId: businessDayId,
         shiftId: shiftId,
         riderStaffId: riderStaffId,
+        tripName: 'Trip 2',
         orderIds: [order1, order2],
       );
 
@@ -173,6 +161,7 @@ void main() {
         businessDayId: businessDayId,
         shiftId: shiftId,
         riderStaffId: riderStaffId,
+        tripName: 'Trip Legacy',
         orderIds: [],
       );
       await db.insert('rider_trip_orders', {
