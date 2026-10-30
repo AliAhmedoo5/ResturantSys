@@ -85,6 +85,7 @@ class _Charts {
     ],
     AnalyticsFamily.cash => cash(),
     AnalyticsFamily.expenses => [
+      ...moneyFlow(),
       summed('expense_categories', 'Operating expenses by category', source('expense_entries'),
         'category', 'amount_paisa', AnalyticsUnit.paisa,
         'Selected Business Day postings · reversals reduce their original category'),
@@ -122,6 +123,30 @@ class _Charts {
         'Whole selected Business Days · recorded outbox status, not proof of recipient receipt'),
     ],
   };
+
+  List<ReportChartData> moneyFlow() {
+    final buckets = source('money_flow_bucket');
+    final details = source('money_flow_event');
+    return [for (final stream in buckets.map((r) => '${r.cells['funding_stream']}').toSet())
+      for (final kind in ['Period money flow', 'Hourly money flow'])
+        for (final measure in ['inflow', 'outflow', 'greatest_net', 'least_net']) (() {
+          final rows = buckets.where((r) => r.cells['funding_stream'] == stream && r.cells['kind'] == kind).toList();
+          rows.sort((a, b) {
+            final rank = (a.cells['${measure}_rank'] as int).compareTo(b.cells['${measure}_rank'] as int);
+            return rank != 0 ? rank : '${a.cells['period']}'.compareTo('${b.cells['period']}');
+          });
+          final value = measure.endsWith('net') ? 'net' : measure;
+          return ReportChartData(id: 'money_${stream}_${measure}_${kind == 'Hourly money flow' ? 'hours' : 'periods'}',
+            title: '$stream · ${measure.replaceAll('_', ' ')} · ${kind == 'Hourly money flow' ? 'hours' : 'periods'}',
+            scope: 'Actual-time money evidence · ${rows.firstOrNull?.cells['time_basis']} · Asia/Karachi',
+            note: 'Observed buckets only; every tied peak retained chronologically. Open activity is labeled partial. Drawer handovers are internal custody transfers, excluded from consolidated business effects. Missing actual times are disclosed in coverage.',
+            unit: AnalyticsUnit.paisa, points: [for (final row in rows)
+              ReportChartPoint('${row.cells['period']}', number(row.cells['${value}_paisa']),
+                quality: '${row.cells['coverage']}'.contains('gaps') || '${row.cells['period_status']}'.contains('open') ? AnalyticsQuality.estimated : AnalyticsQuality.complete,
+                explanation: 'Rank ${row.cells['${measure}_rank']}; ${row.cells['period_status']}; ${row.cells['coverage']}',
+                rows: details.where((r) => '${row.cells['event_ids']}'.split(',').contains(r.sourceId)).toList())]);
+        })()];
+  }
 
   List<ReportChartData> workload() {
     final details = source('orders');

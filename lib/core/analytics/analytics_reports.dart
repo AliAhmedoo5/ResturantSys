@@ -956,6 +956,7 @@ class _ReportBuilder {
     }
     return _section(AnalyticsFamily.expenses, 'Finance timeline and expenses', metrics, [
       ...finance.rows,
+      ..._MoneyFlowPeaks(this).build(),
       ...e.get('expense_entries').map((x) => _row('expense_entries', x, {
         'kind': 'Expense ledger', 'business_day_id': x['business_day_id'],
         'category': _safeText(x['category_snapshot']), 'description': _safeText(x['description']),
@@ -968,7 +969,7 @@ class _ReportBuilder {
         'created_at': m['created_at']})),
     ], ['kind', ..._FinanceTimeline.keys, 'business_day_id', 'shift_id', 'category', 'description', 'payee', 'amount_paisa',
       'source', 'reversal_of', 'correction_of', 'manager_id', 'reason', 'classification', 'created_at'],
-      [...finance.notes, _globalBasis, 'Expense entries retain category snapshots. Cash movements reconcile physical funds and must not be added to expense entries. Legacy outflows are not inferred expenses.']);
+      [...finance.notes, ..._MoneyFlowPeaks.notes, _globalBasis, 'Expense entries retain category snapshots. Cash movements reconcile physical funds and must not be added to expense entries. Legacy outflows are not inferred expenses.']);
   }
 
   AnalyticsSection _staff() {

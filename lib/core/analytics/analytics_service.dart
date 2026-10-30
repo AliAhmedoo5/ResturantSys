@@ -11,6 +11,7 @@ import 'analytics_models.dart';
 part 'analytics_reports.dart';
 part 'order_workload.dart';
 part 'finance_timeline.dart';
+part 'money_flow_peaks.dart';
 part 'customer_report_details.dart';
 part 'earned_payroll.dart';
 part 'shift_cash_bridge.dart';
