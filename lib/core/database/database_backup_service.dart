@@ -18,6 +18,14 @@ class BackupResult {
     this.secondaryBackupPath,
     this.warningMessage,
     required this.timestamp,
+    this.initiator = 'MANUAL',
+    this.managerId,
+    this.primaryStatus = 'SUCCESS',
+    this.secondaryStatus = 'NOT_CONFIGURED',
+    this.verificationStatus = 'VERIFIED',
+    this.failureCategory = 'NONE',
+    this.failureMessage,
+    this.attemptId,
   });
 
   final bool success;
@@ -25,6 +33,75 @@ class BackupResult {
   final String? secondaryBackupPath;
   final String? warningMessage;
   final DateTime timestamp;
+  final String initiator;
+  final int? managerId;
+  final String primaryStatus;
+  final String secondaryStatus;
+  final String verificationStatus;
+  final String failureCategory;
+  final String? failureMessage;
+  final int? attemptId;
+}
+
+abstract final class BackupFailureCategory {
+  static const String none = 'NONE';
+  static const String storageUnavailable = 'STORAGE_UNAVAILABLE';
+  static const String mediaCorrupted = 'MEDIA_CORRUPTED';
+  static const String destinationInvalid = 'DESTINATION_INVALID';
+  static const String permissionDenied = 'PERMISSION_DENIED';
+  static const String databaseError = 'DATABASE_ERROR';
+  static const String unknown = 'UNKNOWN';
+}
+
+String classifyBackupFailure(Object error) {
+  final message = error.toString().toLowerCase();
+  if (message.contains('outside catalog media') ||
+      message.contains('invalid catalog media reference') ||
+      message.contains('this is a file, not a backup directory') ||
+      message.contains('not a directory')) {
+    return BackupFailureCategory.destinationInvalid;
+  }
+  if (message.contains('catalog photo') ||
+      message.contains('photo size does not match') ||
+      message.contains('checksum does not match') ||
+      message.contains('thumbnail is missing') ||
+      message.contains('unsupported link') ||
+      message.contains('catalog media directory not found') ||
+      message.contains('media reference')) {
+    return BackupFailureCategory.mediaCorrupted;
+  }
+  if (message.contains('disconnected') ||
+      message.contains('unreachable') ||
+      message.contains('not found') ||
+      message.contains('source database file not found') ||
+      message.contains('no space') ||
+      message.contains('disk full')) {
+    return BackupFailureCategory.storageUnavailable;
+  }
+  if (message.contains('permission') ||
+      message.contains('denied') ||
+      message.contains('privilege') ||
+      message.contains('access is denied')) {
+    return BackupFailureCategory.permissionDenied;
+  }
+  if (message.contains('sqlite') ||
+      message.contains('database') ||
+      message.contains('locked') ||
+      message.contains('busy')) {
+    return BackupFailureCategory.databaseError;
+  }
+  return BackupFailureCategory.unknown;
+}
+
+String sanitizeBackupFailureMessage(String rawMessage) {
+  var cleaned = rawMessage.replaceAll(RegExp(r'#\d+.*', multiLine: true), '').trim();
+  if (cleaned.startsWith('Exception: ')) cleaned = cleaned.substring('Exception: '.length);
+  if (cleaned.startsWith('FileSystemException: ')) cleaned = cleaned.substring('FileSystemException: '.length);
+  cleaned = cleaned.replaceAll(RegExp(r'\b\d{4,6}\b'), '[REDACTED]');
+  if (cleaned.length > 250) {
+    cleaned = '${cleaned.substring(0, 247)}...';
+  }
+  return cleaned;
 }
 
 typedef _CatalogMediaReference = ({
@@ -58,15 +135,126 @@ class DatabaseBackupService {
     String? localBackupDir,
     String? secondaryBackupDir,
     DateTime? timestamp,
-  }) {
+    String initiator = 'MANUAL',
+    int? managerId,
+  }) async {
     final effectiveTime = timestamp ?? DateTime.now();
     // Only send values to the worker, never the live sqflite connection.
     final mediaPath = catalogMediaDirectoryPath ?? CatalogMediaService.defaultBaseDirectoryPath();
     final requireMedia = catalogMediaDirectoryPath != null;
-    return Isolate.run(() => _createBackup(
-          sourceDbPath, localBackupDir,
-          secondaryBackupDir, effectiveTime, mediaPath, requireMedia,
-        ));
+
+    BackupResult rawResult;
+    try {
+      rawResult = await Isolate.run(() => _createBackup(
+            sourceDbPath, localBackupDir,
+            secondaryBackupDir, effectiveTime, mediaPath, requireMedia,
+          ));
+    } catch (e) {
+      final category = classifyBackupFailure(e);
+      final sanitized = sanitizeBackupFailureMessage(e.toString());
+      rawResult = BackupResult(
+        success: false,
+        warningMessage: 'Backup failed: $e',
+        timestamp: effectiveTime,
+        initiator: initiator,
+        managerId: managerId,
+        primaryStatus: 'FAILED',
+        secondaryStatus: secondaryBackupDir != null && secondaryBackupDir.trim().isNotEmpty
+            ? 'FAILED'
+            : 'NOT_CONFIGURED',
+        verificationStatus: 'FAILED',
+        failureCategory: category,
+        failureMessage: sanitized,
+      );
+    }
+
+    final bool isSuccess = rawResult.success;
+    final String primaryStatus = isSuccess ? 'SUCCESS' : 'FAILED';
+    final String verificationStatus = isSuccess ? 'VERIFIED' : 'FAILED';
+    final String secondaryStatus = rawResult.secondaryBackupPath != null
+        ? 'SUCCESS'
+        : (rawResult.warningMessage != null && isSuccess
+            ? 'WARNING'
+            : (secondaryBackupDir != null && secondaryBackupDir.trim().isNotEmpty
+                ? 'FAILED'
+                : 'NOT_CONFIGURED'));
+    final String failureCategory = !isSuccess
+        ? classifyBackupFailure(rawResult.warningMessage ?? 'Unknown failure')
+        : (secondaryStatus == 'WARNING'
+            ? classifyBackupFailure(rawResult.warningMessage ?? 'Secondary target warning')
+            : 'NONE');
+    final String? failureMessage = rawResult.warningMessage != null
+        ? sanitizeBackupFailureMessage(rawResult.warningMessage!)
+        : null;
+
+    int? attemptId;
+    final attemptData = <String, Object?>{
+      'attempted_at': effectiveTime.toIso8601String(),
+      'initiator': initiator,
+      'manager_id': managerId,
+      'primary_status': primaryStatus,
+      'primary_path': rawResult.localBackupPath,
+      'secondary_status': secondaryStatus,
+      'secondary_path': rawResult.secondaryBackupPath,
+      'verification_status': verificationStatus,
+      'failure_category': failureCategory,
+      'failure_message': failureMessage,
+      'created_at': effectiveTime.toIso8601String(),
+    };
+
+    if (database != null) {
+      try {
+        attemptId = await database!.insert(
+          PosDatabaseConstants.tableBackupAttempts,
+          attemptData,
+        );
+      } catch (_) {}
+    } else if (File(sourceDbPath).existsSync()) {
+      try {
+        final ffiDb = sqlite.sqlite3.open(sourceDbPath);
+        try {
+          final tables = ffiDb.select("SELECT name FROM sqlite_master WHERE type='table' AND name='backup_attempts'");
+          if (tables.isNotEmpty) {
+            ffiDb.execute(
+              'INSERT INTO backup_attempts (attempted_at, initiator, manager_id, primary_status, primary_path, secondary_status, secondary_path, verification_status, failure_category, failure_message, created_at) '
+              'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+              [
+                attemptData['attempted_at'],
+                attemptData['initiator'],
+                attemptData['manager_id'],
+                attemptData['primary_status'],
+                attemptData['primary_path'],
+                attemptData['secondary_status'],
+                attemptData['secondary_path'],
+                attemptData['verification_status'],
+                attemptData['failure_category'],
+                attemptData['failure_message'],
+                attemptData['created_at'],
+              ],
+            );
+            attemptId = ffiDb.lastInsertRowId;
+          }
+        } finally {
+          ffiDb.dispose();
+        }
+      } catch (_) {}
+    }
+
+    return BackupResult(
+      success: isSuccess,
+      localBackupPath: rawResult.localBackupPath,
+      secondaryBackupPath: rawResult.secondaryBackupPath,
+      warningMessage: rawResult.warningMessage,
+      timestamp: effectiveTime,
+      initiator: initiator,
+      managerId: managerId,
+      primaryStatus: primaryStatus,
+      secondaryStatus: secondaryStatus,
+      verificationStatus: verificationStatus,
+      failureCategory: failureCategory,
+      failureMessage: failureMessage,
+      attemptId: attemptId,
+    );
   }
 }
 
@@ -193,12 +381,35 @@ Future<BackupResult> _createBackup(String sourcePath, String? localDirectory,
         }
       }
     }
-    return BackupResult(success: true, localBackupPath: primaryPath,
-        secondaryBackupPath: secondaryPath, warningMessage: warning,
-        timestamp: timestamp);
+    return BackupResult(
+      success: true,
+      localBackupPath: primaryPath,
+      secondaryBackupPath: secondaryPath,
+      warningMessage: warning,
+      timestamp: timestamp,
+      primaryStatus: 'SUCCESS',
+      secondaryStatus: secondaryPath != null
+          ? 'SUCCESS'
+          : (warning != null ? 'WARNING' : 'NOT_CONFIGURED'),
+      verificationStatus: 'VERIFIED',
+      failureCategory: warning != null ? classifyBackupFailure(warning) : 'NONE',
+      failureMessage: warning != null ? sanitizeBackupFailureMessage(warning) : null,
+    );
   } catch (error) {
-    return BackupResult(success: false, warningMessage: 'Backup failed: $error',
-        timestamp: timestamp);
+    final category = classifyBackupFailure(error);
+    final sanitized = sanitizeBackupFailureMessage(error.toString());
+    return BackupResult(
+      success: false,
+      warningMessage: 'Backup failed: $error',
+      timestamp: timestamp,
+      primaryStatus: 'FAILED',
+      secondaryStatus: secondaryDirectory != null && secondaryDirectory.trim().isNotEmpty
+          ? 'FAILED'
+          : 'NOT_CONFIGURED',
+      verificationStatus: 'FAILED',
+      failureCategory: category,
+      failureMessage: sanitized,
+    );
   } finally {
     source?.dispose();
     if (staging != null && await staging.exists()) {

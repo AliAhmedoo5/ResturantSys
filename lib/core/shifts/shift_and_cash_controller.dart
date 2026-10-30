@@ -942,7 +942,11 @@ class ShiftAndCashController {
       final service = backupService ?? DatabaseBackupService(database: database);
       final srcPath = sourceDbPath ?? database.path;
       if (srcPath.isNotEmpty && srcPath != inMemoryDatabasePath) {
-        await service.executeBackup(sourceDbPath: srcPath);
+        await service.executeBackup(
+          sourceDbPath: srcPath,
+          initiator: 'Z_CLOSE',
+          managerId: closedByStaffId,
+        );
       }
     } catch (_) {
       // Non-fatal backup guardrail
