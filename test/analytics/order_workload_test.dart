@@ -73,7 +73,7 @@ void main() {
     expect(date.cells['period_complete'], isFalse);
     expect(date.cells['open_business_day_ids'], '${open.id}');
     expect(date.cells['period_status'], contains('Calendar'));
-    expect(AnalyticsExportService().csv(calendar, AnalyticsFamily.orders), contains('period_complete'));
+    expect(AnalyticsExportService().csv(calendar, AnalyticsFamily.orders), contains('period complete'));
   });
 
   test('confirmed workload retains cancellation once and excludes Holds and revisions', () async {
@@ -135,12 +135,13 @@ void main() {
     // above cover confirmation/cancellation/refund semantics without rewriting time.
     final days = <int>[];
     final shifts = <int>[];
-    for (final period in [
+    final periods = [
       (opened: '2026-10-29T08:00:00+05:00', closed: '2026-10-29T12:00:00+05:00'),
       (opened: '2026-10-29T18:00:00+05:00', closed: '2026-10-30T02:00:00+05:00'),
       (opened: '2026-10-30T08:00:00+05:00', closed: '2026-10-30T12:00:00+05:00'),
-    ]) {
-      final day = await db.insert('business_days', {'opened_at': period.opened, 'closed_at': period.closed, 'status': 'CLOSED', 'opened_by_staff_id': 1});
+    ];
+    for (final period in periods) {
+      final day = await db.insert('business_days', {'opened_at': period.opened, 'status': 'OPEN', 'opened_by_staff_id': 1});
       days.add(day);
       shifts.add(await db.insert('shifts', {'business_day_id': day, 'staff_id': 2,
         'opened_at': period.opened, 'closed_at': period.closed, 'opening_float': 0, 'status': 'CLOSED'}));
@@ -155,6 +156,9 @@ void main() {
     await order(1, 1, 500, '2026-10-29T20:00:00Z'); // 30 Oct 01:00 Karachi
     await order(2, 1, 10, '2026-10-30T11:00:00+05:00');
     await order(2, 2, 10, '2026-10-30T11:30:00+05:00');
+    for (var i = 0; i < days.length; i++) {
+      await db.update('business_days', {'status': 'CLOSED', 'closed_at': periods[i].closed}, where: 'id=?', whereArgs: [days[i]]);
+    }
     final service = AnalyticsService(database: db, authService: auth);
     final query = AnalyticsQuery(startDate: DateTime(2026, 10, 29), endDateExclusive: DateTime(2026, 10, 31));
     final snapshot = await service.load(query);
