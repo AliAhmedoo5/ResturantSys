@@ -173,6 +173,12 @@ class AnalyticsService {
     await read('delivery_audit', 'report_delivery_audit', 'SELECT x.id,x.staff_id,x.action,x.created_at FROM report_delivery_audit x WHERE $interval', intervalArgs);
     await read('configuration_audit', 'configuration_audit', 'SELECT x.id,x.actor_id,x.kind,x.before_json,x.after_json,x.created_at,s.name AS actor_name FROM configuration_audit x LEFT JOIN staff s ON s.id=x.actor_id WHERE $interval', intervalArgs);
     await read('operations_audit', 'operations_audit', 'SELECT x.id,x.manager_id,x.entity,x.entity_id,x.action,x.detail,x.created_at,s.name AS manager_name FROM operations_audit x LEFT JOIN staff s ON s.id=x.manager_id WHERE $interval', intervalArgs);
+    if (tables.contains('backup_attempts')) {
+      await read('backup_attempts', 'backup_attempts', 'SELECT x.*, s.name AS manager_name FROM backup_attempts x LEFT JOIN staff s ON s.id=x.manager_id WHERE $interval ORDER BY x.created_at DESC, x.id DESC', intervalArgs);
+      await read('all_backup_attempts', 'backup_attempts', 'SELECT x.*, s.name AS manager_name FROM backup_attempts x LEFT JOIN staff s ON s.id=x.manager_id WHERE x.created_at <= ? ORDER BY x.created_at DESC, x.id DESC', [effectiveCutoffStr]);
+    } else {
+      e.absent.add('backup_attempts');
+    }
     await read('token_audit', 'checkout_token_audit', 'SELECT x.id,x.order_id,x.token_number,x.action,x.payment_status,x.revision,x.recorded_at FROM checkout_token_audit x $joinedOrder', orderArgs);
     await read('rounding', 'rounding_variance_ledger', 'SELECT x.id,x.order_id,x.shift_id,x.cash_rounding_paisa,x.created_at FROM rounding_variance_ledger x $joinedOrder', orderArgs);
     await read('stock_alerts', 'checkout_stock_alerts', 'SELECT x.order_id,x.ingredient_id,x.stock_at_checkout,x.created_at FROM checkout_stock_alerts x $joinedOrder', orderArgs);

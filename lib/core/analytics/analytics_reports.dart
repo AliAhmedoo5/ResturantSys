@@ -1720,9 +1720,42 @@ class _ReportBuilder {
     }
   }
 
+  static String _safeBackupSummary(Map<String, Object?> b) {
+    final primary = b['primary_status'] ?? 'UNKNOWN';
+    final secondary = b['secondary_status'] ?? 'NOT_CONFIGURED';
+    final category = b['failure_category'] as String?;
+    final message = b['failure_message'] as String?;
+    final buf = StringBuffer('Primary: $primary, Secondary: $secondary');
+    if (category != null && category != 'NONE') {
+      buf.write(' [$category]');
+    }
+    if (message != null && message.isNotEmpty) {
+      buf.write(' - ${_safeText(message)}');
+    }
+    return buf.toString();
+  }
+
   AnalyticsSection _audit() {
     final configEvents = e.get('configuration_audit');
     final opsEvents = e.get('operations_audit');
+    final backupEvents = e.get('backup_attempts');
+    final allBackupEvents = e.get('all_backup_attempts');
+    final allVerifiedBackups = allBackupEvents.where((b) => b['verification_status'] == 'VERIFIED' && b['primary_status'] == 'SUCCESS').toList();
+    final verifiedInInterval = backupEvents.where((b) => b['verification_status'] == 'VERIFIED' && b['primary_status'] == 'SUCCESS').toList();
+    final failedInInterval = backupEvents.where((b) => b['primary_status'] == 'FAILED' || b['verification_status'] == 'FAILED').toList();
+    final warningsInInterval = backupEvents.where((b) => b['primary_status'] == 'SUCCESS' && (b['secondary_status'] == 'WARNING' || b['secondary_status'] == 'FAILED')).toList();
+
+    double? lastVerifiedAgeMinutes;
+    if (allVerifiedBackups.isNotEmpty) {
+      final lastTimeStr = allVerifiedBackups.first['attempted_at'] as String?;
+      if (lastTimeStr != null) {
+        final lastTime = DateTime.tryParse(lastTimeStr);
+        if (lastTime != null) {
+          final diff = e.now.difference(lastTime).inMinutes;
+          lastVerifiedAgeMinutes = diff >= 0 ? diff.toDouble() : 0.0;
+        }
+      }
+    }
     final rows = <AnalyticsRow>[
       ...e.get('revisions').map((r) => _row('order_revisions', r, {'kind': 'Order revision', 'order_id': r['order_id'], 'action': r['action'], 'reason': _safeText(r['reason']), 'staff_id': r['cashier_id'], 'delta_paisa': r['money_delta_paisa'], 'created_at': r['created_at_utc']})),
       ...e.get('token_audit').map((a) => _row('checkout_token_audit', a, {'kind': 'Immutable token audit', 'order_id': a['order_id'], 'token': a['token_number'], 'action': a['action'], 'status': a['payment_status'], 'revision': a['revision'], 'created_at': a['recorded_at']})),
@@ -1745,6 +1778,21 @@ class _ReportBuilder {
         'reason': _safeOperationsSummary(o['action'] as String?, o['detail'] as String?),
         'created_at': o['created_at'],
       })),
+      ...backupEvents.map((b) => _row('backup_attempts', b, {
+        'kind': 'Database backup',
+        'action': b['initiator'] ?? 'MANUAL',
+        'status': b['verification_status'] == 'VERIFIED'
+            ? (b['secondary_status'] == 'WARNING' ? 'WARNING' : 'VERIFIED')
+            : (b['verification_status'] ?? 'UNKNOWN'),
+        'staff_id': b['manager_id'],
+        'reason': _safeBackupSummary(b),
+        'created_at': b['attempted_at'] ?? b['created_at'],
+        'primary_status': b['primary_status'],
+        'secondary_status': b['secondary_status'],
+        'failure_category': b['failure_category'],
+        'primary_path': b['primary_path'],
+        'secondary_path': b['secondary_path'],
+      })),
     ];
     return _section(AnalyticsFamily.audit, 'Control and audit', [
       _metric('revision_events', 'Revision audit events', e.get('revisions').length, unit: AnalyticsUnit.count, explanation: 'Append-only revision evidence for filtered selected orders.'),
@@ -1756,7 +1804,26 @@ class _ReportBuilder {
       _metric('configuration_audit_events', 'Configuration audit events', configEvents.length, unit: AnalyticsUnit.count, explanation: 'Recorded configuration and settings change events within selected interval; safe allowlisted changes projected without raw payloads or secrets.'),
       _metric('operations_audit_events', 'Operations audit events', opsEvents.length, unit: AnalyticsUnit.count, explanation: 'Recorded management operations and finance adjustments within selected interval.'),
       _missing('authentication_event_history', 'Authentication and security event history', 'Login failures, session expirations and PIN reset audit history have no persisted event ledger; configuration and operations audits are projected above.', unit: AnalyticsUnit.count),
-      _missing('backup_history', 'Historical successful backups', 'Current settings are not evidence of historical backup success.', unit: AnalyticsUnit.count),
+      allVerifiedBackups.isEmpty
+          ? _missing('backup_history', 'Historical successful backups',
+              'No verified backup attempts have been recorded. Configured backup destinations or schedules are not evidence of backup completion.',
+              unit: AnalyticsUnit.count)
+          : _metric('backup_history', 'Historical successful backups', verifiedInInterval.length,
+              unit: AnalyticsUnit.count,
+              explanation: 'Durable verified successful backup attempts within selected interval.'),
+      _metric('failed_backups', 'Failed backup attempts', failedInInterval.length,
+          unit: AnalyticsUnit.count,
+          explanation: 'Recorded failed backup attempts within selected interval; failures are preserved and never overwritten.'),
+      _metric('backup_secondary_warnings', 'Secondary backup warnings', warningsInInterval.length,
+          unit: AnalyticsUnit.count,
+          explanation: 'Backup attempts where primary backup succeeded but secondary destination produced a warning or failure.'),
+      lastVerifiedAgeMinutes == null
+          ? _missing('last_verified_backup_age', 'Last verified backup age',
+              'No verified backup has been completed yet; configured settings do not establish backup health.',
+              unit: AnalyticsUnit.minutes)
+          : _metric('last_verified_backup_age', 'Last verified backup age', lastVerifiedAgeMinutes,
+              unit: AnalyticsUnit.minutes,
+              explanation: 'Minutes elapsed since the most recent verified successful backup snapshot.'),
     ], rows, ['kind', 'business_day_id', 'order_id', 'shift_id', 'ingredient_id', 'token', 'revision', 'action', 'reason', 'staff_id', 'delta_paisa', 'hash', 'channel', 'status', 'attempts', 'stock_at_checkout', 'created_at'], ['Order revisions/tokens/rounding/checkout alerts use filtered order cohort. Report runs/outbox use whole selected Business Days. Delivery audit uses selected actual intervals.', 'Configuration and operations audits project authorized management actions with safe field allowlisting. Raw JSON, credentials, PIN hashes, passwords and sensitive customer data are strictly excluded. Authentication events (login failures, PIN resets) have no persistent event ledger and remain disclosed as missing.', 'Immutable Z-report provenance is shown; this explorer never rewrites snapshots. Sensitive payloads, errors, recipients, credentials and raw customer contact fields are excluded.']);
   }
 
