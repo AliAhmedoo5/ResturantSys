@@ -84,4 +84,24 @@ void main() {
     expect(AnalyticsExportService().csv(snapshot, AnalyticsFamily.procurement), contains('Selected supplier'));
   });
 
+  test('expense category follows actual event time independently of posting window', () async {
+    final store = PosDatabase(factory: databaseFactoryFfi, customPath: inMemoryDatabasePath);
+    final db = await store.initialize();
+    addTearDown(store.close);
+    final manager = (await db.query('staff')).firstWhere((r) => r['role'] != 'CASHIER');
+    final managerId = manager['id'] as int;
+    await ShiftAndCashController(database: db).openBusinessDay(openedByStaffId: managerId);
+    final operations = OperationsController(db);
+    final category = await operations.saveCategory(managerId: managerId, name: 'Late bank expense');
+    await operations.postExpense(managerId: managerId, categoryId: category, amountPaisa: 9000,
+      description: 'Posted later', source: FundingSource.bank, reason: 'Late entry',
+      requestKey: 'late-bank', actualAt: DateTime.utc(2026, 9, 1, 8));
+    final auth = AuthService(database: db)..session.login(Staff.fromMap(manager));
+    final snapshot = await AnalyticsService(database: db, authService: auth).load(AnalyticsQuery(
+      startDate: DateTime(2026, 9, 1), endDateExclusive: DateTime(2026, 9, 2),
+      timeBasis: AnalyticsTimeBasis.calendarTime, domainFilters: {AnalyticsDimension.expenseCategory: '$category'}));
+    expect(snapshot.section(AnalyticsFamily.expenses).metrics.singleWhere((m) => m.id == 'finance_bank_outflow').value, 9000);
+    expect(snapshot.section(AnalyticsFamily.expenses).rows.where((r) => r.cells['kind'] == 'Finance payment'), hasLength(1));
+  });
+
 }
