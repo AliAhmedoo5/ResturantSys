@@ -9,6 +9,7 @@ class RawIngredient {
     required this.currentStock,
     required this.lowStockThreshold,
     this.costPerRecipeUnit = 0.0,
+    this.category,
     this.createdAt,
   });
 
@@ -18,6 +19,7 @@ class RawIngredient {
   final double currentStock;
   final double lowStockThreshold;
   final double costPerRecipeUnit;
+  final String? category;
   final DateTime? createdAt;
 
   /// Indicates if the available stock has reached or fallen below the warning threshold.
@@ -31,6 +33,7 @@ class RawIngredient {
       currentStock: (map['current_stock'] as num).toDouble(),
       lowStockThreshold: (map['low_stock_threshold'] as num).toDouble(),
       costPerRecipeUnit: (map['cost_per_recipe_unit'] as num?)?.toDouble() ?? 0.0,
+      category: map['category'] as String?,
       createdAt: map['created_at'] != null
           ? DateTime.tryParse(map['created_at'] as String)
           : null,
@@ -45,6 +48,7 @@ class RawIngredient {
       'current_stock': currentStock,
       'low_stock_threshold': lowStockThreshold,
       'cost_per_recipe_unit': costPerRecipeUnit,
+      if (category != null) 'category': category,
       'created_at': createdAt?.toIso8601String(),
     };
   }
@@ -56,6 +60,7 @@ class RawIngredient {
     double? currentStock,
     double? lowStockThreshold,
     double? costPerRecipeUnit,
+    String? category,
     DateTime? createdAt,
   }) {
     return RawIngredient(
@@ -65,6 +70,7 @@ class RawIngredient {
       currentStock: currentStock ?? this.currentStock,
       lowStockThreshold: lowStockThreshold ?? this.lowStockThreshold,
       costPerRecipeUnit: costPerRecipeUnit ?? this.costPerRecipeUnit,
+      category: category ?? this.category,
       createdAt: createdAt ?? this.createdAt,
     );
   }

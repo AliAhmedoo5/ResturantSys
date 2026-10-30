@@ -565,11 +565,15 @@ class OrderAndCheckoutController {
           costQuantities[entry.key] = (costQuantities[entry.key] ?? 0) + entry.value;
         }
       }
+      final classifications = <int, String>{};
       if (diningType.requiresPackaging) {
         final packaging = await _findPackagingIngredientId(txn);
-        if (packaging != null) costQuantities[packaging] = (costQuantities[packaging] ?? 0) + 1;
+        if (packaging != null) {
+          costQuantities[packaging] = (costQuantities[packaging] ?? 0) + 1;
+          classifications[packaging] = 'PACKAGING';
+        }
       }
-      await HistoricalCosts.consume(txn, orderId, 0, costQuantities);
+      await HistoricalCosts.consume(txn, orderId, 0, costQuantities, classifications: classifications);
       if (cashRoundingPaisa != 0) {
         await txn.insert(PosDatabaseConstants.tableRoundingVarianceLedger, {
           'order_id': orderId, 'shift_id': shiftId, 'cash_rounding_paisa': cashRoundingPaisa,

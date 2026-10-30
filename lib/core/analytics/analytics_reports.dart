@@ -1173,6 +1173,36 @@ class _ReportBuilder {
     final covered = orders.where((o) => coverage.contains(o['id'])).length;
     final complete = e.get('days').isNotEmpty && covered == orders.length && events.every((c) => c['cost_paisa'] != null);
     final cogs = events.fold<int>(0, (sum, c) => sum + orderCostSign(c['kind']) * ((c['cost_paisa'] as int?) ?? 0));
+    final ordersById = {for (final o in orders) o['id']: o};
+
+    var foodCogs = 0;
+    var packagingCogs = 0;
+    var unclassifiedCogs = 0;
+    final foodByDining = <String, int>{'DINE_IN': 0, 'TAKEAWAY': 0, 'DELIVERY': 0};
+    final packagingByDining = <String, int>{'DINE_IN': 0, 'TAKEAWAY': 0, 'DELIVERY': 0};
+    final unclassifiedByDining = <String, int>{'DINE_IN': 0, 'TAKEAWAY': 0, 'DELIVERY': 0};
+
+    for (final c in events) {
+      final sign = orderCostSign(c['kind']);
+      final paisa = (c['cost_paisa'] as int?) ?? 0;
+      final signedCost = sign * paisa;
+      final rawCls = c['classification'] as String?;
+      final cls = (rawCls == null || rawCls.trim().isEmpty) ? 'UNCLASSIFIED' : rawCls.trim().toUpperCase();
+      final order = ordersById[c['order_id']];
+      final diningType = (order?['dining_type'] as String?) ?? 'UNKNOWN';
+
+      if (cls == 'FOOD') {
+        foodCogs += signedCost;
+        foodByDining[diningType] = (foodByDining[diningType] ?? 0) + signedCost;
+      } else if (cls == 'PACKAGING') {
+        packagingCogs += signedCost;
+        packagingByDining[diningType] = (packagingByDining[diningType] ?? 0) + signedCost;
+      } else {
+        unclassifiedCogs += signedCost;
+        unclassifiedByDining[diningType] = (unclassifiedByDining[diningType] ?? 0) + signedCost;
+      }
+    }
+
     // Accrual at confirmation: include COD receivables; cancellation reduces the
     // stored total to zero. Delivery fees are earned with the order; tax is excluded.
     final revenue = _sum(valid, 'grand_total') - _sum(valid, 'tax_amount');
@@ -1192,13 +1222,39 @@ class _ReportBuilder {
       _metric('waste_loss', 'Recorded waste loss', _sum(e.get('waste'), 'cost_loss'), explanation: 'Includes cooked loss already included in consumed cost; never subtract it twice.', previous: _sum(e.get('previous_waste'), 'cost_loss')),
       _metric('purchase_spend', 'Recorded Mandi purchase spend', _sum(e.get('purchases'), 'total_cost'), explanation: 'Inventory acquisition spend; not sales COGS.'),
       _metric('cogs', 'Historical realized COGS', cogs, explanation: policy, unavailable: !complete, unavailableQuality: AnalyticsQuality.missing),
+      _metric('food_cogs', 'Historical food COGS', foodCogs, explanation: 'Realized food component of COGS from event-time acquisition rates; original returns subtract cost.', unavailable: !complete, unavailableQuality: AnalyticsQuality.missing),
+      _metric('packaging_cogs', 'Historical packaging COGS', packagingCogs, explanation: 'Realized packaging component of COGS from event-time acquisition rates; original returns subtract cost.', unavailable: !complete, unavailableQuality: AnalyticsQuality.missing),
+      _metric('unclassified_cogs', 'Legacy unclassified COGS', unclassifiedCogs, explanation: 'Pre-upgrade cost events without recorded food/packaging classification. Not retroactively classified.', unavailable: !complete, unavailableQuality: AnalyticsQuality.missing),
+      _metric('food_cogs_dine_in', 'Dine-In food COGS', foodByDining['DINE_IN'] ?? 0, explanation: 'Realized food COGS for Dine-In orders.', unavailable: !complete, unavailableQuality: AnalyticsQuality.missing),
+      _metric('packaging_cogs_dine_in', 'Dine-In packaging COGS', packagingByDining['DINE_IN'] ?? 0, explanation: 'Realized packaging COGS for Dine-In orders.', unavailable: !complete, unavailableQuality: AnalyticsQuality.missing),
+      _metric('food_cogs_takeaway', 'Takeaway food COGS', foodByDining['TAKEAWAY'] ?? 0, explanation: 'Realized food COGS for Takeaway orders.', unavailable: !complete, unavailableQuality: AnalyticsQuality.missing),
+      _metric('packaging_cogs_takeaway', 'Takeaway packaging COGS', packagingByDining['TAKEAWAY'] ?? 0, explanation: 'Realized packaging COGS for Takeaway orders.', unavailable: !complete, unavailableQuality: AnalyticsQuality.missing),
+      _metric('food_cogs_delivery', 'Delivery food COGS', foodByDining['DELIVERY'] ?? 0, explanation: 'Realized food COGS for Delivery orders.', unavailable: !complete, unavailableQuality: AnalyticsQuality.missing),
+      _metric('packaging_cogs_delivery', 'Delivery packaging COGS', packagingByDining['DELIVERY'] ?? 0, explanation: 'Realized packaging COGS for Delivery orders.', unavailable: !complete, unavailableQuality: AnalyticsQuality.missing),
       _metric('gross_profit', 'Actual gross profit', gross, explanation: policy, unavailable: !complete, unavailableQuality: AnalyticsQuality.missing),
       _metric('net_profit', 'Recorded net operating result', gross - expenses - labor - rawWaste + variance,
         explanation: 'Gross profit less posted operating expenses, salary accruals and raw waste, plus signed posted count valuation. Posting-period allocation; unposted liabilities and legacy generic drawer outflows are not inferred. Available only for whole Business Days with complete cost evidence.', unavailable: !netAvailable, unavailableQuality: AnalyticsQuality.missing),
     ], [
-      ...events.map((c) => _row('order_cost_events', c, {'kind': c['kind'], 'order_id': c['order_id'], 'ingredient_id': c['ingredient_id'], 'revision': c['revision'], 'quantity': c['quantity'], 'unit_cost_rupees': c['unit_cost_rupees'], 'cost_paisa': c['cost_paisa'], 'source_event_id': c['source_event_id'], 'created_at': c['recorded_at']})),
+      ...events.map((c) {
+        final rawCls = c['classification'] as String?;
+        final cls = (rawCls == null || rawCls.trim().isEmpty) ? 'UNCLASSIFIED' : rawCls.trim().toUpperCase();
+        final dining = ordersById[c['order_id']]?['dining_type'] ?? 'UNKNOWN';
+        return _row('order_cost_events', c, {
+          'kind': c['kind'],
+          'order_id': c['order_id'],
+          'dining_type': dining,
+          'ingredient_id': c['ingredient_id'],
+          'classification': cls,
+          'revision': c['revision'],
+          'quantity': c['quantity'],
+          'unit_cost_rupees': c['unit_cost_rupees'],
+          'cost_paisa': c['cost_paisa'],
+          'source_event_id': c['source_event_id'],
+          'created_at': c['recorded_at'],
+        });
+      }),
       ...e.get('waste').map((w) => _row('kitchen_wastage', w, {'kind': 'Waste evidence', 'ingredient_id': w['raw_ingredient_id'], 'quantity': w['quantity'], 'recorded_loss_paisa': _money(w, 'cost_loss'), 'reason': _safeText(w['reason']), 'created_at': w['created_at']})),
-    ], ['kind', 'order_id', 'ingredient_id', 'revision', 'quantity', 'unit_cost_rupees', 'cost_paisa', 'source_event_id', 'recorded_loss_paisa', 'reason', 'created_at'], [policy, 'Unknown costs remain null. Current purchase rates never rewrite earlier cost events. No invented pre-upgrade profit.', 'Recorded net result uses posting periods; it does not assert that all expenses or earned salary have been entered. Order filters withhold net result because overhead cannot be allocated reliably.']);
+    ], ['kind', 'order_id', 'dining_type', 'ingredient_id', 'classification', 'revision', 'quantity', 'unit_cost_rupees', 'cost_paisa', 'source_event_id', 'recorded_loss_paisa', 'reason', 'created_at'], [policy, 'Unknown costs remain null. Current purchase rates never rewrite earlier cost events. No invented pre-upgrade profit.', 'Food and packaging COGS are snapshotted at event time. Legacy pre-classification cost events remain explicit as UNCLASSIFIED and are never retroactively estimated. Realized COGS equals food COGS plus packaging COGS plus any legacy unclassified COGS.', 'Recorded net result uses posting periods; it does not assert that all expenses or earned salary have been entered. Order filters withhold net result because overhead cannot be allocated reliably.']);
   }
 
   static const _safeConfigKeys = {
