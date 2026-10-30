@@ -19,4 +19,3 @@ void main() {
     expect(find.text('Append correction'),findsNothing);
   });
 }
-

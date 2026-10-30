@@ -172,8 +172,8 @@ class HistoricalCorrectionSnapshot {
     final section = _sections.cast<Map<String,dynamic>>().where((s)=>s['title']=='Shift Handover Audit').firstOrNull;
     if (section == null) return null;
     final rows = section['rows'] as List<dynamic>;
-    if (rows.any((r)=>(r as List<dynamic>)[6] is! num)) return null;
-    return rows.fold<int>(0,(sum,r)=>sum+((r as List<dynamic>)[6] as num).toInt());
+    if (rows.any((r)=>(r as List<dynamic>)[5] is! num)) return null;
+    return rows.fold<int>(0,(sum,r)=>sum+((r as List<dynamic>)[5] as num).toInt());
   }
   int _sum(String metric) => entries.where((r)=>r['metric']==metric).fold(0,(sum,r)=>sum+(r['delta_amount_paisa'] as int));
   int? get adjustedCollectionDuePaisa => originalCollectionDuePaisa == null ? null : originalCollectionDuePaisa!-_sum('collection');
