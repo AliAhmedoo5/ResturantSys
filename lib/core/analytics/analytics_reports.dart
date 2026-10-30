@@ -199,10 +199,11 @@ class _ReportBuilder {
       metrics.add(_metric('area_${group.key}', '${group.key} delivery orders', group.value.length, unit: AnalyticsUnit.count, explanation: 'Eligible filtered order count by transaction-time area snapshot.'));
     }
     return _section(AnalyticsFamily.delivery, 'Delivery and riders', metrics, [
+      ..._receivingEventRows(_receivingEvents().where((p) => p['settlement_id'] != null)),
       ...deliveredOrders.map((o) => _row('orders', o, {'order_id': o['id'], 'area': o['delivery_area_name_snapshot'] ?? 'Unknown area', 'fee_paisa': o['delivery_fee_paisa'], 'payment_status': o['payment_status']})),
       ...trips.map((t) => _row('rider_trips', t, {'trip_id': t['id'], 'rider_id': t['rider_staff_id'], 'shift_id': t['shift_id'], 'status': t['status'], 'selected_order_load': attempts.where((a) => a['trip_id'] == t['id']).length, 'expected_paisa': t['cash_expected_paisa'], 'counted_paisa': t['cash_collected_paisa'], 'dispatched_at': t['dispatched_at'], 'settled_at': t['settled_at_utc']})),
       ...attempts.map((a) => _row('rider_trip_orders', a, {'order_id': a['order_id'], 'trip_id': a['trip_id'], 'rider_id': a['rider_staff_id'], 'status': a['status'], 'dispatched_at': a['dispatched_at'], 'delivered_at': a['delivered_at'], 'returned_at': a['returned_at']})),
-    ], ['order_id', 'trip_id', 'rider_id', 'shift_id', 'selected_order_load', 'area', 'fee_paisa', 'payment_status', 'status', 'expected_paisa', 'counted_paisa', 'dispatched_at', 'delivered_at', 'returned_at', 'settled_at'], ['Order/attempt rows and selected-order load use order filters; trip rows and trip exposure use whole selected Business Days. All-outstanding measures explicitly ignore date/order filters.', 'Travel excludes invalid/missing timestamps and reports coverage. Percentiles interpolate sorted valid minutes. No final failure/reattempt or unrecorded failure-reason inference.']);
+    ], ['order_id', 'trip_id', 'rider_id', 'shift_id', 'selected_order_load', 'area', 'fee_paisa', 'payment_status', 'status', 'expected_paisa', 'counted_paisa', 'dispatched_at', 'delivered_at', 'returned_at', 'settled_at'], ['Order/attempt rows and selected-order load use order filters; trip rows and trip exposure use whole selected Business Days. All-outstanding measures explicitly ignore date/order filters.', 'Settlement event rows use receiving Shift/Business Day or actual calendar time, independently of the originating Order cohort. Counted handover is one linked custody transfer; COD settlement value is not verified customer collection. Legacy settled trips without events have unavailable receiving Shift, actors and immutable recording time. Do not sum settlement attribution, digital receipt and counted pouch rows.', 'Travel excludes invalid/missing timestamps and reports coverage. Percentiles interpolate sorted valid minutes. No final failure/reattempt or unrecorded failure-reason inference.']);
   }
 
   AnalyticsSection _customers() {
@@ -374,11 +375,10 @@ class _ReportBuilder {
     ], ['kind', 'supplier_id', 'name', 'opening_paisa', 'current_paisa', 'payment_activity', 'type', 'amount_paisa', 'ingredient_id', 'quantity', 'shift_id', 'created_at'], [_currentBasis, _intervalBasis, 'Supplier directory balances and selected interval entries are different views; do not add their amounts together.']);
   }
 
-  AnalyticsSection _cash() {
-    final shifts = e.get('shifts');
+  List<_Record> _receivingEvents() {
     final receivingIds = e.get('days').map((d) => d['id']).toSet();
     final receiptEvents = e.get('payment_events').where((p) {
-      if (!['RECEIPT', 'REFUND'].contains(p['kind'])) return false;
+      if (!['RECEIPT', 'REFUND', 'RIDER_HANDOVER', 'COD_SETTLEMENT'].contains(p['kind'])) return false;
       if (e.query.timeBasis == AnalyticsTimeBasis.calendarTime) {
         final actual = _karachi(p['actual_at']);
         if (actual == null || actual.isBefore(analyticsWallClock(e.query.startDate)) || !actual.isBefore(analyticsWallClock(e.query.endDateExclusive))) return false;
@@ -387,6 +387,31 @@ class _ReportBuilder {
           (e.query.cashierId == null || p['shift_owner_id'] == e.query.cashierId) &&
           (e.query.paymentMethod == null || p['payment_method'] == e.query.paymentMethod);
     }).toList();
+    return receiptEvents;
+  }
+
+  List<AnalyticsRow> _receivingEventRows(Iterable<_Record> receiptEvents) => [
+      ...receiptEvents.map((p) => _row('payment_events', p, {
+        'kind': p['kind'] == 'RIDER_HANDOVER' ? 'Counted rider custody transfer' : p['kind'] == 'COD_SETTLEMENT' ? 'Order settlement attribution (not collected cash)' : 'Independent customer money event', 'event_kind': p['kind'],
+        'event_key': p['event_key'], 'amount_paisa': p['amount_paisa'],
+        'payment_source': p['payment_source'], 'payment_method': p['payment_method'],
+        'actual_at': p['actual_at'], 'recorded_at': p['recorded_at'],
+        'receiving_business_day_id': p['business_day_id'], 'receiving_shift_id': p['shift_id'],
+        'business_day_id': p['business_day_id'], 'shift_id': p['shift_id'],
+        'originating_business_day_id': p['originating_business_day_id'], 'originating_shift_id': p['originating_shift_id'],
+        'order_id': p['order_id'], 'tender_id': p['tender_id'], 'movement_id': p['movement_id'],
+        'settlement_id': p['settlement_id'], 'trip_id': p['settlement_id'],
+        if (p['settlement_id'] != null) 'customer_collection_evidence': 'Customer-to-rider collection evidence unavailable; delivery and expected pouch are insufficient proof',
+        if (p['kind'] == 'COD_SETTLEMENT') 'value_basis': 'Remaining contractual Order settlement, not allocated physical pouch cash',
+        'recorded_by': p['recorded_by'], 'approved_by': p['approved_by'],
+        'recorded_by_name_snapshot': p['recorded_by_name_snapshot'], 'shift_owner_name_snapshot': p['shift_owner_name_snapshot'],
+        'change_paisa': p['change_paisa'], 'rounding_paisa': p['rounding_paisa'],
+      })),
+  ];
+
+  AnalyticsSection _cash() {
+    final shifts = e.get('shifts');
+    final receiptEvents = _receivingEvents();
     final moves = e.get('movements');
     final payments = e.get('cash_payments');
     final receipts = payments.where((p) => p['payment_method'] == 'CASH' && _money(p, 'amount_tendered') > 0).toList();
@@ -408,19 +433,7 @@ class _ReportBuilder {
       _metric('open_shifts', 'Open shifts', shifts.where((s) => s['status'] == 'OPEN').length, unit: AnalyticsUnit.count, explanation: _globalBasis),
       _metric('unresolved_discrepancies', 'Unresolved discrepancies', shifts.where((s) => s['discrepancy_status'] == 'FLAGGED').length, unit: AnalyticsUnit.count, explanation: 'Selected shifts with stored FLAGGED review status.'),
     ], [
-      ...receiptEvents.map((p) => _row('payment_events', p, {
-        'kind': 'Independent customer money event', 'event_kind': p['kind'],
-        'event_key': p['event_key'], 'amount_paisa': p['amount_paisa'],
-        'payment_source': p['payment_source'], 'payment_method': p['payment_method'],
-        'actual_at': p['actual_at'], 'recorded_at': p['recorded_at'],
-        'receiving_business_day_id': p['business_day_id'], 'receiving_shift_id': p['shift_id'],
-        'business_day_id': p['business_day_id'], 'shift_id': p['shift_id'],
-        'originating_business_day_id': p['originating_business_day_id'], 'originating_shift_id': p['originating_shift_id'],
-        'order_id': p['order_id'], 'tender_id': p['tender_id'], 'movement_id': p['movement_id'],
-        'recorded_by': p['recorded_by'], 'approved_by': p['approved_by'],
-        'recorded_by_name_snapshot': p['recorded_by_name_snapshot'], 'shift_owner_name_snapshot': p['shift_owner_name_snapshot'],
-        'change_paisa': p['change_paisa'], 'rounding_paisa': p['rounding_paisa'],
-      })),
+      ..._receivingEventRows(receiptEvents),
       ...shifts.map((s) {
         final shiftMoves = moves.where((m) => m['shift_id'] == s['id']);
         final expectedShift = _money(s, 'opening_float') + receiptsFor(receipts.where((p) => p['shift_id'] == s['id'])) + _sum(shiftMoves.where((m) => m['type'] == 'PAY_IN'), 'amount') - _sum(shiftMoves.where((m) => m['type'] != 'PAY_IN'), 'amount');
@@ -428,7 +441,7 @@ class _ReportBuilder {
       }),
       ...moves.map((m) => _row('cash_movements', m, {'kind': 'Drawer movement', 'shift_id': m['shift_id'], 'cashier_id': m['staff_id'], 'type': m['type'], 'category': _safeText(m['category']), 'amount_paisa': _money(m, 'amount'), 'created_at': m['created_at']})),
       ...e.get('reports').map((r) => _row('report_runs', r, {'kind': 'Sealed Z-report provenance', 'business_day_id': r['business_day_id'], 'status': r['status'], 'hash': r['content_hash'], 'created_at': r['created_at']})),
-    ], ['event_kind', 'event_key', 'payment_source', 'payment_method', 'actual_at', 'recorded_at', 'receiving_business_day_id', 'receiving_shift_id', 'originating_business_day_id', 'originating_shift_id', 'order_id', 'tender_id', 'movement_id', 'recorded_by', 'approved_by', 'recorded_by_name_snapshot', 'shift_owner_name_snapshot', 'change_paisa', 'rounding_paisa', 'kind', 'business_day_id', 'shift_id', 'cashier_id', 'status', 'opening_paisa', 'expected_paisa', 'counted_paisa', 'variance_paisa', 'review_status', 'type', 'category', 'amount_paisa', 'hash', 'created_at'], [_globalBasis, 'Independent customer money event rows use receiving Business Day/Shift (or actual time in calendar mode); Shift/Cashier/method filters narrow those activity rows only. Legacy payments without linked events have unknown timing/receiving attribution and remain order-cohort estimates in the legacy drawer metrics. Never add event rows to the linked tender/movement again. Shift rows are exploratory X-report inputs; sealed Z-report hashes remain original.']);
+    ], ['event_kind', 'event_key', 'payment_source', 'payment_method', 'actual_at', 'recorded_at', 'receiving_business_day_id', 'receiving_shift_id', 'originating_business_day_id', 'originating_shift_id', 'order_id', 'tender_id', 'movement_id', 'recorded_by', 'approved_by', 'recorded_by_name_snapshot', 'shift_owner_name_snapshot', 'change_paisa', 'rounding_paisa', 'kind', 'business_day_id', 'shift_id', 'cashier_id', 'status', 'opening_paisa', 'expected_paisa', 'counted_paisa', 'variance_paisa', 'review_status', 'type', 'category', 'amount_paisa', 'hash', 'created_at'], [_globalBasis, 'Independent customer money event rows use receiving Business Day/Shift (or actual time in calendar mode); Shift/Cashier/method filters narrow those activity rows only. RIDER_HANDOVER counts the physical pouch once via its linked PAY_IN; COD_SETTLEMENT is contractual attribution, not a second money inflow or proof of customer-to-rider collection. Digital receipts are BANK, never drawer cash. Legacy payments without linked events have unknown timing/receiving attribution and remain order-cohort estimates in the legacy drawer metrics. Never add event rows to the linked tender/movement again. Shift rows are exploratory X-report inputs; sealed Z-report hashes remain original.']);
   }
 
   AnalyticsSection _expenses() {

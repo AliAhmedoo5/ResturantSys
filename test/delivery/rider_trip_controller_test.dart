@@ -236,7 +236,7 @@ void main() {
       expect((await orderController.getOrder(cashOrder.id)).shiftId, shiftId);
       final csv = AnalyticsExportService().csv(snapshot, AnalyticsFamily.cash);
       expect(csv, contains('RIDER_HANDOVER'));
-      expect(csv, contains('customer_collection_evidence'));
+      expect(csv, contains('customer collection evidence'));
       await expectLater(riderTripController.settleRiderTrip(tripId: trip.id,
         cashierStaffId: cashierId, shiftId: receiving.id, cashCountedPaisa: 70000), throwsStateError);
       final again = await AnalyticsService(database: db, authService: auth).load(snapshot.query);
