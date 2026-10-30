@@ -1,6 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:resturant_sys/core/analytics/analytics_models.dart';
+import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
+import 'package:resturant_sys/core/catalog/storage_unit.dart';
+import 'package:resturant_sys/core/khata/vendor_khata_controller.dart';
+import 'package:resturant_sys/core/procurement/procurement_and_wastage_controller.dart';
+import 'package:resturant_sys/core/procurement/desi_unit.dart';
 import 'package:resturant_sys/core/analytics/analytics_service.dart';
 import 'package:resturant_sys/core/analytics/analytics_export_service.dart';
 import 'package:resturant_sys/core/auth/auth_service.dart';
@@ -47,4 +52,36 @@ void main() {
     expect(clear.section(AnalyticsFamily.expenses).metrics.singleWhere((m) => m.id == 'operating_expense').value, 19000);
     expect(snapshot.section(AnalyticsFamily.expenses).metrics.singleWhere((m) => m.id == 'operating_expense').value, 12000);
   });
+  test('supplier acquisitions use retained identities and disclose unlinked Mandi coverage', () async {
+    final store = PosDatabase(factory: databaseFactoryFfi, customPath: inMemoryDatabasePath);
+    final db = await store.initialize();
+    addTearDown(store.close);
+    final people = await db.query('staff');
+    final manager = people.firstWhere((r) => r['role'] != 'CASHIER');
+    final managerId = manager['id'] as int;
+    await ShiftAndCashController(database: db).openBusinessDay(openedByStaffId: managerId);
+    final catalog = CatalogAndRecipeController(database: db);
+    final flour = await catalog.createRawIngredient(name: 'Synthetic flour', storageUnit: StorageUnit.kg);
+    final khata = VendorKhataController(database: db);
+    final supplier = await khata.createVendor(name: 'Selected supplier', phone: '03001112233');
+    final other = await khata.createVendor(name: 'Other supplier', phone: '03009998877');
+    final selected = await khata.recordCreditDelivery(vendorId: supplier.id, amount: 400,
+      rawIngredientId: flour.id, quantity: 5, staffId: managerId, requestKey: 'selected');
+    await khata.recordCreditDelivery(vendorId: other.id, amount: 300,
+      rawIngredientId: flour.id, quantity: 3, staffId: managerId, requestKey: 'other');
+    await ProcurementAndWastageController(database: db).recordMandiPurchase(
+      rawIngredientId: flour.id, unit: DesiUnit.dharri, quantity: 1, totalCost: 200);
+    final auth = AuthService(database: db)..session.login(Staff.fromMap(manager));
+    final snapshot = await AnalyticsService(database: db, authService: auth).load(
+      AnalyticsQuery(startDate: DateTime(2020), endDateExclusive: DateTime(2100), live: true,
+        domainFilters: {AnalyticsDimension.supplier: '${supplier.id}', AnalyticsDimension.ingredient: '${flour.id}'}));
+    final report = snapshot.section(AnalyticsFamily.procurement);
+    expect(report.metrics.singleWhere((m) => m.id == 'supplier_acquisition_value').value, 40000);
+    expect(report.metrics.singleWhere((m) => m.id == 'purchase_spend').value, 0);
+    expect(report.rows.where((r) => r.cells['kind'] == 'Supplier credit acquisition').single.sourceId, '${selected.id}');
+    expect(report.notes.join(' '), contains('supplier unknown'));
+    expect(snapshot.section(AnalyticsFamily.suppliers).rows.where((r) => r.sourceType == 'vendor_transactions').every((r) => r.cells['vendor_id'] == supplier.id), isTrue);
+    expect(AnalyticsExportService().csv(snapshot, AnalyticsFamily.procurement), contains('Selected supplier'));
+  });
+
 }

@@ -311,7 +311,7 @@ class _ReportBuilder {
     var returningCount = 0;
     final rows = <AnalyticsRow>[];
     for (final entry in groups.entries) {
-      final customer = 'Customer •••${entry.key.substring(entry.key.length - 4)}';
+      final customer = 'Customer â€¢â€¢â€¢${entry.key.substring(entry.key.length - 4)}';
       final value = _sum(entry.value, 'grand_total');
       final firstLifetime = lifetimeFirstOrders[entry.key];
       final firstLifetimeTime = _karachi(firstLifetime?['created_at']);
@@ -369,7 +369,7 @@ class _ReportBuilder {
       _orderBasis,
       'Customer classification distinguishes first-time customers (whose first eligible purchase occurred in this selected window) from returning customers (who had an eligible purchase prior to this window across all available history). Earlier installation boundaries limit historical depth; guest orders without phone numbers cannot be classified.',
       'Phone normalization removes separators and unifies +92/0092/92 mobile prefixes with local 0. Shared numbers and masked suffix collisions are possible. Raw phones, names and addresses are excluded.',
-      'Customer aggregate rows show each known identity’s eligible recorded value / its eligible order count, with all contributing order source IDs. Order history rows are a separate view; do not sum these different row kinds together. No known orders makes average ticket Not applicable.',
+      'Customer aggregate rows show each known identityâ€™s eligible recorded value / its eligible order count, with all contributing order source IDs. Order history rows are a separate view; do not sum these different row kinds together. No known orders makes average ticket Not applicable.',
     ]);
   }
 
@@ -854,9 +854,9 @@ class _ReportBuilder {
       _metric('khata_adjustments', 'Opening balance adjustments', totalAdjsInRange, unit: AnalyticsUnit.paisa, explanation: 'Net versioned opening balance adjustments in selected interval.'),
       _metric('khata_closing_payable', 'Vendor Khata closing payable', totalClosingPayable, unit: AnalyticsUnit.paisa, explanation: 'Opening + purchases + adjustments - payments reconciled at disclosed cutoff.'),
       _metric('aging_current', 'Current (not yet due) payable', totalCurrent, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable with due date strictly after disclosed cutoff date.'),
-      _metric('aging_0_7', 'Payable overdue 0–7 days', totalDays0to7, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable 0 to 7 days past due date (including due today at cutoff).'),
-      _metric('aging_8_30', 'Payable overdue 8–30 days', totalDays8to30, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable 8 to 30 days past due date as of cutoff.'),
-      _metric('aging_31_60', 'Payable overdue 31–60 days', totalDays31to60, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable 31 to 60 days past due date as of cutoff.'),
+      _metric('aging_0_7', 'Payable overdue 0â€“7 days', totalDays0to7, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable 0 to 7 days past due date (including due today at cutoff).'),
+      _metric('aging_8_30', 'Payable overdue 8â€“30 days', totalDays8to30, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable 8 to 30 days past due date as of cutoff.'),
+      _metric('aging_31_60', 'Payable overdue 31â€“60 days', totalDays31to60, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable 31 to 60 days past due date as of cutoff.'),
       _metric('aging_over_60', 'Payable overdue over 60 days', totalOver60, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable more than 60 days past due date as of cutoff.'),
       _metric('aging_unknown', 'Payable with unknown due date', totalUnknownDue, unit: AnalyticsUnit.paisa, explanation: 'Undated invoices and unallocated opening balances without explicit due dates.'),
       _coverage('supplier_coverage', 'Active and archived supplier coverage', activeCount, vendors.length, 'Active suppliers vs total registered suppliers including archived historical vendors.'),
