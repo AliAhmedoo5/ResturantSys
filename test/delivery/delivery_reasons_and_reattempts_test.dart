@@ -15,6 +15,7 @@ import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
 import 'package:resturant_sys/core/orders/payment_method.dart';
 import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
 import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
+import 'package:resturant_sys/core/catalog/storage_unit.dart';
 
 void main() {
   setUpAll(() {
@@ -83,10 +84,20 @@ void main() {
         displayOrder: 1,
         colorHex: '#FFC400',
       );
+      final beef = await catalogController.createRawIngredient(
+        name: 'Beef Patty',
+        storageUnit: StorageUnit.kg,
+        currentStock: 50.0,
+        costPerRecipeUnit: 150.0,
+      );
       final burgerItem = await catalogController.createMenuItem(
         categoryId: category.id,
         name: 'Zinger Burger',
         basePrice: 500.0,
+      );
+      await catalogController.setRecipeForMenuItem(
+        menuItemId: burgerItem.id,
+        items: [(rawIngredientId: beef.id, quantity: 0.15)],
       );
       await catalogController.toggleMenuItemActive(burgerItem.id, true);
 

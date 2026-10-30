@@ -15,6 +15,7 @@ import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
 import 'package:resturant_sys/core/orders/payment_method.dart';
 import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
 import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
+import 'package:resturant_sys/core/catalog/storage_unit.dart';
 
 void main() {
   setUpAll(() {
@@ -79,10 +80,20 @@ void main() {
         displayOrder: 1,
         colorHex: '#FFC400',
       );
+      final cheese = await catalogController.createRawIngredient(
+        name: 'Cheese',
+        storageUnit: StorageUnit.kg,
+        currentStock: 50.0,
+        costPerRecipeUnit: 200.0,
+      );
       final pizzaItem = await catalogController.createMenuItem(
         categoryId: category.id,
         name: 'Fajita Pizza',
         basePrice: 1000.0,
+      );
+      await catalogController.setRecipeForMenuItem(
+        menuItemId: pizzaItem.id,
+        items: [(rawIngredientId: cheese.id, quantity: 0.2)],
       );
       await catalogController.toggleMenuItemActive(pizzaItem.id, true);
 
