@@ -100,7 +100,7 @@ class AnalyticsService {
       await read('bridge_days', 'business_days', 'SELECT DISTINCT b.* FROM business_days b JOIN shifts s ON s.business_day_id=b.id WHERE s.id IN ($slots)', bridgeIds);
     }
     await read('trips', 'rider_trips', 'SELECT t.* FROM rider_trips t JOIN business_days b ON b.id=t.business_day_id WHERE $dayScope', dayArgs);
-    await read('attempts', 'rider_trip_orders', 'SELECT x.id,x.order_id,x.trip_id,x.status,x.delivered_at,x.returned_at,t.dispatched_at,t.rider_staff_id FROM rider_trip_orders x JOIN rider_trips t ON t.id=x.trip_id $joinedOrder', orderArgs);
+    await read('attempts', 'rider_trip_orders', 'SELECT x.id,x.order_id,x.trip_id,x.status,x.assigned_at,x.delivered_at,x.returned_at,x.notes,t.dispatched_at,t.rider_staff_id,o.delivery_area_id,o.delivery_area_name_snapshot FROM rider_trip_orders x JOIN rider_trips t ON t.id=x.trip_id $joinedOrder ORDER BY x.id', orderArgs);
     await read('ingredients', 'raw_ingredients', 'SELECT id,name,storage_unit,current_stock,low_stock_threshold,cost_per_recipe_unit FROM raw_ingredients');
     await read('inventory', 'inventory_movements', 'SELECT m.* FROM inventory_movements m JOIN business_days b ON b.id=m.business_day_id WHERE $dayScope', dayArgs);
     final cutoff = e.get('days').map((d) => _karachi(d['closed_at']) ?? _karachi(e.now.toIso8601String())!).fold<DateTime?>(null, (latest, time) => latest == null || time.isAfter(latest) ? time : latest);

@@ -170,6 +170,16 @@ class _ReportBuilder {
     final attempts = e.get('attempts');
     final delivered = attempts.where((a) => a['status'] == 'DELIVERED').toList();
     final returned = attempts.where((a) => a['status'] == 'RETURNED').toList();
+    final attemptsByOrder = <int, List<_Record>>{};
+    for (final a in attempts) {
+      final orderId = a['order_id'];
+      if (orderId is int) {
+        attemptsByOrder.putIfAbsent(orderId, () => []).add(a);
+      }
+    }
+    final uniqueAttemptedOrders = attemptsByOrder.keys.length;
+    final reattemptedOrders = attemptsByOrder.values.where((list) => list.length > 1).length;
+    final totalReattempts = attempts.length - uniqueAttemptedOrders;
     final times = <double>[];
     for (final a in delivered) {
       final dispatch = _karachi(a['dispatched_at']);
@@ -187,6 +197,10 @@ class _ReportBuilder {
       _metric('trips', 'Trips (whole selected days)', trips.length, unit: AnalyticsUnit.count, explanation: _globalBasis),
       _metric('unsettled_exposure', 'Unsettled expected COD (selected days)', _integers(trips.where((t) => ['DISPATCHED', 'RETURNED'].contains(t['status'])), 'cash_expected_paisa'), explanation: 'Expected COD in unsettled trips selected by trip Business Day, all orders. Exposure is not proof of customer collection or rider debt.'),
       _metric('all_unsettled_exposure', 'Unsettled expected COD (all outstanding)', _integers(e.get('all_trips'), 'cash_expected_paisa'), explanation: 'Current global expected COD for DISPATCHED/RETURNED trips; not verified cash collected.'),
+      _metric('unique_attempted_orders', 'Unique delivery orders attempted', uniqueAttemptedOrders, unit: AnalyticsUnit.count, explanation: 'Distinct Order IDs with at least one dispatched delivery attempt.'),
+      _metric('reattempted_orders', 'Reattempted orders', reattemptedOrders, unit: AnalyticsUnit.count, explanation: 'Distinct Order IDs with more than one dispatched attempt.'),
+      _metric('total_reattempts', 'Total delivery reattempts', totalReattempts, unit: AnalyticsUnit.count, explanation: 'Attempts dispatched beyond the initial run (total attempts minus unique attempted orders).'),
+      _rate('reattempt_rate', 'Delivery reattempt rate', reattemptedOrders, uniqueAttemptedOrders, 'Orders with >1 attempt / unique attempted orders.'),
       _metric('delivered_attempts', 'Delivered attempts', delivered.length, unit: AnalyticsUnit.count, explanation: 'Filtered order delivery-attempt rows with DELIVERED status.'),
       _metric('returned_attempts', 'Returned attempts', returned.length, unit: AnalyticsUnit.count, explanation: 'Filtered returned attempts, not final failed orders; later redelivery may succeed.'),
       _rate('returned_attempt_rate', 'Returned-attempt rate', returned.length, attempts.length, 'Returned attempt rows / dispatched attempt rows in selected filtered order cohort; not final failure rate.'),
@@ -195,6 +209,17 @@ class _ReportBuilder {
       _duration('travel_p90', '90th percentile travel', _percentile(times, .9), times.length, delivered.length),
       _missing('rider_verified_debt', 'Verified rider cash debt', 'Expected COD does not establish actual customer collection. No separate confirmed-collected-but-unremitted ledger exists.'),
     ];
+    final returnReasons = <String, int>{};
+    for (final a in returned) {
+      final rawNotes = a['notes'] as String?;
+      final reason = (rawNotes != null && rawNotes.trim().isNotEmpty)
+          ? _safeText(rawNotes.trim())
+          : 'Absent historical reason evidence';
+      returnReasons[reason] = (returnReasons[reason] ?? 0) + 1;
+    }
+    for (final entry in returnReasons.entries) {
+      metrics.add(_metric('return_reason_${entry.key.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_]'), '_')}', 'Return reason: ${entry.key}', entry.value, unit: AnalyticsUnit.count, explanation: 'Returned attempts attributed to recorded reason. Legacy attempts without notes disclose absent historical evidence.'));
+    }
     for (final group in _group(deliveredOrders, 'delivery_area_name_snapshot').entries) {
       metrics.add(_metric('area_${group.key}', '${group.key} delivery orders', group.value.length, unit: AnalyticsUnit.count, explanation: 'Eligible filtered order count by transaction-time area snapshot.'));
     }
@@ -202,8 +227,30 @@ class _ReportBuilder {
       ..._receivingEventRows(_receivingEvents().where((p) => p['settlement_id'] != null)),
       ...deliveredOrders.map((o) => _row('orders', o, {'order_id': o['id'], 'area': o['delivery_area_name_snapshot'] ?? 'Unknown area', 'fee_paisa': o['delivery_fee_paisa'], 'payment_status': o['payment_status']})),
       ...trips.map((t) => _row('rider_trips', t, {'trip_id': t['id'], 'rider_id': t['rider_staff_id'], 'shift_id': t['shift_id'], 'status': t['status'], 'selected_order_load': attempts.where((a) => a['trip_id'] == t['id']).length, 'expected_paisa': t['cash_expected_paisa'], 'counted_paisa': t['cash_collected_paisa'], 'dispatched_at': t['dispatched_at'], 'settled_at': t['settled_at_utc']})),
-      ...attempts.map((a) => _row('rider_trip_orders', a, {'order_id': a['order_id'], 'trip_id': a['trip_id'], 'rider_id': a['rider_staff_id'], 'status': a['status'], 'dispatched_at': a['dispatched_at'], 'delivered_at': a['delivered_at'], 'returned_at': a['returned_at']})),
-    ], ['order_id', 'trip_id', 'rider_id', 'shift_id', 'selected_order_load', 'area', 'fee_paisa', 'payment_status', 'status', 'expected_paisa', 'counted_paisa', 'dispatched_at', 'delivered_at', 'returned_at', 'settled_at'], ['Order/attempt rows and selected-order load use order filters; trip rows and trip exposure use whole selected Business Days. All-outstanding measures explicitly ignore date/order filters.', 'Settlement event rows use receiving Shift/Business Day or actual calendar time, independently of the originating Order cohort. Counted handover is one linked custody transfer; COD settlement value is not verified customer collection. Legacy settled trips without events have unavailable receiving Shift, actors and immutable recording time. Do not sum settlement attribution, digital receipt and counted pouch rows.', 'Travel excludes invalid/missing timestamps and reports coverage. Percentiles interpolate sorted valid minutes. No final failure/reattempt or unrecorded failure-reason inference.']);
+      ...attempts.map((a) {
+        final orderAttempts = attemptsByOrder[a['order_id']] ?? const <_Record>[];
+        final isReattempt = orderAttempts.indexOf(a) > 0;
+        final rawNotes = a['notes'] as String?;
+        final reason = a['status'] == 'RETURNED'
+            ? (rawNotes != null && rawNotes.trim().isNotEmpty
+                ? _safeText(rawNotes.trim())
+                : 'Absent historical reason evidence')
+            : null;
+        return _row('rider_trip_orders', a, {
+          'kind': 'Delivery attempt',
+          'order_id': a['order_id'],
+          'trip_id': a['trip_id'],
+          'rider_id': a['rider_staff_id'],
+          'area': a['delivery_area_name_snapshot'] ?? 'Unknown area',
+          'status': a['status'],
+          'is_reattempt': isReattempt ? 'Yes' : 'No',
+          'return_reason': reason ?? 'N/A',
+          'dispatched_at': a['dispatched_at'],
+          'delivered_at': a['delivered_at'],
+          'returned_at': a['returned_at'],
+        });
+      }),
+    ], ['kind', 'order_id', 'trip_id', 'rider_id', 'shift_id', 'selected_order_load', 'area', 'fee_paisa', 'payment_status', 'status', 'is_reattempt', 'return_reason', 'expected_paisa', 'counted_paisa', 'dispatched_at', 'delivered_at', 'returned_at', 'settled_at'], ['Order/attempt rows and selected-order load use order filters; trip rows and trip exposure use whole selected Business Days. All-outstanding measures explicitly ignore date/order filters.', 'Settlement event rows use receiving Shift/Business Day or actual calendar time, independently of the originating Order cohort. Counted handover is one linked custody transfer; COD settlement value is not verified customer collection. Legacy settled trips without events have unavailable receiving Shift, actors and immutable recording time. Do not sum settlement attribution, digital receipt and counted pouch rows.', 'Returned attempts are delivery run outcomes, not final order failures. Reattempts represent subsequent dispatch runs for the same order. Legacy returned attempts without recorded notes disclose absent historical reason evidence rather than inferring reasons. Delivered status is not proof of payment collection.', 'Travel excludes invalid/missing timestamps and reports coverage. Percentiles interpolate sorted valid minutes. No final failure/reattempt or unrecorded failure-reason inference.']);
   }
 
   AnalyticsSection _customers() {
