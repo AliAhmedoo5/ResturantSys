@@ -130,10 +130,7 @@ class _Charts {
       final buckets = section.rows.where((r) => r.cells['kind'] == kind).toList();
       if (buckets.isEmpty) continue;
       for (final value in [false, true]) {
-        final rankedBuckets = [...buckets]..sort((a, b) {
-          final key = value ? 'value_rank' : 'count_rank';
-          return ((a.cells[key] as int?) ?? 999999).compareTo((b.cells[key] as int?) ?? 999999);
-        });
+        final rankedBuckets = [...buckets];
         // Stable chronological tie order is explicit, independent of sort stability.
         rankedBuckets.sort((a, b) {
           final key = value ? 'value_rank' : 'count_rank';
@@ -143,13 +140,13 @@ class _Charts {
         result.add(ReportChartData(
           id: '${value ? 'value' : 'workload'}_${kind == 'Daily workload' ? 'days' : 'hours'}',
           title: '${value ? 'Highest recorded value' : 'Busiest by confirmed Orders'} · ${kind == 'Daily workload' ? 'days' : 'hours'}',
-          scope: '${buckets.first.cells['time_basis']} · Asia/Karachi · all tied ranks, chronological ties',
-          note: value ? '${buckets.first.cells['value_basis']}' : 'Confirmed Orders include cancellations/refunds. Holds and Order Revisions add no Orders. Missing coverage is unavailable; observed zeros are zero.',
+          scope: '${buckets.first.cells['time_basis']} · Asia/Karachi · completed periods ranked with chronological ties; incomplete periods shown separately',
+          note: '${value ? buckets.first.cells['value_basis'] : 'Confirmed Orders include cancellations/refunds. Holds and Order Revisions add no Orders.'} Incomplete periods retain observed activity to cutoff without completed-period ranks. Unobserved future hours have unavailable totals, not reliable zeros. Calendar elapsed time does not imply contributing Business Days are closed.',
           unit: value ? AnalyticsUnit.paisa : AnalyticsUnit.count,
           points: [for (final bucket in rankedBuckets) ReportChartPoint(
-            '${bucket.cells['period']}', number(bucket.cells[value ? 'recorded_value_paisa' : 'confirmed_orders']),
-            explanation: '${bucket.cells['coverage']}; rank ${bucket.cells[value ? 'value_rank' : 'count_rank'] ?? 'unavailable'}',
-            quality: bucket.cells['coverage'] == 'Unavailable coverage' ? AnalyticsQuality.missing : AnalyticsQuality.complete,
+            '${bucket.cells['period']}${bucket.cells['period_complete'] == false ? ' · Incomplete' : ''}', number(bucket.cells[value ? 'recorded_value_paisa' : 'confirmed_orders']),
+            explanation: '${bucket.cells['period_status'] ?? bucket.cells['coverage']}; cutoff ${bucket.cells['coverage_cutoff'] ?? 'unavailable'}; rank ${bucket.cells[value ? 'value_rank' : 'count_rank'] ?? 'unavailable (incomplete period)'}',
+            quality: bucket.cells['coverage'] == 'Unavailable coverage' ? AnalyticsQuality.missing : bucket.cells['period_complete'] == false ? AnalyticsQuality.estimated : AnalyticsQuality.complete,
             rows: details.where((r) => '${bucket.cells[value ? 'eligible_order_ids' : 'order_ids']}'.split(',').contains(r.sourceId)).toList(),
           )]));
       }

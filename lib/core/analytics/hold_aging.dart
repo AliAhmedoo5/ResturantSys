@@ -42,4 +42,3 @@ class _HoldAging {
     'Only active persisted Holds are visible. Deleted/recalled Hold lifecycle history is unavailable. Draft labels, items, customer contact and delivery details are excluded from reporting and exports. Cashier names are current directory values; historical names are unavailable.',
   ];
 }
-

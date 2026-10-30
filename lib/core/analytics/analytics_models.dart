@@ -86,4 +86,3 @@ class AnalyticsSnapshot {
 /// Cooked wastage is already consumed; raw returns reverse original-rate COGS.
 /// Used by report totals and dated chart postings alike.
 int orderCostSign(Object? kind) => kind == 'COOKED_WASTE' ? 0 : kind == 'RETURN' ? -1 : 1;
-

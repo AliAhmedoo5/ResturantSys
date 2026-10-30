@@ -113,5 +113,3 @@ void main() {
     expect(AnalyticsExportService().csv(snapshot, AnalyticsFamily.cash), contains('Receiving Shift and actual time unavailable'));
   });
 }
-
-

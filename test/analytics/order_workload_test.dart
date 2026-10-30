@@ -16,6 +16,66 @@ import '../orders/order_and_checkout_controller_test.dart' show publishFixtures;
 
 void main() {
   setUpAll(sqfliteFfiInit);
+  test('open workload remains partial beside completed days and future hours are unavailable', () async {
+    final store = PosDatabase(factory: databaseFactoryFfi, customPath: inMemoryDatabasePath);
+    final db = await store.initialize();
+    addTearDown(store.close);
+    final auth = AuthService(database: db)..session.login(Staff.fromMap((await db.query('staff', where: 'id=1')).single));
+    addTearDown(auth.session.dispose);
+    final shifts = ShiftAndCashController(database: db);
+    final previous = DateTime.now().subtract(const Duration(days: 1));
+    final completed = await shifts.openBusinessDay(openedByStaffId: 1, openedAt: previous);
+    final previousShift = await shifts.openShift(staffId: 2, openingFloat: 0, openedAt: previous);
+    await shifts.closeShift(shiftId: previousShift.id, staffId: 2, countedCash: 0);
+    await shifts.closeBusinessDay(closedByStaffId: 1);
+    final open = await shifts.openBusinessDay(openedByStaffId: 1);
+    final shift = await shifts.openShift(staffId: 2, openingFloat: 0);
+    final catalog = CatalogAndRecipeController(database: db);
+    final category = await catalog.createCategory(name: 'Partial workload', displayOrder: 1, colorHex: '#FFFFFF');
+    final menu = await catalog.createMenuItem(categoryId: category.id, name: 'Partial tea', basePrice: 100);
+    await publishFixtures(catalog);
+    await OrderAndCheckoutController(database: db).checkoutOrder(commandId: 'partial-workload',
+      businessDayId: open.id, shiftId: shift.id, cashierId: 2, diningType: DiningType.dineIn,
+      items: [CartItem(menuItem: await catalog.getMenuItem(menu.id))],
+      payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 100)]);
+    final service = AnalyticsService(database: db, authService: auth);
+    final query = AnalyticsQuery(startDate: DateTime(2020), endDateExclusive: DateTime(2100));
+    final legacyOpen = await db.insert('business_days', {'opened_at': '2020-01-02T08:00:00+05:00',
+      'status': 'OPEN', 'opened_by_staff_id': 1});
+    final snapshot = await service.load(query);
+    final section = snapshot.section(AnalyticsFamily.orders);
+    final daily = section.rows.where((r) => r.cells['kind'] == 'Daily workload');
+    final closed = daily.singleWhere((r) => r.cells['business_day_id'] == completed.id);
+    final partial = daily.singleWhere((r) => r.cells['business_day_id'] == open.id);
+    expect(closed.cells['period_complete'], isTrue);
+    expect(daily.singleWhere((r) => r.cells['business_day_id'] == legacyOpen).cells['period_complete'], isFalse,
+      reason: 'An old opening date does not establish Business Day closure');
+    expect(partial.cells['period_complete'], isFalse);
+    expect(partial.cells['period_status'], contains('Open Business Day'));
+    expect(partial.cells['confirmed_orders'], 1);
+    expect(partial.cells['count_rank'], isNull, reason: 'Open activity is not ranked against completed days');
+    expect(closed.cells['count_rank'], 1);
+    final partialPoint = section.charts.singleWhere((c) => c.id == 'workload_days').points.singleWhere((p) => p.rows.any((r) => r.sourceType == 'orders'));
+    expect(partialPoint.label, contains('Incomplete'));
+    expect(partialPoint.quality, AnalyticsQuality.estimated);
+    final local = snapshot.generatedAt.toUtc().add(const Duration(hours: 5));
+    final today = DateTime(local.year, local.month, local.day);
+    final operationalDate = DateTime(open.openedAt.year, open.openedAt.month, open.openedAt.day);
+    final active = await service.load(query.copyWith(startDate: operationalDate, endDateExclusive: operationalDate.add(const Duration(days: 1))));
+    final nextHour = (local.hour + 1) % 24;
+    final future = active.section(AnalyticsFamily.orders).rows.singleWhere((r) => r.cells['kind'] == 'Hourly workload' && r.cells['hour'] == nextHour);
+    expect(future.cells['observed_confirmed_orders'], 0);
+    expect(future.cells['confirmed_orders'], isNull);
+    expect(future.cells['period_status'], contains('Not yet observed'));
+    final calendar = await service.load(query.copyWith(timeBasis: AnalyticsTimeBasis.calendarTime,
+      startDate: today, endDateExclusive: today.add(const Duration(days: 1))));
+    final date = calendar.section(AnalyticsFamily.orders).rows.singleWhere((r) => r.cells['kind'] == 'Daily workload');
+    expect(date.cells['period_complete'], isFalse);
+    expect(date.cells['open_business_day_ids'], '${open.id}');
+    expect(date.cells['period_status'], contains('Calendar'));
+    expect(AnalyticsExportService().csv(calendar, AnalyticsFamily.orders), contains('period complete'));
+  });
+
   test('confirmed workload retains cancellation once and excludes Holds and revisions', () async {
     final store = PosDatabase(factory: databaseFactoryFfi, customPath: inMemoryDatabasePath);
     final db = await store.initialize();
@@ -55,7 +115,7 @@ void main() {
     expect(daily.cells['order_ids'], '1,2');
     final hourly = section.rows.where((r) => r.cells['kind'] == 'Hourly workload').toList();
     expect(hourly, hasLength(24));
-    expect(hourly.fold<int>(0, (sum, r) => sum + (r.cells['confirmed_orders'] as int)), 2);
+    expect(hourly.fold<int>(0, (sum, r) => sum + (r.cells['confirmed_orders'] as int? ?? 0)), 2);
     final chart = section.charts.singleWhere((c) => c.id == 'workload_hours');
     expect(chart.points.fold<num>(0, (sum, p) => sum + (p.value ?? 0)), 2);
     expect(chart.points.expand((p) => p.rows).map((r) => r.sourceId).toSet(), {'1', '2'});
@@ -75,11 +135,16 @@ void main() {
     // above cover confirmation/cancellation/refund semantics without rewriting time.
     final days = <int>[];
     final shifts = <int>[];
-    for (final opening in ['2026-10-29T08:00:00+05:00', '2026-10-29T18:00:00+05:00', '2026-10-30T08:00:00+05:00']) {
-      final day = await db.insert('business_days', {'opened_at': opening, 'status': 'OPEN', 'opened_by_staff_id': 1});
+    final periods = [
+      (opened: '2026-10-29T08:00:00+05:00', closed: '2026-10-29T12:00:00+05:00'),
+      (opened: '2026-10-29T18:00:00+05:00', closed: '2026-10-30T02:00:00+05:00'),
+      (opened: '2026-10-30T08:00:00+05:00', closed: '2026-10-30T12:00:00+05:00'),
+    ];
+    for (final period in periods) {
+      final day = await db.insert('business_days', {'opened_at': period.opened, 'status': 'OPEN', 'opened_by_staff_id': 1});
       days.add(day);
       shifts.add(await db.insert('shifts', {'business_day_id': day, 'staff_id': 2,
-        'opened_at': opening, 'opening_float': 0, 'status': 'OPEN'}));
+        'opened_at': period.opened, 'closed_at': period.closed, 'opening_float': 0, 'status': 'CLOSED'}));
     }
     Future<int> order(int index, int token, int amount, String at) => db.insert('orders', {
       'business_day_id': days[index], 'shift_id': shifts[index], 'cashier_id': 2,
@@ -91,6 +156,9 @@ void main() {
     await order(1, 1, 500, '2026-10-29T20:00:00Z'); // 30 Oct 01:00 Karachi
     await order(2, 1, 10, '2026-10-30T11:00:00+05:00');
     await order(2, 2, 10, '2026-10-30T11:30:00+05:00');
+    for (var i = 0; i < days.length; i++) {
+      await db.update('business_days', {'status': 'CLOSED', 'closed_at': periods[i].closed}, where: 'id=?', whereArgs: [days[i]]);
+    }
     final service = AnalyticsService(database: db, authService: auth);
     final query = AnalyticsQuery(startDate: DateTime(2026, 10, 29), endDateExclusive: DateTime(2026, 10, 31));
     final snapshot = await service.load(query);
@@ -117,7 +185,8 @@ void main() {
     expect(calendarRows.map((r) => r.cells['period']), ['2026-10-29', '2026-10-30']);
     expect(calendarRows.map((r) => r.cells['confirmed_orders']), [2, 3]);
     expect(calendarRows.map((r) => r.cells['recorded_value_paisa']), [2000, 52000]);
-    expect(calendar.section(AnalyticsFamily.orders).charts.singleWhere((c) => c.id == 'workload_days').points.first.value, 3);
+    final currentCalendar = calendar.section(AnalyticsFamily.orders).charts.singleWhere((c) => c.id == 'workload_days').points.singleWhere((p) => p.label.startsWith('2026-10-30'));
+    expect(currentCalendar.value, 3);
     final empty = await service.load(query.copyWith(startDate: DateTime(2020, 1, 1), endDateExclusive: DateTime(2020, 1, 2)));
     final absentHours = empty.section(AnalyticsFamily.orders).rows.where((r) => r.cells['kind'] == 'Hourly workload');
     expect(absentHours, hasLength(24));
