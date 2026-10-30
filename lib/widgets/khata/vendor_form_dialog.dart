@@ -33,6 +33,7 @@ class _VendorFormDialogState extends State<VendorFormDialog> {
   late final TextEditingController _phoneController;
   late final TextEditingController _ingredientsController;
   late final TextEditingController _openingBalanceController;
+  late final TextEditingController _reasonController;
 
   bool get isEditing => widget.vendor != null;
 
@@ -48,6 +49,7 @@ class _VendorFormDialogState extends State<VendorFormDialog> {
           ? widget.vendor!.openingBalance.toStringAsFixed(2)
           : '0.00',
     );
+    _reasonController = TextEditingController();
   }
 
   @override
@@ -56,6 +58,7 @@ class _VendorFormDialogState extends State<VendorFormDialog> {
     _phoneController.dispose();
     _ingredientsController.dispose();
     _openingBalanceController.dispose();
+    _reasonController.dispose();
     super.dispose();
   }
 
@@ -71,6 +74,7 @@ class _VendorFormDialogState extends State<VendorFormDialog> {
           ? null
           : _ingredientsController.text.trim(),
       'opening_balance': openingBalance,
+      'reason': _reasonController.text.trim().isEmpty ? null : _reasonController.text.trim(),
     });
   }
 
@@ -203,6 +207,19 @@ class _VendorFormDialogState extends State<VendorFormDialog> {
                     return null;
                   },
                 ),
+                if (isEditing) ...[
+                  const SizedBox(height: WarmCounterSpacing.space16),
+                  TextFormField(
+                    key: const Key('vendor_adjustment_reason_field'),
+                    controller: _reasonController,
+                    decoration: const InputDecoration(
+                      labelText: 'Adjustment Reason (if changing balance)',
+                      hintText: 'e.g. Ledger reconciliation audit',
+                      prefixIcon: Icon(Icons.edit_note_rounded),
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: WarmCounterSpacing.space24),
 
                 // Action Buttons

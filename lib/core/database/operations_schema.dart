@@ -27,7 +27,22 @@ Future<void> createOperationsSchema(DatabaseExecutor db) async {
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     payment_id INTEGER NOT NULL REFERENCES vendor_transactions(id),
     invoice_id INTEGER REFERENCES vendor_transactions(id),
-    amount_paisa INTEGER NOT NULL CHECK(amount_paisa > 0))''');
+    amount_paisa INTEGER NOT NULL CHECK(amount_paisa > 0),
+    created_at TEXT)''');
+  final allocCols = (await db.rawQuery('PRAGMA table_info(supplier_payment_allocations)'))
+      .map((c) => c['name']).toSet();
+  if (!allocCols.contains('created_at')) {
+    await db.execute('ALTER TABLE supplier_payment_allocations ADD COLUMN created_at TEXT');
+  }
+  await db.execute('''CREATE TABLE IF NOT EXISTS supplier_opening_adjustments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    vendor_id INTEGER NOT NULL REFERENCES vendor_khata(id) ON DELETE CASCADE,
+    opening_balance_paisa INTEGER NOT NULL,
+    previous_balance_paisa INTEGER NOT NULL,
+    manager_id INTEGER NOT NULL REFERENCES staff(id),
+    reason TEXT NOT NULL,
+    recorded_at TEXT NOT NULL)''');
+  await db.execute('CREATE INDEX IF NOT EXISTS supplier_adjustments_vendor ON supplier_opening_adjustments(vendor_id, recorded_at)');
   await db.execute('CREATE INDEX IF NOT EXISTS supplier_allocations_invoice ON supplier_payment_allocations(invoice_id)');
   // Reconstruct historical allocations deterministically: opening payable first,
   // then invoices in posting order. Excess legacy payments stay unallocated.
@@ -107,7 +122,7 @@ Future<void> createOperationsSchema(DatabaseExecutor db) async {
     id INTEGER PRIMARY KEY AUTOINCREMENT, manager_id INTEGER NOT NULL REFERENCES staff(id),
     entity TEXT NOT NULL, entity_id INTEGER NOT NULL, action TEXT NOT NULL,
     detail TEXT NOT NULL, created_at TEXT NOT NULL)''');
-  for (final table in ['salary_rates','payroll_entries','expense_entries','operations_audit','supplier_payment_allocations']) {
+  for (final table in ['salary_rates','payroll_entries','expense_entries','operations_audit','supplier_payment_allocations','supplier_opening_adjustments']) {
     for (final operation in ['UPDATE','DELETE']) {
       await db.execute("CREATE TRIGGER IF NOT EXISTS ${table}_no_$operation BEFORE $operation ON $table BEGIN SELECT RAISE(ABORT,'Financial history is immutable'); END");
     }

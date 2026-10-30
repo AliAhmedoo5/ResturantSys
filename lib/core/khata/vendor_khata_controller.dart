@@ -78,7 +78,8 @@ class VendorKhataController {
   }
 
   Future<void> _allocate(DatabaseExecutor txn, int vendorId, int paymentId,
-      int amount, Map<int,int>? allocations) async {
+      int amount, Map<int,int>? allocations, [String? recordedAt]) async {
+    final allocTimestamp = recordedAt ?? _formatTimestamp(DateTime.now());
     var remaining = amount;
     final rows = await txn.rawQuery('''SELECT t.id,
       COALESCE(t.amount_paisa,CAST(ROUND(t.amount*100) AS INTEGER)) - COALESCE(SUM(a.amount_paisa),0) due
@@ -96,7 +97,7 @@ class VendorKhataController {
           throw StateError('Allocation exceeds invoice due or belongs to another supplier.');
         }
         await txn.insert('supplier_payment_allocations', {'payment_id': paymentId,
-          'invoice_id': entry.key, 'amount_paisa': entry.value});
+          'invoice_id': entry.key, 'amount_paisa': entry.value, 'created_at': allocTimestamp});
       }
       return;
     }
@@ -108,14 +109,14 @@ class VendorKhataController {
     final openingDue = PaisaEngine.rupeesToPaisa(vendor['opening_balance'] as num) - openingPaid;
     if (openingDue > 0) {
       final value = remaining < openingDue ? remaining : openingDue;
-      await txn.insert('supplier_payment_allocations', {'payment_id': paymentId, 'amount_paisa': value});
+      await txn.insert('supplier_payment_allocations', {'payment_id': paymentId, 'amount_paisa': value, 'created_at': allocTimestamp});
       remaining -= value;
     }
     for (final row in rows) {
       final due = row['due'] as int;
       final value = remaining < due ? remaining : due;
       if (value > 0) await txn.insert('supplier_payment_allocations', {'payment_id': paymentId,
-        'invoice_id': row['id'], 'amount_paisa': value});
+        'invoice_id': row['id'], 'amount_paisa': value, 'created_at': allocTimestamp});
       remaining -= value;
     }
     if (remaining != 0) throw StateError('Payment cannot be reconciled to the supplier payable.');
@@ -137,6 +138,7 @@ class VendorKhataController {
     required String phone,
     String? suppliedIngredients,
     double openingBalance = 0.0,
+    DateTime? createdAt,
   }) async {
     final trimmedName = name.trim();
     final trimmedPhone = phone.trim();
@@ -152,7 +154,7 @@ class VendorKhataController {
     }
     openingBalance = PaisaEngine.rupeesToPaisa(openingBalance) / 100;
 
-    final now = DateTime.now();
+    final now = createdAt ?? DateTime.now();
     final formattedNow = _formatTimestamp(now);
 
     final id = await database.insert(
@@ -187,6 +189,8 @@ class VendorKhataController {
     required String phone,
     String? suppliedIngredients,
     double? openingBalance,
+    int? managerId,
+    String? reason,
   }) async {
     final trimmedName = name.trim();
     final trimmedPhone = phone.trim();
@@ -218,6 +222,21 @@ class VendorKhataController {
         FROM supplier_payment_allocations a JOIN vendor_transactions t ON t.id=a.payment_id
         WHERE t.vendor_id=? AND a.invoice_id IS NULL''',[id])).single['paid'] as int;
       if (PaisaEngine.rupeesToPaisa(openingBalance) < allocated) throw StateError('Opening payable cannot be reduced below its allocated payments.');
+      final oldOpeningPaisa = PaisaEngine.rupeesToPaisa(existing.openingBalance);
+      final newOpeningPaisa = PaisaEngine.rupeesToPaisa(openingBalance);
+      if (oldOpeningPaisa != newOpeningPaisa) {
+        if (managerId == null) {
+          throw ArgumentError('Manager ID is required to adjust opening balance.');
+        }
+        await database.insert('supplier_opening_adjustments', {
+          'vendor_id': id,
+          'opening_balance_paisa': newOpeningPaisa,
+          'previous_balance_paisa': oldOpeningPaisa,
+          'manager_id': managerId,
+          'reason': reason?.trim().isNotEmpty == true ? reason!.trim() : 'Opening balance adjustment',
+          'recorded_at': formattedNow,
+        });
+      }
     }
 
     await database.rawUpdate('''
@@ -560,7 +579,7 @@ class VendorKhataController {
         },
       );
 
-      await _allocate(txn,vendorId,txnId,amountPaisa,allocations);
+      await _allocate(txn,vendorId,txnId,amountPaisa,allocations,formattedDate);
       final days = await txn.query('business_days', where: "status='OPEN'" +
           (businessDayId == null ? '' : ' AND id=?'),
           whereArgs: businessDayId == null ? null : [businessDayId]);
@@ -684,5 +703,199 @@ class VendorKhataController {
     ''', args);
 
     return rows.map((r) => VendorTransaction.fromMap(r)).toList();
+  }
+
+
+  /// Reconciles supplier payables as of a specific cutoff timestamp.
+  /// Opening balance + purchases + adjustments - payments = closing balance.
+  Future<Map<String, dynamic>> reconcileCutoff({
+    int? vendorId,
+    required DateTime cutoff,
+  }) async {
+    final cutoffStr = _formatTimestamp(cutoff);
+    final vendors = await database.rawQuery(
+      'SELECT * FROM vendor_khata '
+      '${vendorId != null ? "WHERE id = ?" : ""}',
+      vendorId != null ? [vendorId] : null,
+    );
+
+    int totalOpeningPaisa = 0;
+    int totalPurchasesPaisa = 0;
+    int totalPaymentsPaisa = 0;
+    int totalAdjustmentsPaisa = 0;
+    int totalClosingPaisa = 0;
+    final supplierBridges = <Map<String, dynamic>>[];
+
+    for (final v in vendors) {
+      final vId = v['id'] as int;
+      final vCreated = v['created_at'] as String;
+      final isArchived = v['archived_at'] != null;
+      final initOpeningPaisa = PaisaEngine.rupeesToPaisa(v['opening_balance'] as num);
+
+      if (vCreated.compareTo(cutoffStr) > 0) {
+        continue;
+      }
+
+      final adjRows = await database.rawQuery(
+        'SELECT * FROM supplier_opening_adjustments WHERE vendor_id = ? AND recorded_at <= ? ORDER BY recorded_at ASC, id ASC',
+        [vId, cutoffStr],
+      );
+
+      int effectiveOpeningPaisa = initOpeningPaisa;
+      int adjustmentDeltaPaisa = 0;
+      if (adjRows.isNotEmpty) {
+        final latest = adjRows.last;
+        effectiveOpeningPaisa = latest['opening_balance_paisa'] as int;
+        adjustmentDeltaPaisa = effectiveOpeningPaisa - initOpeningPaisa;
+      }
+
+      final purchaseRows = await database.rawQuery(
+        "SELECT COALESCE(SUM(COALESCE(amount_paisa, CAST(ROUND(amount * 100) AS INTEGER))), 0) AS total FROM vendor_transactions WHERE vendor_id = ? AND type = 'PURCHASE_CREDIT' AND created_at <= ?",
+        [vId, cutoffStr],
+      );
+      final purchasesPaisa = purchaseRows.first['total'] as int;
+
+      final paymentRows = await database.rawQuery(
+        "SELECT COALESCE(SUM(COALESCE(amount_paisa, CAST(ROUND(amount * 100) AS INTEGER))), 0) AS total FROM vendor_transactions WHERE vendor_id = ? AND type IN ('PAYMENT_DRAWER', 'PAYMENT_EXTERNAL') AND created_at <= ?",
+        [vId, cutoffStr],
+      );
+      final paymentsPaisa = paymentRows.first['total'] as int;
+
+      final closingPaisa = initOpeningPaisa + purchasesPaisa + adjustmentDeltaPaisa - paymentsPaisa;
+
+      totalOpeningPaisa += initOpeningPaisa;
+      totalPurchasesPaisa += purchasesPaisa;
+      totalPaymentsPaisa += paymentsPaisa;
+      totalAdjustmentsPaisa += adjustmentDeltaPaisa;
+      totalClosingPaisa += closingPaisa;
+
+      supplierBridges.add({
+        'vendor_id': vId,
+        'name': v['name'],
+        'is_archived': isArchived,
+        'opening_paisa': initOpeningPaisa,
+        'purchases_paisa': purchasesPaisa,
+        'payments_paisa': paymentsPaisa,
+        'adjustments_paisa': adjustmentDeltaPaisa,
+        'closing_paisa': closingPaisa,
+      });
+    }
+
+    return {
+      'cutoff': cutoffStr,
+      'opening_paisa': totalOpeningPaisa,
+      'purchases_paisa': totalPurchasesPaisa,
+      'payments_paisa': totalPaymentsPaisa,
+      'adjustments_paisa': totalAdjustmentsPaisa,
+      'closing_paisa': totalClosingPaisa,
+      'suppliers': supplierBridges,
+    };
+  }
+
+  /// Partitions outstanding payable into nonoverlapping aging buckets as of [cutoff].
+  /// Buckets: current (not yet due), 0-7 days overdue, 8-30 days overdue,
+  /// 31-60 days overdue, >60 days overdue, and unknown due date.
+  /// Allocations created AFTER [cutoff] are strictly excluded.
+  Future<Map<String, dynamic>> calculateAgingBuckets({
+    int? vendorId,
+    required DateTime cutoff,
+  }) async {
+    final cutoffStr = _formatTimestamp(cutoff);
+    final cutoffDate = cutoffStr.substring(0, 10);
+    final vendors = await database.rawQuery(
+      'SELECT * FROM vendor_khata '
+      '${vendorId != null ? "WHERE id = ?" : ""}',
+      vendorId != null ? [vendorId] : null,
+    );
+
+    int currentPaisa = 0;
+    int days0to7Paisa = 0;
+    int days8to30Paisa = 0;
+    int days31to60Paisa = 0;
+    int over60Paisa = 0;
+    int unknownDuePaisa = 0;
+    int totalOutstandingPaisa = 0;
+
+    for (final v in vendors) {
+      final vId = v['id'] as int;
+      final vCreated = v['created_at'] as String;
+      if (vCreated.compareTo(cutoffStr) > 0) continue;
+
+      final adjRows = await database.rawQuery(
+        'SELECT opening_balance_paisa FROM supplier_opening_adjustments WHERE vendor_id = ? AND recorded_at <= ? ORDER BY recorded_at DESC, id DESC LIMIT 1',
+        [vId, cutoffStr],
+      );
+      final openingPaisa = adjRows.isNotEmpty
+          ? adjRows.first['opening_balance_paisa'] as int
+          : PaisaEngine.rupeesToPaisa(v['opening_balance'] as num);
+
+      final openingPaidRows = await database.rawQuery('''
+        SELECT COALESCE(SUM(a.amount_paisa), 0) AS paid
+        FROM supplier_payment_allocations a
+        JOIN vendor_transactions t ON t.id = a.payment_id
+        WHERE t.vendor_id = ? AND a.invoice_id IS NULL AND COALESCE(a.created_at, t.created_at) <= ?
+      ''', [vId, cutoffStr]);
+      final openingPaidPaisa = openingPaidRows.first['paid'] as int;
+      final openingDue = openingPaisa - openingPaidPaisa;
+      if (openingDue > 0) {
+        unknownDuePaisa += openingDue;
+        totalOutstandingPaisa += openingDue;
+      }
+
+      final invoiceRows = await database.rawQuery('''
+        SELECT t.id, t.due_date, COALESCE(t.amount_paisa, CAST(ROUND(t.amount * 100) AS INTEGER)) AS amount_paisa,
+               COALESCE((
+                 SELECT SUM(a.amount_paisa)
+                 FROM supplier_payment_allocations a
+                 JOIN vendor_transactions p ON p.id = a.payment_id
+                 WHERE a.invoice_id = t.id AND COALESCE(a.created_at, p.created_at) <= ?
+               ), 0) AS paid_paisa
+        FROM vendor_transactions t
+        WHERE t.vendor_id = ? AND t.type = 'PURCHASE_CREDIT' AND t.created_at <= ?
+        ORDER BY t.created_at ASC, t.id ASC
+      ''', [cutoffStr, vId, cutoffStr]);
+
+      for (final inv in invoiceRows) {
+        final invAmount = inv['amount_paisa'] as int;
+        final invPaid = inv['paid_paisa'] as int;
+        final due = invAmount - invPaid;
+        if (due <= 0) continue;
+
+        totalOutstandingPaisa += due;
+        final dueDateStr = inv['due_date'] as String?;
+        if (dueDateStr == null || dueDateStr.trim().isEmpty) {
+          unknownDuePaisa += due;
+        } else {
+          final dueTrimmed = dueDateStr.trim().substring(0, 10);
+          if (dueTrimmed.compareTo(cutoffDate) > 0) {
+            currentPaisa += due;
+          } else {
+            final dueDt = DateTime.parse(dueTrimmed);
+            final cutoffDt = DateTime.parse(cutoffDate);
+            final overdueDays = cutoffDt.difference(dueDt).inDays;
+            if (overdueDays <= 7) {
+              days0to7Paisa += due;
+            } else if (overdueDays <= 30) {
+              days8to30Paisa += due;
+            } else if (overdueDays <= 60) {
+              days31to60Paisa += due;
+            } else {
+              over60Paisa += due;
+            }
+          }
+        }
+      }
+    }
+
+    return {
+      'cutoff': cutoffStr,
+      'total_outstanding_paisa': totalOutstandingPaisa,
+      'current_paisa': currentPaisa,
+      'days_0_7_paisa': days0to7Paisa,
+      'days_8_30_paisa': days8to30Paisa,
+      'days_31_60_paisa': days31to60Paisa,
+      'over_60_paisa': over60Paisa,
+      'unknown_due_paisa': unknownDuePaisa,
+    };
   }
 }

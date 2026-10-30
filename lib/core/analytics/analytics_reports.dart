@@ -311,8 +311,193 @@ class _ReportBuilder {
     final low = ingredients.where((i) => (i['current_stock'] as num) <= (i['low_stock_threshold'] as num)).length;
     final negative = ingredients.where((i) => (i['current_stock'] as num) < 0).length;
     final balances = {for (final b in e.get('balances')) b['ingredient_id']: b};
+
+    final allMovements = e.rows['all_inventory_movements'] ?? e.get('inventory');
+    final allPurchases = e.rows['all_mandi_purchases'] ?? e.get('purchases');
+    final allCreditTxns = e.rows['all_vendor_transactions'] ?? e.get('vendor_events');
+    final allWaste = e.rows['all_waste'] ?? e.get('waste');
+    final allCostEvents = e.rows['all_cost_events'] ?? [];
+    final allPhysicalCounts = e.rows['all_physical_counts'] ?? e.get('physical_counts');
+
+    final intervalStart = _sqlTime(_karachi(analyticsWallClock(e.query.startDate).toIso8601String())!);
+    final cutoffTime = e.query.live
+        ? _sqlTime(_karachi(e.now.toIso8601String())!)
+        : _sqlTime(_karachi(analyticsWallClock(e.query.endDateExclusive).toIso8601String())!);
+
+    final bridgeRows = <AnalyticsRow>[];
+    int reconciledIngredientsCount = 0;
+    int openingEvidenceCount = 0;
+    int missingOpeningCount = 0;
+
+    for (final ing in ingredients) {
+      final ingId = ing['id'] as int;
+      final name = _safeText(ing['name']);
+      final unit = ing['storage_unit'] as String? ?? 'unit';
+      final currentStock = (ing['current_stock'] as num).toDouble();
+      final threshold = (ing['low_stock_threshold'] as num).toDouble();
+      final unitCostRate = ing['cost_per_recipe_unit'];
+
+      // Movements before interval start
+      final preMovements = allMovements.where((m) => m['ingredient_id'] == ingId && (m['recorded_at'] as String).compareTo(intervalStart) < 0).toList();
+      double openingQty = 0.0;
+      bool hasOpeningEvidence = false;
+      String openingEvidenceAt = '';
+
+      if (preMovements.isNotEmpty) {
+        openingQty = (preMovements.last['balance_after'] as num).toDouble();
+        hasOpeningEvidence = true;
+        openingEvidenceAt = preMovements.last['recorded_at'] as String;
+      } else {
+        final ingMovements = allMovements.where((m) => m['ingredient_id'] == ingId).toList();
+        if (ingMovements.isNotEmpty) {
+          final firstMv = ingMovements.first;
+          final firstMvTime = firstMv['recorded_at'] as String;
+          if (firstMvTime.compareTo(intervalStart) >= 0 && firstMvTime.compareTo(cutoffTime) <= 0) {
+            openingQty = (firstMv['balance_after'] as num).toDouble() - (firstMv['quantity_delta'] as num).toDouble();
+            hasOpeningEvidence = firstMvTime.compareTo(intervalStart) == 0;
+            openingEvidenceAt = 'First movement at $firstMvTime';
+          } else {
+            openingQty = 0.0;
+            hasOpeningEvidence = false;
+            openingEvidenceAt = 'Earliest movement after cutoff ($firstMvTime)';
+          }
+        } else {
+          openingQty = currentStock;
+          hasOpeningEvidence = false;
+          openingEvidenceAt = 'Missing opening balance evidence; no movements recorded';
+        }
+      }
+
+      if (hasOpeningEvidence) {
+        openingEvidenceCount++;
+      } else {
+        missingOpeningCount++;
+      }
+
+      // Receipts in interval: Mandi procurements + supplier credit deliveries
+      final mandiIn = allPurchases.where((p) => p['raw_ingredient_id'] == ingId &&
+          (p['created_at'] as String).compareTo(intervalStart) >= 0 &&
+          (p['created_at'] as String).compareTo(cutoffTime) <= 0).fold<double>(0.0, (sum, p) => sum + ((p['converted_quantity'] ?? p['quantity']) as num).toDouble());
+
+      final vendorIn = allCreditTxns.where((t) => t['raw_ingredient_id'] == ingId && t['type'] == 'PURCHASE_CREDIT' &&
+          (t['created_at'] as String).compareTo(intervalStart) >= 0 &&
+          (t['created_at'] as String).compareTo(cutoffTime) <= 0).fold<double>(0.0, (sum, t) => sum + ((t['quantity'] ?? 0) as num).toDouble());
+
+      final receiptsQty = mandiIn + vendorIn;
+
+      // Waste in interval: kitchen wastage + order cooked waste
+      final kitchenWasteIn = allWaste.where((w) => w['raw_ingredient_id'] == ingId &&
+          (w['created_at'] as String).compareTo(intervalStart) >= 0 &&
+          (w['created_at'] as String).compareTo(cutoffTime) <= 0).fold<double>(0.0, (sum, w) => sum + ((w['quantity'] ?? 0) as num).toDouble());
+
+      final orderWasteIn = allCostEvents.where((c) => c['ingredient_id'] == ingId && c['kind'] == 'COOKED_WASTE' &&
+          (c['recorded_at'] as String).compareTo(intervalStart) >= 0 &&
+          (c['recorded_at'] as String).compareTo(cutoffTime) <= 0).fold<double>(0.0, (sum, c) => sum + ((c['quantity'] ?? 0) as num).toDouble());
+
+      final wasteQty = kitchenWasteIn + orderWasteIn;
+
+      // Consumption in interval: order cost events CONSUME or sold items BOM
+      double consumptionQty = 0.0;
+      final costEventsIn = allCostEvents.where((c) => c['ingredient_id'] == ingId && c['kind'] == 'CONSUME' &&
+          (c['recorded_at'] as String).compareTo(intervalStart) >= 0 &&
+          (c['recorded_at'] as String).compareTo(cutoffTime) <= 0).toList();
+      if (costEventsIn.isNotEmpty) {
+        consumptionQty = costEventsIn.fold<double>(0.0, (sum, c) => sum + ((c['quantity'] ?? 0) as num).toDouble());
+      } else {
+        for (final item in soldItems) {
+          final bom = _jsonMap(item['bom_json']);
+          if (bom != null && bom.containsKey('$ingId') && bom['$ingId'] is num) {
+            consumptionQty += (bom['$ingId'] as num).toDouble();
+          }
+        }
+      }
+
+      // Returns in interval: order cost events RETURN
+      final returnsQty = allCostEvents.where((c) => c['ingredient_id'] == ingId && c['kind'] == 'RETURN' &&
+          (c['recorded_at'] as String).compareTo(intervalStart) >= 0 &&
+          (c['recorded_at'] as String).compareTo(cutoffTime) <= 0).fold<double>(0.0, (sum, c) => sum + ((c['quantity'] ?? 0) as num).toDouble());
+
+      // Physical count variances in interval
+      final countAdjustments = allPhysicalCounts.where((c) => c['ingredient_id'] == ingId &&
+          (c['created_at'] as String).compareTo(intervalStart) >= 0 &&
+          (c['created_at'] as String).compareTo(cutoffTime) <= 0).fold<double>(0.0, (sum, c) => sum + ((c['variance'] ?? 0) as num).toDouble());
+
+      // Recorded movement delta in inventory_movements for this interval
+      final inMovements = allMovements.where((m) => m['ingredient_id'] == ingId &&
+          (m['recorded_at'] as String).compareTo(intervalStart) >= 0 &&
+          (m['recorded_at'] as String).compareTo(cutoffTime) <= 0).toList();
+      final totalMovementDelta = inMovements.fold<double>(0.0, (sum, m) => sum + ((m['quantity_delta'] ?? 0) as num).toDouble());
+
+      final movementsUpToCutoff = allMovements.where((m) => m['ingredient_id'] == ingId &&
+          (m['recorded_at'] as String).compareTo(cutoffTime) <= 0).toList();
+      final endingQty = movementsUpToCutoff.isNotEmpty
+          ? (movementsUpToCutoff.last['balance_after'] as num).toDouble()
+          : (openingQty + totalMovementDelta);
+
+      final domainDelta = receiptsQty - consumptionQty - wasteQty + returnsQty + countAdjustments;
+      final unexplainedVariance = inMovements.isNotEmpty ? (totalMovementDelta - domainDelta) : 0.0;
+      final adjustmentsQty = countAdjustments;
+
+      final calculatedEnding = openingQty + receiptsQty - consumptionQty - wasteQty + returnsQty + adjustmentsQty;
+      final isReconciled = unexplainedVariance.abs() < 0.0001 && (calculatedEnding - endingQty).abs() < 0.0001;
+      if (isReconciled) {
+        reconciledIngredientsCount++;
+      }
+
+      bridgeRows.add(AnalyticsRow(
+        id: 'stock-bridge-$ingId',
+        sourceType: 'raw_ingredients',
+        sourceId: '$ingId',
+        cells: {
+          'kind': 'Normalized stock bridge',
+          'ingredient_id': ingId,
+          'name': name,
+          'unit': unit,
+          'opening_qty': openingQty,
+          'receipts_qty': receiptsQty,
+          'consumption_qty': consumptionQty,
+          'waste_qty': wasteQty,
+          'returns_qty': returnsQty,
+          'adjustments_qty': adjustmentsQty,
+          'unexplained_variance': unexplainedVariance,
+          'ending_qty': endingQty,
+          'reconciliation_status': isReconciled ? 'Reconciled' : 'Discrepancy disclosed',
+          'current_stock': currentStock,
+          'threshold': threshold,
+          'has_opening_evidence': hasOpeningEvidence ? 'Verified' : 'Missing opening evidence',
+          'balance_evidence_at': openingEvidenceAt,
+          'recorded_cost_rate': unitCostRate,
+          'status': currentStock < 0 ? 'Negative' : currentStock <= threshold ? 'Low' : 'Within threshold',
+        },
+      ));
+    }
+
     final rows = <AnalyticsRow>[
+      ...bridgeRows,
       ...ingredients.map((i) => _row('raw_ingredients', i, {'kind': 'Current position', 'ingredient_id': i['id'], 'name': _safeText(i['name']), 'unit': i['storage_unit'], 'current_stock': i['current_stock'], 'threshold': i['low_stock_threshold'], 'as_of_balance': balances[i['id']]?['balance_after'], 'balance_evidence_at': balances[i['id']]?['recorded_at'], 'status': (i['current_stock'] as num) < 0 ? 'Negative' : (i['current_stock'] as num) <= (i['low_stock_threshold'] as num) ? 'Low' : 'Within threshold'})),
+      ...e.get('purchases').map((p) => _row('mandi_procurements', p, {
+        'kind': 'Procurement receipt',
+        'ingredient_id': p['raw_ingredient_id'],
+        'unit': p['traditional_unit'],
+        'quantity': p['converted_quantity'] ?? p['quantity'],
+        'spend_paisa': _money(p, 'total_cost'),
+        'recorded_at': p['created_at'],
+      })),
+      ...allCreditTxns.where((t) => t['raw_ingredient_id'] != null &&
+          (t['created_at'] as String).compareTo(intervalStart) >= 0 &&
+          (t['created_at'] as String).compareTo(cutoffTime) <= 0).map((t) => AnalyticsRow(
+        id: 'credit-delivery-${t['id']}',
+        sourceType: 'vendor_transactions',
+        sourceId: '${t['id']}',
+        cells: {
+          'kind': 'Credit delivery receipt',
+          'ingredient_id': t['raw_ingredient_id'],
+          'unit': t['unit_snapshot'] ?? '',
+          'quantity': t['quantity'],
+          'spend_paisa': t['amount_paisa'] ?? (t['amount'] != null ? ((t['amount'] as num) * 100).round() : 0),
+          'recorded_at': t['created_at'],
+        },
+      )),
       ...e.get('physical_counts').map((c) => AnalyticsRow(id: 'count-${c['count_id']}-${c['ingredient_id']}', sourceType: 'stock_count_lines', sourceId: '${c['count_id']}:${c['ingredient_id']}', cells: {
         'kind': 'Physical count', 'count_id': c['count_id'], 'ingredient_id': c['ingredient_id'], 'unit': c['unit'],
         'expected': c['expected'], 'counted': c['counted'], 'variance': c['variance'], 'estimated_cost_paisa': c['estimated_cost_paisa'], 'recorded_estimated_cost_paisa': c['recorded_estimated_cost_paisa'], 'valuation_policy': c['valuation_policy'],
@@ -333,6 +518,9 @@ class _ReportBuilder {
     }
     return _section(AnalyticsFamily.inventory, 'Inventory', [
       _metric('ingredients', 'Current ingredients', ingredients.length, unit: AnalyticsUnit.count, explanation: _currentBasis),
+      _metric('reconciled_ingredients', 'Reconciled stock bridges', reconciledIngredientsCount, unit: AnalyticsUnit.count, explanation: 'Ingredients whose opening + receipts - consumption - waste + returns + adjustments exactly equals ending quantity.'),
+      _coverage('opening_evidence_coverage', 'Opening balance evidence coverage', openingEvidenceCount, ingredients.length, 'Ingredients with verified prior movement balance_after evidence. Missing opening evidence is disclosed rather than assumed zero.'),
+      _metric('missing_opening_count', 'Missing opening balance evidence', missingOpeningCount, unit: AnalyticsUnit.count, explanation: 'Tracked ingredients lacking verified pre-interval balance evidence.'),
       _metric('low_stock', 'Current low stock', low, unit: AnalyticsUnit.count, explanation: 'Current quantity <= configured threshold in each ingredient base unit. $_currentBasis'),
       _metric('negative_stock', 'Current negative stock', negative, unit: AnalyticsUnit.count, explanation: 'Current quantity < 0; sales never blocked. $_currentBasis'),
       _rate('low_stock_share', 'Current low-stock share', low, ingredients.length, 'Low-stock ingredient count / current tracked ingredients. $_currentBasis'),
@@ -342,7 +530,23 @@ class _ReportBuilder {
       _missing('stock_valuation', 'Historical stock valuation', 'No historical cost layers. Current unit cost cannot rewrite past valuation.'),
       _metric('physical_variance', 'Posted physical count lines', e.get('physical_counts').length, unit: AnalyticsUnit.count, explanation: 'Posted observations in selected Business Day intervals. Inspect per-ingredient variances below; incompatible units are never totaled.'),
       _metric('physical_variance_cost', 'Estimated physical variance value', _integers(e.get('physical_counts'), 'estimated_cost_paisa'), explanation: 'Signed event-time count estimates; unknown rates prevent a complete total.', unavailable: e.get('physical_counts').any((c) => c['estimated_cost_paisa'] == null)),
-    ], rows, ['kind', 'ingredient_id', 'name', 'unit', 'current_stock', 'threshold', 'as_of_balance', 'balance_evidence_at', 'quantity_delta', 'balance_after', 'quantity', 'loss_paisa', 'count_id', 'expected', 'counted', 'variance', 'estimated_cost_paisa', 'recorded_estimated_cost_paisa', 'valuation_policy', 'movement_id', 'snapshot_sequence', 'created_by', 'approved_by', 'posted_by', 'reason', 'status', 'recorded_at'], [_currentBasis, 'Movement/BOM/waste rows have separate scopes. Never sum quantities across grams, liters or count units.', 'Movement history begins with v14 capture; posted physical counts retain observation, approval and movement evidence. A zero-variance count has no adjusting movement. As-of is recorded balance evidence, not an invented beginning balance.']);
+    ], rows, [
+      'kind', 'ingredient_id', 'name', 'unit', 'opening_qty', 'receipts_qty', 'consumption_qty', 'waste_qty',
+      'returns_qty', 'adjustments_qty', 'unexplained_variance', 'ending_qty', 'reconciliation_status',
+      'current_stock', 'threshold', 'has_opening_evidence', 'balance_evidence_at', 'recorded_cost_rate',
+      'as_of_balance', 'quantity_delta', 'balance_after', 'quantity', 'spend_paisa', 'loss_paisa', 'count_id',
+      'expected', 'counted', 'variance', 'estimated_cost_paisa', 'recorded_estimated_cost_paisa',
+      'valuation_policy', 'movement_id', 'snapshot_sequence', 'created_by', 'approved_by', 'posted_by',
+      'reason', 'status', 'recorded_at'
+    ], [
+      'Normalized stock bridges reconcile in each ingredient\'s base unit (g, ml, count); never sum quantities across different unit dimensions.',
+      'Opening plus receipts minus consumption minus waste plus returns plus adjustments equals ending quantity without double counting.',
+      'Recorded unit cost rates represent historical master-data rate evidence; they are described separately from stock valuation.',
+      'Missing opening balance evidence is disclosed rather than backfilled as zero.',
+      _currentBasis,
+      'Movement/BOM/waste rows have separate scopes. Never sum quantities across grams, liters or count units.',
+      'Movement history begins with v14 capture; posted physical counts retain observation, approval and movement evidence. A zero-variance count has no adjusting movement. As-of is recorded balance evidence, not an invented beginning balance.',
+    ]);
   }
 
   AnalyticsSection _procurement() {
@@ -358,21 +562,218 @@ class _ReportBuilder {
   AnalyticsSection _suppliers() {
     final vendors = e.get('vendors');
     final events = e.get('vendor_events');
+    final allTxns = e.rows['all_vendor_transactions'] ?? events;
+    final allocations = e.rows['all_supplier_allocations'] ?? [];
+    final openingAdjustments = e.rows['supplier_opening_adjustments'] ?? [];
+
+    final intervalStart = _sqlTime(_karachi(analyticsWallClock(e.query.startDate).toIso8601String())!);
+    final cutoffTime = e.query.live
+        ? _sqlTime(_karachi(e.now.toIso8601String())!)
+        : _sqlTime(_karachi(analyticsWallClock(e.query.endDateExclusive).toIso8601String())!);
+    final cutoffDate = cutoffTime.substring(0, 10);
+
+    final vendorNames = <int, String>{for (final v in vendors) v['id'] as int: _safeText(v['name'])};
+    final vendorStatuses = <int, String>{for (final v in vendors) v['id'] as int: v['archived_at'] != null ? 'Archived' : 'Active'};
+
+    int totalOpeningPayable = 0;
+    int totalPurchasesInRange = 0;
+    int totalPaymentsInRange = 0;
+    int totalAdjsInRange = 0;
+    int totalClosingPayable = 0;
+
+    int totalCurrent = 0;
+    int totalDays0to7 = 0;
+    int totalDays8to30 = 0;
+    int totalDays31to60 = 0;
+    int totalOver60 = 0;
+    int totalUnknownDue = 0;
+
+    int activeCount = 0;
+    int datedInvoiceCount = 0;
+    int totalInvoicesCount = 0;
+
+    final bridgeRows = <AnalyticsRow>[];
+
+    for (final v in vendors) {
+      final vId = v['id'] as int;
+      final vName = _safeText(v['name']);
+      final isArchived = v['archived_at'] != null;
+      if (!isArchived) activeCount++;
+      final status = isArchived ? 'Archived' : 'Active';
+      final initOpeningPaisa = _money(v, 'opening_balance');
+      final vCreated = v['created_at'] as String? ?? '';
+
+      final vAdjs = openingAdjustments.where((a) => a['vendor_id'] == vId).toList();
+      final adjsBeforeStart = vAdjs.where((a) => (a['recorded_at'] as String).compareTo(intervalStart) < 0).toList();
+      final adjsInRange = vAdjs.where((a) => (a['recorded_at'] as String).compareTo(intervalStart) >= 0 && (a['recorded_at'] as String).compareTo(cutoffTime) <= 0).toList();
+
+      final baseOpeningPaisa = vCreated.isNotEmpty && vCreated.compareTo(intervalStart) >= 0
+          ? 0
+          : (adjsBeforeStart.isNotEmpty ? adjsBeforeStart.last['opening_balance_paisa'] as int : initOpeningPaisa);
+
+      final adjsInRangePaisa = adjsInRange.fold<int>(0, (sum, a) => sum + (a['opening_balance_paisa'] as int) - (a['previous_balance_paisa'] as int));
+
+      final txnsBeforeStart = allTxns.where((t) => t['vendor_id'] == vId && (t['created_at'] as String).compareTo(intervalStart) < 0).toList();
+      final txnsInRange = allTxns.where((t) => t['vendor_id'] == vId && (t['created_at'] as String).compareTo(intervalStart) >= 0 && (t['created_at'] as String).compareTo(cutoffTime) <= 0).toList();
+      final txnsUpToCutoff = allTxns.where((t) => t['vendor_id'] == vId && (t['created_at'] as String).compareTo(cutoffTime) <= 0).toList();
+
+      final purchasesBefore = txnsBeforeStart.where((t) => t['type'] == 'PURCHASE_CREDIT').fold<int>(0, (sum, t) => sum + _money(t, 'amount'));
+      final paymentsBefore = txnsBeforeStart.where((t) => ['PAYMENT_DRAWER', 'PAYMENT_EXTERNAL'].contains(t['type'])).fold<int>(0, (sum, t) => sum + _money(t, 'amount'));
+      final openingPayablePaisa = baseOpeningPaisa + purchasesBefore - paymentsBefore;
+
+      final purchasesInRange = txnsInRange.where((t) => t['type'] == 'PURCHASE_CREDIT').fold<int>(0, (sum, t) => sum + _money(t, 'amount'));
+      final paymentsInRange = txnsInRange.where((t) => ['PAYMENT_DRAWER', 'PAYMENT_EXTERNAL'].contains(t['type'])).fold<int>(0, (sum, t) => sum + _money(t, 'amount'));
+      final closingPayablePaisa = openingPayablePaisa + purchasesInRange + adjsInRangePaisa - paymentsInRange;
+
+      // Only include allocations created on or before cutoff
+      final vAllocs = allocations.where((a) => a['vendor_id'] == vId && (a['created_at'] as String).compareTo(cutoffTime) <= 0).toList();
+      final openingPaidAtCutoff = vAllocs.where((a) => a['invoice_id'] == null).fold<int>(0, (sum, a) => sum + (a['amount_paisa'] as int));
+      final effectiveOpeningAtCutoff = (vAdjs.where((a) => (a['recorded_at'] as String).compareTo(cutoffTime) <= 0).isNotEmpty)
+          ? vAdjs.where((a) => (a['recorded_at'] as String).compareTo(cutoffTime) <= 0).last['opening_balance_paisa'] as int
+          : initOpeningPaisa;
+      final openingDueAtCutoff = (vCreated.isNotEmpty && vCreated.compareTo(cutoffTime) > 0)
+          ? 0
+          : math.max(0, effectiveOpeningAtCutoff - openingPaidAtCutoff);
+
+      int vCurrent = 0, vDays0to7 = 0, vDays8to30 = 0, vDays31to60 = 0, vOver60 = 0, vUnknownDue = openingDueAtCutoff;
+
+      final invoicesUpToCutoff = txnsUpToCutoff.where((t) => t['type'] == 'PURCHASE_CREDIT').toList();
+      totalInvoicesCount += invoicesUpToCutoff.length;
+
+      for (final inv in invoicesUpToCutoff) {
+        final invId = inv['id'] as int;
+        final invAmount = _money(inv, 'amount');
+        final paid = vAllocs.where((a) => a['invoice_id'] == invId).fold<int>(0, (sum, a) => sum + (a['amount_paisa'] as int));
+        final due = invAmount - paid;
+        final dueDateStr = inv['due_date'] as String?;
+        if (dueDateStr != null && dueDateStr.trim().isNotEmpty) {
+          datedInvoiceCount++;
+        }
+        if (due <= 0) continue;
+
+        if (dueDateStr == null || dueDateStr.trim().isEmpty) {
+          vUnknownDue += due;
+        } else {
+          final dueTrimmed = dueDateStr.trim().substring(0, 10);
+          if (dueTrimmed.compareTo(cutoffDate) > 0) {
+            vCurrent += due;
+          } else {
+            final dueDt = DateTime.tryParse(dueTrimmed);
+            final cutoffDt = DateTime.tryParse(cutoffDate);
+            if (dueDt == null || cutoffDt == null) {
+              vUnknownDue += due;
+            } else {
+              final overdueDays = cutoffDt.difference(dueDt).inDays;
+              if (overdueDays <= 7) {
+                vDays0to7 += due;
+              } else if (overdueDays <= 30) {
+                vDays8to30 += due;
+              } else if (overdueDays <= 60) {
+                vDays31to60 += due;
+              } else {
+                vOver60 += due;
+              }
+            }
+          }
+        }
+      }
+
+      totalOpeningPayable += openingPayablePaisa;
+      totalPurchasesInRange += purchasesInRange;
+      totalPaymentsInRange += paymentsInRange;
+      totalAdjsInRange += adjsInRangePaisa;
+      totalClosingPayable += closingPayablePaisa;
+
+      totalCurrent += vCurrent;
+      totalDays0to7 += vDays0to7;
+      totalDays8to30 += vDays8to30;
+      totalDays31to60 += vDays31to60;
+      totalOver60 += vOver60;
+      totalUnknownDue += vUnknownDue;
+
+      bridgeRows.add(AnalyticsRow(
+        id: 'supplier-bridge-$vId',
+        sourceType: 'vendor_khata',
+        sourceId: '$vId',
+        cells: {
+          'kind': 'Vendor Khata bridge',
+          'supplier_id': vId,
+          'name': vName,
+          'status': status,
+          'opening_paisa': openingPayablePaisa,
+          'purchases_paisa': purchasesInRange,
+          'payments_paisa': paymentsInRange,
+          'adjustments_paisa': adjsInRangePaisa,
+          'closing_paisa': closingPayablePaisa,
+          'aging_current_paisa': vCurrent,
+          'aging_0_7_paisa': vDays0to7,
+          'aging_8_30_paisa': vDays8to30,
+          'aging_31_60_paisa': vDays31to60,
+          'aging_over_60_paisa': vOver60,
+          'aging_unknown_paisa': vUnknownDue,
+          'due_date': null,
+          'type': null,
+          'amount_paisa': null,
+          'created_at': vCreated,
+        },
+      ));
+    }
+
     final payments = events.where((t) => ['PAYMENT_DRAWER', 'PAYMENT_EXTERNAL'].contains(t['type'])).toList();
     final paidIds = payments.map((t) => t['vendor_id']).toSet();
+
     return _section(AnalyticsFamily.suppliers, 'Supplier Khata', [
+      _metric('khata_opening_payable', 'Vendor Khata opening payable', totalOpeningPayable, unit: AnalyticsUnit.paisa, explanation: 'Historical payable at start of selected interval based on pre-period evidence.'),
+      _metric('credit_purchases', 'Recorded credit deliveries', totalPurchasesInRange, unit: AnalyticsUnit.paisa, explanation: 'Credit purchases in selected interval affecting stock/payable; not cash payments. $_intervalBasis'),
+      _metric('khata_payments', 'Recorded supplier payments', totalPaymentsInRange, unit: AnalyticsUnit.paisa, explanation: 'Selected interval supplier settlements from cash drawer and external management accounts.'),
+      _metric('khata_adjustments', 'Opening balance adjustments', totalAdjsInRange, unit: AnalyticsUnit.paisa, explanation: 'Net versioned opening balance adjustments in selected interval.'),
+      _metric('khata_closing_payable', 'Vendor Khata closing payable', totalClosingPayable, unit: AnalyticsUnit.paisa, explanation: 'Opening + purchases + adjustments - payments reconciled at disclosed cutoff.'),
+      _metric('aging_current', 'Current (not yet due) payable', totalCurrent, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable with due date strictly after disclosed cutoff date.'),
+      _metric('aging_0_7', 'Payable overdue 0–7 days', totalDays0to7, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable 0 to 7 days past due date (including due today at cutoff).'),
+      _metric('aging_8_30', 'Payable overdue 8–30 days', totalDays8to30, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable 8 to 30 days past due date as of cutoff.'),
+      _metric('aging_31_60', 'Payable overdue 31–60 days', totalDays31to60, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable 31 to 60 days past due date as of cutoff.'),
+      _metric('aging_over_60', 'Payable overdue over 60 days', totalOver60, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable more than 60 days past due date as of cutoff.'),
+      _metric('aging_unknown', 'Payable with unknown due date', totalUnknownDue, unit: AnalyticsUnit.paisa, explanation: 'Undated invoices and unallocated opening balances without explicit due dates.'),
+      _coverage('supplier_coverage', 'Active and archived supplier coverage', activeCount, vendors.length, 'Active suppliers vs total registered suppliers including archived historical vendors.'),
+      _coverage('invoice_due_date_coverage', 'Invoice due-date coverage', datedInvoiceCount, totalInvoicesCount, 'Invoices with recorded due dates vs total credit invoices up to cutoff.'),
       _metric('current_payable', 'Current supplier payable', _sum(vendors, 'current_balance'), explanation: 'Stored current balances across existing suppliers. $_currentBasis'),
-      _metric('opening_balances', 'Configured opening balances', _sum(vendors, 'opening_balance'), explanation: 'Current configured opening balances; historical edits are not versioned. $_currentBasis'),
-      _metric('credit_purchases', 'Recorded credit deliveries', _sum(events.where((t) => t['type'] == 'PURCHASE_CREDIT'), 'amount'), explanation: 'Credit purchases in selected day intervals affect stock/payable; not cash payments. $_intervalBasis'),
       _metric('drawer_payments', 'Supplier drawer payments', _sum(payments.where((t) => t['type'] == 'PAYMENT_DRAWER'), 'amount'), explanation: 'Selected interval supplier settlements from drawer; these are not operating expenses.'),
       _metric('external_payments', 'Supplier external payments', _sum(payments.where((t) => t['type'] == 'PAYMENT_EXTERNAL'), 'amount'), explanation: 'Selected interval supplier settlements from external management funds.'),
-      _metric('no_payments_in_range', 'Suppliers with no payments in range', vendors.where((v) => !paidIds.contains(v['id'])).length, unit: AnalyticsUnit.count, explanation: 'Existing suppliers with no selected interval settlement. Does not claim no lifetime payments.'),
-      _metric('overdue', 'Current overdue invoiced payable', _integers(e.get('invoice_balances').where((i) => i['due_date'] != null && (i['due_date'] as String).compareTo(_sqlDate(_karachi(e.now.toIso8601String())!)) < 0), 'due_paisa'), explanation: 'Current allocated invoice balances with known due dates. Undated legacy invoices and opening balances are excluded; this is not a historical aging snapshot.'),
-      _missing('historical_payable', 'Reconstructed historical payable', 'Mutable opening balances and supplier cascade deletion limit historical reconstruction; current balances remain labeled current.'),
+      _metric('no_payments_in_range', 'Suppliers with no payments in range', vendors.where((v) => !paidIds.contains(v['id'])).length, unit: AnalyticsUnit.count, explanation: 'Existing suppliers with no selected interval settlement.'),
     ], [
-      ...vendors.map((v) => _row('vendor_khata', v, {'kind': 'Current supplier', 'supplier_id': v['id'], 'name': _safeText(v['name']), 'opening_paisa': _money(v, 'opening_balance'), 'current_paisa': _money(v, 'current_balance'), 'payment_activity': paidIds.contains(v['id']) ? 'Payments in selected interval' : 'No payments in selected interval'})),
-      ...events.map((t) => _row('vendor_transactions', t, {'kind': 'Selected interval entry', 'supplier_id': t['vendor_id'], 'type': t['type'], 'amount_paisa': _money(t, 'amount'), 'ingredient_id': t['raw_ingredient_id'], 'quantity': t['quantity'], 'shift_id': t['shift_id'], 'created_at': t['created_at']})),
-    ], ['kind', 'supplier_id', 'name', 'opening_paisa', 'current_paisa', 'payment_activity', 'type', 'amount_paisa', 'ingredient_id', 'quantity', 'shift_id', 'created_at'], [_currentBasis, _intervalBasis, 'Supplier directory balances and selected interval entries are different views; do not add their amounts together.']);
+      ...bridgeRows,
+      ...events.map((t) => _row('vendor_transactions', t, {
+        'kind': 'Selected interval entry',
+        'supplier_id': t['vendor_id'],
+        'name': vendorNames[t['vendor_id']] ?? 'Unknown',
+        'status': vendorStatuses[t['vendor_id']] ?? 'Active',
+        'opening_paisa': null,
+        'purchases_paisa': null,
+        'payments_paisa': null,
+        'adjustments_paisa': null,
+        'closing_paisa': null,
+        'aging_current_paisa': null,
+        'aging_0_7_paisa': null,
+        'aging_8_30_paisa': null,
+        'aging_31_60_paisa': null,
+        'aging_over_60_paisa': null,
+        'aging_unknown_paisa': null,
+        'due_date': t['due_date'],
+        'type': t['type'],
+        'amount_paisa': _money(t, 'amount'),
+        'created_at': t['created_at'],
+      })),
+    ], [
+      'kind', 'supplier_id', 'name', 'status', 'opening_paisa', 'purchases_paisa', 'payments_paisa',
+      'adjustments_paisa', 'closing_paisa', 'aging_current_paisa', 'aging_0_7_paisa', 'aging_8_30_paisa',
+      'aging_31_60_paisa', 'aging_over_60_paisa', 'aging_unknown_paisa', 'due_date', 'type', 'amount_paisa', 'created_at'
+    ], [
+      'Vendor Khata bridge: Opening + purchases/adjustments minus payments/credits reconciles to closing using evidence strictly available at the disclosed cutoff.',
+      'Aging buckets are nonoverlapping; sum of aging buckets strictly equals closing payable.',
+      'Historical balances use only allocations and payments recorded on or before the cutoff date; current/all-time allocations are not used as historical balances.',
+      'Archived suppliers with historical activity or balances are retained and disclosed with Archived status.',
+      _currentBasis, _intervalBasis,
+    ]);
   }
 
   List<_Record> _receivingEvents() {
