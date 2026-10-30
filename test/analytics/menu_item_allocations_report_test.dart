@@ -102,15 +102,10 @@ void main() {
         'value': 100.0, // 100 PKR = 10,000 paisa
         'is_active': 1,
         'rules_json': '{}',
-        'created_at': '2026-10-30 10:00:00',
+        'created_at': '2026-10-30T10:00:00.000Z',
       });
-      final discount = DiscountPreset(
-        id: discountId,
-        name: 'Flat 100 Off',
-        type: DiscountType.flat,
-        value: 100.0,
-        isActive: true,
-        createdAt: DateTime.parse('2026-10-30T10:00:00Z'),
+      final discount = DiscountPreset.fromMap(
+        (await db.query('discount_presets', where: 'id = ?', whereArgs: [discountId])).single,
       );
 
       // Perform checkout via OrderAndCheckoutController
