@@ -242,7 +242,7 @@ class _ReportBuilder {
       ...trips.map((t) => _row('rider_trips', t, {'trip_id': t['id'], 'rider_id': t['rider_staff_id'], 'shift_id': t['shift_id'], 'status': t['status'], 'selected_order_load': attempts.where((a) => a['trip_id'] == t['id']).length, 'expected_paisa': t['cash_expected_paisa'], 'counted_paisa': t['cash_collected_paisa'], 'dispatched_at': t['dispatched_at'], 'settled_at': t['settled_at_utc']})),
       ...attempts.map((a) {
         final orderAttempts = attemptsByOrder[a['order_id']] ?? const <_Record>[];
-        final isReattempt = orderAttempts.indexOf(a) > 0;
+        final isReattempt = orderAttempts.isNotEmpty && a['id'] != orderAttempts.first['id'];
         final rawNotes = a['notes'] as String?;
         final reason = a['status'] == 'RETURNED'
             ? (rawNotes != null && rawNotes.trim().isNotEmpty
