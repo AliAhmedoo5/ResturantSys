@@ -311,7 +311,7 @@ class _ReportBuilder {
     var returningCount = 0;
     final rows = <AnalyticsRow>[];
     for (final entry in groups.entries) {
-      final customer = 'Customer â€¢â€¢â€¢${entry.key.substring(entry.key.length - 4)}';
+      final customer = 'Customer •••${entry.key.substring(entry.key.length - 4)}';
       final value = _sum(entry.value, 'grand_total');
       final firstLifetime = lifetimeFirstOrders[entry.key];
       final firstLifetimeTime = _karachi(firstLifetime?['created_at']);
@@ -369,7 +369,7 @@ class _ReportBuilder {
       _orderBasis,
       'Customer classification distinguishes first-time customers (whose first eligible purchase occurred in this selected window) from returning customers (who had an eligible purchase prior to this window across all available history). Earlier installation boundaries limit historical depth; guest orders without phone numbers cannot be classified.',
       'Phone normalization removes separators and unifies +92/0092/92 mobile prefixes with local 0. Shared numbers and masked suffix collisions are possible. Raw phones, names and addresses are excluded.',
-      'Customer aggregate rows show each known identityâ€™s eligible recorded value / its eligible order count, with all contributing order source IDs. Order history rows are a separate view; do not sum these different row kinds together. No known orders makes average ticket Not applicable.',
+      'Customer aggregate rows show each known identity’s eligible recorded value / its eligible order count, with all contributing order source IDs. Order history rows are a separate view; do not sum these different row kinds together. No known orders makes average ticket Not applicable.',
     ]);
   }
 
@@ -676,12 +676,19 @@ class _ReportBuilder {
 
   AnalyticsSection _procurement() {
     final purchases = e.get('purchases');
+    final acquisitions = e.get('vendor_events').where((r) => r['type'] == 'PURCHASE_CREDIT').toList();
+    final narrowed = e.query.domainFilters.keys.any((d) => [AnalyticsDimension.ingredient, AnalyticsDimension.supplier, AnalyticsDimension.acquisition].contains(d));
     return _section(AnalyticsFamily.procurement, 'Procurement', [
-      _metric('purchase_spend', 'Recorded Mandi purchase spend', _sum(purchases, 'total_cost'), explanation: 'Mandi purchase records only; unlinked supplier credit deliveries are separate and not blindly added. $_intervalBasis', previous: _sum(e.get('previous_purchases'), 'total_cost')),
-      _metric('purchase_count', 'Recorded purchases', purchases.length, unit: AnalyticsUnit.count, explanation: 'Mandi purchase rows in selected actual day intervals.', previous: e.get('previous_purchases').length),
+      _metric('purchase_spend', 'Recorded Mandi purchase spend', _sum(purchases, 'total_cost'), explanation: 'Mandi purchase records only; unlinked supplier credit deliveries are separate and not blindly added. $_intervalBasis', previous: narrowed ? null : _sum(e.get('previous_purchases'), 'total_cost')),
+      _metric('purchase_count', 'Recorded purchases', purchases.length, unit: AnalyticsUnit.count, explanation: 'Mandi purchase rows in selected actual day intervals.', previous: narrowed ? null : e.get('previous_purchases').length),
       _metric('purchased_ingredients', 'Distinct purchased ingredients', purchases.map((p) => p['raw_ingredient_id']).toSet().length, unit: AnalyticsUnit.count, explanation: 'Distinct ingredient IDs in selected Mandi purchase records.'),
+      _metric('supplier_acquisition_value', 'Recorded supplier credit acquisitions (separate)', _sum(acquisitions, 'amount'), explanation: 'Retained supplier/ingredient links only. Separate from Mandi spend; no combined spend or deduplication is asserted without acquisition links.'),
       _missing('supplier_performance', 'Supplier delivery performance', 'Mandi purchase records lack supplier link and promised/actual delivery performance timestamps.', unit: AnalyticsUnit.percent),
-    ], purchases.map((p) => _row('mandi_procurements', p, {'ingredient_id': p['raw_ingredient_id'], 'purchase_unit': p['traditional_unit'], 'purchase_quantity': p['quantity'], 'base_quantity': p['converted_quantity'], 'spend_paisa': _money(p, 'total_cost'), 'unit_cost_rupees_per_base_unit': p['cost_per_recipe_unit'], 'created_at': p['created_at']})).toList(), ['ingredient_id', 'purchase_unit', 'purchase_quantity', 'base_quantity', 'spend_paisa', 'unit_cost_rupees_per_base_unit', 'created_at'], [_intervalBasis, _globalBasis, 'Per-ingredient unit rates retain their recorded decimal PKR/base-unit precision (a rate, not a rounded monetary amount). Different base-unit dimensions must not be totaled. Purchase spend is not sales COGS.']);
+    ], [...purchases.map((p) => _row('mandi_procurements', p, {'kind': 'Mandi acquisition', 'ingredient_id': p['raw_ingredient_id'], 'purchase_unit': p['traditional_unit'], 'purchase_quantity': p['quantity'], 'base_quantity': p['converted_quantity'], 'spend_paisa': _money(p, 'total_cost'), 'unit_cost_rupees_per_base_unit': p['cost_per_recipe_unit'], 'created_at': p['created_at']})),
+      ...acquisitions.map((p) => _row('vendor_transactions', p, {'kind': 'Supplier credit acquisition',
+        'vendor_id': p['vendor_id'], 'ingredient_id': p['raw_ingredient_id'], 'base_quantity': p['quantity'],
+        'supplier_acquisition_paisa': _money(p, 'amount'), 'created_at': p['created_at']})),
+    ], ['kind', 'vendor_id', 'supplier_acquisition_paisa', 'ingredient_id', 'purchase_unit', 'purchase_quantity', 'base_quantity', 'spend_paisa', 'unit_cost_rupees_per_base_unit', 'created_at'], [_intervalBasis, _globalBasis, 'Per-ingredient unit rates retain their recorded decimal PKR/base-unit precision (a rate, not a rounded monetary amount). Different base-unit dimensions must not be totaled. Purchase spend is not sales COGS.']);
   }
 
   AnalyticsSection _suppliers() {
@@ -854,9 +861,9 @@ class _ReportBuilder {
       _metric('khata_adjustments', 'Opening balance adjustments', totalAdjsInRange, unit: AnalyticsUnit.paisa, explanation: 'Net versioned opening balance adjustments in selected interval.'),
       _metric('khata_closing_payable', 'Vendor Khata closing payable', totalClosingPayable, unit: AnalyticsUnit.paisa, explanation: 'Opening + purchases + adjustments - payments reconciled at disclosed cutoff.'),
       _metric('aging_current', 'Current (not yet due) payable', totalCurrent, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable with due date strictly after disclosed cutoff date.'),
-      _metric('aging_0_7', 'Payable overdue 0â€“7 days', totalDays0to7, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable 0 to 7 days past due date (including due today at cutoff).'),
-      _metric('aging_8_30', 'Payable overdue 8â€“30 days', totalDays8to30, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable 8 to 30 days past due date as of cutoff.'),
-      _metric('aging_31_60', 'Payable overdue 31â€“60 days', totalDays31to60, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable 31 to 60 days past due date as of cutoff.'),
+      _metric('aging_0_7', 'Payable overdue 0–7 days', totalDays0to7, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable 0 to 7 days past due date (including due today at cutoff).'),
+      _metric('aging_8_30', 'Payable overdue 8–30 days', totalDays8to30, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable 8 to 30 days past due date as of cutoff.'),
+      _metric('aging_31_60', 'Payable overdue 31–60 days', totalDays31to60, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable 31 to 60 days past due date as of cutoff.'),
       _metric('aging_over_60', 'Payable overdue over 60 days', totalOver60, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable more than 60 days past due date as of cutoff.'),
       _metric('aging_unknown', 'Payable with unknown due date', totalUnknownDue, unit: AnalyticsUnit.paisa, explanation: 'Undated invoices and unallocated opening balances without explicit due dates.'),
       _coverage('supplier_coverage', 'Active and archived supplier coverage', activeCount, vendors.length, 'Active suppliers vs total registered suppliers including archived historical vendors.'),
