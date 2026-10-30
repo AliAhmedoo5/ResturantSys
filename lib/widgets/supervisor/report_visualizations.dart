@@ -91,7 +91,7 @@ class _ChartCardState extends State<_ChartCard> {
             AnalyticsUnit.decimal => 'Quantity',
           }, style: const TextStyle(fontSize: 11, color: StreetFoodMafiaColors.cartelYellow)),
           const SizedBox(height: 12),
-        if (section.family == AnalyticsFamily.orders) _WeekdayPeakTables(section: section, onInspect: onInspect),
+
           if (chart.points.isEmpty) const Padding(padding: EdgeInsets.symmetric(vertical: 20),
             child: Text('No recorded values for this selection. No history is inferred.',
               style: TextStyle(color: StreetFoodMafiaColors.secondaryText, fontSize: 12, height: 1.5))),
@@ -217,3 +217,4 @@ class _WeekdayPeakTables extends StatelessWidget {
       onTap: row == null ? null : () => onInspect('Weekday/hour coverage', [row]));
   }
 }
+
