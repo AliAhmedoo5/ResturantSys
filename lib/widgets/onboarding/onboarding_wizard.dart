@@ -952,6 +952,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
               const SizedBox(width: WarmCounterSpacing.space12),
               Expanded(
                 child: DropdownButtonFormField<StorageUnit>(
+                  mouseCursor: WidgetStateMouseCursor.clickable,
                   isExpanded: true,
                   initialValue: _selectedStorageUnit,
                   decoration: const InputDecoration(

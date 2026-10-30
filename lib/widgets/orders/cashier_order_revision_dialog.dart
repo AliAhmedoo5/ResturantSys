@@ -657,6 +657,7 @@ class _CashierOrderRevisionDialogState
                     return Padding(
                       padding: const EdgeInsets.only(right: 6.0),
                       child: ActionChip(
+                        mouseCursor: WidgetStateMouseCursor.clickable,
                         label: Text(r, style: const TextStyle(fontSize: 11)),
                         onPressed: () => setState(() => _reasonController.text = r),
                       ),

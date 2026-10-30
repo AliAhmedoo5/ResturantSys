@@ -80,6 +80,7 @@ class PinNumpad extends StatelessWidget {
           ),
         ),
         child: InkWell(
+          mouseCursor: WidgetStateMouseCursor.clickable,
           borderRadius: WarmCounterSpacing.controlBorderRadius,
           onTap: isEnabled ? () => onDigitPressed(digit) : null,
           child: Center(
@@ -121,6 +122,7 @@ class PinNumpad extends StatelessWidget {
             ),
           ),
           child: InkWell(
+            mouseCursor: WidgetStateMouseCursor.clickable,
             borderRadius: WarmCounterSpacing.controlBorderRadius,
             onTap: onTap,
             child: Center(

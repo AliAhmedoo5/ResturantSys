@@ -59,6 +59,7 @@ class AppSidebar extends StatelessWidget {
                           border: Border.all(color: active ? StreetFoodMafiaColors.border : Colors.transparent),
                         ),
                         child: InkWell(
+                          mouseCursor: WidgetStateMouseCursor.clickable,
                           key: ValueKey('workspace_tab_${tab.name}'),
                           borderRadius: BorderRadius.circular(8),
                           onTap: () => onSelected(tab),

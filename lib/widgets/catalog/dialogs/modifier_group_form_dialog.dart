@@ -78,6 +78,7 @@ class _ModifierGroupFormDialogState extends State<ModifierGroupFormDialog> {
         child: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             DropdownButtonFormField<int>(
+              mouseCursor: WidgetStateMouseCursor.clickable,
               key: const ValueKey('group_item_dropdown'),
               initialValue: _itemId,
               isExpanded: true,
@@ -93,6 +94,7 @@ class _ModifierGroupFormDialogState extends State<ModifierGroupFormDialog> {
               validator: (value) => value == null || value.trim().isEmpty ? 'Enter a group name' : null,
             ),
             DropdownButtonFormField<String>(
+              mouseCursor: WidgetStateMouseCursor.clickable,
               initialValue: _mode,
               decoration: const InputDecoration(labelText: 'Selection mode'),
               items: const [

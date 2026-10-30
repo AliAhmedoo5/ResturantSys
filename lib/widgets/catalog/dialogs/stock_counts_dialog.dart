@@ -87,6 +87,7 @@ class _StockCountsDialogState extends State<StockCountsDialog> {
       if (_error != null) Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
       TextField(controller: _reason, enabled: !_busy, decoration: const InputDecoration(labelText: 'Reason / storage area')),
       Wrap(children: [for (final ingredient in _ingredients) Padding(padding: const EdgeInsets.all(4), child: FilterChip(
+        mouseCursor: WidgetStateMouseCursor.clickable,
         label: Text('${ingredient['name']} (${ingredient['storage_unit']})'), selected: _selection.contains(ingredient['id']),
         onSelected: _busy ? null : (selected) => setState(() { if (selected) { _selection.add(ingredient['id'] as int); } else { _selection.remove(ingredient['id']); } }))) ]),
       FilledButton(onPressed: _busy ? null : () => _run(() async {

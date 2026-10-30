@@ -171,6 +171,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
       isDense: true, border: const OutlineInputBorder());
     return [
       SizedBox(width: compact ? 130 : 190, child: DropdownButtonFormField<int>(
+        mouseCursor: WidgetStateMouseCursor.clickable,
         key: const ValueKey('analytics_cashier_picker'), value: _query.cashierId,
         isExpanded: true, decoration: decoration('Cashier'),
         items: [DropdownMenuItem<int>(child: Text(compact ? 'All' : 'All cashiers')),
@@ -182,6 +183,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
         },
       )),
       SizedBox(width: compact ? 130 : 200, child: DropdownButtonFormField<int>(
+        mouseCursor: WidgetStateMouseCursor.clickable,
         key: const ValueKey('analytics_shift_picker'), value: _query.shiftId,
         isExpanded: true, decoration: decoration('Shift'),
         items: [DropdownMenuItem<int>(child: Text(compact ? 'All' : 'All shifts')),
@@ -193,6 +195,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
         },
       )),
       SizedBox(width: compact ? 145 : 180, child: DropdownButtonFormField<String>(
+        mouseCursor: WidgetStateMouseCursor.clickable,
         key: const ValueKey('analytics_dining_picker'), value: _query.diningType,
         isExpanded: true, decoration: decoration('Dining Type'),
         items: [DropdownMenuItem<String>(child: Text(compact ? 'All' : 'All dining types')),
@@ -200,6 +203,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
         onChanged: (value) { setState(() => _dining = value); _changeQuery(_query.copyWith(diningType: value)); },
       )),
       SizedBox(width: compact ? 140 : 180, child: DropdownButtonFormField<String>(
+        mouseCursor: WidgetStateMouseCursor.clickable,
         key: const ValueKey('analytics_payment_picker'), value: _query.paymentMethod,
         isExpanded: true, decoration: decoration('Payment method'),
         items: [DropdownMenuItem<String>(child: Text(compact ? 'All' : 'All payments')),
@@ -324,12 +328,14 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
           final compact = constraints.maxWidth >= 1100;
           return Wrap(spacing: 8, runSpacing: 12, crossAxisAlignment: WrapCrossAlignment.center, children: [
         SizedBox(width: compact ? 140 : 205, child: DropdownButtonFormField<AnalyticsFamily>(
+          mouseCursor: WidgetStateMouseCursor.clickable,
           key: const ValueKey('analytics_family'), value: _family, isExpanded: true,
           decoration: const InputDecoration(labelText: 'Report', isDense: true, border: OutlineInputBorder()),
           items: _familyLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
           onChanged: (family) { if (family != null) _selectReport(family); },
         )),
         SizedBox(width: compact ? 155 : 190, child: DropdownButtonFormField<String>(
+          mouseCursor: WidgetStateMouseCursor.clickable,
           key: const ValueKey('analytics_period'), value: _preset, isExpanded: true,
           decoration: InputDecoration(labelText: _query.timeBasis == AnalyticsTimeBasis.businessDay ? 'Business Day period' : 'Calendar Order period', isDense: true, border: const OutlineInputBorder()),
           items: const [
@@ -429,6 +435,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
           onChanged: (value) { if (value != null) _changeQuery(_query.copyWith(holdStaleMinutes: value)); },
         )),
         SizedBox(width: 160, child: DropdownButtonFormField<String>(
+          mouseCursor: WidgetStateMouseCursor.clickable,
           key: const ValueKey('analytics_dining'), value: _dining, isExpanded: true,
           decoration: const InputDecoration(labelText: 'Dining Type', border: OutlineInputBorder(), isDense: true),
           items: [const DropdownMenuItem<String>(value: null, child: Text('All')),
@@ -437,6 +444,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
           onChanged: (value) => setState(() => _dining = value),
         )),
         SizedBox(width: 180, child: DropdownButtonFormField<String>(
+          mouseCursor: WidgetStateMouseCursor.clickable,
           key: const ValueKey('analytics_payment'), value: _payment, isExpanded: true,
           decoration: const InputDecoration(labelText: 'Payment method', border: OutlineInputBorder(), isDense: true),
           items: [const DropdownMenuItem<String>(value: null, child: Text('All')),

@@ -179,6 +179,7 @@ class _BlindShiftCloseDialogState extends State<BlindShiftCloseDialog> {
               children: [
                 Expanded(
                   child: ChoiceChip(
+                    mouseCursor: WidgetStateMouseCursor.clickable,
                     label: const Text('Direct Cash Total'),
                     selected: !_useDenominationCounter,
                     onSelected: (val) {
@@ -190,6 +191,7 @@ class _BlindShiftCloseDialogState extends State<BlindShiftCloseDialog> {
                 const SizedBox(width: WarmCounterSpacing.space8),
                 Expanded(
                   child: ChoiceChip(
+                    mouseCursor: WidgetStateMouseCursor.clickable,
                     label: const Text('Currency Note Breakdown'),
                     selected: _useDenominationCounter,
                     onSelected: (val) {
