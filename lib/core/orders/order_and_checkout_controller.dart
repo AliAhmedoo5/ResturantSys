@@ -1171,8 +1171,8 @@ class OrderAndCheckoutController {
   /// Retrieves the immutable void audit record for a voided order, if any.
   Future<OrderVoid?> getOrderVoid(int orderId) async {
     final rows = await database.rawQuery('''
-      SELECT ov.*, 
-             s1.name as supervisor_name, 
+      SELECT ov.*,
+             s1.name as supervisor_name,
              s2.name as cashier_name
       FROM ${PosDatabaseConstants.tableOrderVoids} ov
       LEFT JOIN ${PosDatabaseConstants.tableStaff} s1 ON ov.voided_by_supervisor_id = s1.id
