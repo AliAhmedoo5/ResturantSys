@@ -465,7 +465,7 @@ class ShiftAndCashController {
         JOIN ${PosDatabaseConstants.tableOrders} o ON op.order_id = o.id
         LEFT JOIN payment_events pe ON pe.tender_id=op.id WHERE COALESCE(pe.shift_id,o.shift_id) = ?
           AND (pe.id IS NOT NULL OR o.payment_status = 'SETTLED')
-          AND op.payment_method IN ('CARD', 'RAAST', 'JAZZCASH', 'EASYPAISA', 'BANK_TRANSFER')
+          AND op.payment_method IN ('CARD', 'RAAST', 'JAZZCASH', 'EASYPAISA', 'BANK_TRANSFER', 'DIGITAL_WALLET')
         GROUP BY op.payment_method;
       ''', [shiftId]);
 

@@ -1,4 +1,9 @@
 import 'dart:io';
+import 'package:resturant_sys/core/analytics/analytics_models.dart';
+import 'package:resturant_sys/core/analytics/analytics_service.dart';
+import 'package:resturant_sys/core/analytics/analytics_export_service.dart';
+import 'package:resturant_sys/core/auth/auth_service.dart';
+import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
@@ -188,6 +193,110 @@ void main() {
       expect((await orderController.getOrder(order.id)).paymentStatus, 'SETTLED');
       final movements = await db.query('cash_movements', where: 'shift_id=?', whereArgs: [currentShift.id]);
       expect(movements, hasLength(1));
+    });
+
+    test('Manager traces mixed short pouch to receiving Shift without allocating cash to Orders', () async {
+      final cashOrder = await createTestDeliveryOrder(phone: '03001112222', isCod: true);
+      final digitalOrder = await createTestDeliveryOrder(phone: '03003334444', isCod: true);
+      final trip = await riderTripController.createRiderTrip(riderStaffId: riderStaffId,
+        shiftId: shiftId, businessDayId: businessDayId, tripName: 'Mixed pouch',
+        orderIds: [cashOrder.id, digitalOrder.id]);
+      await riderTripController.markOrderDelivered(tripId: trip.id, orderId: cashOrder.id);
+      await riderTripController.markOrderDelivered(tripId: trip.id, orderId: digitalOrder.id);
+      await shiftController.closeShift(shiftId: shiftId, staffId: cashierId, countedCash: 5000);
+      final receiving = await shiftController.openShift(staffId: cashierId, openingFloat: 0);
+      final actual = DateTime.now().toUtc();
+      await riderTripController.settleRiderTrip(tripId: trip.id, cashierStaffId: cashierId,
+        shiftId: receiving.id, cashCountedPaisa: 70000,
+        digitalWalletReferences: {digitalOrder.id: 'BANK-CONFIRMED'}, settledAt: actual);
+      final auth = AuthService(database: db)..session.login(Staff.fromMap((await db.query('staff', where: 'id=1')).single));
+      final snapshot = await AnalyticsService(database: db, authService: auth).load(
+        AnalyticsQuery(startDate: DateTime.now().subtract(const Duration(days: 1)),
+          endDateExclusive: DateTime.now().add(const Duration(days: 1)), shiftId: receiving.id));
+      final cash = snapshot.section(AnalyticsFamily.cash);
+      final events = cash.rows.where((r) => r.sourceType == 'payment_events').toList();
+      final handover = events.singleWhere((r) => r.cells['event_kind'] == 'RIDER_HANDOVER');
+      expect(handover.cells['amount_paisa'], 70000);
+      expect(handover.cells['order_id'], isNull);
+      expect(handover.cells['movement_id'], isNotNull);
+      expect(handover.cells['settlement_id'], trip.id);
+      expect(handover.cells['receiving_shift_id'], receiving.id);
+      expect(handover.cells['recorded_by'], cashierId);
+      expect(handover.cells['actual_at_source'], actual.toIso8601String());
+      final attribution = events.singleWhere((r) => r.cells['order_id'] == cashOrder.id);
+      expect(attribution.cells['event_kind'], 'COD_SETTLEMENT');
+      expect(attribution.cells['originating_shift_id'], shiftId);
+      expect(attribution.cells['receiving_shift_id'], receiving.id);
+      expect(attribution.cells['settlement_id'], trip.id);
+      expect(attribution.cells['customer_collection_evidence'], contains('unavailable'));
+      final bank = events.singleWhere((r) => r.cells['order_id'] == digitalOrder.id);
+      expect(bank.cells['payment_source'], 'BANK');
+      expect(bank.cells['movement_id'], isNull);
+      expect(cash.metrics.singleWhere((m) => m.id == 'expected_drawer').value, 570000);
+      expect((await orderController.getOrder(cashOrder.id)).shiftId, shiftId);
+      final csv = AnalyticsExportService().csv(snapshot, AnalyticsFamily.cash);
+      expect(csv, contains('RIDER_HANDOVER'));
+      expect(csv, contains('customer collection evidence'));
+      await expectLater(riderTripController.settleRiderTrip(tripId: trip.id,
+        cashierStaffId: cashierId, shiftId: receiving.id, cashCountedPaisa: 70000), throwsStateError);
+      final again = await AnalyticsService(database: db, authService: auth).load(snapshot.query);
+      expect(again.section(AnalyticsFamily.cash).rows.where((r) => r.sourceType == 'payment_events').length, events.length);
+    });
+
+    test('Digital-only settlement rolls back invalid time and adds no drawer cash', () async {
+      final order = await createTestDeliveryOrder(phone: '03001112222', isCod: true);
+      final trip = await riderTripController.createRiderTrip(riderStaffId: riderStaffId,
+        shiftId: shiftId, businessDayId: businessDayId, tripName: 'Direct bank', orderIds: [order.id]);
+      await riderTripController.markOrderDelivered(tripId: trip.id, orderId: order.id);
+      await expectLater(riderTripController.settleRiderTrip(tripId: trip.id,
+        cashierStaffId: cashierId, shiftId: shiftId, cashCountedPaisa: 0,
+        digitalWalletReferences: {order.id: 'CONFIRMED'},
+        settledAt: DateTime.now().toUtc().subtract(const Duration(days: 1))), throwsStateError);
+      expect((await riderTripController.getTrip(trip.id)).isSettled, isFalse);
+      expect((await orderController.getOrder(order.id)).paymentStatus, 'COLLECTION_DUE');
+      await expectLater(riderTripController.settleRiderTrip(tripId: trip.id,
+        cashierStaffId: cashierId, shiftId: shiftId, cashCountedPaisa: 80000,
+        digitalWalletReferences: {order.id: 'CONFIRMED'}), throwsStateError);
+      await riderTripController.settleRiderTrip(tripId: trip.id,
+        cashierStaffId: cashierId, shiftId: shiftId, cashCountedPaisa: 0,
+        digitalWalletReferences: {order.id: 'CONFIRMED'});
+      expect(await shiftController.calculateExpectedCash(shiftId), 5000);
+      final paid = await orderController.getOrder(order.id);
+      expect(paid.payments.singleWhere((p) => p.netPaid > 0).paymentMethod.code, 'DIGITAL_WALLET');
+      expect((await shiftController.calculateTenderSales(shiftId))['DIGITAL_WALLET'], 800);
+      final auth = AuthService(database: db)..session.login(Staff.fromMap((await db.query('staff', where: 'id=1')).single));
+      final snapshot = await AnalyticsService(database: db, authService: auth).load(
+        AnalyticsQuery(startDate: DateTime.now().subtract(const Duration(days: 1)),
+          endDateExclusive: DateTime.now().add(const Duration(days: 1))));
+      final events = snapshot.section(AnalyticsFamily.delivery).rows.where((r) => r.sourceType == 'payment_events').toList();
+      expect(events, hasLength(2));
+      final bank = events.singleWhere((r) => r.cells['event_kind'] == 'RECEIPT');
+      expect(bank.cells['amount_paisa'], 80000);
+      expect(bank.cells['receiving_shift_id'], shiftId);
+      expect(bank.cells['payment_source'], 'BANK');
+      expect(bank.cells['movement_id'], isNull);
+      expect(events.singleWhere((r) => r.cells['event_kind'] == 'RIDER_HANDOVER').cells['amount_paisa'], 0);
+      expect(AnalyticsExportService().csv(snapshot, AnalyticsFamily.delivery), isNot(contains('CONFIRMED')));
+    });
+
+    test('Settlement preserves partial receipts and appends only the remaining balance', () async {
+      final order = await createTestDeliveryOrder(phone: '03001112222', isCod: true);
+      await orderController.recordCashierReceipt(orderId: order.id, shiftId: shiftId,
+        cashierId: cashierId, amountPaisa: 20000, method: PaymentMethod.bankTransfer,
+        commandId: 'partial-before-trip', referenceCode: 'PRIVATE-REFERENCE');
+      final trip = await riderTripController.createRiderTrip(riderStaffId: riderStaffId,
+        shiftId: shiftId, businessDayId: businessDayId, tripName: 'Partial receipt', orderIds: [order.id]);
+      await riderTripController.markOrderDelivered(tripId: trip.id, orderId: order.id);
+      await riderTripController.settleRiderTrip(tripId: trip.id, cashierStaffId: cashierId,
+        shiftId: shiftId, cashCountedPaisa: 60000);
+      final auth = AuthService(database: db)..session.login(Staff.fromMap((await db.query('staff', where: 'id=1')).single));
+      final snapshot = await AnalyticsService(database: db, authService: auth).load(
+        AnalyticsQuery(startDate: DateTime.now().subtract(const Duration(days: 1)),
+          endDateExclusive: DateTime.now().add(const Duration(days: 1))));
+      final events = snapshot.section(AnalyticsFamily.cash).rows.where((r) => r.sourceType == 'payment_events').toList();
+      expect(events.singleWhere((r) => r.cells['event_kind'] == 'RECEIPT').cells['amount_paisa'], 20000);
+      expect(events.singleWhere((r) => r.cells['event_kind'] == 'COD_SETTLEMENT').cells['amount_paisa'], 60000);
+      expect(await shiftController.calculateExpectedCash(shiftId), 5600);
     });
 
     test('1. Delivery orders can be batched and assigned to named rider trips', () async {
