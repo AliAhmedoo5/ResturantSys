@@ -169,9 +169,10 @@ class _WeekdayOrderPeaks {
       if (!operational) {
         result.add(row('calendar-weekday-$weekday', {
           'kind': 'Calendar weekday total', 'period': names[weekday - 1], 'weekday': weekday,
+          'period_complete': sourceAvailable && weekdayDays.isNotEmpty && unknownTime == 0 && weekdayDays.every((id) => dayMap[id] != null && completed(dayMap[id]!)),
           'confirmed_orders': sourceAvailable && weekdayDays.isNotEmpty && unknownTime == 0 ? weekdayOrders.length : null,
           'orders_per_completed_day': null,
-          'coverage': weekdayDays.isEmpty ? 'Unavailable observed calendar coverage' : 'Actual Calendar weekday total over observed intervals; not an operational average',
+          'coverage': weekdayDays.isEmpty ? 'Unavailable observed calendar coverage' : 'Actual Calendar weekday total over observed intervals; open Business Days remain incomplete; not an operational average',
         }, weekdayOrders, weekdayDays));
       }
     }
