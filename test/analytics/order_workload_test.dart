@@ -16,6 +16,62 @@ import '../orders/order_and_checkout_controller_test.dart' show publishFixtures;
 
 void main() {
   setUpAll(sqfliteFfiInit);
+  test('open workload remains partial beside completed days and future hours are unavailable', () async {
+    final store = PosDatabase(factory: databaseFactoryFfi, customPath: inMemoryDatabasePath);
+    final db = await store.initialize();
+    addTearDown(store.close);
+    final auth = AuthService(database: db)..session.login(Staff.fromMap((await db.query('staff', where: 'id=1')).single));
+    addTearDown(auth.session.dispose);
+    final shifts = ShiftAndCashController(database: db);
+    final previous = DateTime.now().subtract(const Duration(days: 1));
+    final completed = await shifts.openBusinessDay(openedByStaffId: 1, openedAt: previous);
+    final previousShift = await shifts.openShift(staffId: 2, openingFloat: 0, openedAt: previous);
+    await shifts.closeShift(shiftId: previousShift.id, staffId: 2, countedCash: 0);
+    await shifts.closeBusinessDay(closedByStaffId: 1);
+    final open = await shifts.openBusinessDay(openedByStaffId: 1);
+    final shift = await shifts.openShift(staffId: 2, openingFloat: 0);
+    final catalog = CatalogAndRecipeController(database: db);
+    final category = await catalog.createCategory(name: 'Partial workload', displayOrder: 1, colorHex: '#FFFFFF');
+    final menu = await catalog.createMenuItem(categoryId: category.id, name: 'Partial tea', basePrice: 100);
+    await publishFixtures(catalog);
+    await OrderAndCheckoutController(database: db).checkoutOrder(commandId: 'partial-workload',
+      businessDayId: open.id, shiftId: shift.id, cashierId: 2, diningType: DiningType.dineIn,
+      items: [CartItem(menuItem: await catalog.getMenuItem(menu.id))],
+      payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 100)]);
+    final service = AnalyticsService(database: db, authService: auth);
+    final query = AnalyticsQuery(startDate: DateTime(2020), endDateExclusive: DateTime(2100));
+    final snapshot = await service.load(query);
+    final section = snapshot.section(AnalyticsFamily.orders);
+    final daily = section.rows.where((r) => r.cells['kind'] == 'Daily workload');
+    final closed = daily.singleWhere((r) => r.cells['business_day_id'] == completed.id);
+    final partial = daily.singleWhere((r) => r.cells['business_day_id'] == open.id);
+    expect(closed.cells['period_complete'], isTrue);
+    expect(partial.cells['period_complete'], isFalse);
+    expect(partial.cells['period_status'], contains('Open Business Day'));
+    expect(partial.cells['confirmed_orders'], 1);
+    expect(partial.cells['count_rank'], isNull, reason: 'Open activity is not ranked against completed days');
+    expect(closed.cells['count_rank'], 1);
+    final partialPoint = section.charts.singleWhere((c) => c.id == 'workload_days').points.singleWhere((p) => p.rows.any((r) => r.sourceType == 'orders'));
+    expect(partialPoint.label, contains('Incomplete'));
+    expect(partialPoint.quality, AnalyticsQuality.estimated);
+    final local = snapshot.generatedAt.toUtc().add(const Duration(hours: 5));
+    final today = DateTime(local.year, local.month, local.day);
+    final operationalDate = DateTime(open.openedAt.year, open.openedAt.month, open.openedAt.day);
+    final active = await service.load(query.copyWith(startDate: operationalDate, endDateExclusive: operationalDate.add(const Duration(days: 1))));
+    final nextHour = (local.hour + 1) % 24;
+    final future = active.section(AnalyticsFamily.orders).rows.singleWhere((r) => r.cells['kind'] == 'Hourly workload' && r.cells['hour'] == nextHour);
+    expect(future.cells['observed_confirmed_orders'], 0);
+    expect(future.cells['confirmed_orders'], isNull);
+    expect(future.cells['period_status'], contains('Not yet observed'));
+    final calendar = await service.load(query.copyWith(timeBasis: AnalyticsTimeBasis.calendarTime,
+      startDate: today, endDateExclusive: today.add(const Duration(days: 1))));
+    final date = calendar.section(AnalyticsFamily.orders).rows.singleWhere((r) => r.cells['kind'] == 'Daily workload');
+    expect(date.cells['period_complete'], isFalse);
+    expect(date.cells['open_business_day_ids'], '${open.id}');
+    expect(date.cells['period_status'], contains('Calendar'));
+    expect(AnalyticsExportService().csv(calendar, AnalyticsFamily.orders), contains('period_complete'));
+  });
+
   test('confirmed workload retains cancellation once and excludes Holds and revisions', () async {
     final store = PosDatabase(factory: databaseFactoryFfi, customPath: inMemoryDatabasePath);
     final db = await store.initialize();
