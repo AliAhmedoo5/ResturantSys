@@ -1,3 +1,4 @@
+import 'analytics_domain_filters.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:intl/intl.dart';
@@ -24,7 +25,7 @@ const _familyLabels = <AnalyticsFamily, String>{
   AnalyticsFamily.procurement: 'Procurement',
   AnalyticsFamily.suppliers: 'Supplier Khata',
   AnalyticsFamily.cash: 'Cash & shifts',
-  AnalyticsFamily.expenses: 'Expenses',
+  AnalyticsFamily.expenses: 'Finance & flows',
   AnalyticsFamily.staff: 'Staff & payroll',
   AnalyticsFamily.profitability: 'Profitability',
   AnalyticsFamily.audit: 'Control & audit',
@@ -446,12 +447,14 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
         )),
         FilledButton(key: const ValueKey('analytics_apply_filters'), onPressed: _applyFilters, child: const Text('Apply')),
         TextButton(onPressed: () {
+          _changeQuery(_query.copyWith(domainFilters: {}, fundingStream: null));
           _cashier.clear(); _shift.clear();
           setState(() { _dining = null; _payment = null; });
           _applyFilters();
         }, child: const Text('Clear')),
       ]),
       const SizedBox(height: 12),
+      AnalyticsDomainFilters(query: _query, options: _snapshot?.filterOptions ?? const [], onChanged: _changeQuery),
     ]))],
   );
 

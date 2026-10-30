@@ -15,7 +15,13 @@ class _ReportBuilder {
   static const _intervalBasis = 'Timestamp-only events within the union of selected actual Business Day intervals; opening inclusive, closing exclusive. No five-minute extension.';
 
   AnalyticsSnapshot build() {
-    final sections = [_sales(), _orders(), _delivery(), _customers(), _menu(), _inventory(), _procurement(), _suppliers(), _cash(), _expenses(), _staff(), _profitability(), _audit()];
+    final sections = [_sales(), _orders(), _delivery(), _customers(),
+      _ReportBuilder(_domainEvidence(e, AnalyticsFamily.menu))._menu(),
+      _ReportBuilder(_domainEvidence(e, AnalyticsFamily.inventory))._inventory(),
+      _ReportBuilder(_domainEvidence(e, AnalyticsFamily.procurement))._procurement(),
+      _ReportBuilder(_domainEvidence(e, AnalyticsFamily.suppliers))._suppliers(), _cash(),
+      _ReportBuilder(_domainEvidence(e, AnalyticsFamily.expenses))._expenses(),
+      _ReportBuilder(_domainEvidence(e, AnalyticsFamily.staff))._staff(), _profitability(), _audit()];
     final overview = AnalyticsSection(family: AnalyticsFamily.overview, title: 'Overview', metrics: [
       ...sections.first.metrics.where((m) => ['recorded_value', 'orders', 'average_ticket'].contains(m.id)),
       ...sections.firstWhere((s) => s.family == AnalyticsFamily.delivery).metrics.where((m) => ['collection_due', 'all_collection_due'].contains(m.id)),
@@ -26,10 +32,12 @@ class _ReportBuilder {
       'Overview combines explicitly labeled order-cohort, selected-day and current global measures. See each formula for scope.',
       if (e.query.live && !e.get('days').any((d) => d['status'] == 'OPEN')) 'No Business Day is currently open. Historical reporting remains available.',
     ]);
-    return AnalyticsSnapshot(query: e.query, generatedAt: e.now, generatedByStaffId: e.actor, sourceSchemaVersion: e.sourceSchemaVersion, businessDayIds: {...e.get('days').map((d) => d['id'] as int), ...e.get('order_days').map((d) => d['id'] as int), ...e.get('event_days').map((d) => d['id'] as int), ...e.get('bridge_days').map((d) => d['id'] as int)}.toList(), sections: [overview, ...sections], notes: [
-      'Analytics formula version 3; PKR; Order time basis: ${e.query.timeBasis.name}; grouping: ${e.query.grouping.name}; Asia/Karachi (UTC+05:00). Start inclusive; end exclusive. Business Day weekday uses assigned opening date; calendar weekday uses actual creation date. Weeks start Monday; months use local calendar months.',
+    return AnalyticsSnapshot(filterOptions: e.filterOptions, query: e.query, generatedAt: e.now, generatedByStaffId: e.actor, sourceSchemaVersion: e.sourceSchemaVersion, businessDayIds: {...e.get('days').map((d) => d['id'] as int), ...e.get('order_days').map((d) => d['id'] as int), ...e.get('event_days').map((d) => d['id'] as int), ...e.get('bridge_days').map((d) => d['id'] as int)}.toList(), sections: [overview, ...sections], notes: [
+      'Analytics formula version 4; PKR; Order time basis: ${e.query.timeBasis.name}; grouping: ${e.query.grouping.name}; Asia/Karachi (UTC+05:00). Start inclusive; end exclusive. Business Day weekday uses assigned opening date; calendar weekday uses actual creation date. Weeks start Monday; months use local calendar months.',
       'Non-order ledgers and drawer reconciliation retain Business Day opening-date scope. Calendar Order activity does not change their scope or Order assignments.',
 
+      'Domain filters use stable IDs and current readable picker names. Whole drawers and current global balances are outside scope of unrelated domains; section notes state every exception.',
+      for (final entry in e.query.domainFilters.entries) 'Selected ${entry.key.name}: ${entry.value} (${e.filterOptions.where((o) => o.dimension == entry.key && o.id == entry.value).firstOrNull?.label ?? "Unknown / archived ID"}).',
       'Exploratory view over current committed local records. Immutable sealed Z-reports retain their original content hash and revision.',
       'Legacy REAL rupees are normalized once per source amount through PaisaEngine; integer-paisa columns are preferred. Historical floating-point precision is not restored.',
       _intervalBasis,
@@ -855,6 +863,7 @@ class _ReportBuilder {
 
   AnalyticsSection _procurement() {
     final purchases = e.get('purchases');
+    final narrowed = e.query.domainFilters.keys.any((d) => [AnalyticsDimension.ingredient, AnalyticsDimension.supplier, AnalyticsDimension.acquisition].contains(d));
     final creditPurchases = e.get('vendor_events').where((t) => t['type'] == 'PURCHASE_CREDIT').toList();
     final procLinks = e.rows['procurement_links'] ?? [];
     final allReceiptEvidence = e.rows['all_receipt_evidence'] ?? [];
@@ -1175,7 +1184,7 @@ class _ReportBuilder {
           'Recorded Mandi purchase spend',
           _sum(purchases, 'total_cost'),
           explanation: 'Mandi purchase records only; unlinked supplier credit deliveries are separate and not blindly added. $_intervalBasis',
-          previous: _sum(e.get('previous_purchases'), 'total_cost'),
+          previous: narrowed ? null : _sum(e.get('previous_purchases'), 'total_cost'),
         ),
         _metric(
           'purchase_count',
@@ -1183,7 +1192,7 @@ class _ReportBuilder {
           purchases.length,
           unit: AnalyticsUnit.count,
           explanation: 'Mandi purchase rows in selected actual day intervals.',
-          previous: e.get('previous_purchases').length,
+          previous: narrowed ? null : e.get('previous_purchases').length,
         ),
         _metric(
           'purchased_ingredients',
@@ -1908,7 +1917,7 @@ class _ReportBuilder {
     };
     final absent = (sources[family] ?? const <String>[]).where(e.absent.contains).toList();
     final safeMetrics = absent.isEmpty ? metrics : metrics.map((m) => AnalyticsMetric(id: m.id, label: m.label, unit: m.unit, explanation: '${m.explanation} Missing source tables: ${absent.join(', ')}.', quality: AnalyticsQuality.missing)).toList();
-    return AnalyticsSection(family: family, title: title, metrics: safeMetrics, rows: rows, columns: _columns({...keys, ...rows.expand((row) => row.cells.keys)}.toList()), notes: [...notes, if (absent.isNotEmpty) 'Missing source tables: ${absent.join(', ')}. Values withheld rather than asserted zero.']);
+    return AnalyticsSection(family: family, title: title, metrics: safeMetrics, rows: rows, columns: _columns({...keys, ...rows.expand((row) => row.cells.keys)}.toList()), notes: [...notes, ..._domainScopeNotes(e, family), if (absent.isNotEmpty) 'Missing source tables: ${absent.join(', ')}. Values withheld rather than asserted zero.']);
   }
   static List<AnalyticsColumn> _columns(List<String> keys) => keys.map((key) => AnalyticsColumn(key: key, label: _label(key), unit: key.endsWith('_paisa') ? AnalyticsUnit.paisa : key == 'unit_cost_rupees_per_base_unit' ? AnalyticsUnit.decimal : null)).toList();
   static String _label(String key) => key.replaceAll('_', ' ');
