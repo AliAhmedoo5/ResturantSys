@@ -182,15 +182,19 @@ void main() {
       );
 
       // Insert a synthetic legacy attempt with null notes directly in DB to simulate older history
-      final tripLegacy = await riderTripController.createRiderTrip(
-        businessDayId: businessDayId,
-        shiftId: shiftId,
-        riderStaffId: riderStaffId,
-        tripName: 'Trip Legacy',
-        orderIds: [],
-      );
+      final tripLegacyId = await db.insert('rider_trips', {
+        'trip_name': 'Trip Legacy',
+        'rider_staff_id': riderStaffId,
+        'shift_id': shiftId,
+        'business_day_id': businessDayId,
+        'status': 'SETTLED',
+        'cash_expected_paisa': 0,
+        'cash_collected_paisa': 0,
+        'dispatched_at': DateTime.now().toIso8601String(),
+        'created_at': DateTime.now().toIso8601String(),
+      });
       await db.insert('rider_trip_orders', {
-        'trip_id': tripLegacy.id,
+        'trip_id': tripLegacyId,
         'order_id': order2,
         'status': 'RETURNED',
         'assigned_at': DateTime.now().toIso8601String(),
