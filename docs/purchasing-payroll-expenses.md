@@ -43,7 +43,9 @@ unify acquisition spend and purchase counts without double-counting.
 Manager Portal → **Payroll** includes staff without POS login and retains inactive
 staff history. Configure an effective monthly salary in YYYY-MM, then manually
 accrue a period. Blank accrual amount uses the full configured salary; an explicit
-amount permits approved proration with a reason, without an assumed day divisor.
+amount permits approved proration with a reason. Approved earned-month policy
+uses the month's actual calendar-day divisor and integer floor arithmetic; see
+[earned payroll reporting](earned-payroll-reporting.md).
 Salary rates are immutable and cannot change already accrued periods.
 
 Post advances, recover them explicitly against accrued pay, and make partial
@@ -80,9 +82,10 @@ Financial entries and audits reject update/delete at the database level. Request
 keys prevent duplicate payroll/expense cash effects and reject mismatched replays.
 Legacy generic pay-outs are not guessed into expense or payroll entries.
 
-Analytics includes recorded expenses, salary accruals, employee balances, and
-current overdue invoices. Actual historical profit/COGS and period allocation
-remain outside this change, as requested.
+Analytics includes recorded expenses, posting and earned-month salary accruals,
+employee balances, and current overdue invoices. Earned salary and its later
+settlement remain distinct; all shared exports use the same snapshot. Historical
+coverage limitations and unsupported allocations are disclosed in the report.
 
 ## Validation
 

@@ -9,9 +9,15 @@ import '../inventory/stock_count_valuation.dart';
 import 'analytics_models.dart';
 
 part 'analytics_reports.dart';
+part 'order_workload.dart';
+part 'weekday_order_peaks.dart';
 part 'finance_timeline.dart';
+part 'money_flow_peaks.dart';
 part 'customer_report_details.dart';
+part 'earned_payroll.dart';
 part 'shift_cash_bridge.dart';
+part 'hold_aging.dart';
+part 'domain_filters.dart';
 typedef _Record = Map<String, Object?>;
 
 /// Consistent, authorized reads. Computation runs after releasing SQLite.
@@ -53,9 +59,17 @@ class AnalyticsService {
       e.rows[key] = await txn.rawQuery(sql, args);
     }
     await read('days', 'business_days', 'SELECT b.id,b.opened_at,b.closed_at,b.status FROM business_days b WHERE $dayScope ORDER BY b.opened_at', dayArgs);
+    if (query.timeBasis == AnalyticsTimeBasis.calendarTime) {
+      await read('peak_coverage_days', 'business_days',
+        "SELECT b.id,b.opened_at,b.closed_at,b.status FROM business_days b WHERE ${_localSql('b.opened_at')} < ? AND (b.closed_at IS NULL OR ${_localSql('b.closed_at')} > ?) ORDER BY b.opened_at,b.id",
+        [_sqlTime(analyticsWallClock(query.endDateExclusive)), _sqlTime(analyticsWallClock(query.startDate))]);
+    }
     const fields = 'o.id,o.business_day_id,o.shift_id,o.cashier_id,o.token_number,o.dining_type,o.subtotal,o.discount_amount,o.discount_id,o.tax_amount,o.grand_total,o.payment_status,o.token_status,o.cash_rounding_paisa,o.delivery_area_id,o.delivery_area_name_snapshot,o.delivery_fee_paisa,o.customer_phone,o.created_at,$outstandingCollectionPaisaSql AS collection_due_paisa';
     final orderFrom = 'FROM orders o JOIN business_days b ON b.id=o.business_day_id WHERE $orderScope';
     await read('orders', 'orders', 'SELECT $fields $orderFrom ORDER BY o.id', orderArgs);
+    // Current Holds have no Business Day/Shift assignment or retained deleted
+    // lifecycle. Never read private draft content into reporting evidence.
+    await read('active_holds', 'held_carts', 'SELECT id,cashier_id,created_at FROM held_carts${query.cashierId == null ? '' : ' WHERE cashier_id=?'} ORDER BY created_at,id', [if (query.cashierId != null) query.cashierId]);
     await read('first_purchases', 'orders', "SELECT o.id,o.customer_phone,o.created_at FROM orders o WHERE o.customer_phone IS NOT NULL AND o.customer_phone != '' AND o.payment_status NOT IN ('CANCELLED','VOIDED','REFUNDED') ORDER BY o.id");
     await read('order_days', 'business_days', 'SELECT DISTINCT b.id,b.opened_at,b.closed_at,b.status FROM business_days b JOIN orders o ON o.business_day_id=b.id WHERE $orderScope ORDER BY b.opened_at,b.id', orderArgs);
     await read('order_shifts', 'shifts', 'SELECT DISTINCT s.* FROM shifts s JOIN orders o ON o.shift_id=s.id JOIN business_days b ON b.id=o.business_day_id WHERE $orderScope ORDER BY s.id', orderArgs);
@@ -150,6 +164,9 @@ class AnalyticsService {
     }
     await read('expense_entries', 'expense_entries', 'SELECT x.* FROM expense_entries x JOIN business_days b ON b.id=x.business_day_id WHERE $dayScope', dayArgs);
     await read('payroll_entries', 'payroll_entries', 'SELECT x.* FROM payroll_entries x WHERE $interval', intervalArgs);
+    // Earned months survive late posting and later settlement. Never constrain
+    // this evidence to the posting window or substitute current salary rates.
+    await read('all_payroll_entries', 'payroll_entries', 'SELECT * FROM payroll_entries ORDER BY id');
     await read('payroll_balances', 'payroll_entries', 'SELECT employee_id AS id,SUM(payable_delta_paisa) payable_paisa,SUM(advance_delta_paisa) advance_paisa FROM payroll_entries GROUP BY employee_id');
     if (tables.contains('supplier_payment_allocations')) {
       await read('invoice_balances', 'vendor_transactions', "SELECT t.id,t.vendor_id,t.due_date,COALESCE(t.amount_paisa,CAST(ROUND(t.amount*100) AS INTEGER))-COALESCE(SUM(a.amount_paisa),0) due_paisa FROM vendor_transactions t LEFT JOIN supplier_payment_allocations a ON a.invoice_id=t.id WHERE t.type='PURCHASE_CREDIT' GROUP BY t.id");
@@ -163,6 +180,8 @@ class AnalyticsService {
       e.absent.add('supplier_opening_adjustments');
     }
     await read('identity_snapshots', 'reporting_identity_snapshots', 'SELECT * FROM reporting_identity_snapshots');
+    await read('expense_identities', 'expense_entries', 'SELECT id,category_id FROM expense_entries');
+    await read('supplier_identities', 'vendor_transactions', 'SELECT id,vendor_id FROM vendor_transactions');
     await read('expense_categories', 'expense_categories', 'SELECT id,name FROM expense_categories');
     await read('vendors', 'vendor_khata', 'SELECT id,name,opening_balance,current_balance,created_at,archived_at FROM vendor_khata ORDER BY name');
     await read('staff', 'staff', 'SELECT s.id,s.name,s.department_id,s.job_role_id,s.role,s.is_active,s.login_enabled,d.name AS department,j.name AS job_role FROM staff s LEFT JOIN departments d ON d.id=s.department_id LEFT JOIN job_roles j ON j.id=s.job_role_id');
@@ -192,6 +211,24 @@ class AnalyticsService {
       await read('previous_purchases', 'mandi_procurements', 'SELECT x.id,x.total_cost FROM mandi_procurements x WHERE ${_intervalScope(prior, 'x.created_at')}', priorIntervalArgs);
       await read('previous_waste', 'kitchen_wastage', 'SELECT x.id,x.cost_loss FROM kitchen_wastage x WHERE ${_intervalScope(prior, 'x.created_at')}', priorIntervalArgs);
     }
+    final optionSources = <AnalyticsDimension, String>{
+      AnalyticsDimension.menuItem: 'catalog', AnalyticsDimension.menuCategory: 'menu_categories',
+      AnalyticsDimension.deal: 'deals', AnalyticsDimension.discount: 'discounts',
+      AnalyticsDimension.deliveryArea: 'delivery_areas', AnalyticsDimension.rider: 'staff',
+      AnalyticsDimension.supplier: 'vendors', AnalyticsDimension.expenseCategory: 'expense_categories',
+      AnalyticsDimension.department: 'departments', AnalyticsDimension.ingredient: 'ingredients',
+    };
+    for (final pair in [('menu_categories','categories'), ('discounts','discount_presets'), ('delivery_areas','delivery_areas'), ('departments','departments')]) {
+      await read(pair.$1, pair.$2, 'SELECT id,name FROM ${pair.$2}');
+    }
+    e.filterOptions = [for (final source in optionSources.entries)
+      for (final row in e.get(source.value)) AnalyticsFilterOption(dimension: source.key,
+        id: '${row['id']}', label: _ReportBuilder._safeText(row['name'])),
+      const AnalyticsFilterOption(dimension: AnalyticsDimension.customerSegment, id: 'known', label: 'Known phone identity'),
+      const AnalyticsFilterOption(dimension: AnalyticsDimension.customerSegment, id: 'guest', label: 'Guest / unknown identity'),
+      const AnalyticsFilterOption(dimension: AnalyticsDimension.acquisition, id: 'mandi', label: 'Mandi (supplier unknown)'),
+      const AnalyticsFilterOption(dimension: AnalyticsDimension.acquisition, id: 'supplier', label: 'Supplier credit acquisitions'),
+    ];
     return e;
   }
 
@@ -206,8 +243,8 @@ class AnalyticsService {
 
   static String _dayScope(AnalyticsQuery q) => q.live ? "b.status='OPEN'" : '(${_localSql('b.opened_at', dateOnly: true)}>=? AND ${_localSql('b.opened_at', dateOnly: true)}<?)';
   static List<Object?> _dayArgs(AnalyticsQuery q) => q.live ? [] : [_sqlDate(q.startDate), _sqlDate(q.endDateExclusive)];
-  static String _orderScope(AnalyticsQuery q) => [if (q.cashierId != null) 'o.cashier_id=?', if (q.shiftId != null) 'o.shift_id=?', if (q.diningType != null) 'o.dining_type=?', if (q.paymentMethod != null) 'o.id IN(SELECT fp.order_id FROM order_payments fp WHERE fp.payment_method=?)', '1=1'].join(' AND ');
-  static List<Object?> _orderArgs(AnalyticsQuery q) => [if (q.cashierId != null) q.cashierId, if (q.shiftId != null) q.shiftId, if (q.diningType != null) q.diningType, if (q.paymentMethod != null) q.paymentMethod];
+  static String _orderScope(AnalyticsQuery q) => [..._domainOrderSql(q), if (q.cashierId != null) 'o.cashier_id=?', if (q.shiftId != null) 'o.shift_id=?', if (q.diningType != null) 'o.dining_type=?', if (q.paymentMethod != null) 'o.id IN(SELECT fp.order_id FROM order_payments fp WHERE fp.payment_method=?)', '1=1'].join(' AND ');
+  static List<Object?> _orderArgs(AnalyticsQuery q) => [..._domainOrderArgs(q), if (q.cashierId != null) q.cashierId, if (q.shiftId != null) q.shiftId, if (q.diningType != null) q.diningType, if (q.paymentMethod != null) q.paymentMethod];
   static String _intervalScope(AnalyticsQuery q, String timestamp) => 'EXISTS(SELECT 1 FROM business_days b WHERE ${_dayScope(q)} AND ${_localSql(timestamp)}>=${_localSql('b.opened_at')} AND ${_localSql(timestamp)}<COALESCE(${_localSql('b.closed_at')},?))';
 }
 
@@ -219,6 +256,7 @@ class _Evidence {
   final Map<String, List<_Record>> rows = {};
   final Set<String> absent = {};
   int? sourceSchemaVersion;
+  List<AnalyticsFilterOption> filterOptions = [];
   List<_Record> get(String name) => rows[name] ?? const [];
 }
 

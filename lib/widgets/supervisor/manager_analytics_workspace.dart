@@ -1,3 +1,6 @@
+import 'analytics_domain_filters.dart';
+import 'historical_corrections_workspace.dart';
+import '../../core/analytics/historical_corrections.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:intl/intl.dart';
@@ -24,7 +27,7 @@ const _familyLabels = <AnalyticsFamily, String>{
   AnalyticsFamily.procurement: 'Procurement',
   AnalyticsFamily.suppliers: 'Supplier Khata',
   AnalyticsFamily.cash: 'Cash & shifts',
-  AnalyticsFamily.expenses: 'Expenses',
+  AnalyticsFamily.expenses: 'Finance & flows',
   AnalyticsFamily.staff: 'Staff & payroll',
   AnalyticsFamily.profitability: 'Profitability',
   AnalyticsFamily.audit: 'Control & audit',
@@ -117,9 +120,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
   }
 
   AnalyticsQuery _withDates(DateTime start, DateTime end, {required bool live}) =>
-      AnalyticsQuery(startDate: start, endDateExclusive: end, live: live,
-        cashierId: _query.cashierId, shiftId: _query.shiftId,
-        diningType: _query.diningType, paymentMethod: _query.paymentMethod, timeBasis: _query.timeBasis, grouping: _query.grouping);
+      _query.copyWith(startDate: start, endDateExclusive: end, live: live);
 
   Future<void> _selectPreset(String? value) async {
     if (value == null) return;
@@ -142,10 +143,9 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
 
   void _applyFilters() {
     if (!_filtersKey.currentState!.validate()) return;
-    _changeQuery(AnalyticsQuery(startDate: _query.startDate,
-      endDateExclusive: _query.endDateExclusive, live: _query.live,
+    _changeQuery(_query.copyWith(
       cashierId: int.tryParse(_cashier.text.trim()), shiftId: int.tryParse(_shift.text.trim()),
-      diningType: _dining, paymentMethod: _payment, timeBasis: _query.timeBasis, grouping: _query.grouping));
+      diningType: _dining, paymentMethod: _payment));
   }
 
   void _selectReport(AnalyticsFamily family) {
@@ -318,6 +318,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
           ConstrainedBox(constraints: const BoxConstraints(maxWidth: 240),
             child: widget.exportActionsBuilder!(context, snapshot, _family)),
       ]),
+      Align(alignment: Alignment.centerLeft, child: TextButton.icon(icon: const Icon(Icons.history), label: const Text('Historical corrections'), onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => Scaffold(appBar: AppBar(title: const Text('Historical corrections')), body: HistoricalCorrectionsWorkspace(service: HistoricalCorrections(database: widget.service.database, auth: widget.service.authService))))))),
       const SizedBox(height: 18),
       Container(padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(color: StreetFoodMafiaColors.darkNavy,
@@ -413,7 +414,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
     key: const ValueKey('analytics_filters'), tilePadding: EdgeInsets.zero,
     dense: true,
     leading: const Icon(Icons.tune_rounded, size: 18),
-    title: const Text('Order cohort filters', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+    title: const Text('Report filters & Hold aging', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
     subtitle: Text(_query.cashierId == null && _query.shiftId == null && _query.diningType == null && _query.paymentMethod == null
       ? 'All cashiers, shifts, Dining Types and payment methods' : 'Filters applied • inspect each report’s scope notes',
       style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
@@ -424,6 +425,13 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
       Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
         _idInput(_cashier, 'Cashier ID', 'analytics_cashier'),
         _idInput(_shift, 'Shift ID', 'analytics_shift'),
+        SizedBox(width: 210, child: DropdownButtonFormField<int>(
+          key: const ValueKey('analytics_hold_stale_minutes'), value: _query.holdStaleMinutes, isExpanded: true,
+          decoration: const InputDecoration(labelText: 'Hold stale after (minutes)', border: OutlineInputBorder(), isDense: true),
+          items: [for (final minutes in ({15, 30, 60, 120, 240, _query.holdStaleMinutes}.toList()..sort()))
+            DropdownMenuItem(value: minutes, child: Text('$minutes minutes'))],
+          onChanged: (value) { if (value != null) _changeQuery(_query.copyWith(holdStaleMinutes: value)); },
+        )),
         SizedBox(width: 160, child: DropdownButtonFormField<String>(
           key: const ValueKey('analytics_dining'), value: _dining, isExpanded: true,
           decoration: const InputDecoration(labelText: 'Dining Type', border: OutlineInputBorder(), isDense: true),
@@ -442,12 +450,14 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
         )),
         FilledButton(key: const ValueKey('analytics_apply_filters'), onPressed: _applyFilters, child: const Text('Apply')),
         TextButton(onPressed: () {
+          _changeQuery(_query.copyWith(domainFilters: {}, fundingStream: null));
           _cashier.clear(); _shift.clear();
           setState(() { _dining = null; _payment = null; });
           _applyFilters();
         }, child: const Text('Clear')),
       ]),
       const SizedBox(height: 12),
+      AnalyticsDomainFilters(query: _query, options: _snapshot?.filterOptions ?? const [], onChanged: _changeQuery),
     ]))],
   );
 
@@ -832,4 +842,3 @@ String _sourceLabel(AnalyticsRow row) {
       ? '${row.sourceType} • ${ids.length} records'
       : '${row.sourceType} #$source';
 }
-

@@ -9,3 +9,14 @@ All ranges include the start and exclude the end. Query date/time components rep
 The immutable snapshot and CSV, XLSX and PDF metadata retain the selected basis, grouping, range boundaries and bucket definitions. Eligible sales value and eligible Order count retain their existing cancellation rules; committed workload remains a separate Order operations metric. Non-order ledgers and whole-drawer reconciliation continue to use their labeled Business Day scope. A calendar Order selection does not move a tender into another drawer or infer a collection date.
 
 Source details retain stable Business Day IDs. Calendar snapshots additionally identify the assigned Business Days of selected Orders, including days opened outside the chosen calendar interval. The overview's Business Day rows describe the operational context rather than a calendar cash reconciliation.
+
+Workload daily/hourly rows retain period completion status, contributing and open
+Business Day IDs, original closure evidence and the snapshot cutoff. Completed
+buckets alone receive peak ranks; incomplete activity is shown separately with
+an **Incomplete** chart label and its observed count/value. An old opening date
+does not close a still-open Business Day. An elapsed calendar date is distinct
+from closure of its contributing Business Days. Current calendar windows remain
+partial until their end has elapsed, even when their contributing days closed.
+Empty hours not yet observed in selected operational intervals have unavailable
+totals; separately labeled observed counts retain activity recorded so far.
+The same per-bucket status, cutoff and ranking basis are exported.

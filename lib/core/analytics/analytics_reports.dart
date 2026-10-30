@@ -15,7 +15,13 @@ class _ReportBuilder {
   static const _intervalBasis = 'Timestamp-only events within the union of selected actual Business Day intervals; opening inclusive, closing exclusive. No five-minute extension.';
 
   AnalyticsSnapshot build() {
-    final sections = [_sales(), _orders(), _delivery(), _customers(), _menu(), _inventory(), _procurement(), _suppliers(), _cash(), _expenses(), _staff(), _profitability(), _audit()];
+    final sections = [_sales(), _orders(), _delivery(), _customers(),
+      _ReportBuilder(_domainEvidence(e, AnalyticsFamily.menu))._menu(),
+      _ReportBuilder(_domainEvidence(e, AnalyticsFamily.inventory))._inventory(),
+      _ReportBuilder(_domainEvidence(e, AnalyticsFamily.procurement))._procurement(),
+      _ReportBuilder(_domainEvidence(e, AnalyticsFamily.suppliers))._suppliers(), _cash(),
+      _ReportBuilder(_domainEvidence(e, AnalyticsFamily.expenses))._expenses(),
+      _ReportBuilder(_domainEvidence(e, AnalyticsFamily.staff))._staff(), _profitability(), _audit()];
     final overview = AnalyticsSection(family: AnalyticsFamily.overview, title: 'Overview', metrics: [
       ...sections.first.metrics.where((m) => ['recorded_value', 'orders', 'average_ticket'].contains(m.id)),
       ...sections.firstWhere((s) => s.family == AnalyticsFamily.delivery).metrics.where((m) => ['collection_due', 'all_collection_due'].contains(m.id)),
@@ -26,10 +32,12 @@ class _ReportBuilder {
       'Overview combines explicitly labeled order-cohort, selected-day and current global measures. See each formula for scope.',
       if (e.query.live && !e.get('days').any((d) => d['status'] == 'OPEN')) 'No Business Day is currently open. Historical reporting remains available.',
     ]);
-    return AnalyticsSnapshot(query: e.query, generatedAt: e.now, generatedByStaffId: e.actor, sourceSchemaVersion: e.sourceSchemaVersion, businessDayIds: {...e.get('days').map((d) => d['id'] as int), ...e.get('order_days').map((d) => d['id'] as int), ...e.get('event_days').map((d) => d['id'] as int)}.toList(), sections: [overview, ...sections], notes: [
-      'Analytics formula version 2; PKR; Order time basis: ${e.query.timeBasis.name}; grouping: ${e.query.grouping.name}; Asia/Karachi (UTC+05:00). Start inclusive; end exclusive. Business Day weekday uses assigned opening date; calendar weekday uses actual creation date. Weeks start Monday; months use local calendar months.',
+    return AnalyticsSnapshot(filterOptions: e.filterOptions, query: e.query, generatedAt: e.now, generatedByStaffId: e.actor, sourceSchemaVersion: e.sourceSchemaVersion, businessDayIds: {...e.get('days').map((d) => d['id'] as int), ...e.get('order_days').map((d) => d['id'] as int), ...e.get('event_days').map((d) => d['id'] as int), ...e.get('bridge_days').map((d) => d['id'] as int)}.toList(), sections: [overview, ...sections], notes: [
+      'Analytics formula version 4; PKR; Order time basis: ${e.query.timeBasis.name}; grouping: ${e.query.grouping.name}; Asia/Karachi (UTC+05:00). Start inclusive; end exclusive. Business Day weekday uses assigned opening date; calendar weekday uses actual creation date. Weeks start Monday; months use local calendar months.',
       'Non-order ledgers and drawer reconciliation retain Business Day opening-date scope. Calendar Order activity does not change their scope or Order assignments.',
 
+      'Domain filters use stable IDs and current readable picker names. Whole drawers and current global balances are outside scope of unrelated domains; section notes state every exception.',
+      for (final entry in e.query.domainFilters.entries) 'Selected ${entry.key.name}: ${entry.value} (${e.filterOptions.where((o) => o.dimension == entry.key && o.id == entry.value).firstOrNull?.label ?? "Unknown / archived ID"}).',
       'Exploratory view over current committed local records. Immutable sealed Z-reports retain their original content hash and revision.',
       'Legacy REAL rupees are normalized once per source amount through PaisaEngine; integer-paisa columns are preferred. Historical floating-point precision is not restored.',
       _intervalBasis,
@@ -143,7 +151,7 @@ class _ReportBuilder {
       exposure += math.max(0, retained - due);
     }
     final metrics = <AnalyticsMetric>[
-      _metric('committed_orders', 'Committed orders', orders.length, unit: AnalyticsUnit.count, explanation: 'All selected committed orders, including cancellation states; no historical in-memory holds.'),
+      _metric('committed_orders', 'Committed orders', orders.length, unit: AnalyticsUnit.count, explanation: 'All selected committed Orders, including cancellation states. Persisted current Holds are unconfirmed drafts outside Orders, Tokens and revenue.'),
       _metric('revised_orders', 'Orders revised', revisedIds.length, unit: AnalyticsUnit.count, explanation: 'Distinct selected order IDs with append-only revision evidence.'),
       _metric('revision_events', 'Revision events', revisions.length, unit: AnalyticsUnit.count, explanation: 'Revision events, separate from distinct revised order count.'),
       _metric('revision_delta', 'Revision price delta', _integers(revisions, 'money_delta_paisa'), explanation: 'Sum append-only revision money deltas for selected order cohort; event dates may differ.'),
@@ -152,7 +160,8 @@ class _ReportBuilder {
       _metric('refunds', 'Explicit refunds', -_sum(refunds, 'amount_tendered'), explanation: 'Negative payment records only; cancellation does not itself disburse cash.'),
       _metric('refund_exposure', 'Retained funds above current payable', exposure, explanation: 'Per order max(0, net collected - current payable), using zero payable for cancelled/refunded orders. This is exposure, not a completed refund.'),
       _missing('prep_time', 'Preparation time', 'No persisted confirmed/preparing/ready lifecycle timestamps. Current state cannot establish historical durations.', unit: AnalyticsUnit.minutes),
-      _missing('held_history', 'Historical holds', 'Holds are in memory and cannot be reconstructed as historical records.', unit: AnalyticsUnit.count),
+      ..._HoldAging(e).metrics,
+      _missing('held_history', 'Historical Holds', 'Current Holds are persisted. Complete deleted/recalled Hold lifecycle history is unavailable; current rows cannot reconstruct a historical population.', unit: AnalyticsUnit.count),
     ];
     for (final key in ['payment_status', 'token_status']) {
       for (final group in _group(orders, key).entries) {
@@ -160,9 +169,13 @@ class _ReportBuilder {
       }
     }
     return _section(AnalyticsFamily.orders, 'Order operations', metrics, [
+
+      ..._HoldAging(e).rows,
+      ..._OrderWorkload(this).build(), ..._WeekdayOrderPeaks(this).build(),
       ...orders.map((o) => _row('orders', o, {'order_id': o['id'], 'business_day_id': o['business_day_id'], 'cashier_id': o['cashier_id'], 'shift_id': o['shift_id'], 'token': o['token_number'], 'dining_type': o['dining_type'], 'payment_status': o['payment_status'], 'token_status': o['token_status'], 'recorded_value_paisa': _money(o, 'grand_total'), 'collection_due_paisa': o['payment_status'] == 'COLLECTION_DUE' ? o['collection_due_paisa'] : 0, 'created_at': o['created_at'], 'assigned_business_date': _karachi(daysById[o['business_day_id']]?['opened_at']) == null ? null : _sqlDate(_karachi(daysById[o['business_day_id']]!['opened_at'])!)})),
       ...revisions.map((r) => _row('order_revisions', r, {'order_id': r['order_id'], 'revision': r['revision_no'], 'action': r['action'], 'reason': _safeText(r['reason']), 'cashier_id': r['cashier_id'], 'delta_paisa': r['money_delta_paisa'], 'created_at': r['created_at_utc']})),
-    ], ['order_id', 'business_day_id', 'assigned_business_date', 'token', 'cashier_id', 'shift_id', 'dining_type', 'payment_status', 'token_status', 'recorded_value_paisa', 'collection_due_paisa', 'action', 'revision', 'delta_paisa', 'reason', 'created_at'], [_orderBasis, 'Order and revision source rows are separate kinds. Their counts/amounts must not be added together.']);
+    ], ['order_id', 'business_day_id', 'assigned_business_date', 'token', 'cashier_id', 'shift_id', 'dining_type', 'payment_status', 'token_status', 'recorded_value_paisa', 'collection_due_paisa', 'action', 'revision', 'delta_paisa', 'reason', 'created_at'], [_orderBasis, _WeekdayOrderPeaks.note, 'Workload counts every confirmed Order once, including cancellations and refunds. Holds and revisions add no Orders. Daily and hourly rows are independent projections; never add them together. Rankings use count and eligible value independently; rank 1 includes every tie, shown chronologically. Hourly buckets are actual Asia/Karachi creation clock hours across the selected cohort, not a promise of trading in every hour. Observed cohort zeros differ from unavailable source/time evidence. Calendar dates without Orders or observed Business Days are not invented. Daily workload stays daily regardless of Sales grouping.', 'Order and revision source rows are separate kinds. Their counts/amounts must not be added together.', ..._HoldAging(e).notes]);
+
   }
 
   AnalyticsSection _delivery() {
@@ -850,6 +863,7 @@ class _ReportBuilder {
 
   AnalyticsSection _procurement() {
     final purchases = e.get('purchases');
+    final narrowed = e.query.domainFilters.keys.any((d) => [AnalyticsDimension.ingredient, AnalyticsDimension.supplier, AnalyticsDimension.acquisition].contains(d));
     final creditPurchases = e.get('vendor_events').where((t) => t['type'] == 'PURCHASE_CREDIT').toList();
     final procLinks = e.rows['procurement_links'] ?? [];
     final allReceiptEvidence = e.rows['all_receipt_evidence'] ?? [];
@@ -1170,7 +1184,7 @@ class _ReportBuilder {
           'Recorded Mandi purchase spend',
           _sum(purchases, 'total_cost'),
           explanation: 'Mandi purchase records only; unlinked supplier credit deliveries are separate and not blindly added. $_intervalBasis',
-          previous: _sum(e.get('previous_purchases'), 'total_cost'),
+          previous: narrowed ? null : _sum(e.get('previous_purchases'), 'total_cost'),
         ),
         _metric(
           'purchase_count',
@@ -1178,7 +1192,7 @@ class _ReportBuilder {
           purchases.length,
           unit: AnalyticsUnit.count,
           explanation: 'Mandi purchase rows in selected actual day intervals.',
-          previous: e.get('previous_purchases').length,
+          previous: narrowed ? null : e.get('previous_purchases').length,
         ),
         _metric(
           'purchased_ingredients',
@@ -1567,6 +1581,7 @@ class _ReportBuilder {
     }
     return _section(AnalyticsFamily.expenses, 'Finance timeline and expenses', metrics, [
       ...finance.rows,
+      ..._MoneyFlowPeaks(this).build(),
       ...e.get('expense_entries').map((x) => _row('expense_entries', x, {
         'kind': 'Expense ledger', 'business_day_id': x['business_day_id'],
         'category': _safeText(x['category_snapshot']), 'description': _safeText(x['description']),
@@ -1579,11 +1594,12 @@ class _ReportBuilder {
         'created_at': m['created_at']})),
     ], ['kind', ..._FinanceTimeline.keys, 'business_day_id', 'shift_id', 'category', 'description', 'payee', 'amount_paisa',
       'source', 'reversal_of', 'correction_of', 'manager_id', 'reason', 'classification', 'created_at'],
-      [...finance.notes, _globalBasis, 'Expense entries retain category snapshots. Cash movements reconcile physical funds and must not be added to expense entries. Legacy outflows are not inferred expenses.']);
+      [...finance.notes, ..._MoneyFlowPeaks.notes, _globalBasis, 'Expense entries retain category snapshots. Cash movements reconcile physical funds and must not be added to expense entries. Legacy outflows are not inferred expenses.']);
   }
 
   AnalyticsSection _staff() {
     final staff = e.get('staff');
+    final payroll = _EarnedPayroll(e);
     return _section(AnalyticsFamily.staff, 'Staff and payroll', [
       _metric('staff_count', 'Current staff', staff.length, unit: AnalyticsUnit.count, explanation: _currentBasis),
       _metric('active_staff', 'Current active staff', staff.where((s) => s['is_active'] == 1).length, unit: AnalyticsUnit.count, explanation: _currentBasis),
@@ -1592,11 +1608,13 @@ class _ReportBuilder {
       _metric('job_roles', 'Assigned job roles', staff.where((s) => s['job_role_id'] != null).map((s) => s['job_role_id']).toSet().length, unit: AnalyticsUnit.count, explanation: 'Distinct current assigned job-role IDs.'),
       e.get('payroll_balances').isEmpty ? _missing('salary_due', 'Current recorded salary due', 'No payroll has been posted; legacy staff salary liabilities are unknown.') : _metric('salary_due', 'Current recorded salary due', _integers(e.get('payroll_balances'), 'payable_paisa') - _integers(e.get('payroll_balances'), 'advance_paisa'), explanation: 'Current accrued payable less outstanding advances. No unposted salary is inferred.'),
       _metric('labor_cost', 'Posted salary accruals', e.get('payroll_entries').fold<int>(0, (sum, p) => sum + (p['kind']=='ACCRUAL' || (p['kind']=='REVERSAL' && p['source']=='NONE' && p['advance_delta_paisa']==0) ? p['payable_delta_paisa'] as int : 0)), explanation: 'Salary accruals and their reversals posted in selected day intervals. Payments and advances never count as another expense; earned-period profit allocation remains separate.'),
+      ...payroll.metrics,
       _missing('labor_productivity', 'Orders per labor hour', 'Cashier shift duration is not paid attendance or worked labor-hour evidence.', unit: AnalyticsUnit.decimal),
-    ], staff.map((s) => _row('staff', s, {'staff_id': s['id'], 'name': _safeText(s['name']), 'department': s['department'], 'job_role': s['job_role'], 'role': s['role'], 'active': s['is_active'] == 1 ? 'Active' : 'Inactive', 'login': s['login_enabled'] == 1 ? 'Enabled' : 'Disabled', 'selected_orders': orders.where((o) => o['cashier_id'] == s['id']).length, 'selected_shifts': e.get('shifts').where((sh) => sh['staff_id'] == s['id']).length})).toList(), ['staff_id', 'name', 'department', 'job_role', 'role', 'active', 'login', 'selected_orders', 'selected_shifts'], [_currentBasis, 'Order activity uses selected order filters; shift activity is whole selected Business Days. Current role/department names are not historical snapshots. PIN hashes and credentials are never projected.']);
+    ], [...payroll.rows, ...staff.map((s) => _row('staff', s, {'staff_id': s['id'], 'name': _safeText(s['name']), 'department': s['department'], 'job_role': s['job_role'], 'role': s['role'], 'active': s['is_active'] == 1 ? 'Active' : 'Inactive', 'login': s['login_enabled'] == 1 ? 'Enabled' : 'Disabled', 'selected_orders': orders.where((o) => o['cashier_id'] == s['id']).length, 'selected_shifts': e.get('shifts').where((sh) => sh['staff_id'] == s['id']).length}))], ['staff_id', 'name', 'department', 'job_role', 'role', 'active', 'login', 'selected_orders', 'selected_shifts'], [...payroll.notes, _currentBasis, 'Order activity uses selected order filters; shift activity is whole selected Business Days. Current role/department names are not historical snapshots. PIN hashes and credentials are never projected.']);
   }
 
   AnalyticsSection _profitability() {
+    final payroll = _EarnedPayroll(e);
     final coverage = e.get('cost_coverage').map((c) => c['order_id']).toSet();
     final events = e.get('cost_events');
     final covered = orders.where((o) => coverage.contains(o['id'])).length;
@@ -1663,7 +1681,13 @@ class _ReportBuilder {
       _metric('gross_profit', 'Actual gross profit', gross, explanation: policy, unavailable: !complete, unavailableQuality: AnalyticsQuality.missing),
       _metric('net_profit', 'Recorded net operating result', gross - expenses - labor - rawWaste + variance,
         explanation: 'Gross profit less posted operating expenses, salary accruals and raw waste, plus signed posted count valuation. Posting-period allocation; unposted liabilities and legacy generic drawer outflows are not inferred. Available only for whole Business Days with complete cost evidence.', unavailable: !netAvailable, unavailableQuality: AnalyticsQuality.missing),
+      ...payroll.metrics.where((m) => m.id == 'earned_salary'),
+      _metric('earned_payroll_net_profit', 'Operating result with earned payroll', gross - expenses - payroll.accrued - rawWaste + variance,
+        explanation: 'Alternative to the posting-period result: replaces posted salary accruals with recorded earned-month accruals, never adds both. Other expenses retain posting scope. Whole calendar months in Business Day scope only; no complete historical payroll is inferred.',
+        unavailable: !netAvailable || !payroll.supported || e.query.timeBasis != AnalyticsTimeBasis.businessDay,
+        unavailableQuality: AnalyticsQuality.missing),
     ], [
+      ...payroll.rows,
       ...events.map((c) {
         final rawCls = c['classification'] as String?;
         final cls = (rawCls == null || rawCls.trim().isEmpty) ? 'UNCLASSIFIED' : rawCls.trim().toUpperCase();
@@ -1683,7 +1707,7 @@ class _ReportBuilder {
         });
       }),
       ...e.get('waste').map((w) => _row('kitchen_wastage', w, {'kind': 'Waste evidence', 'ingredient_id': w['raw_ingredient_id'], 'quantity': w['quantity'], 'recorded_loss_paisa': _money(w, 'cost_loss'), 'reason': _safeText(w['reason']), 'created_at': w['created_at']})),
-    ], ['kind', 'order_id', 'dining_type', 'ingredient_id', 'classification', 'revision', 'quantity', 'unit_cost_rupees', 'cost_paisa', 'source_event_id', 'recorded_loss_paisa', 'reason', 'created_at'], [policy, 'Unknown costs remain null. Current purchase rates never rewrite earlier cost events. No invented pre-upgrade profit.', 'Food and packaging COGS are snapshotted at event time. Legacy pre-classification cost events remain explicit as UNCLASSIFIED and are never retroactively estimated. Realized COGS equals food COGS plus packaging COGS plus any legacy unclassified COGS.', 'Recorded net result uses posting periods; it does not assert that all expenses or earned salary have been entered. Order filters withhold net result because overhead cannot be allocated reliably.']);
+    ], ['kind', 'order_id', 'dining_type', 'ingredient_id', 'classification', 'revision', 'quantity', 'unit_cost_rupees', 'cost_paisa', 'source_event_id', 'recorded_loss_paisa', 'reason', 'created_at'], [...payroll.notes, policy, 'Unknown costs remain null. Current purchase rates never rewrite earlier cost events. No invented pre-upgrade profit.', 'Food and packaging COGS are snapshotted at event time. Legacy pre-classification cost events remain explicit as UNCLASSIFIED and are never retroactively estimated. Realized COGS equals food COGS plus packaging COGS plus any legacy unclassified COGS.', 'Recorded net result uses posting periods; it does not assert that all expenses or earned salary have been entered. Order filters withhold net result because overhead cannot be allocated reliably.']);
   }
 
   static const _safeConfigKeys = {
@@ -1893,7 +1917,7 @@ class _ReportBuilder {
     };
     final absent = (sources[family] ?? const <String>[]).where(e.absent.contains).toList();
     final safeMetrics = absent.isEmpty ? metrics : metrics.map((m) => AnalyticsMetric(id: m.id, label: m.label, unit: m.unit, explanation: '${m.explanation} Missing source tables: ${absent.join(', ')}.', quality: AnalyticsQuality.missing)).toList();
-    return AnalyticsSection(family: family, title: title, metrics: safeMetrics, rows: rows, columns: _columns({...keys, ...rows.expand((row) => row.cells.keys)}.toList()), notes: [...notes, if (absent.isNotEmpty) 'Missing source tables: ${absent.join(', ')}. Values withheld rather than asserted zero.']);
+    return AnalyticsSection(family: family, title: title, metrics: safeMetrics, rows: rows, columns: _columns({...keys, ...rows.expand((row) => row.cells.keys)}.toList()), notes: [...notes, ..._domainScopeNotes(e, family), if (absent.isNotEmpty) 'Missing source tables: ${absent.join(', ')}. Values withheld rather than asserted zero.']);
   }
   static List<AnalyticsColumn> _columns(List<String> keys) => keys.map((key) => AnalyticsColumn(key: key, label: _label(key), unit: key.endsWith('_paisa') ? AnalyticsUnit.paisa : key == 'unit_cost_rupees_per_base_unit' ? AnalyticsUnit.decimal : null)).toList();
   static String _label(String key) => key.replaceAll('_', ' ');
@@ -2009,4 +2033,3 @@ class _EvaluatedCommitment {
   final int recordedBy;
   final _Record record;
 }
-

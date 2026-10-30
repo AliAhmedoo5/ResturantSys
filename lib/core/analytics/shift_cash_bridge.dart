@@ -84,9 +84,10 @@ class _ShiftCashBridge {
         'kind': 'Physical cash effect', 'effect_source_id': effect['id'],
         for (final key in ['component', 'amount_paisa', 'payment_source', 'payment_method',
           'shift_id', 'business_day_id', 'order_id', 'originating_shift_id', 'originating_business_day_id',
-          'event_key', 'tender_id', 'movement_id', 'settlement_id', 'recorded_by', 'approved_by',
+          'tender_id', 'movement_id', 'settlement_id', 'recorded_by', 'approved_by',
           'actual_at', 'recorded_at', 'time_coverage']) key: effect[key],
         'category': _ReportBuilder._safeText(effect['category']),
+        'linked_event_key': effect['event_key'],
       });
       // Physical contributors have a distinct row kind from activity evidence.
       rows.add(AnalyticsRow(id: 'cash-effect-${detail.id}', sourceType: 'cash_effect', sourceId: detail.sourceId, cells: {
@@ -123,4 +124,3 @@ class _ShiftCashBridge {
     ]);
   }
 }
-
