@@ -850,12 +850,415 @@ class _ReportBuilder {
 
   AnalyticsSection _procurement() {
     final purchases = e.get('purchases');
-    return _section(AnalyticsFamily.procurement, 'Procurement', [
-      _metric('purchase_spend', 'Recorded Mandi purchase spend', _sum(purchases, 'total_cost'), explanation: 'Mandi purchase records only; unlinked supplier credit deliveries are separate and not blindly added. $_intervalBasis', previous: _sum(e.get('previous_purchases'), 'total_cost')),
-      _metric('purchase_count', 'Recorded purchases', purchases.length, unit: AnalyticsUnit.count, explanation: 'Mandi purchase rows in selected actual day intervals.', previous: e.get('previous_purchases').length),
-      _metric('purchased_ingredients', 'Distinct purchased ingredients', purchases.map((p) => p['raw_ingredient_id']).toSet().length, unit: AnalyticsUnit.count, explanation: 'Distinct ingredient IDs in selected Mandi purchase records.'),
-      _missing('supplier_performance', 'Supplier delivery performance', 'Mandi purchase records lack supplier link and promised/actual delivery performance timestamps.', unit: AnalyticsUnit.percent),
-    ], purchases.map((p) => _row('mandi_procurements', p, {'ingredient_id': p['raw_ingredient_id'], 'purchase_unit': p['traditional_unit'], 'purchase_quantity': p['quantity'], 'base_quantity': p['converted_quantity'], 'spend_paisa': _money(p, 'total_cost'), 'unit_cost_rupees_per_base_unit': p['cost_per_recipe_unit'], 'created_at': p['created_at']})).toList(), ['ingredient_id', 'purchase_unit', 'purchase_quantity', 'base_quantity', 'spend_paisa', 'unit_cost_rupees_per_base_unit', 'created_at'], [_intervalBasis, _globalBasis, 'Per-ingredient unit rates retain their recorded decimal PKR/base-unit precision (a rate, not a rounded monetary amount). Different base-unit dimensions must not be totaled. Purchase spend is not sales COGS.']);
+    final creditPurchases = e.get('vendor_events').where((t) => t['type'] == 'PURCHASE_CREDIT').toList();
+    final procLinks = e.rows['procurement_links'] ?? [];
+    final allReceiptEvidence = e.rows['all_receipt_evidence'] ?? [];
+    final intervalReceiptEvidence = e.rows['interval_receipt_evidence'] ?? [];
+
+    final ingredientNames = <int, String>{for (final i in e.get('ingredients')) i['id'] as int: _safeText(i['name'])};
+    final ingredientUnits = <int, String>{for (final i in e.get('ingredients')) i['id'] as int: i['storage_unit'] as String? ?? 'g'};
+    final vendorNames = <int, String>{for (final v in e.get('vendors')) v['id'] as int: _safeText(v['name'])};
+
+    // 1. Stable link identification between Mandi procurements and Vendor Khata credit purchases
+    final linkedMandiToTxn = <int, _Record>{};
+    final linkedTxnToMandi = <int, _Record>{};
+
+    for (final p in purchases) {
+      final pId = p['id'] as int;
+      _Record? matchedTxn;
+      final txnId = p['vendor_transaction_id'] as int?;
+      if (txnId != null) {
+        matchedTxn = creditPurchases.where((t) => t['id'] == txnId).firstOrNull;
+      }
+      matchedTxn ??= creditPurchases.where((t) => t['procurement_id'] == pId).firstOrNull;
+      if (matchedTxn == null) {
+        final link = procLinks.where((l) => l['procurement_id'] == pId).firstOrNull;
+        if (link != null) {
+          final lTxnId = link['vendor_transaction_id'] as int?;
+          matchedTxn = creditPurchases.where((t) => t['id'] == lTxnId).firstOrNull;
+        }
+      }
+      if (matchedTxn != null) {
+        linkedMandiToTxn[pId] = matchedTxn;
+        linkedTxnToMandi[matchedTxn['id'] as int] = p;
+      }
+    }
+
+    // Unified acquisition spend and count (counting linked purchases once)
+    int unifiedSpend = 0;
+    int linkedPurchasesCount = linkedMandiToTxn.length;
+    int unlinkedMandiCount = 0;
+    int unlinkedCreditCount = 0;
+
+    for (final p in purchases) {
+      final pId = p['id'] as int;
+      final spend = _money(p, 'total_cost');
+      unifiedSpend += spend;
+      if (!linkedMandiToTxn.containsKey(pId)) {
+        unlinkedMandiCount++;
+      }
+    }
+
+    for (final t in creditPurchases) {
+      final tId = t['id'] as int;
+      if (!linkedTxnToMandi.containsKey(tId)) {
+        unifiedSpend += _money(t, 'amount');
+        unlinkedCreditCount++;
+      }
+    }
+
+    final unlinkedPurchasesCount = unlinkedMandiCount + unlinkedCreditCount;
+    final unifiedPurchaseCount = linkedPurchasesCount + unlinkedPurchasesCount;
+    final selectedDaysCount = e.get('days').isNotEmpty ? e.get('days').length : 1;
+    final purchaseFrequency = unifiedPurchaseCount / selectedDaysCount;
+
+    // 2. Receipt punctuality evaluation from evidence
+    // Group all evidence by root commitment to handle amendments append-only
+    final commitmentsByRoot = <int, List<_Record>>{};
+    for (final ev in allReceiptEvidence) {
+      final rootId = ev['amendment_of'] as int? ?? ev['id'] as int;
+      var currentRoot = rootId;
+      var parent = allReceiptEvidence.where((x) => x['id'] == currentRoot).firstOrNull;
+      while (parent != null && parent['amendment_of'] != null) {
+        currentRoot = parent['amendment_of'] as int;
+        parent = allReceiptEvidence.where((x) => x['id'] == currentRoot).firstOrNull;
+      }
+      commitmentsByRoot.putIfAbsent(currentRoot, () => []).add(ev);
+    }
+
+    bool inInterval(String? ts) {
+      if (ts == null) return false;
+      final dt = _karachi(ts);
+      if (dt == null) return false;
+      for (final d in e.get('days')) {
+        final open = _karachi(d['opened_at']);
+        final close = d['closed_at'] != null ? _karachi(d['closed_at']) : e.now;
+        if (open != null && close != null && !dt.isBefore(open) && dt.isBefore(close)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    final intervalEvIds = intervalReceiptEvidence.map((ev) => ev['id'] as int).toSet();
+    final intervalRootCommitments = <int, List<_Record>>{};
+    for (final entry in commitmentsByRoot.entries) {
+      final chain = entry.value;
+      if (chain.any((ev) => intervalEvIds.contains(ev['id'] as int) ||
+          inInterval(ev['recorded_at'] as String?) ||
+          inInterval(ev['actual_at'] as String?) ||
+          inInterval(ev['promised_at'] as String?))) {
+        intervalRootCommitments[entry.key] = chain;
+      }
+    }
+
+    int validSampleCount = 0;
+    int punctualCount = 0;
+    int lateCount = 0;
+    int unknownPromisesCount = 0;
+    int unknownReceiptsCount = 0;
+
+    final evaluatedCommitments = <_EvaluatedCommitment>[];
+
+    for (final entry in intervalRootCommitments.entries) {
+      final chain = entry.value;
+      chain.sort((a, b) => (a['id'] as int).compareTo(b['id'] as int));
+      final root = chain.first;
+      final latest = chain.last;
+
+      final vendorId = root['vendor_id'] as int;
+      final ingredientId = chain.map((ev) => ev['ingredient_id'] as int?).whereType<int>().lastOrNull ?? root['ingredient_id'] as int?;
+      final procId = chain.map((ev) => ev['procurement_id'] as int?).whereType<int>().lastOrNull;
+      final txnId = chain.map((ev) => ev['vendor_transaction_id'] as int?).whereType<int>().lastOrNull;
+
+      final promisedAt = chain.map((ev) => ev['promised_at'] as String?).whereType<String>().lastOrNull;
+      final actualAt = chain.map((ev) => ev['actual_at'] as String?).whereType<String>().lastOrNull;
+
+      final amendmentCount = chain.length - 1;
+      final recordedAt = latest['recorded_at'] as String? ?? root['recorded_at'] as String? ?? '';
+      final recordedBy = latest['recorded_by'] as int? ?? root['recorded_by'] as int? ?? 1;
+
+      int? delayMins;
+      String status;
+
+      if (promisedAt != null && actualAt != null) {
+        final promDt = _karachi(promisedAt) ?? DateTime.tryParse(promisedAt);
+        final actDt = _karachi(actualAt) ?? DateTime.tryParse(actualAt);
+        if (promDt != null && actDt != null) {
+          delayMins = actDt.difference(promDt).inMinutes;
+          if (delayMins <= 0) {
+            status = 'ON_TIME';
+            punctualCount++;
+          } else {
+            status = 'LATE';
+            lateCount++;
+          }
+          validSampleCount++;
+        } else {
+          status = 'UNKNOWN';
+        }
+      } else if (promisedAt == null && actualAt != null) {
+        status = 'UNKNOWN_PROMISE';
+        unknownPromisesCount++;
+      } else if (promisedAt != null && actualAt == null) {
+        status = 'UNKNOWN_RECEIPT';
+        unknownReceiptsCount++;
+      } else {
+        status = 'UNKNOWN';
+      }
+
+      evaluatedCommitments.add(_EvaluatedCommitment(
+        id: entry.key,
+        vendorId: vendorId,
+        ingredientId: ingredientId,
+        procurementId: procId,
+        vendorTransactionId: txnId,
+        effectivePromisedAt: promisedAt,
+        effectiveActualAt: actualAt,
+        delayMinutes: delayMins,
+        status: status,
+        amendmentCount: amendmentCount,
+        recordedAt: recordedAt,
+        recordedBy: recordedBy,
+        record: latest,
+      ));
+    }
+
+    final totalCommitments = evaluatedCommitments.length;
+
+    // Contributor rows
+    final mandiRows = purchases.map((p) {
+      final pId = p['id'] as int;
+      final isLinked = linkedMandiToTxn.containsKey(pId);
+      final matchedTxn = linkedMandiToTxn[pId];
+      final vendorId = p['vendor_id'] as int? ?? matchedTxn?['vendor_id'] as int?;
+      final ingId = p['raw_ingredient_id'] as int?;
+      final convertedQty = (p['converted_quantity'] as num?)?.toDouble() ?? 0.0;
+      final spend = _money(p, 'total_cost');
+      final unitPricePaisa = convertedQty > 0 ? (spend / convertedQty).round() : null;
+
+      return _row('mandi_procurements', p, {
+        'kind': 'Mandi procurement',
+        'purchase_id': pId,
+        'vendor_transaction_id': p['vendor_transaction_id'] ?? matchedTxn?['id'],
+        'supplier_id': vendorId,
+        'supplier_name': vendorId != null ? (vendorNames[vendorId] ?? 'Supplier #$vendorId') : 'Mandi wholesale',
+        'ingredient_id': ingId,
+        'ingredient_name': ingId != null ? (ingredientNames[ingId] ?? 'Ingredient #$ingId') : 'Unknown ingredient',
+        'purchase_unit': p['traditional_unit'],
+        'purchase_quantity': p['quantity'],
+        'base_quantity': p['converted_quantity'],
+        'base_unit': ingId != null ? (ingredientUnits[ingId] ?? p['traditional_unit']) : p['traditional_unit'],
+        'spend_paisa': spend,
+        'unit_cost_rupees_per_base_unit': p['cost_per_recipe_unit'],
+        'unit_price_paisa': unitPricePaisa,
+        'is_linked': isLinked,
+        'promised_at': null,
+        'actual_at': null,
+        'delay_minutes': null,
+        'punctuality_status': null,
+        'amendment_count': null,
+        'created_at': p['created_at'],
+      });
+    }).toList();
+
+    final unlinkedCreditRows = creditPurchases.where((t) => !linkedTxnToMandi.containsKey(t['id'])).map((t) {
+      final tId = t['id'] as int;
+      final vendorId = t['vendor_id'] as int?;
+      final ingId = t['raw_ingredient_id'] as int?;
+      final qty = (t['quantity'] as num?)?.toDouble();
+      final spend = _money(t, 'amount');
+      final unitPricePaisa = (qty != null && qty > 0) ? (spend / qty).round() : null;
+
+      return _row('vendor_transactions', t, {
+        'kind': 'Supplier credit delivery',
+        'purchase_id': null,
+        'vendor_transaction_id': tId,
+        'supplier_id': vendorId,
+        'supplier_name': vendorId != null ? (vendorNames[vendorId] ?? 'Supplier #$vendorId') : 'Unknown supplier',
+        'ingredient_id': ingId,
+        'ingredient_name': ingId != null
+            ? (ingredientNames[ingId] ?? 'Ingredient #$ingId')
+            : (t['ingredient_name_snapshot'] as String? ?? 'Unlinked ingredient'),
+        'purchase_unit': t['unit_snapshot'] ?? (ingId != null ? ingredientUnits[ingId] : null),
+        'purchase_quantity': qty,
+        'base_quantity': qty,
+        'base_unit': ingId != null ? (ingredientUnits[ingId] ?? t['unit_snapshot']) : t['unit_snapshot'],
+        'spend_paisa': spend,
+        'unit_cost_rupees_per_base_unit': (qty != null && qty > 0) ? (spend / 100.0) / qty : null,
+        'unit_price_paisa': unitPricePaisa,
+        'is_linked': false,
+        'promised_at': null,
+        'actual_at': null,
+        'delay_minutes': null,
+        'punctuality_status': null,
+        'amendment_count': null,
+        'created_at': t['created_at'],
+      });
+    }).toList();
+
+    final receiptEvidenceRows = evaluatedCommitments.map((c) {
+      return _row('supplier_receipt_evidence', c.record, {
+        'kind': 'Supplier receipt evidence',
+        'purchase_id': c.procurementId,
+        'vendor_transaction_id': c.vendorTransactionId,
+        'supplier_id': c.vendorId,
+        'supplier_name': vendorNames[c.vendorId] ?? 'Supplier #${c.vendorId}',
+        'ingredient_id': c.ingredientId,
+        'ingredient_name': c.ingredientId != null ? (ingredientNames[c.ingredientId] ?? 'Ingredient #${c.ingredientId}') : null,
+        'purchase_unit': null,
+        'purchase_quantity': null,
+        'base_quantity': null,
+        'base_unit': null,
+        'spend_paisa': null,
+        'unit_cost_rupees_per_base_unit': null,
+        'unit_price_paisa': null,
+        'is_linked': null,
+        'promised_at': c.effectivePromisedAt,
+        'actual_at': c.effectiveActualAt,
+        'delay_minutes': c.delayMinutes,
+        'punctuality_status': c.status,
+        'amendment_count': c.amendmentCount,
+        'created_at': c.recordedAt,
+      });
+    }).toList();
+
+    final allRows = [...mandiRows, ...unlinkedCreditRows, ...receiptEvidenceRows];
+
+    final punctualityMetric = validSampleCount > 0
+        ? _metric(
+            'supplier_performance',
+            'Supplier delivery performance',
+            (punctualCount * 100.0 / validSampleCount).round(),
+            unit: AnalyticsUnit.percent,
+            explanation: '$punctualCount on-time receipts of $validSampleCount valid commitments with recorded promises and actual delivery times. $unknownPromisesCount unknown promises and $unknownReceiptsCount pending/unknown receipts disclosed separately; not classified as failed deliveries.',
+            sampleCount: validSampleCount,
+            populationCount: totalCommitments,
+          )
+        : _missing(
+            'supplier_performance',
+            'Supplier delivery performance',
+            'No delivery commitments with both promised and actual delivery times recorded in selected interval.',
+            unit: AnalyticsUnit.percent,
+          );
+
+    return _section(
+      AnalyticsFamily.procurement,
+      'Procurement',
+      [
+        _metric(
+          'purchase_spend',
+          'Recorded Mandi purchase spend',
+          _sum(purchases, 'total_cost'),
+          explanation: 'Mandi purchase records only; unlinked supplier credit deliveries are separate and not blindly added. $_intervalBasis',
+          previous: _sum(e.get('previous_purchases'), 'total_cost'),
+        ),
+        _metric(
+          'purchase_count',
+          'Recorded purchases',
+          purchases.length,
+          unit: AnalyticsUnit.count,
+          explanation: 'Mandi purchase rows in selected actual day intervals.',
+          previous: e.get('previous_purchases').length,
+        ),
+        _metric(
+          'purchased_ingredients',
+          'Distinct purchased ingredients',
+          purchases.map((p) => p['raw_ingredient_id']).toSet().length,
+          unit: AnalyticsUnit.count,
+          explanation: 'Distinct ingredient IDs in selected Mandi purchase records.',
+        ),
+        _metric(
+          'unified_spend',
+          'Unified acquisition spend',
+          unifiedSpend,
+          unit: AnalyticsUnit.paisa,
+          explanation: 'Total acquisition spend across wholesale Mandi procurements and credit purchases, counting linked purchases once. $_intervalBasis',
+        ),
+        _metric(
+          'unified_purchase_count',
+          'Unified purchase events',
+          unifiedPurchaseCount,
+          unit: AnalyticsUnit.count,
+          explanation: 'Total distinct acquisition events across Mandi wholesale and credit deliveries, counting linked purchases once.',
+        ),
+        _metric(
+          'linked_purchases_count',
+          'Linked supplier purchases',
+          linkedPurchasesCount,
+          unit: AnalyticsUnit.count,
+          explanation: 'Purchases with verified stable links between Mandi procurement and Vendor Khata credit entries, counted once without double counting.',
+        ),
+        _metric(
+          'unlinked_purchases_count',
+          'Unlinked purchases',
+          unlinkedPurchasesCount,
+          unit: AnalyticsUnit.count,
+          explanation: 'Purchases without cross-ledger links, disclosed honestly without guessing matches.',
+        ),
+        _metric(
+          'purchase_frequency',
+          'Purchase frequency',
+          purchaseFrequency,
+          unit: AnalyticsUnit.decimal,
+          explanation: 'Average unified acquisition events per selected Business Day ($unifiedPurchaseCount purchases / $selectedDaysCount days).',
+        ),
+        punctualityMetric,
+        _metric(
+          'valid_punctuality_sample',
+          'Valid punctuality commitments',
+          validSampleCount,
+          unit: AnalyticsUnit.count,
+          explanation: 'Commitments with both promised delivery deadline and actual receipt timestamp recorded.',
+        ),
+        _metric(
+          'punctual_receipts',
+          'Punctual receipts',
+          punctualCount,
+          unit: AnalyticsUnit.count,
+          explanation: 'Deliveries received at or before promised deadline.',
+        ),
+        _metric(
+          'late_receipts',
+          'Late deliveries',
+          lateCount,
+          unit: AnalyticsUnit.count,
+          explanation: 'Deliveries received strictly after promised deadline.',
+        ),
+        _metric(
+          'unknown_promises',
+          'Receipts with unknown promise',
+          unknownPromisesCount,
+          unit: AnalyticsUnit.count,
+          explanation: 'Deliveries received without a recorded delivery promise; disclosed honestly and not classified as failed.',
+        ),
+        _metric(
+          'unknown_receipts',
+          'Pending or unknown receipts',
+          unknownReceiptsCount,
+          unit: AnalyticsUnit.count,
+          explanation: 'Recorded delivery commitments without an actual receipt timestamp; disclosed honestly and not classified as failed.',
+        ),
+      ],
+      allRows,
+      [
+        'kind', 'purchase_id', 'vendor_transaction_id', 'supplier_id', 'supplier_name',
+        'ingredient_id', 'ingredient_name', 'purchase_unit', 'purchase_quantity',
+        'base_quantity', 'base_unit', 'spend_paisa', 'unit_cost_rupees_per_base_unit',
+        'unit_price_paisa', 'is_linked', 'promised_at', 'actual_at', 'delay_minutes',
+        'punctuality_status', 'amendment_count', 'created_at'
+      ],
+      [
+        _intervalBasis,
+        _globalBasis,
+        'Per-ingredient unit rates retain their recorded decimal PKR/base-unit precision (a rate, not a rounded monetary amount). Different base-unit dimensions must not be totaled. Purchase spend is not sales COGS.',
+        'Normalized acquisition prices reconcile to ingredient base unit and integer paisa.',
+        'Stable links between Mandi procurements and Vendor Khata credit deliveries prevent double-counting unified purchases.',
+        'Unlinked purchases and unavailable units are disclosed honestly without guessing matches.',
+        'Supplier receipt punctuality compares recorded commitments with actual receipt timestamps; unknown promises or receipts are disclosed separately and never classified as failed deliveries.',
+        'Valid-sample coverage indicates commitments with both promised and actual receipt timestamps; no unapproved SLA or scoring formulas are used.',
+      ],
+    );
   }
 
   AnalyticsSection _suppliers() {
@@ -1357,10 +1760,12 @@ class _ReportBuilder {
     ], rows, ['kind', 'business_day_id', 'order_id', 'shift_id', 'ingredient_id', 'token', 'revision', 'action', 'reason', 'staff_id', 'delta_paisa', 'hash', 'channel', 'status', 'attempts', 'stock_at_checkout', 'created_at'], ['Order revisions/tokens/rounding/checkout alerts use filtered order cohort. Report runs/outbox use whole selected Business Days. Delivery audit uses selected actual intervals.', 'Configuration and operations audits project authorized management actions with safe field allowlisting. Raw JSON, credentials, PIN hashes, passwords and sensitive customer data are strictly excluded. Authentication events (login failures, PIN resets) have no persistent event ledger and remain disclosed as missing.', 'Immutable Z-report provenance is shown; this explorer never rewrites snapshots. Sensitive payloads, errors, recipients, credentials and raw customer contact fields are excluded.']);
   }
 
-  AnalyticsMetric _metric(String id, String label, num value, {AnalyticsUnit unit = AnalyticsUnit.paisa, String? explanation, num? previous, bool unavailable = false, AnalyticsQuality unavailableQuality = AnalyticsQuality.notApplicable}) {
+  AnalyticsMetric _metric(String id, String label, num value, {AnalyticsUnit unit = AnalyticsUnit.paisa, String? explanation, num? previous, bool unavailable = false, AnalyticsQuality unavailableQuality = AnalyticsQuality.notApplicable, int? sampleCount, int? populationCount}) {
     final difference = !partial && !unavailable && previous != null ? value - previous : null;
     return AnalyticsMetric(id: id, label: label, value: unavailable ? null : value, unit: unit, explanation: explanation ?? _orderBasis,
       quality: unavailable ? unavailableQuality : AnalyticsQuality.complete,
+      sampleCount: sampleCount,
+      populationCount: populationCount,
       changeAbsolute: difference,
       changePercent: difference != null && previous != null && previous != 0 ? difference / previous.abs() * 100 : null);
   }
@@ -1478,5 +1883,36 @@ class _ReportBuilder {
       return 'Snapshot present';
     } on FormatException { return 'Unreadable snapshot'; }
   }
+}
+
+class _EvaluatedCommitment {
+  _EvaluatedCommitment({
+    required this.id,
+    required this.vendorId,
+    this.ingredientId,
+    this.procurementId,
+    this.vendorTransactionId,
+    this.effectivePromisedAt,
+    this.effectiveActualAt,
+    this.delayMinutes,
+    required this.status,
+    required this.amendmentCount,
+    required this.recordedAt,
+    required this.recordedBy,
+    required this.record,
+  });
+  final int id;
+  final int vendorId;
+  final int? ingredientId;
+  final int? procurementId;
+  final int? vendorTransactionId;
+  final String? effectivePromisedAt;
+  final String? effectiveActualAt;
+  final int? delayMinutes;
+  final String status;
+  final int amendmentCount;
+  final String recordedAt;
+  final int recordedBy;
+  final _Record record;
 }
 
