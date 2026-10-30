@@ -98,7 +98,7 @@ void main() {
       // Insert discount preset
       final discountId = await db.insert('discount_presets', {
         'name': 'Flat 100 Off',
-        'type': 'FIXED',
+        'type': 'FLAT',
         'value': 100.0, // 100 PKR = 10,000 paisa
         'is_active': 1,
         'rules_json': '{}',
@@ -107,7 +107,7 @@ void main() {
       final discount = DiscountPreset(
         id: discountId,
         name: 'Flat 100 Off',
-        type: DiscountType.fixed,
+        type: DiscountType.flat,
         value: 100.0,
         isActive: true,
         createdAt: DateTime.parse('2026-10-30T10:00:00Z'),
