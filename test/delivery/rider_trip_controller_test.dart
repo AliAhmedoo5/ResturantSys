@@ -261,6 +261,9 @@ void main() {
         cashierStaffId: cashierId, shiftId: shiftId, cashCountedPaisa: 0,
         digitalWalletReferences: {order.id: 'CONFIRMED'});
       expect(await shiftController.calculateExpectedCash(shiftId), 5000);
+      final paid = await orderController.getOrder(order.id);
+      expect(paid.payments.singleWhere((p) => p.netPaid > 0).paymentMethod.code, 'DIGITAL_WALLET');
+      expect((await shiftController.calculateTenderSales(shiftId))['DIGITAL_WALLET'], 800);
       final auth = AuthService(database: db)..session.login(Staff.fromMap((await db.query('staff', where: 'id=1')).single));
       final snapshot = await AnalyticsService(database: db, authService: auth).load(
         AnalyticsQuery(startDate: DateTime.now().subtract(const Duration(days: 1)),
