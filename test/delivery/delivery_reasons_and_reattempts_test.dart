@@ -58,12 +58,13 @@ void main() {
       authService.session.login(Staff.fromMap(manager));
 
       // Open Day and Shift
-      businessDayId = await shiftController.openBusinessDay(cashierId);
-      shiftId = await shiftController.startShift(
-        businessDayId: businessDayId,
+      final day = await shiftController.openBusinessDay(openedByStaffId: 1);
+      businessDayId = day.id;
+      final shift = await shiftController.openShift(
         staffId: cashierId,
         openingFloat: 1000.0,
       );
+      shiftId = shift.id;
 
       // Create rider staff
       riderStaffId = await db.insert('staff', {
@@ -76,7 +77,11 @@ void main() {
       });
 
       // Create category and menu item
-      final category = await catalogController.createCategory(name: 'Burgers');
+      final category = await catalogController.createCategory(
+        name: 'Burgers',
+        displayOrder: 1,
+        colorHex: '#FFC400',
+      );
       final burgerItem = await catalogController.createMenuItem(
         categoryId: category.id,
         name: 'Zinger Burger',

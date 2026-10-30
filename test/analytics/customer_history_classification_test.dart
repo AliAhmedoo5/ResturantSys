@@ -7,7 +7,6 @@ import 'package:resturant_sys/core/analytics/analytics_export_service.dart';
 import 'package:resturant_sys/core/auth/auth_service.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/database/pos_database.dart';
-import 'package:resturant_sys/core/orders/dining_type.dart';
 
 void main() {
   setUpAll(() {

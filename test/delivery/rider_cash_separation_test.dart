@@ -56,12 +56,13 @@ void main() {
       final manager = (await db.query('staff', where: 'id = 1')).single;
       authService.session.login(Staff.fromMap(manager));
 
-      businessDayId = await shiftController.openBusinessDay(cashierId);
-      shiftId = await shiftController.startShift(
-        businessDayId: businessDayId,
+      final day = await shiftController.openBusinessDay(openedByStaffId: 1);
+      businessDayId = day.id;
+      final shift = await shiftController.openShift(
         staffId: cashierId,
         openingFloat: 1000.0,
       );
+      shiftId = shift.id;
 
       riderStaffId = await db.insert('staff', {
         'name': 'Test Rider Tariq',
@@ -72,7 +73,11 @@ void main() {
         'created_at': DateTime.now().toIso8601String(),
       });
 
-      final category = await catalogController.createCategory(name: 'Pizza');
+      final category = await catalogController.createCategory(
+        name: 'Pizza',
+        displayOrder: 1,
+        colorHex: '#FFC400',
+      );
       final pizzaItem = await catalogController.createMenuItem(
         categoryId: category.id,
         name: 'Fajita Pizza',
