@@ -844,6 +844,7 @@ class _ReportBuilder {
 
   AnalyticsSection _staff() {
     final staff = e.get('staff');
+    final payroll = _EarnedPayroll(e);
     return _section(AnalyticsFamily.staff, 'Staff and payroll', [
       _metric('staff_count', 'Current staff', staff.length, unit: AnalyticsUnit.count, explanation: _currentBasis),
       _metric('active_staff', 'Current active staff', staff.where((s) => s['is_active'] == 1).length, unit: AnalyticsUnit.count, explanation: _currentBasis),
@@ -852,11 +853,13 @@ class _ReportBuilder {
       _metric('job_roles', 'Assigned job roles', staff.where((s) => s['job_role_id'] != null).map((s) => s['job_role_id']).toSet().length, unit: AnalyticsUnit.count, explanation: 'Distinct current assigned job-role IDs.'),
       e.get('payroll_balances').isEmpty ? _missing('salary_due', 'Current recorded salary due', 'No payroll has been posted; legacy staff salary liabilities are unknown.') : _metric('salary_due', 'Current recorded salary due', _integers(e.get('payroll_balances'), 'payable_paisa') - _integers(e.get('payroll_balances'), 'advance_paisa'), explanation: 'Current accrued payable less outstanding advances. No unposted salary is inferred.'),
       _metric('labor_cost', 'Posted salary accruals', e.get('payroll_entries').fold<int>(0, (sum, p) => sum + (p['kind']=='ACCRUAL' || (p['kind']=='REVERSAL' && p['source']=='NONE' && p['advance_delta_paisa']==0) ? p['payable_delta_paisa'] as int : 0)), explanation: 'Salary accruals and their reversals posted in selected day intervals. Payments and advances never count as another expense; earned-period profit allocation remains separate.'),
+      ...payroll.metrics,
       _missing('labor_productivity', 'Orders per labor hour', 'Cashier shift duration is not paid attendance or worked labor-hour evidence.', unit: AnalyticsUnit.decimal),
-    ], staff.map((s) => _row('staff', s, {'staff_id': s['id'], 'name': _safeText(s['name']), 'department': s['department'], 'job_role': s['job_role'], 'role': s['role'], 'active': s['is_active'] == 1 ? 'Active' : 'Inactive', 'login': s['login_enabled'] == 1 ? 'Enabled' : 'Disabled', 'selected_orders': orders.where((o) => o['cashier_id'] == s['id']).length, 'selected_shifts': e.get('shifts').where((sh) => sh['staff_id'] == s['id']).length})).toList(), ['staff_id', 'name', 'department', 'job_role', 'role', 'active', 'login', 'selected_orders', 'selected_shifts'], [_currentBasis, 'Order activity uses selected order filters; shift activity is whole selected Business Days. Current role/department names are not historical snapshots. PIN hashes and credentials are never projected.']);
+    ], [...payroll.rows, ...staff.map((s) => _row('staff', s, {'staff_id': s['id'], 'name': _safeText(s['name']), 'department': s['department'], 'job_role': s['job_role'], 'role': s['role'], 'active': s['is_active'] == 1 ? 'Active' : 'Inactive', 'login': s['login_enabled'] == 1 ? 'Enabled' : 'Disabled', 'selected_orders': orders.where((o) => o['cashier_id'] == s['id']).length, 'selected_shifts': e.get('shifts').where((sh) => sh['staff_id'] == s['id']).length}))], ['staff_id', 'name', 'department', 'job_role', 'role', 'active', 'login', 'selected_orders', 'selected_shifts'], [...payroll.notes, _currentBasis, 'Order activity uses selected order filters; shift activity is whole selected Business Days. Current role/department names are not historical snapshots. PIN hashes and credentials are never projected.']);
   }
 
   AnalyticsSection _profitability() {
+    final payroll = _EarnedPayroll(e);
     final coverage = e.get('cost_coverage').map((c) => c['order_id']).toSet();
     final events = e.get('cost_events');
     final covered = orders.where((o) => coverage.contains(o['id'])).length;
@@ -884,10 +887,16 @@ class _ReportBuilder {
       _metric('gross_profit', 'Actual gross profit', gross, explanation: policy, unavailable: !complete, unavailableQuality: AnalyticsQuality.missing),
       _metric('net_profit', 'Recorded net operating result', gross - expenses - labor - rawWaste + variance,
         explanation: 'Gross profit less posted operating expenses, salary accruals and raw waste, plus signed posted count valuation. Posting-period allocation; unposted liabilities and legacy generic drawer outflows are not inferred. Available only for whole Business Days with complete cost evidence.', unavailable: !netAvailable, unavailableQuality: AnalyticsQuality.missing),
+      ...payroll.metrics.where((m) => m.id == 'earned_salary'),
+      _metric('earned_payroll_net_profit', 'Operating result with earned payroll', gross - expenses - payroll.accrued - rawWaste + variance,
+        explanation: 'Alternative to the posting-period result: replaces posted salary accruals with recorded earned-month accruals, never adds both. Other expenses retain posting scope. Whole calendar months in Business Day scope only; no complete historical payroll is inferred.',
+        unavailable: !netAvailable || !payroll.supported || e.query.timeBasis != AnalyticsTimeBasis.businessDay,
+        unavailableQuality: AnalyticsQuality.missing),
     ], [
+      ...payroll.rows,
       ...events.map((c) => _row('order_cost_events', c, {'kind': c['kind'], 'order_id': c['order_id'], 'ingredient_id': c['ingredient_id'], 'revision': c['revision'], 'quantity': c['quantity'], 'unit_cost_rupees': c['unit_cost_rupees'], 'cost_paisa': c['cost_paisa'], 'source_event_id': c['source_event_id'], 'created_at': c['recorded_at']})),
       ...e.get('waste').map((w) => _row('kitchen_wastage', w, {'kind': 'Waste evidence', 'ingredient_id': w['raw_ingredient_id'], 'quantity': w['quantity'], 'recorded_loss_paisa': _money(w, 'cost_loss'), 'reason': _safeText(w['reason']), 'created_at': w['created_at']})),
-    ], ['kind', 'order_id', 'ingredient_id', 'revision', 'quantity', 'unit_cost_rupees', 'cost_paisa', 'source_event_id', 'recorded_loss_paisa', 'reason', 'created_at'], [policy, 'Unknown costs remain null. Current purchase rates never rewrite earlier cost events. No invented pre-upgrade profit.', 'Recorded net result uses posting periods; it does not assert that all expenses or earned salary have been entered. Order filters withhold net result because overhead cannot be allocated reliably.']);
+    ], ['kind', 'order_id', 'ingredient_id', 'revision', 'quantity', 'unit_cost_rupees', 'cost_paisa', 'source_event_id', 'recorded_loss_paisa', 'reason', 'created_at'], [...payroll.notes, policy, 'Unknown costs remain null. Current purchase rates never rewrite earlier cost events. No invented pre-upgrade profit.', 'Recorded net result uses posting periods; it does not assert that all expenses or earned salary have been entered. Order filters withhold net result because overhead cannot be allocated reliably.']);
   }
 
   AnalyticsSection _audit() {

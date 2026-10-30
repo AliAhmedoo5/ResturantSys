@@ -12,6 +12,7 @@ part 'analytics_reports.dart';
 part 'order_workload.dart';
 part 'finance_timeline.dart';
 part 'customer_report_details.dart';
+part 'earned_payroll.dart';
 part 'shift_cash_bridge.dart';
 typedef _Record = Map<String, Object?>;
 
@@ -129,6 +130,9 @@ class AnalyticsService {
     await read('all_vendor_transactions', 'vendor_transactions', 'SELECT id,vendor_id,shift_id,staff_id,type,amount,COALESCE(amount_paisa,CAST(ROUND(amount*100) AS INTEGER)) amount_paisa,due_date,raw_ingredient_id,quantity,created_at FROM vendor_transactions WHERE created_at <= ? ORDER BY created_at,id', [effectiveCutoffStr]);
     await read('expense_entries', 'expense_entries', 'SELECT x.* FROM expense_entries x JOIN business_days b ON b.id=x.business_day_id WHERE $dayScope', dayArgs);
     await read('payroll_entries', 'payroll_entries', 'SELECT x.* FROM payroll_entries x WHERE $interval', intervalArgs);
+    // Earned months survive late posting and later settlement. Never constrain
+    // this evidence to the posting window or substitute current salary rates.
+    await read('all_payroll_entries', 'payroll_entries', 'SELECT * FROM payroll_entries ORDER BY id');
     await read('payroll_balances', 'payroll_entries', 'SELECT employee_id AS id,SUM(payable_delta_paisa) payable_paisa,SUM(advance_delta_paisa) advance_paisa FROM payroll_entries GROUP BY employee_id');
     if (tables.contains('supplier_payment_allocations')) {
       await read('invoice_balances', 'vendor_transactions', "SELECT t.id,t.vendor_id,t.due_date,COALESCE(t.amount_paisa,CAST(ROUND(t.amount*100) AS INTEGER))-COALESCE(SUM(a.amount_paisa),0) due_paisa FROM vendor_transactions t LEFT JOIN supplier_payment_allocations a ON a.invoice_id=t.id WHERE t.type='PURCHASE_CREDIT' GROUP BY t.id");

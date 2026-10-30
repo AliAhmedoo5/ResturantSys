@@ -101,6 +101,9 @@ class _Charts {
         'Current staff directory · includes active and inactive profiles'),
       metrics('salary_accruals', 'Posted salary accruals', ['labor_cost'], AnalyticsUnit.paisa,
         'Selected-day accrual postings and reversals · salary payments are not another expense'),
+      metrics('earned_payroll', 'Earned salary and settlement',
+        ['earned_salary', 'earned_paid', 'earned_recovered', 'earned_unpaid', 'earned_advances'], AnalyticsUnit.paisa,
+        'Whole earned months · settlement as of snapshot cutoff · overlapping balances, do not add bars'),
     ],
     AnalyticsFamily.profitability => [
       metrics('profit_components', 'Revenue, cost and operating result',
