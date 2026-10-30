@@ -41,7 +41,7 @@ class _Charts {
         'Filtered committed orders · current stored status, including cancellations'),
       count('dining_mix', 'Orders by Dining Type', source('orders'), 'dining_type',
         'Filtered committed orders · revisions are not counted again'),
-      ...workload(), ...weekdayPeaks(),
+      ...workload(), ...weekdayPeaks(), ...recurringPeaks(),
     ],
     AnalyticsFamily.delivery => [
       count('attempt_outcomes', 'Delivery attempt outcomes', source('rider_trip_orders'), 'status',
@@ -167,6 +167,23 @@ class _Charts {
         quality: row.cells['orders_per_completed_day'] == null ? AnalyticsQuality.missing : AnalyticsQuality.complete,
         explanation: '${row.cells['completed_confirmed_orders']} / ${row.cells['completed_business_days']} completed days; aggregate ${row.cells['confirmed_orders']}; open ${row.cells['open_confirmed_orders']} Orders / ${row.cells['open_business_days']} days', rows: [row])])];
   }
+  List<ReportChartData> recurringPeaks() {
+    final result = <ReportChartData>[];
+    for (final kind in ['Weekly workload', 'Monthly workload', 'Calendar weekday total']) {
+      final rows = section.rows.where((r) => r.cells['kind'] == kind).toList();
+      if (rows.isEmpty) continue;
+      result.add(ReportChartData(id: kind == 'Weekly workload' ? 'workload_weeks' : kind == 'Monthly workload' ? 'workload_months' : 'calendar_weekdays',
+        title: kind == 'Calendar weekday total' ? 'Actual Calendar weekday totals' : '$kind trend',
+        scope: '${rows.first.cells['weekday_basis']} · Asia/Karachi · Monday-start weeks / local calendar months',
+        unit: AnalyticsUnit.count,
+        note: 'Selected observed evidence only. Incomplete/clipped periods are labeled; unopened Business Days are not fabricated. Exact bucket boundaries, source IDs and coverage are retained in source details and exports.',
+        points: [for (final row in rows) ReportChartPoint('${row.cells['period']}${row.cells['period_complete'] == false ? ' · Incomplete' : ''}', number(row.cells['confirmed_orders']),
+          explanation: '${row.cells['coverage']}; ${row.cells['period_start'] ?? row.cells['period']} to ${row.cells['period_end_exclusive'] ?? 'selected range'} exclusive',
+          quality: row.cells['confirmed_orders'] == null ? AnalyticsQuality.missing : row.cells['period_complete'] == false ? AnalyticsQuality.estimated : AnalyticsQuality.complete,
+          rows: [row])]));
+    }
+    return result;
+  }
   List<ReportChartData> inventory() {
     final positions = section.rows.where((r) => r.cells['kind'] == 'Current position').toList();
     final units = positions.map((r) => r.cells['unit']?.toString()).whereType<String>()
@@ -284,4 +301,5 @@ class _Charts {
     return order != 0 ? order : a.label.compareTo(b.label);
   });
 }
+
 

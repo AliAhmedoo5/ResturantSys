@@ -22,6 +22,7 @@ class ReportVisualizations extends StatelessWidget {
           Text('Visual analysis', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
         ]),
         const SizedBox(height: 12),
+        if (section.family == AnalyticsFamily.orders) _WeekdayPeakTables(section: section, onInspect: onInspect),
         LayoutBuilder(builder: (context, constraints) {
           final columns = constraints.maxWidth >= 920 ? 2 : 1;
           final width = (constraints.maxWidth - (columns - 1) * 16) / columns;
@@ -90,6 +91,7 @@ class _ChartCardState extends State<_ChartCard> {
             AnalyticsUnit.decimal => 'Quantity',
           }, style: const TextStyle(fontSize: 11, color: StreetFoodMafiaColors.cartelYellow)),
           const SizedBox(height: 12),
+        if (section.family == AnalyticsFamily.orders) _WeekdayPeakTables(section: section, onInspect: onInspect),
           if (chart.points.isEmpty) const Padding(padding: EdgeInsets.symmetric(vertical: 20),
             child: Text('No recorded values for this selection. No history is inferred.',
               style: TextStyle(color: StreetFoodMafiaColors.secondaryText, fontSize: 12, height: 1.5))),
@@ -155,5 +157,63 @@ class _ChartCardState extends State<_ChartCard> {
               if (point.quality == AnalyticsQuality.estimated)
                 const Text('Estimated', style: TextStyle(fontSize: 11, color: StreetFoodMafiaColors.burntGold)),
             ])))));
+  }
+}
+
+class _WeekdayPeakTables extends StatelessWidget {
+  const _WeekdayPeakTables({required this.section, required this.onInspect});
+  final AnalyticsSection section;
+  final void Function(String title, List<AnalyticsRow> rows) onInspect;
+  static const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+  @override
+  Widget build(BuildContext context) {
+    final comparisons = section.rows.where((r) => r.cells['kind'] == 'Weekday comparison').toList()
+      ..sort((a, b) {
+        final difference = ((b.cells['orders_per_completed_day'] as num?) ?? -1).compareTo((a.cells['orders_per_completed_day'] as num?) ?? -1);
+        return difference != 0 ? difference : (a.cells['weekday'] as int).compareTo(b.cells['weekday'] as int);
+      });
+    final hours = {for (final row in section.rows.where((r) => r.cells['kind'] == 'Weekday/hour workload'))
+      '${row.cells['weekday']}_${row.cells['hour']}': row};
+    if (comparisons.isEmpty && hours.isEmpty) return const SizedBox.shrink();
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      if (comparisons.isNotEmpty) ...[
+        const Text('Operational weekday ranking · completed Business Days', style: TextStyle(fontWeight: FontWeight.w700)),
+        const Text('Completed Orders / completed days includes opened zero-order days. Open activity is separate. Equal averages share the peak; ties use weekday order.'),
+        SingleChildScrollView(scrollDirection: Axis.horizontal, child: DataTable(columns: const [
+          DataColumn(label: Text('Weekday')), DataColumn(label: Text('Completed Orders / days')),
+          DataColumn(label: Text('Orders / completed day')), DataColumn(label: Text('Aggregate Orders')),
+          DataColumn(label: Text('Open Orders / days')),
+        ], rows: [for (final row in comparisons) DataRow(cells: [
+          DataCell(Text('${row.cells['period']}'), onTap: () => onInspect('Weekday comparison', [row])),
+          DataCell(Text('${row.cells['completed_confirmed_orders']} / ${row.cells['completed_business_days']}')),
+          DataCell(Text(row.cells['orders_per_completed_day'] == null ? 'Unavailable' : (row.cells['orders_per_completed_day'] as num).toStringAsFixed(2))),
+          DataCell(Text('${row.cells['confirmed_orders']}')),
+          DataCell(Text('${row.cells['open_confirmed_orders']} / ${row.cells['open_business_days']}')),
+        ])])),
+        const SizedBox(height: 18),
+      ],
+      if (hours.isNotEmpty) ...[
+        const Text('Weekday by hour · confirmed Orders', style: TextStyle(fontWeight: FontWeight.w700)),
+        Text('${hours.values.first.cells['weekday_basis']} · Asia/Karachi · actual clock hour'),
+        const Text('0 = observed zero; Unavailable = unobserved or missing evidence. Open Business Day cells show partial activity at cutoff. Select a cell for coverage and source IDs.'),
+        SingleChildScrollView(scrollDirection: Axis.horizontal, child: DataTable(columnSpacing: 16, columns: [
+          const DataColumn(label: Text('Weekday')),
+          for (var h = 0; h < 24; h++) DataColumn(label: Text('${h.toString().padLeft(2, '0')}:00'), numeric: true),
+        ], rows: [for (var weekday = 1; weekday <= 7; weekday++) DataRow(cells: [
+          DataCell(Text(weekdays[weekday - 1])),
+          for (var hour = 0; hour < 24; hour++) _hourCell(hours['${weekday}_$hour'], weekday, hour),
+        ])])),
+        const SizedBox(height: 18),
+      ],
+    ]);
+  }
+
+  DataCell _hourCell(AnalyticsRow? row, int weekday, int hour) {
+    final value = row?.cells['confirmed_orders'];
+    final text = value == null ? 'Unavailable' : '$value';
+    return DataCell(Tooltip(message: '${weekdays[weekday - 1]} ${hour.toString().padLeft(2, '0')}:00: $text · ${row?.cells['coverage'] ?? 'Unavailable coverage'}',
+      child: Text(text, key: ValueKey('weekday_hour_${weekday}_$hour'))),
+      onTap: row == null ? null : () => onInspect('Weekday/hour coverage', [row]));
   }
 }
