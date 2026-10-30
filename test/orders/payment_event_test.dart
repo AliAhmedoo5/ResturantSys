@@ -116,6 +116,12 @@ void main() {
     expect((await controller.getOrderPayments(order)).length, 2);
     final afterRefund = await AnalyticsService(database: db, authService: auth).load(snapshot.query);
     expect(afterRefund.section(AnalyticsFamily.cash).rows.where((r) => r.sourceType == 'payment_events').map((r) => r.cells['amount_paisa']), unorderedEquals([10000, -5000]));
+    final selected = await AnalyticsService(database: db, authService: auth).load(snapshot.query.copyWith(shiftId: receiving, diningType: 'DELIVERY', paymentMethod: 'CARD'));
+    final bridge = selected.section(AnalyticsFamily.cash);
+    expect(bridge.metrics.singleWhere((m) => m.id == 'expected_drawer').value, 5000);
+    expect(bridge.metrics.singleWhere((m) => m.id == 'cash_refunds').value, 5000);
+    expect(bridge.rows.where((r) => r.cells['kind'] == 'Physical cash effect'), hasLength(2));
+    expect(bridge.metrics.singleWhere((m) => m.id == 'variance').value, isNull);
 
     await expectLater(controller.recordCashierReceipt(orderId: order, shiftId: receiving, cashierId: 2, amountPaisa: 1000, method: PaymentMethod.cash, commandId: 'invalid-time', actualAt: now.subtract(const Duration(days: 1))), throwsStateError);
     expect((await controller.getOrderPayments(order)).length, 2, reason: 'Failed event validation must roll back its tender');

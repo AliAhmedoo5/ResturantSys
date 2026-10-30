@@ -191,7 +191,7 @@ class _Charts {
     final rows = source('shifts').where((r) => r.cells['kind'] == 'Shift reconciliation').toList();
     return [
       ReportChartData(id: 'shift_cash', title: 'Expected and counted cash by shift',
-        scope: 'All shifts in selected Business Days · missing blind counts remain unavailable',
+        scope: 'Whole selected owning/receiving Shifts · missing cash evidence or blind counts remain unavailable',
         unit: AnalyticsUnit.paisa, points: [for (final row in rows) ...[
           ReportChartPoint('Shift #${row.cells['shift_id']} · expected', number(row.cells['expected_paisa']), rows: [row]),
           ReportChartPoint('Shift #${row.cells['shift_id']} · counted', number(row.cells['counted_paisa']), rows: [row]),
