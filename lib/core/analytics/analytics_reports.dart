@@ -318,7 +318,7 @@ class _ReportBuilder {
       } else {
         classification = 'Unavailable';
       }
-      final firstOrderAtSource = firstLifetimeTime != null ? firstLifetime?['created_at'] : null;
+      final firstOrderAtSource = firstLifetime != null ? firstLifetime['created_at'] : null;
       final firstOrderAtFormatted = firstOrderAtSource != null ? analyticsTimestamp(firstOrderAtSource) : 'Unavailable';
 
       rows.add(AnalyticsRow(id: 'customer-${entry.value.first['id']}', sourceType: 'orders',
