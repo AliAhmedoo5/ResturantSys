@@ -889,19 +889,53 @@ class OrderAndCheckoutController {
     }
   }
 
-  Future<int?> _calculateBomCostPaisa(Map<int, double> ingredientQuantities, DatabaseExecutor executor) async {
+  Future<int?> _calculateBomCostPaisa(
+    Map<int, double> ingredientQuantities,
+    DatabaseExecutor executor, {
+    String? asOfTimestamp,
+  }) async {
     if (ingredientQuantities.isEmpty) return 0;
     var totalCostPaisa = 0;
+    final lookupCutoff = asOfTimestamp != null
+        ? (asOfTimestamp.length == 19 ? '$asOfTimestamp.999' : asOfTimestamp)
+        : null;
+
     for (final entry in ingredientQuantities.entries) {
       if (entry.value <= 0) continue;
-      final ingRows = await executor.query(
-        PosDatabaseConstants.tableRawIngredients,
-        columns: ['cost_per_recipe_unit'],
-        where: 'id = ?',
-        whereArgs: [entry.key],
-      );
-      if (ingRows.isEmpty) continue;
-      final rate = (ingRows.first['cost_per_recipe_unit'] as num?)?.toDouble() ?? 0.0;
+      double? unitCost;
+      try {
+        final historyRows = await executor.query(
+          'ingredient_cost_history',
+          columns: ['unit_cost_rupees'],
+          where: lookupCutoff != null
+              ? 'ingredient_id = ? AND recorded_at <= ?'
+              : 'ingredient_id = ?',
+          whereArgs: lookupCutoff != null
+              ? [entry.key, lookupCutoff]
+              : [entry.key],
+          orderBy: 'recorded_at DESC, id DESC',
+          limit: 1,
+        );
+        if (historyRows.isNotEmpty) {
+          unitCost = (historyRows.first['unit_cost_rupees'] as num?)?.toDouble();
+        }
+      } catch (_) {
+        // Table may not exist in legacy database schemas or early migrations
+      }
+
+      if (unitCost == null) {
+        final ingRows = await executor.query(
+          PosDatabaseConstants.tableRawIngredients,
+          columns: ['cost_per_recipe_unit'],
+          where: 'id = ?',
+          whereArgs: [entry.key],
+        );
+        if (ingRows.isNotEmpty) {
+          unitCost = (ingRows.first['cost_per_recipe_unit'] as num?)?.toDouble() ?? 0.0;
+        }
+      }
+
+      final rate = unitCost ?? 0.0;
       totalCostPaisa += (entry.value * rate * 100).round();
     }
     return totalCostPaisa;
@@ -952,7 +986,7 @@ class OrderAndCheckoutController {
 
       if (cartItem.menuItem != null) {
         final bom = await _lineBom(cartItem, txn);
-        final bomCost = await _calculateBomCostPaisa(bom, txn);
+        final bomCost = await _calculateBomCostPaisa(bom, txn, asOfTimestamp: formattedNow);
         final margin = bomCost == null ? null : (net - bomCost);
 
         await txn.insert(PosDatabaseConstants.tableOrderItemAllocations, {
@@ -997,7 +1031,7 @@ class OrderAndCheckoutController {
             deductions: choiceBom,
             executor: txn,
           );
-          final choiceBomCost = await _calculateBomCostPaisa(choiceBom, txn);
+          final choiceBomCost = await _calculateBomCostPaisa(choiceBom, txn, asOfTimestamp: formattedNow);
           componentBomCosts.add(choiceBomCost);
         }
 
@@ -1058,6 +1092,116 @@ class OrderAndCheckoutController {
           });
         }
       }
+    }
+  }
+
+  /// Records contra-allocations for active lines of an order (ADR-0021 Section 5).
+  ///
+  /// Prevents double-reversal across multiple revisions:
+  /// - Only lines with positive active net quantities are contra-allocated.
+  /// - If [targetOrderItemIds] is provided, only active allocations belonging to those
+  ///   specific order item IDs are reversed (used during revisions for removed items).
+  /// - If [partialReversals] is provided (orderItemId -> quantity to reverse), reverses
+  ///   only the specified quantity fraction.
+  /// - When both are null (void / cancel), all active net allocations for the order are reversed.
+  Future<void> _recordContraAllocations({
+    required int orderId,
+    required int revision,
+    required DatabaseExecutor txn,
+    required DateTime now,
+    Set<int>? targetOrderItemIds,
+    Map<int, int>? partialReversals,
+  }) async {
+    final rows = await txn.query(
+      PosDatabaseConstants.tableOrderItemAllocations,
+      where: 'order_id = ?',
+      whereArgs: [orderId],
+      orderBy: 'id ASC',
+    );
+    if (rows.isEmpty) return;
+
+    final grouped = <String, List<OrderItemAllocation>>{};
+    for (final row in rows) {
+      final alloc = OrderItemAllocation.fromMap(row);
+      final key = '${alloc.orderItemId}_${alloc.lineKind}_${alloc.menuItemId}_${alloc.dealId}_${alloc.componentMenuItemId}';
+      grouped.putIfAbsent(key, () => []).add(alloc);
+    }
+
+    for (final entry in grouped.entries) {
+      final lineRows = entry.value;
+      final baseAlloc = lineRows.firstWhere((a) => a.entryType == 'SALE', orElse: () => lineRows.first);
+      final orderItemId = baseAlloc.orderItemId;
+
+      if (targetOrderItemIds != null && (orderItemId == null || !targetOrderItemIds.contains(orderItemId))) {
+        continue;
+      }
+
+      int netQty = 0;
+      int netGross = 0;
+      int netDiscount = 0;
+      int netNetSales = 0;
+      int netTax = 0;
+      int? netBom;
+      int? netMargin;
+      bool hasBom = false;
+
+      for (final a in lineRows) {
+        netQty += a.quantity;
+        netGross += a.grossSalesPaisa;
+        netDiscount += a.allocatedDiscountPaisa;
+        netNetSales += a.netSalesPaisa;
+        netTax += a.taxCarveOutPaisa;
+        if (a.bomRecipeCostPaisa != null) {
+          hasBom = true;
+          netBom = (netBom ?? 0) + a.bomRecipeCostPaisa!;
+        }
+        if (a.contributionMarginPaisa != null) {
+          netMargin = (netMargin ?? 0) + a.contributionMarginPaisa!;
+        }
+      }
+
+      if (netQty <= 0 && netGross <= 0) {
+        continue;
+      }
+
+      int qtyToReverse = netQty;
+      if (partialReversals != null && orderItemId != null && partialReversals.containsKey(orderItemId)) {
+        final req = partialReversals[orderItemId]!;
+        if (req < netQty) {
+          qtyToReverse = req;
+        }
+      }
+
+      final factor = (netQty == 0) ? 1.0 : (qtyToReverse / netQty);
+      final contraQty = -qtyToReverse;
+      final contraGross = -(netGross * factor).round();
+      final contraDiscount = -(netDiscount * factor).round();
+      final contraNet = contraGross - contraDiscount;
+      final contraTax = -(netTax * factor).round();
+      final contraBom = hasBom && netBom != null ? -(netBom * factor).round() : null;
+      final contraMargin = contraBom != null ? (contraNet - contraBom) : (netMargin != null ? -(netMargin * factor).round() : null);
+
+      final contra = OrderItemAllocation(
+        orderId: orderId,
+        orderItemId: orderItemId,
+        revision: revision,
+        lineKind: baseAlloc.lineKind,
+        entryType: 'CONTRA',
+        menuItemId: baseAlloc.menuItemId,
+        dealId: baseAlloc.dealId,
+        componentMenuItemId: baseAlloc.componentMenuItemId,
+        itemNameSnapshot: baseAlloc.itemNameSnapshot,
+        quantity: contraQty,
+        grossSalesPaisa: contraGross,
+        allocatedDiscountPaisa: contraDiscount,
+        netSalesPaisa: contraNet,
+        taxCarveOutPaisa: contraTax,
+        bomRecipeCostPaisa: contraBom,
+        contributionMarginPaisa: contraMargin,
+        recordedAt: now,
+      );
+
+      await txn.insert(PosDatabaseConstants.tableOrderItemAllocations, contra.toMap());
     }
   }
 
@@ -1235,21 +1379,12 @@ class OrderAndCheckoutController {
       );
 
       // 2b. Insert immutable contra-allocations (ADR-0021 Section 5)
-      final existingAllocs = await txn.query(
-        PosDatabaseConstants.tableOrderItemAllocations,
-        where: 'order_id = ? AND entry_type = "SALE"',
-        whereArgs: [orderId],
+      await _recordContraAllocations(
+        orderId: orderId,
+        revision: order.currentRevision + 1,
+        txn: txn,
+        now: now,
       );
-      for (final row in existingAllocs) {
-        final original = OrderItemAllocation.fromMap(row);
-        final contra = OrderAllocationEngine.createContraAllocation(
-          original: original,
-          revision: order.currentRevision + 1,
-          quantityToReverse: original.quantity,
-          recordedAt: now,
-        );
-        await txn.insert(PosDatabaseConstants.tableOrderItemAllocations, contra.toMap());
-      }
 
       // 3. Reverses BOM ingredient consumption
       final reversals = <int, double>{};
@@ -1654,21 +1789,12 @@ class OrderAndCheckoutController {
       );
 
       // Contra-allocations for cancelled order (ADR-0021 Section 5)
-      final existingAllocs = await txn.query(
-        PosDatabaseConstants.tableOrderItemAllocations,
-        where: 'order_id = ? AND entry_type = "SALE"',
-        whereArgs: [orderId],
+      await _recordContraAllocations(
+        orderId: orderId,
+        revision: nextRevisionNo,
+        txn: txn,
+        now: now,
       );
-      for (final row in existingAllocs) {
-        final original = OrderItemAllocation.fromMap(row);
-        final contra = OrderAllocationEngine.createContraAllocation(
-          original: original,
-          revision: nextRevisionNo,
-          quantityToReverse: original.quantity,
-          recordedAt: now,
-        );
-        await txn.insert(PosDatabaseConstants.tableOrderItemAllocations, contra.toMap());
-      }
 
       final activeTripRows = await txn.rawQuery('''
         SELECT rt.id, rt.trip_name, rt.cash_expected_paisa, rto.status as stop_status
@@ -1880,6 +2006,8 @@ class OrderAndCheckoutController {
 
       final linesToInsert = <Map<String, Object?>>[];
       final matchedItemIndices = <int>{};
+      final removedOrderItemIds = <int>{};
+      final partialReversals = <int, int>{};
 
       for (final oldItem in oldOrderItems) {
         final matchIdx = newItems.indexWhere((ni) =>
@@ -1888,6 +2016,7 @@ class OrderAndCheckoutController {
              (oldItem.dealId != null && ni.deal?.id == oldItem.dealId)));
 
         if (matchIdx == -1) {
+          removedOrderItemIds.add(oldItem.id);
           final itemBom = oldItem.decodedBom ?? await _computeBOMForOrderItem(oldItem, txn);
           final disposition = isUnstartedPrep ? 'RESTOCK_RAW' : 'WASTED_COOKED';
           linesToInsert.add({
@@ -1909,6 +2038,11 @@ class OrderAndCheckoutController {
             final oldQty = oldItem.quantity;
             final newQty = matchedNew.quantity;
             final qtyDelta = newQty - oldQty;
+            if (qtyDelta < 0) {
+              final reduction = oldQty - newQty;
+              partialReversals[oldItem.id] = reduction;
+              removedOrderItemIds.add(oldItem.id);
+            }
             final priceDelta = PaisaEngine.rupeesToPaisa(matchedNew.totalPrice) - PaisaEngine.rupeesToPaisa(oldItem.totalPrice);
             final itemBom = await _lineBom(matchedNew, txn);
             final disposition = qtyDelta < 0
@@ -2133,33 +2267,67 @@ class OrderAndCheckoutController {
         },
       );
 
-      // Contra-allocations for revised order (ADR-0021 Section 5)
-      final existingAllocs = await txn.query(
-        PosDatabaseConstants.tableOrderItemAllocations,
-        where: 'order_id = ? AND entry_type = "SALE"',
-        whereArgs: [orderId],
-      );
-      for (final row in existingAllocs) {
-        final original = OrderItemAllocation.fromMap(row);
-        final contra = OrderAllocationEngine.createContraAllocation(
-          original: original,
-          revision: nextRevisionNo,
-          quantityToReverse: original.quantity,
-          recordedAt: now,
-        );
-        await txn.insert(PosDatabaseConstants.tableOrderItemAllocations, contra.toMap());
-      }
-
-      if (action != 'CANCEL' && newItems.isNotEmpty) {
-        await _recordOrderAllocations(
+      // Contra-allocations for removed/reduced lines only (ADR-0021 Section 5)
+      if (removedOrderItemIds.isNotEmpty) {
+        await _recordContraAllocations(
           orderId: orderId,
           revision: nextRevisionNo,
-          items: newItems,
-          orderItems: createdOrderItems,
-          totals: totals,
           txn: txn,
           now: now,
+          targetOrderItemIds: removedOrderItemIds,
+          partialReversals: partialReversals.isNotEmpty ? partialReversals : null,
         );
+      }
+
+      // Independent allocations for newly added items or quantity increases (ADR-0021 Section 5)
+      if (action != 'CANCEL') {
+        final newlyAddedCartItems = <CartItem>[];
+        final newlyAddedOrderItems = <OrderItem>[];
+
+        for (var i = 0; i < newItems.length; i++) {
+          final ni = newItems[i];
+          final oi = createdOrderItems[i];
+          if (!matchedItemIndices.contains(i)) {
+            newlyAddedCartItems.add(ni);
+            newlyAddedOrderItems.add(oi);
+          } else {
+            final oldItem = oldOrderItems.firstWhere((old) =>
+                (old.menuItemId != null && ni.menuItem?.id == old.menuItemId) ||
+                (old.dealId != null && ni.deal?.id == old.dealId));
+            if (ni.quantity > oldItem.quantity) {
+              final addedQty = ni.quantity - oldItem.quantity;
+              final addedCartItem = CartItem(
+                menuItem: ni.menuItem,
+                deal: ni.deal,
+                quantity: addedQty,
+                unitPrice: ni.unitPrice,
+                selectedModifiers: ni.selectedModifiers,
+                selectedDealChoices: ni.selectedDealChoices,
+              );
+              newlyAddedCartItems.add(addedCartItem);
+              newlyAddedOrderItems.add(oi);
+            }
+          }
+        }
+
+        if (newlyAddedCartItems.isNotEmpty) {
+          final addedTotals = calculateCartTotals(
+            items: newlyAddedCartItems,
+            discounts: const [],
+            diningType: order.diningType,
+            cashierId: cashierId,
+            now: now,
+          );
+          await _recordOrderAllocations(
+            orderId: orderId,
+            revision: nextRevisionNo,
+            items: newlyAddedCartItems,
+            orderItems: newlyAddedOrderItems,
+            totals: addedTotals,
+            txn: txn,
+            now: now,
+          );
+        }
       }
 
       final activeTripRows = await txn.rawQuery('''
