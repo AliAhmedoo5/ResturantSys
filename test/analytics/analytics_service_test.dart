@@ -30,7 +30,8 @@ void main() {
     expect(metric(AnalyticsFamily.sales,'recorded_value'),65000);
     expect(metric(AnalyticsFamily.sales,'collected_tender'),40000);
     expect(metric(AnalyticsFamily.delivery,'collection_due'),25000);
-    expect(metric(AnalyticsFamily.cash,'expected_drawer'),50000);
+    expect(metric(AnalyticsFamily.cash,'expected_drawer'),isNull);
+    expect(snapshot.section(AnalyticsFamily.cash).metrics.firstWhere((m) => m.id == 'cash_evidence_gaps').value, 2);
     expect(metric(AnalyticsFamily.cash,'variance'),isNull);
     expect(snapshot.businessDayIds,[day]);
   });
