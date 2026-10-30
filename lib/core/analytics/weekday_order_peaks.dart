@@ -3,6 +3,7 @@ part of 'analytics_service.dart';
 class _WeekdayOrderPeaks {
   _WeekdayOrderPeaks(this.builder);
   final _ReportBuilder builder;
+  static const note = 'Operational weekday average = confirmed Orders on selected completed Business Days / those distinct completed Business Days, including opened zero-order days. Open days are separate; zero denominator is unavailable. Order-only filters restrict the numerator, not the opened-day denominator. Calendar weekdays use actual Karachi creation date; operational weekdays use assigned Business Day date. Weekday/hour cells use actual Karachi clock hours; weeks start Monday and months use local calendar boundaries. Projections overlap and must not be added. Missing evidence remains unavailable; exports retain these same rows and exact bucket boundaries.';
   static const names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
   List<AnalyticsRow> build() {
@@ -44,7 +45,15 @@ class _WeekdayOrderPeaks {
           'denominator_policy': 'All selected opened Business Days; order-only filters restrict numerator, not denominator. Open days separate.',
         }));
     }
-    return [...rows, ...recurring(days, operational, cutoff, completed)];
+    final ranked = [for (final row in rows) AnalyticsRow(id: row.id, sourceType: row.sourceType, sourceId: row.sourceId,
+      cells: {...row.cells,
+        'weekday_rank': row.cells['orders_per_completed_day'] == null ? null : 1 + rows.where((other) =>
+          other.cells['orders_per_completed_day'] is num && (other.cells['orders_per_completed_day'] as num) > (row.cells['orders_per_completed_day'] as num)).length,
+        'weekday_peak': row.cells['orders_per_completed_day'] == null ? null : !rows.any((other) =>
+          other.cells['orders_per_completed_day'] is num && (other.cells['orders_per_completed_day'] as num) > (row.cells['orders_per_completed_day'] as num)),
+        'ranking_basis': 'Completed-day average only; every tie included, chronological weekday order',
+      })];
+    return [...ranked, ...recurring(days, operational, cutoff, completed)];
   }
 
   List<AnalyticsRow> recurring(List<_Record> days, bool operational, DateTime cutoff,
@@ -190,4 +199,5 @@ class _WeekdayOrderPeaks {
     }
     return result;
   }}
+
 

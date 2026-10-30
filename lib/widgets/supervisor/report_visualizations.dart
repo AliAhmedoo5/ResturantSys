@@ -217,4 +217,3 @@ class _WeekdayPeakTables extends StatelessWidget {
       onTap: row == null ? null : () => onInspect('Weekday/hour coverage', [row]));
   }
 }
-
