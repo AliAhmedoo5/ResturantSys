@@ -37,10 +37,9 @@ _Evidence _domainEvidence(_Evidence source, AnalyticsFamily family) {
   final filters = source.query.domainFilters;
   void keep(String key, bool Function(_Record) test) => e.rows[key] = e.get(key).where(test).toList();
   final category = filters[AnalyticsDimension.expenseCategory];
-  if (family == AnalyticsFamily.expenses && category != null) {
-    keep('expense_entries', (r) => '${r['category_id']}' == category);
-    final ids = e.get('expense_entries').map((r) => r['id']).toSet();
-    keep('payment_events', (r) => r['source_table'] == 'expense_entries' && ids.contains(r['source_id']));
+  if (family == AnalyticsFamily.expenses) {
+    if (category != null) keep('expense_entries', (r) => '${r['category_id']}' == category);
+    keep('payment_events', (r) => _matchesFinanceDomain(e, r));
   }
   if (family == AnalyticsFamily.staff && filters[AnalyticsDimension.department] != null) {
     keep('staff', (r) => '${r['department_id']}' == filters[AnalyticsDimension.department]);
@@ -63,6 +62,7 @@ _Evidence _domainEvidence(_Evidence source, AnalyticsFamily family) {
     }
   }
   if (family == AnalyticsFamily.procurement) {
+    e.rows['domain_unlinked_mandi'] = source.get('purchases');
     if (supplier != null) {
       keep('vendor_events', (r) => '${r['vendor_id']}' == supplier);
       // Mandi has no retained supplier link. Never infer it from today's SKU map.
@@ -91,11 +91,23 @@ List<String> _domainScopeNotes(_Evidence e, AnalyticsFamily family) => [
   'Domain scope: Menu Item/category/Deal select matching Order cohorts (full Order values); Menu reports select matching sold lines. Delivery Area, rider (any retained attempt) and customer identity segment select Orders. Multiple dimensions intersect. No Deal component membership is inferred from current recipes.',
   'Menu category uses the current Menu Item classification, not a historical category snapshot. Deleted or unlinked catalog IDs cannot match that category; their old category is unavailable. Stable Menu Item/Deal/discount/Delivery Area IDs use retained source relationships. Current picker names are context; historical source names remain in rows where retained.',
   'Customer segments: known = usable normalized phone (7–15 digits); guest = no usable phone. These are identity coverage segments, not lifetime loyalty. First-time/returning classifications remain limited to available installation history and are not offered as lifetime filters.',
-  if (family == AnalyticsFamily.expenses) 'Expense category filters expense ledger and its linked finance events. Whole-drawer outflows and other money-flow domains are outside scope of category selection; legacy rows without category IDs cannot match.',
+  if (family == AnalyticsFamily.expenses) 'Expense category filters expense ledger and its linked finance events by stable source IDs, independently of posting date. Supplier filters linked supplier finance events; unrelated expense postings remain outside supplier scope. Whole-drawer outflows and other money-flow domains are outside scope of category selection; legacy rows without category IDs cannot match.',
   if (family == AnalyticsFamily.staff) 'Department filters the current staff directory only. Payroll, current liabilities and historical department allocation are outside scope: no effective historical department evidence exists. Changing department does not rewrite earned payroll.',
   if (family == AnalyticsFamily.inventory) 'Raw Ingredient selects the same IDs for stock bridges, rows and totals. Stock category is unavailable: no category evidence is stored. Supplier/acquisition, order and expense dimensions are outside scope of inventory balances.',
-  if (family == AnalyticsFamily.procurement) 'Raw Ingredient, supplier and acquisition evidence select retained acquisition identities. Supplier selection excludes unlinked Mandi rows (supplier unknown). Mandi spend and supplier credit acquisitions are separate evidence views; never add them without retained deduplication links. Stock categories and supplier punctuality are unavailable.',
+  if (family == AnalyticsFamily.procurement) 'Raw Ingredient, supplier and acquisition evidence select retained acquisition identities. Unlinked Mandi evidence before supplier/acquisition narrowing: ${e.get('domain_unlinked_mandi').length} rows, ${_sum(e.get('domain_unlinked_mandi'), 'total_cost')} paisa. Supplier selection excludes unlinked Mandi rows (supplier unknown). Mandi spend and supplier credit acquisitions are separate evidence views; never add them without retained deduplication links. Stock categories and supplier punctuality are unavailable.',
   if (family == AnalyticsFamily.suppliers) 'Supplier selects Vendor Khata history and current position for that stable supplier ID. Ingredient/acquisition filters are outside scope of payable balances: a supplier payment cannot be allocated to ingredients without evidence.',
   if (family == AnalyticsFamily.cash || family == AnalyticsFamily.delivery) 'Whole-Shift drawer reconciliation, whole trips and all-outstanding current balances are outside scope of Order/domain filters; their existing owning/receiving scope remains explicit.',
   if (family == AnalyticsFamily.profitability) 'Non-order domain filters are outside scope of profitability. No ingredient/supplier/category/department overhead allocation is inferred.',
 ];
+
+/// Full-history source identity maps preserve independently selected actual-time
+/// events, including a posting outside the selected Business Day opening dates.
+bool _matchesFinanceDomain(_Evidence e, _Record event) {
+  final category = e.query.domainFilters[AnalyticsDimension.expenseCategory];
+  if (category != null && (event['source_table'] != 'expense_entries' ||
+      !e.get('expense_identities').any((r) => r['id'] == event['source_id'] && '${r['category_id']}' == category))) return false;
+  final supplier = e.query.domainFilters[AnalyticsDimension.supplier];
+  if (supplier != null && (event['source_table'] != 'vendor_transactions' ||
+      !e.get('supplier_identities').any((r) => r['id'] == event['source_id'] && '${r['vendor_id']}' == supplier))) return false;
+  return true;
+}

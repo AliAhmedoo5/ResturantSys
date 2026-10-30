@@ -3,6 +3,11 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:resturant_sys/core/analytics/analytics_models.dart';
 import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
 import 'package:resturant_sys/core/catalog/storage_unit.dart';
+import 'package:resturant_sys/core/orders/cart_item.dart';
+import 'package:resturant_sys/core/orders/dining_type.dart';
+import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
+import 'package:resturant_sys/core/orders/payment_method.dart';
+import '../orders/order_and_checkout_controller_test.dart' show publishFixtures;
 import 'package:resturant_sys/core/khata/vendor_khata_controller.dart';
 import 'package:resturant_sys/core/procurement/procurement_and_wastage_controller.dart';
 import 'package:resturant_sys/core/procurement/desi_unit.dart';
@@ -83,7 +88,7 @@ void main() {
     expect(report.metrics.singleWhere((m) => m.id == 'purchase_spend').value, 0);
     expect(report.rows.where((r) => r.cells['kind'] == 'Supplier credit acquisition').single.sourceId, '${selected.id}');
     expect(report.notes.join(' '), contains('supplier unknown'));
-    expect(snapshot.section(AnalyticsFamily.suppliers).rows.where((r) => r.sourceType == 'vendor_transactions').every((r) => r.cells['vendor_id'] == supplier.id), isTrue);
+    expect(snapshot.section(AnalyticsFamily.suppliers).rows.where((r) => r.sourceType == 'vendor_transactions').every((r) => r.cells['supplier_id'] == supplier.id), isTrue);
     expect(AnalyticsExportService().csv(snapshot, AnalyticsFamily.procurement), contains('Selected supplier'));
   });
 
@@ -105,6 +110,47 @@ void main() {
       timeBasis: AnalyticsTimeBasis.calendarTime, domainFilters: {AnalyticsDimension.expenseCategory: '$category'}));
     expect(snapshot.section(AnalyticsFamily.expenses).metrics.singleWhere((m) => m.id == 'finance_bank_outflow').value, 9000);
     expect(snapshot.section(AnalyticsFamily.expenses).rows.where((r) => r.cells['kind'] == 'Finance payment'), hasLength(1));
+  });
+
+  test('Menu Item predicates reconcile full Order cohorts and matching Menu lines', () async {
+    final store = PosDatabase(factory: databaseFactoryFfi, customPath: inMemoryDatabasePath);
+    final db = await store.initialize();
+    addTearDown(store.close);
+    final people = await db.query('staff');
+    final manager = people.firstWhere((r) => r['role'] != 'CASHIER');
+    final cashierId = people.firstWhere((r) => r['role'] == 'CASHIER')['id'] as int;
+    final shifts = ShiftAndCashController(database: db);
+    final day = await shifts.openBusinessDay(openedByStaffId: manager['id'] as int);
+    final shift = await shifts.openShift(staffId: cashierId, openingFloat: 0);
+    final catalog = CatalogAndRecipeController(database: db);
+    final category = await catalog.createCategory(name: 'Synthetic meals', displayOrder: 1, colorHex: '#FFFFFF');
+    final tea = await catalog.createMenuItem(categoryId: category.id, name: 'Selected tea', basePrice: 100);
+    final meal = await catalog.createMenuItem(categoryId: category.id, name: 'Other meal', basePrice: 200);
+    await publishFixtures(catalog);
+    final orders = OrderAndCheckoutController(database: db);
+    final selected = await orders.checkoutOrder(businessDayId: day.id, shiftId: shift.id,
+      cashierId: cashierId, diningType: DiningType.takeaway,
+      items: [CartItem(menuItem: await catalog.getMenuItem(tea.id)), CartItem(menuItem: await catalog.getMenuItem(meal.id))],
+      payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 300)]);
+    await orders.checkoutOrder(businessDayId: day.id, shiftId: shift.id,
+      cashierId: cashierId, diningType: DiningType.takeaway,
+      items: [CartItem(menuItem: await catalog.getMenuItem(meal.id))],
+      payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 200)]);
+    final auth = AuthService(database: db)..session.login(Staff.fromMap(manager));
+    final service = AnalyticsService(database: db, authService: auth);
+    final query = AnalyticsQuery(startDate: DateTime(2020), endDateExclusive: DateTime(2100), live: true,
+      domainFilters: {AnalyticsDimension.menuItem: '${tea.id}', AnalyticsDimension.menuCategory: '${category.id}', AnalyticsDimension.customerSegment: 'guest'});
+    final snapshot = await service.load(query);
+    final sales = snapshot.section(AnalyticsFamily.sales);
+    expect(sales.metrics.singleWhere((m) => m.id == 'recorded_value').value, 30000);
+    expect(sales.rows.where((r) => r.cells['kind'] == 'Daily total').single.cells['orders'], 1);
+    expect(snapshot.section(AnalyticsFamily.orders).rows.where((r) => r.sourceType == 'orders').single.sourceId, '${selected.order.id}');
+    final menu = snapshot.section(AnalyticsFamily.menu);
+    expect(menu.metrics.singleWhere((m) => m.id == 'line_value').value, 10000);
+    expect(menu.charts.singleWhere((c) => c.id == 'menu_value').points.single.value, 10000);
+    expect(snapshot.section(AnalyticsFamily.cash).metrics.singleWhere((m) => m.id == 'expected_drawer').value, 50000);
+    expect(await service.loadCustomerDetails(query.copyWith(domainFilters: {AnalyticsDimension.menuItem: '${tea.id}', AnalyticsDimension.customerSegment: 'known'})), isEmpty);
+    expect(AnalyticsExportService().csv(snapshot, AnalyticsFamily.menu), contains('Selected tea'));
   });
 
 }

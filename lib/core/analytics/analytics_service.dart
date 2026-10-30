@@ -152,6 +152,8 @@ class AnalyticsService {
       e.absent.add('supplier_opening_adjustments');
     }
     await read('identity_snapshots', 'reporting_identity_snapshots', 'SELECT * FROM reporting_identity_snapshots');
+    await read('expense_identities', 'expense_entries', 'SELECT id,category_id FROM expense_entries');
+    await read('supplier_identities', 'vendor_transactions', 'SELECT id,vendor_id FROM vendor_transactions');
     await read('expense_categories', 'expense_categories', 'SELECT id,name FROM expense_categories');
     await read('vendors', 'vendor_khata', 'SELECT id,name,opening_balance,current_balance,created_at,archived_at FROM vendor_khata ORDER BY name');
     await read('staff', 'staff', 'SELECT s.id,s.name,s.department_id,s.job_role_id,s.role,s.is_active,s.login_enabled,d.name AS department,j.name AS job_role FROM staff s LEFT JOIN departments d ON d.id=s.department_id LEFT JOIN job_roles j ON j.id=s.job_role_id');
