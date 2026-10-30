@@ -338,6 +338,9 @@ class VendorKhataController {
     DateTime? createdAt,
     DateTime? dueDate,
     String? requestKey,
+    int? procurementId,
+    DateTime? promisedAt,
+    DateTime? actualAt,
   }) async {
     if (!amount.isFinite || amount <= 0 || PaisaEngine.rupeesToPaisa(amount) <= 0) {
       throw ArgumentError('Credit delivery amount must be greater than zero.');
@@ -427,8 +430,36 @@ class VendorKhataController {
           'raw_ingredient_id': rawIngredientId,
           'quantity': quantity,
           'created_at': formattedDate,
+          'procurement_id': procurementId,
         },
       );
+
+      // 5. Stable linking if procurementId is provided
+      if (procurementId != null) {
+        await txn.rawInsert('''INSERT INTO procurement_vendor_links(procurement_id, vendor_transaction_id, created_at)
+          VALUES(?, ?, ?) ON CONFLICT(procurement_id, vendor_transaction_id) DO NOTHING''',
+          [procurementId, txnId, formattedDate]);
+        await txn.rawUpdate(
+          'UPDATE mandi_procurements SET vendor_transaction_id = ?, vendor_id = COALESCE(vendor_id, ?) WHERE id = ?',
+          [txnId, vendorId, procurementId],
+        );
+      }
+
+      // 6. Record receipt evidence if promise or actual delivery timestamps provided
+      if (promisedAt != null || actualAt != null) {
+        final recordingStaffId = staffId ?? (await txn.query('staff', columns: ['id'], where: 'role != ?', whereArgs: ['CASHIER'], limit: 1)).firstOrNull?['id'] as int? ?? 1;
+        await txn.insert('supplier_receipt_evidence', {
+          'vendor_id': vendorId,
+          'ingredient_id': rawIngredientId,
+          'procurement_id': procurementId,
+          'vendor_transaction_id': txnId,
+          'promised_at': promisedAt == null ? null : _formatTimestamp(promisedAt),
+          'actual_at': actualAt == null ? null : _formatTimestamp(actualAt),
+          'recorded_at': formattedDate,
+          'recorded_by': recordingStaffId,
+          'notes': notes?.trim(),
+        });
+      }
 
       return VendorTransaction(
         id: txnId,
@@ -444,7 +475,118 @@ class VendorKhataController {
         dueDate: dueDate,
         vendorName: vendor.name,
         rawIngredientName: ingredientName,
+        procurementId: procurementId,
       );
+    });
+  }
+
+  /// Records promised and/or actual supplier receipt evidence append-only.
+  /// If [amendmentOf] is provided, an amendment record is appended linking to the prior evidence without overwriting.
+  Future<int> recordReceiptEvidence({
+    required int managerId,
+    required int vendorId,
+    int? ingredientId,
+    int? procurementId,
+    int? vendorTransactionId,
+    DateTime? promisedAt,
+    DateTime? actualAt,
+    int? amendmentOf,
+    String? notes,
+    DateTime? recordedAt,
+  }) async {
+    final now = recordedAt ?? DateTime.now();
+    final formattedNow = _formatTimestamp(now);
+    final promisedStr = promisedAt == null ? null : _formatTimestamp(promisedAt);
+    final actualStr = actualAt == null ? null : _formatTimestamp(actualAt);
+
+    return await database.transaction((txn) async {
+      await CustomerController.requireRole(txn, managerId, manager: true);
+      final vendorRows = await txn.query('vendor_khata', where: 'id = ?', whereArgs: [vendorId]);
+      if (vendorRows.isEmpty) throw StateError('Supplier with ID #$vendorId not found.');
+
+      if (amendmentOf != null) {
+        final prior = await txn.query('supplier_receipt_evidence', where: 'id = ?', whereArgs: [amendmentOf]);
+        if (prior.isEmpty) throw StateError('Commitment evidence to amend was not found.');
+        if (prior.single['vendor_id'] != vendorId) {
+          throw StateError('Amended commitment belongs to another supplier.');
+        }
+      }
+
+      final id = await txn.insert('supplier_receipt_evidence', {
+        'vendor_id': vendorId,
+        'ingredient_id': ingredientId,
+        'procurement_id': procurementId,
+        'vendor_transaction_id': vendorTransactionId,
+        'promised_at': promisedStr,
+        'actual_at': actualStr,
+        'recorded_at': formattedNow,
+        'recorded_by': managerId,
+        'amendment_of': amendmentOf,
+        'notes': notes?.trim(),
+      });
+
+      await OperationsController.audit(txn, managerId, 'supplier', vendorId, 'RECEIPT_EVIDENCE', {
+        'evidence_id': id,
+        'amendment_of': amendmentOf,
+        'promised_at': promisedStr,
+        'actual_at': actualStr,
+        'ingredient_id': ingredientId,
+      });
+
+      return id;
+    });
+  }
+
+  /// Retrieves recorded supplier receipt evidence rows.
+  Future<List<Map<String, Object?>>> getReceiptEvidence({int? vendorId, int? limit}) async {
+    final where = vendorId != null ? 'vendor_id = ?' : null;
+    final whereArgs = vendorId != null ? [vendorId] : null;
+    return database.query(
+      'supplier_receipt_evidence',
+      where: where,
+      whereArgs: whereArgs,
+      orderBy: 'recorded_at DESC, id DESC',
+      limit: limit,
+    );
+  }
+
+  /// Links a wholesale Mandi procurement and a Vendor Khata credit delivery together stably.
+  Future<void> linkProcurementToCreditDelivery({
+    required int managerId,
+    required int procurementId,
+    required int vendorTransactionId,
+    DateTime? linkedAt,
+  }) async {
+    final now = linkedAt ?? DateTime.now();
+    final formattedNow = _formatTimestamp(now);
+
+    await database.transaction((txn) async {
+      await CustomerController.requireRole(txn, managerId, manager: true);
+
+      final procRows = await txn.query('mandi_procurements', where: 'id = ?', whereArgs: [procurementId]);
+      if (procRows.isEmpty) throw StateError('Mandi procurement with ID #$procurementId not found.');
+
+      final txnRows = await txn.query('vendor_transactions', where: 'id = ?', whereArgs: [vendorTransactionId]);
+      if (txnRows.isEmpty) throw StateError('Vendor transaction with ID #$vendorTransactionId not found.');
+
+      await txn.rawInsert('''INSERT INTO procurement_vendor_links(procurement_id, vendor_transaction_id, created_at)
+        VALUES(?, ?, ?) ON CONFLICT(procurement_id, vendor_transaction_id) DO NOTHING''',
+        [procurementId, vendorTransactionId, formattedNow]);
+
+      // Update cross-reference columns
+      await txn.rawUpdate(
+        'UPDATE mandi_procurements SET vendor_transaction_id = ?, vendor_id = COALESCE(vendor_id, ?) WHERE id = ?',
+        [vendorTransactionId, txnRows.single['vendor_id'], procurementId],
+      );
+      await txn.rawUpdate(
+        'UPDATE vendor_transactions SET procurement_id = ? WHERE id = ?',
+        [procurementId, vendorTransactionId],
+      );
+
+      await OperationsController.audit(txn, managerId, 'procurement', procurementId, 'LINK_CREDIT_PURCHASE', {
+        'procurement_id': procurementId,
+        'vendor_transaction_id': vendorTransactionId,
+      });
     });
   }
 

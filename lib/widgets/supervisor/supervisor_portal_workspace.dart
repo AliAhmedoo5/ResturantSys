@@ -110,6 +110,9 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
   String _secondaryBackupPath = '';
   final TextEditingController _usbPathController = TextEditingController();
   final TextEditingController _localPathController = TextEditingController();
+  Map<String, Object?>? _lastVerifiedBackup;
+  Map<String, Object?>? _lastAttempt;
+  List<Map<String, Object?>> _recentBackupAttempts = [];
 
   @override
   void initState() {
@@ -297,10 +300,34 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
           _usbPathController.text = _secondaryBackupPath;
         }
       }
+      await _loadBackupHistory();
       if (mounted) setState(() => _isLoadingZReport = false);
     } catch (_) {
       if (mounted) setState(() => _isLoadingZReport = false);
     }
+  }
+
+  Future<void> _loadBackupHistory() async {
+    if (widget.shiftController == null) return;
+    try {
+      final db = widget.shiftController!.database;
+      final tables = await db.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='backup_attempts'");
+      if (tables.isEmpty) return;
+
+      final allAttempts = await db.query(
+        'backup_attempts',
+        orderBy: 'attempted_at DESC, id DESC',
+        limit: 5,
+      );
+      if (mounted) {
+        setState(() {
+          _recentBackupAttempts = allAttempts;
+          _lastAttempt = allAttempts.isNotEmpty ? allAttempts.first : null;
+          _lastVerifiedBackup = allAttempts.where((a) =>
+            a['verification_status'] == 'VERIFIED' && a['primary_status'] == 'SUCCESS').firstOrNull;
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _saveBackupPath(String key, String value) async {
@@ -342,10 +369,14 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
     try {
       final backupService = DatabaseBackupService(database: widget.shiftController!.database);
       final dbPath = widget.shiftController!.database.path;
+      final managerId = widget.authService?.session.currentStaff?.id;
       final result = await backupService.executeBackup(
         sourceDbPath: dbPath,
         secondaryBackupDir: _secondaryBackupPath.isNotEmpty ? _secondaryBackupPath : null,
+        initiator: 'MANUAL',
+        managerId: managerId,
       );
+      await _loadBackupHistory();
       if (mounted) {
         if (result.success) {
           final msg = result.warningMessage != null
@@ -1886,6 +1917,70 @@ class _SupervisorPortalWorkspaceState extends State<SupervisorPortalWorkspace> {
                         child: const Text('Save'),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: WarmCounterSpacing.space16),
+
+                  // Backup Health & Durable Evidence
+                  Container(
+                    key: const ValueKey('backup_health_status'),
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: WarmCounterColors.lightCardBackground,
+                      borderRadius: WarmCounterSpacing.controlBorderRadius,
+                      border: Border.all(color: WarmCounterColors.lightBorder),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Durable Backup Health',
+                          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                        ),
+                        const SizedBox(height: 6),
+                        if (_recentBackupAttempts.isEmpty) ...[
+                          const Text(
+                            'No backup attempts recorded. Configured backup settings are not evidence of backup completion.',
+                            key: ValueKey('last_verified_backup_info'),
+                            style: TextStyle(fontSize: 12, color: WarmCounterColors.lightSecondaryText, fontStyle: FontStyle.italic),
+                          ),
+                        ] else ...[
+                          if (_lastVerifiedBackup != null) ...[
+                            Text(
+                              'Last Verified Backup: ${_lastVerifiedBackup!['attempted_at']} (${_lastVerifiedBackup!['initiator']})',
+                              key: const ValueKey('last_verified_backup_info'),
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF047857)),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Primary: ${_lastVerifiedBackup!['primary_status']} | Secondary: ${_lastVerifiedBackup!['secondary_status']} | Verified: ${_lastVerifiedBackup!['verification_status']}',
+                              style: const TextStyle(fontSize: 11, color: WarmCounterColors.lightSecondaryText),
+                            ),
+                          ] else ...[
+                            const Text(
+                              'No verified successful backup has completed yet.',
+                              key: ValueKey('last_verified_backup_info'),
+                              style: TextStyle(fontSize: 12, color: WarmCounterColors.lightDestructiveAction),
+                            ),
+                          ],
+                          if (_lastAttempt != null && _lastAttempt!['primary_status'] == 'FAILED') ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              'Latest attempt FAILED [${_lastAttempt!['failure_category']}]: ${_lastAttempt!['failure_message'] ?? 'Unknown error'}',
+                              key: const ValueKey('backup_failure_alert'),
+                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: WarmCounterColors.lightDestructiveAction),
+                            ),
+                          ] else if (_lastAttempt != null && _lastAttempt!['secondary_status'] == 'WARNING') ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              'Secondary warning: ${_lastAttempt!['failure_message'] ?? 'Secondary destination unreachable'}',
+                              key: const ValueKey('backup_secondary_status'),
+                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.orange),
+                            ),
+                          ],
+                        ],
+                      ],
+                    ),
                   ),
                   const SizedBox(height: WarmCounterSpacing.space24),
 
