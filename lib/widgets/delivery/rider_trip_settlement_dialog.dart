@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/delivery/rider_trip.dart';
 import '../../core/delivery/rider_trip_controller.dart';
 import '../../core/orders/paisa_engine.dart';
+import '../../core/time/actual_event_time.dart';
 import '../../core/theme/theme.dart';
 
 /// Modal dialog where the Cashier counts physical cash handed over from a rider's pouch,
@@ -30,6 +31,8 @@ class _RiderTripSettlementDialogState extends State<RiderTripSettlementDialog> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _cashController;
   late TextEditingController _notesController;
+  final _actualTime = TextEditingController();
+  final _digitalReferences = <int, TextEditingController>{};
   bool _isSubmitting = false;
   String? _errorMessage;
 
@@ -39,12 +42,19 @@ class _RiderTripSettlementDialogState extends State<RiderTripSettlementDialog> {
     final expectedRupees = PaisaEngine.paisaToRupees(widget.trip.cashExpectedPaisa);
     _cashController = TextEditingController(text: expectedRupees > 0 ? expectedRupees.toStringAsFixed(0) : '0');
     _notesController = TextEditingController();
+    for (final item in widget.trip.orders) {
+      if (item.isDelivered && item.order?.paymentStatus == 'COLLECTION_DUE') {
+        _digitalReferences[item.orderId] = TextEditingController();
+      }
+    }
   }
 
   @override
   void dispose() {
     _cashController.dispose();
     _notesController.dispose();
+    _actualTime.dispose();
+    for (final controller in _digitalReferences.values) { controller.dispose(); }
     super.dispose();
   }
 
@@ -70,6 +80,9 @@ class _RiderTripSettlementDialogState extends State<RiderTripSettlementDialog> {
         shiftId: widget.shiftId,
         cashCountedPaisa: _countedPaisa,
         notes: _notesController.text.trim(),
+        settledAt: parseActualEventTime(_actualTime.text),
+        digitalWalletReferences: {for (final entry in _digitalReferences.entries)
+          if (entry.value.text.trim().isNotEmpty) entry.key: entry.value.text.trim()},
       );
 
       if (mounted) {
@@ -103,7 +116,7 @@ class _RiderTripSettlementDialogState extends State<RiderTripSettlementDialog> {
         constraints: const BoxConstraints(maxWidth: 580, maxHeight: 680),
         child: Padding(
           padding: const EdgeInsets.all(24.0),
-          child: Form(
+          child: SingleChildScrollView(child: Form(
             key: _formKey,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -232,7 +245,7 @@ class _RiderTripSettlementDialogState extends State<RiderTripSettlementDialog> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('Variance / Discrepancy:', style: TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
+                          const Text('Counted minus dispatch estimate:', style: TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
                           Text(
                             _variancePaisa == 0
                                 ? 'Exact (Rs. 0)'
@@ -267,6 +280,39 @@ class _RiderTripSettlementDialogState extends State<RiderTripSettlementDialog> {
                     border: OutlineInputBorder(),
                   ),
                 ),
+
+                const SizedBox(height: 14),
+                TextFormField(
+                  key: const ValueKey('rider_settlement_actual_time'),
+                  controller: _actualTime,
+                  decoration: const InputDecoration(
+                    labelText: 'Actual handover / confirmation time (Pakistan)',
+                    hintText: 'YYYY-MM-DD HH:MM; blank = now',
+                    helperText: 'Must be within this open receiving Shift. Recording time stays unchanged.',
+                    helperMaxLines: 2,
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    try { parseActualEventTime(value); return null; }
+                    on FormatException catch (error) { return error.message; }
+                  },
+                ),
+                for (final entry in _digitalReferences.entries) ...[
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    key: ValueKey('rider_digital_reference_${entry.key}'),
+                    controller: entry.value,
+                    decoration: InputDecoration(
+                      labelText: 'Order #${entry.key}: confirmed direct digital reference',
+                      helperText: 'Leave blank for COD. Confirm the bank receipt; count only physical cash above.',
+                      helperMaxLines: 2,
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                const Text('Dispatch estimates are not proof of customer collection. Digital payments and later receipts can change the expected pouch; this difference is not verified rider debt.',
+                  style: TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
 
                 if (_errorMessage != null) ...[
                   const SizedBox(height: 12),
@@ -315,7 +361,7 @@ class _RiderTripSettlementDialogState extends State<RiderTripSettlementDialog> {
                 ),
               ],
             ),
-          ),
+          )),
         ),
       ),
     );
