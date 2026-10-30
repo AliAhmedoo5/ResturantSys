@@ -80,12 +80,18 @@ class _ShiftCashBridge {
         'review_status': shift['discrepancy_status'], 'coverage': missing ? 'Incomplete; complete balance withheld' : 'Reconciled retained evidence'}));
     }
     for (final effect in effects) {
-      final detail = builder._row(effect['source_type'] as String, effect, {...effect,
-        'kind': 'Physical cash effect', 'effect_source_id': effect['id']});
+      final detail = builder._row(effect['source_type'] as String, effect, {
+        'kind': 'Physical cash effect', 'effect_source_id': effect['id'],
+        for (final key in ['component', 'amount_paisa', 'payment_source', 'payment_method',
+          'shift_id', 'business_day_id', 'order_id', 'originating_shift_id', 'originating_business_day_id',
+          'event_key', 'tender_id', 'movement_id', 'settlement_id', 'recorded_by', 'approved_by',
+          'actual_at', 'recorded_at', 'time_coverage']) key: effect[key],
+        'category': _ReportBuilder._safeText(effect['category']),
+      });
       // Physical contributors have a distinct row kind from activity evidence.
       rows.add(AnalyticsRow(id: 'cash-effect-${detail.id}', sourceType: 'cash_effect', sourceId: detail.sourceId, cells: {
         ...detail.cells, 'source_table': effect['source_type'],
-      }..remove('notes')));
+      }));
     }
     return builder._section(AnalyticsFamily.cash, 'Cash and shifts', [
       metric('opening_float', 'Opening float', opening),
@@ -104,9 +110,9 @@ class _ShiftCashBridge {
       metric('blind_count', 'Blind Count', _sum(counted, 'counted_cash'), unavailable: counted.length != shifts.length || shifts.isEmpty),
       metric('variance', 'Discrepancy (counted minus expected)', _sum(counted, 'counted_cash') - evidenced, unavailable: !complete),
       _ReportBuilder._coverage('count_coverage', 'Counted shift coverage', counted.length, shifts.length, 'Uncounted Shift variance is unavailable.'),
-      _ReportBuilder._metric('cash_evidence_gaps', 'Cash evidence gaps', gaps.length, unit: AnalyticsUnit.count, explanation: 'Unlinked legacy tenders and inconsistent stable links; complete expected balances withheld.'),
-      _ReportBuilder._metric('open_shifts', 'Open shifts', shifts.where((s) => s['status'] == 'OPEN').length, unit: AnalyticsUnit.count, explanation: scope),
-      _ReportBuilder._metric('unresolved_discrepancies', 'Unresolved discrepancies', shifts.where((s) => s['discrepancy_status'] == 'FLAGGED').length, unit: AnalyticsUnit.count, explanation: scope),
+      builder._metric('cash_evidence_gaps', 'Cash evidence gaps', gaps.length, unit: AnalyticsUnit.count, explanation: 'Unlinked legacy tenders and inconsistent stable links; complete expected balances withheld.'),
+      builder._metric('open_shifts', 'Open shifts', shifts.where((s) => s['status'] == 'OPEN').length, unit: AnalyticsUnit.count, explanation: scope),
+      builder._metric('unresolved_discrepancies', 'Unresolved discrepancies', shifts.where((s) => s['discrepancy_status'] == 'FLAGGED').length, unit: AnalyticsUnit.count, explanation: scope),
     ], [
       ...rows, ...gaps, ...builder._receivingEventRows(builder._receivingEvents()),
       ...e.get('reports').map((r) => builder._row('report_runs', r, {'kind': 'Sealed Z-report provenance', 'hash': r['content_hash']})),
@@ -117,3 +123,4 @@ class _ShiftCashBridge {
     ]);
   }
 }
+

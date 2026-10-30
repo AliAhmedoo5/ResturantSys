@@ -9,6 +9,8 @@ import 'package:resturant_sys/core/database/pos_database.dart';
 import 'package:resturant_sys/core/finance/operations_controller.dart';
 import 'package:resturant_sys/core/shifts/cash_movement.dart';
 import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
+import 'package:resturant_sys/core/khata/vendor_khata_controller.dart';
+import 'package:resturant_sys/core/khata/vendor_payment_source.dart';
 
 void main() {
   setUpAll(sqfliteFfiInit);
@@ -37,7 +39,16 @@ void main() {
       amountPaisa: 7000, description: 'Bank bill', source: FundingSource.bank,
       reason: 'Paid externally', requestKey: 'external');
     await shifts.recordCashMovement(shiftId: selected.id, staffId: cashierId,
-      type: CashMovementType.payIn, amount: 50, category: 'General', notes: 'Extra float');
+      type: CashMovementType.payIn, amount: 50, category: 'General 03001234567', notes: 'Private note');
+    await operations.setSalary(managerId: managerId, employeeId: cashierId, effectivePeriod: '2026-10', amountPaisa: 100000, reason: 'Salary');
+    await operations.postPayroll(managerId: managerId, employeeId: cashierId, period: '2026-10',
+      kind: 'ADVANCE', amountPaisa: 3000, source: FundingSource.drawer,
+      shiftId: selected.id, reason: 'Advance', requestKey: 'advance');
+    final khata = VendorKhataController(database: db);
+    final vendor = await khata.createVendor(name: 'Supplier', phone: '', openingBalance: 100);
+    await khata.recordSettlementPayment(vendorId: vendor.id, amount: 20,
+      paymentSource: VendorPaymentSource.paidFromActiveDrawer, staffId: managerId,
+      shiftId: selected.id, requestKey: 'supplier-payment');
     final auth = AuthService(database: db)..session.login(Staff.fromMap(manager));
     final service = AnalyticsService(database: db, authService: auth);
     final query = AnalyticsQuery(startDate: DateTime(2020), endDateExclusive: DateTime(2100),
@@ -47,20 +58,25 @@ void main() {
     final report = snapshot.section(AnalyticsFamily.cash);
     num? value(String id) => report.metrics.singleWhere((m) => m.id == id).value;
     expect(value('opening_float'), 100000);
-    expect(value('expected_drawer'), 81000);
+    expect(value('expected_drawer'), 76000);
     expect(value('variance'), isNull);
     expect(value('cash_expenses'), 24000);
+    expect(value('cash_payroll_advances'), 3000);
+    expect(value('cash_supplier_payments'), 2000);
     expect(report.rows.where((r) => r.cells['kind'] == 'Shift reconciliation'), hasLength(1));
     final effects = report.rows.where((r) => r.cells['kind'] == 'Physical cash effect');
-    expect(effects.map((r) => r.cells['amount_paisa']), unorderedEquals([-12000, -12000, 5000]));
+    expect(effects.map((r) => r.cells['amount_paisa']), unorderedEquals([-12000, -12000, 5000, -3000, -2000]));
     expect(effects.where((r) => r.cells['component'] == 'expenses').every(
       (r) => r.cells['recorded_by_id'] == managerId && r.cells['shift_owner_id'] == cashierId), isTrue);
     final csv = AnalyticsExportService().csv(snapshot, AnalyticsFamily.cash);
     expect(csv, contains('Physical cash effect'));
-    expect(csv, contains('81000'));
-    await shifts.closeShift(shiftId: selected.id, staffId: cashierId, countedCash: 800);
+    expect(csv, contains('76000'));
+    expect(csv, isNot(contains('03001234567')));
+    expect(csv, isNot(contains('Private note')));
+    await shifts.closeShift(shiftId: selected.id, staffId: cashierId, countedCash: 750);
     final closed = (await service.load(query)).section(AnalyticsFamily.cash);
     expect(closed.metrics.singleWhere((m) => m.id == 'variance').value, -1000);
     expect(value('variance'), isNull, reason: 'Earlier snapshot remains immutable');
   });
 }
+
