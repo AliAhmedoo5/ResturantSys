@@ -73,7 +73,7 @@ void main() {
       (row) => row.sourceType == 'vendor_transactions' && row.sourceId == '${entry.id}');
     expect(vendorRow.cells['supplier_name_at_transaction'], 'Original supplier');
     expect(vendorRow.cells['supplier_name_current'], 'Renamed supplier');
-    final movement = snapshot.section(AnalyticsFamily.cash).rows.singleWhere((row) => row.sourceType == 'cash_movements');
+    final movement = snapshot.section(AnalyticsFamily.cash).rows.singleWhere((row) => row.cells['kind'] == 'Physical cash effect');
     expect(movement.cells['shift_owner_id'], cashierId);
     expect(movement.cells['shift_owner_name_at_transaction'], cashier['name']);
     expect(movement.cells['shift_owner_name_current'], 'Renamed cashier');

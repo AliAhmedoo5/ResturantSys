@@ -30,7 +30,7 @@ Select **Overview** or one of the 13 report families:
 
 Read each metric's explanation and quality state. **Missing data** is not zero. **Not applicable** indicates no applicable population or denominator. **Estimated** identifies incomplete evidence or approximate methodology. Coverage counts explain which records contribute to timing and rate statistics.
 
-Cashier, shift, Dining Type and payment filters describe an order cohort. A split-payment order must be counted once even if it has several tender rows. The report states where a filter applies: current stock, staff and supplier balances must not appear filtered by an unrelated order selection. Current balances remain labeled current when browsing historical activity.
+Cashier and Shift filters describe the originating order cohort and owning/receiving drawer separately. Dining Type and payment filters narrow order/activity breakdowns only. A split-payment order must be counted once even if it has several tender rows. The report states where a filter applies: current stock, staff and supplier balances must not appear filtered by an unrelated order selection. Current balances remain labeled current when browsing historical activity.
 
 Trend tables and detail tables provide the values behind the visual display. Source details identify recorded evidence without exposing staff PIN hashes, report credentials or unmasked customer contact information.
 
@@ -79,3 +79,31 @@ Schema 23 captures names atomically at source insertion in an append-only identi
 Audit Timestamp means immutable recording evidence; Event Time means actual occurrence. New money events retain explicit UTC recording time and preserve actual event time independently. Reports convert either known instant for Asia/Karachi display while exporting the source string. Existing naive local fields are preserved, never rewritten as supposedly known UTC history.
 
 COD receiving attribution and evidence limits: see [COD settlement evidence](cod-settlement-evidence.md).
+# Selected Shift cash bridge
+
+Cashier and Shift filters select the owning/receiving drawer in **Cash & shifts**.
+The bridge covers each whole selected Shift, including receipts from Orders
+originating in another Shift. Dining Type, payment method and actual-time windows
+describe the separately labeled activity breakdown; they never trim a drawer's
+opening-to-count accountability. Selecting a Shift explicitly loads its whole
+history even when its Business Day opened outside a selected calendar window.
+
+Opening Float plus customer cash accepted, rider handovers and other pay-ins,
+less refunds, expenses, supplier payments, payroll/advances, cash drops and other
+outflows gives expected cash. Finance reversals retain their signed effect.
+Only **Physical cash effect** rows contribute to this bridge. Linked tender,
+payment-event and Cash Movement details describe the same effect once.
+COD settlement attribution is not another inflow. Bank/owner funding, unpaid
+purchases and salary accruals do not change drawer cash.
+
+Blind Count is displayed separately; Discrepancy is counted minus expected.
+Uncounted Shifts have unavailable Discrepancy. Unlinked historical cash tenders
+have unknown receiving attribution, remain visible as coverage gaps, and withhold
+complete expected cash and Discrepancy. The partial balance from retained evidence
+is labeled separately. Amount/time similarity never establishes a link.
+Manual Cash Movements retain their physical effect but disclose unavailable
+independent actual time. Actor, owner, source links, Karachi times and original
+timestamp evidence travel with the snapshot into CSV, Excel and PDF exports.
+Existing sealed X/Z reports remain unchanged.
+
+

@@ -418,7 +418,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
       ? 'All cashiers, shifts, Dining Types and payment methods' : 'Filters applied • inspect each report’s scope notes',
       style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
     children: [Form(key: _filtersKey, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Text('Applies to order-based measures only. Inventory, procurement, Khata, staff and cash ledgers retain their stated scope.',
+      const Text('Cashier and Shift select owning/receiving drawers. Dining Type and payment method narrow order/activity breakdowns only; whole-Shift cash accountability is unchanged. Other reports retain their stated scope.',
         style: TextStyle(color: StreetFoodMafiaColors.secondaryText, fontSize: 12)),
       const SizedBox(height: 8),
       Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
@@ -556,7 +556,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
       'average_ticket' => 'Per eligible order${metric.sampleCount == null ? '' : ' · ${metric.sampleCount} covered'}',
       'collection_due' => 'Selected filtered Business Days',
       'all_collection_due' => 'All Business Days',
-      'expected_drawer' => 'All shifts in selected Business Days',
+      'expected_drawer' => 'Whole selected owning/receiving Shifts',
       'negative_stock' => 'Current inventory position',
       _ => metric.explanation,
     } : metric.explanation;
@@ -830,3 +830,4 @@ String _sourceLabel(AnalyticsRow row) {
       ? '${row.sourceType} • ${ids.length} records'
       : '${row.sourceType} #$source';
 }
+
