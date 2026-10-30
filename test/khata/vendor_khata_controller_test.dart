@@ -405,6 +405,7 @@ void main() {
         name: 'Cutoff Reconciliation Supplier',
         phone: '03009998877',
         openingBalance: 500.0, // 50,000 paisa
+        createdAt: DateTime(2026, 10, 10, 8),
       );
 
       final t1 = DateTime(2026, 10, 20, 10);

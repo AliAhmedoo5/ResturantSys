@@ -138,6 +138,7 @@ class VendorKhataController {
     required String phone,
     String? suppliedIngredients,
     double openingBalance = 0.0,
+    DateTime? createdAt,
   }) async {
     final trimmedName = name.trim();
     final trimmedPhone = phone.trim();
@@ -153,7 +154,7 @@ class VendorKhataController {
     }
     openingBalance = PaisaEngine.rupeesToPaisa(openingBalance) / 100;
 
-    final now = DateTime.now();
+    final now = createdAt ?? DateTime.now();
     final formattedNow = _formatTimestamp(now);
 
     final id = await database.insert(
