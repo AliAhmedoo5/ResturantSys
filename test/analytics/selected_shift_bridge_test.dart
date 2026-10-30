@@ -45,7 +45,7 @@ void main() {
       kind: 'ADVANCE', amountPaisa: 3000, source: FundingSource.drawer,
       shiftId: selected.id, reason: 'Advance', requestKey: 'advance');
     final khata = VendorKhataController(database: db);
-    final vendor = await khata.createVendor(name: 'Supplier', phone: '', openingBalance: 100);
+    final vendor = await khata.createVendor(name: 'Supplier', phone: '03009876543', openingBalance: 100);
     await khata.recordSettlementPayment(vendorId: vendor.id, amount: 20,
       paymentSource: VendorPaymentSource.paidFromActiveDrawer, staffId: managerId,
       shiftId: selected.id, requestKey: 'supplier-payment');
@@ -113,4 +113,5 @@ void main() {
     expect(AnalyticsExportService().csv(snapshot, AnalyticsFamily.cash), contains('Receiving Shift and actual time unavailable'));
   });
 }
+
 
