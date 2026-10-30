@@ -357,21 +357,218 @@ class _ReportBuilder {
   AnalyticsSection _suppliers() {
     final vendors = e.get('vendors');
     final events = e.get('vendor_events');
+    final allTxns = e.rows['all_vendor_transactions'] ?? events;
+    final allocations = e.rows['all_supplier_allocations'] ?? [];
+    final openingAdjustments = e.rows['supplier_opening_adjustments'] ?? [];
+
+    final intervalStart = _sqlTime(_karachi(analyticsWallClock(e.query.startDate).toIso8601String())!);
+    final cutoffTime = e.query.live
+        ? _sqlTime(_karachi(e.now.toIso8601String())!)
+        : _sqlTime(_karachi(analyticsWallClock(e.query.endDateExclusive).toIso8601String())!);
+    final cutoffDate = cutoffTime.substring(0, 10);
+
+    final vendorNames = <int, String>{for (final v in vendors) v['id'] as int: _safeText(v['name'])};
+    final vendorStatuses = <int, String>{for (final v in vendors) v['id'] as int: v['archived_at'] != null ? 'Archived' : 'Active'};
+
+    int totalOpeningPayable = 0;
+    int totalPurchasesInRange = 0;
+    int totalPaymentsInRange = 0;
+    int totalAdjsInRange = 0;
+    int totalClosingPayable = 0;
+
+    int totalCurrent = 0;
+    int totalDays0to7 = 0;
+    int totalDays8to30 = 0;
+    int totalDays31to60 = 0;
+    int totalOver60 = 0;
+    int totalUnknownDue = 0;
+
+    int activeCount = 0;
+    int datedInvoiceCount = 0;
+    int totalInvoicesCount = 0;
+
+    final bridgeRows = <AnalyticsRow>[];
+
+    for (final v in vendors) {
+      final vId = v['id'] as int;
+      final vName = _safeText(v['name']);
+      final isArchived = v['archived_at'] != null;
+      if (!isArchived) activeCount++;
+      final status = isArchived ? 'Archived' : 'Active';
+      final initOpeningPaisa = _money(v, 'opening_balance');
+      final vCreated = v['created_at'] as String? ?? '';
+
+      final vAdjs = openingAdjustments.where((a) => a['vendor_id'] == vId).toList();
+      final adjsBeforeStart = vAdjs.where((a) => (a['recorded_at'] as String).compareTo(intervalStart) < 0).toList();
+      final adjsInRange = vAdjs.where((a) => (a['recorded_at'] as String).compareTo(intervalStart) >= 0 && (a['recorded_at'] as String).compareTo(cutoffTime) <= 0).toList();
+
+      final baseOpeningPaisa = vCreated.isNotEmpty && vCreated.compareTo(intervalStart) >= 0
+          ? 0
+          : (adjsBeforeStart.isNotEmpty ? adjsBeforeStart.last['opening_balance_paisa'] as int : initOpeningPaisa);
+
+      final adjsInRangePaisa = adjsInRange.fold<int>(0, (sum, a) => sum + (a['opening_balance_paisa'] as int) - (a['previous_balance_paisa'] as int));
+
+      final txnsBeforeStart = allTxns.where((t) => t['vendor_id'] == vId && (t['created_at'] as String).compareTo(intervalStart) < 0).toList();
+      final txnsInRange = allTxns.where((t) => t['vendor_id'] == vId && (t['created_at'] as String).compareTo(intervalStart) >= 0 && (t['created_at'] as String).compareTo(cutoffTime) <= 0).toList();
+      final txnsUpToCutoff = allTxns.where((t) => t['vendor_id'] == vId && (t['created_at'] as String).compareTo(cutoffTime) <= 0).toList();
+
+      final purchasesBefore = txnsBeforeStart.where((t) => t['type'] == 'PURCHASE_CREDIT').fold<int>(0, (sum, t) => sum + _money(t, 'amount_paisa'));
+      final paymentsBefore = txnsBeforeStart.where((t) => ['PAYMENT_DRAWER', 'PAYMENT_EXTERNAL'].contains(t['type'])).fold<int>(0, (sum, t) => sum + _money(t, 'amount_paisa'));
+      final openingPayablePaisa = baseOpeningPaisa + purchasesBefore - paymentsBefore;
+
+      final purchasesInRange = txnsInRange.where((t) => t['type'] == 'PURCHASE_CREDIT').fold<int>(0, (sum, t) => sum + _money(t, 'amount_paisa'));
+      final paymentsInRange = txnsInRange.where((t) => ['PAYMENT_DRAWER', 'PAYMENT_EXTERNAL'].contains(t['type'])).fold<int>(0, (sum, t) => sum + _money(t, 'amount_paisa'));
+      final closingPayablePaisa = openingPayablePaisa + purchasesInRange + adjsInRangePaisa - paymentsInRange;
+
+      // Only include allocations created on or before cutoff
+      final vAllocs = allocations.where((a) => a['vendor_id'] == vId && (a['created_at'] as String).compareTo(cutoffTime) <= 0).toList();
+      final openingPaidAtCutoff = vAllocs.where((a) => a['invoice_id'] == null).fold<int>(0, (sum, a) => sum + (a['amount_paisa'] as int));
+      final effectiveOpeningAtCutoff = (vAdjs.where((a) => (a['recorded_at'] as String).compareTo(cutoffTime) <= 0).isNotEmpty)
+          ? vAdjs.where((a) => (a['recorded_at'] as String).compareTo(cutoffTime) <= 0).last['opening_balance_paisa'] as int
+          : initOpeningPaisa;
+      final openingDueAtCutoff = (vCreated.isNotEmpty && vCreated.compareTo(cutoffTime) > 0)
+          ? 0
+          : math.max(0, effectiveOpeningAtCutoff - openingPaidAtCutoff);
+
+      int vCurrent = 0, vDays0to7 = 0, vDays8to30 = 0, vDays31to60 = 0, vOver60 = 0, vUnknownDue = openingDueAtCutoff;
+
+      final invoicesUpToCutoff = txnsUpToCutoff.where((t) => t['type'] == 'PURCHASE_CREDIT').toList();
+      totalInvoicesCount += invoicesUpToCutoff.length;
+
+      for (final inv in invoicesUpToCutoff) {
+        final invId = inv['id'] as int;
+        final invAmount = _money(inv, 'amount_paisa');
+        final paid = vAllocs.where((a) => a['invoice_id'] == invId).fold<int>(0, (sum, a) => sum + (a['amount_paisa'] as int));
+        final due = invAmount - paid;
+        final dueDateStr = inv['due_date'] as String?;
+        if (dueDateStr != null && dueDateStr.trim().isNotEmpty) {
+          datedInvoiceCount++;
+        }
+        if (due <= 0) continue;
+
+        if (dueDateStr == null || dueDateStr.trim().isEmpty) {
+          vUnknownDue += due;
+        } else {
+          final dueTrimmed = dueDateStr.trim().substring(0, 10);
+          if (dueTrimmed.compareTo(cutoffDate) >= 0) {
+            vCurrent += due;
+          } else {
+            final dueDt = DateTime.tryParse(dueTrimmed);
+            final cutoffDt = DateTime.tryParse(cutoffDate);
+            if (dueDt == null || cutoffDt == null) {
+              vUnknownDue += due;
+            } else {
+              final overdueDays = cutoffDt.difference(dueDt).inDays;
+              if (overdueDays <= 7) {
+                vDays0to7 += due;
+              } else if (overdueDays <= 30) {
+                vDays8to30 += due;
+              } else if (overdueDays <= 60) {
+                vDays31to60 += due;
+              } else {
+                vOver60 += due;
+              }
+            }
+          }
+        }
+      }
+
+      totalOpeningPayable += openingPayablePaisa;
+      totalPurchasesInRange += purchasesInRange;
+      totalPaymentsInRange += paymentsInRange;
+      totalAdjsInRange += adjsInRangePaisa;
+      totalClosingPayable += closingPayablePaisa;
+
+      totalCurrent += vCurrent;
+      totalDays0to7 += vDays0to7;
+      totalDays8to30 += vDays8to30;
+      totalDays31to60 += vDays31to60;
+      totalOver60 += vOver60;
+      totalUnknownDue += vUnknownDue;
+
+      bridgeRows.add(AnalyticsRow(
+        id: 'supplier-bridge-$vId',
+        sourceType: 'vendor_khata',
+        sourceId: '$vId',
+        cells: {
+          'kind': 'Vendor Khata bridge',
+          'supplier_id': vId,
+          'name': vName,
+          'status': status,
+          'opening_paisa': openingPayablePaisa,
+          'purchases_paisa': purchasesInRange,
+          'payments_paisa': paymentsInRange,
+          'adjustments_paisa': adjsInRangePaisa,
+          'closing_paisa': closingPayablePaisa,
+          'aging_current_paisa': vCurrent,
+          'aging_0_7_paisa': vDays0to7,
+          'aging_8_30_paisa': vDays8to30,
+          'aging_31_60_paisa': vDays31to60,
+          'aging_over_60_paisa': vOver60,
+          'aging_unknown_paisa': vUnknownDue,
+          'due_date': null,
+          'type': null,
+          'amount_paisa': null,
+          'created_at': vCreated,
+        },
+      ));
+    }
+
     final payments = events.where((t) => ['PAYMENT_DRAWER', 'PAYMENT_EXTERNAL'].contains(t['type'])).toList();
     final paidIds = payments.map((t) => t['vendor_id']).toSet();
+
     return _section(AnalyticsFamily.suppliers, 'Supplier Khata', [
+      _metric('khata_opening_payable', 'Vendor Khata opening payable', totalOpeningPayable, unit: AnalyticsUnit.paisa, explanation: 'Historical payable at start of selected interval based on pre-period evidence.'),
+      _metric('credit_purchases', 'Recorded credit deliveries', totalPurchasesInRange, unit: AnalyticsUnit.paisa, explanation: 'Credit purchases in selected interval affecting stock/payable; not cash payments. $_intervalBasis'),
+      _metric('khata_payments', 'Recorded supplier payments', totalPaymentsInRange, unit: AnalyticsUnit.paisa, explanation: 'Selected interval supplier settlements from cash drawer and external management accounts.'),
+      _metric('khata_adjustments', 'Opening balance adjustments', totalAdjsInRange, unit: AnalyticsUnit.paisa, explanation: 'Net versioned opening balance adjustments in selected interval.'),
+      _metric('khata_closing_payable', 'Vendor Khata closing payable', totalClosingPayable, unit: AnalyticsUnit.paisa, explanation: 'Opening + purchases + adjustments - payments reconciled at disclosed cutoff.'),
+      _metric('aging_current', 'Current (not yet due) payable', totalCurrent, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable with due date on or after disclosed cutoff.'),
+      _metric('aging_0_7', 'Payable overdue 0–7 days', totalDays0to7, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable 1 to 7 days past due date as of cutoff.'),
+      _metric('aging_8_30', 'Payable overdue 8–30 days', totalDays8to30, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable 8 to 30 days past due date as of cutoff.'),
+      _metric('aging_31_60', 'Payable overdue 31–60 days', totalDays31to60, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable 31 to 60 days past due date as of cutoff.'),
+      _metric('aging_over_60', 'Payable overdue over 60 days', totalOver60, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable more than 60 days past due date as of cutoff.'),
+      _metric('aging_unknown', 'Payable with unknown due date', totalUnknownDue, unit: AnalyticsUnit.paisa, explanation: 'Undated invoices and unallocated opening balances without explicit due dates.'),
+      _coverage('supplier_coverage', 'Active and archived supplier coverage', activeCount, vendors.length, 'Active suppliers vs total registered suppliers including archived historical vendors.'),
+      _coverage('invoice_due_date_coverage', 'Invoice due-date coverage', datedInvoiceCount, totalInvoicesCount, 'Invoices with recorded due dates vs total credit invoices up to cutoff.'),
       _metric('current_payable', 'Current supplier payable', _sum(vendors, 'current_balance'), explanation: 'Stored current balances across existing suppliers. $_currentBasis'),
-      _metric('opening_balances', 'Configured opening balances', _sum(vendors, 'opening_balance'), explanation: 'Current configured opening balances; historical edits are not versioned. $_currentBasis'),
-      _metric('credit_purchases', 'Recorded credit deliveries', _sum(events.where((t) => t['type'] == 'PURCHASE_CREDIT'), 'amount'), explanation: 'Credit purchases in selected day intervals affect stock/payable; not cash payments. $_intervalBasis'),
       _metric('drawer_payments', 'Supplier drawer payments', _sum(payments.where((t) => t['type'] == 'PAYMENT_DRAWER'), 'amount'), explanation: 'Selected interval supplier settlements from drawer; these are not operating expenses.'),
       _metric('external_payments', 'Supplier external payments', _sum(payments.where((t) => t['type'] == 'PAYMENT_EXTERNAL'), 'amount'), explanation: 'Selected interval supplier settlements from external management funds.'),
-      _metric('no_payments_in_range', 'Suppliers with no payments in range', vendors.where((v) => !paidIds.contains(v['id'])).length, unit: AnalyticsUnit.count, explanation: 'Existing suppliers with no selected interval settlement. Does not claim no lifetime payments.'),
-      _metric('overdue', 'Current overdue invoiced payable', _integers(e.get('invoice_balances').where((i) => i['due_date'] != null && (i['due_date'] as String).compareTo(_sqlDate(_karachi(e.now.toIso8601String())!)) < 0), 'due_paisa'), explanation: 'Current allocated invoice balances with known due dates. Undated legacy invoices and opening balances are excluded; this is not a historical aging snapshot.'),
-      _missing('historical_payable', 'Reconstructed historical payable', 'Mutable opening balances and supplier cascade deletion limit historical reconstruction; current balances remain labeled current.'),
+      _metric('no_payments_in_range', 'Suppliers with no payments in range', vendors.where((v) => !paidIds.contains(v['id'])).length, unit: AnalyticsUnit.count, explanation: 'Existing suppliers with no selected interval settlement.'),
     ], [
-      ...vendors.map((v) => _row('vendor_khata', v, {'kind': 'Current supplier', 'supplier_id': v['id'], 'name': _safeText(v['name']), 'opening_paisa': _money(v, 'opening_balance'), 'current_paisa': _money(v, 'current_balance'), 'payment_activity': paidIds.contains(v['id']) ? 'Payments in selected interval' : 'No payments in selected interval'})),
-      ...events.map((t) => _row('vendor_transactions', t, {'kind': 'Selected interval entry', 'supplier_id': t['vendor_id'], 'type': t['type'], 'amount_paisa': _money(t, 'amount'), 'ingredient_id': t['raw_ingredient_id'], 'quantity': t['quantity'], 'shift_id': t['shift_id'], 'created_at': t['created_at']})),
-    ], ['kind', 'supplier_id', 'name', 'opening_paisa', 'current_paisa', 'payment_activity', 'type', 'amount_paisa', 'ingredient_id', 'quantity', 'shift_id', 'created_at'], [_currentBasis, _intervalBasis, 'Supplier directory balances and selected interval entries are different views; do not add their amounts together.']);
+      ...bridgeRows,
+      ...events.map((t) => _row('vendor_transactions', t, {
+        'kind': 'Selected interval entry',
+        'supplier_id': t['vendor_id'],
+        'name': vendorNames[t['vendor_id']] ?? 'Unknown',
+        'status': vendorStatuses[t['vendor_id']] ?? 'Active',
+        'opening_paisa': null,
+        'purchases_paisa': null,
+        'payments_paisa': null,
+        'adjustments_paisa': null,
+        'closing_paisa': null,
+        'aging_current_paisa': null,
+        'aging_0_7_paisa': null,
+        'aging_8_30_paisa': null,
+        'aging_31_60_paisa': null,
+        'aging_over_60_paisa': null,
+        'aging_unknown_paisa': null,
+        'due_date': t['due_date'],
+        'type': t['type'],
+        'amount_paisa': _money(t, 'amount_paisa'),
+        'created_at': t['created_at'],
+      })),
+    ], [
+      'kind', 'supplier_id', 'name', 'status', 'opening_paisa', 'purchases_paisa', 'payments_paisa',
+      'adjustments_paisa', 'closing_paisa', 'aging_current_paisa', 'aging_0_7_paisa', 'aging_8_30_paisa',
+      'aging_31_60_paisa', 'aging_over_60_paisa', 'aging_unknown_paisa', 'due_date', 'type', 'amount_paisa', 'created_at'
+    ], [
+      'Vendor Khata bridge: Opening + purchases/adjustments minus payments/credits reconciles to closing using evidence strictly available at the disclosed cutoff.',
+      'Aging buckets are nonoverlapping; sum of aging buckets strictly equals closing payable.',
+      'Historical balances use only allocations and payments recorded on or before the cutoff date; current/all-time allocations are not used as historical balances.',
+      'Archived suppliers with historical activity or balances are retained and disclosed with Archived status.',
+      _currentBasis, _intervalBasis,
+    ]);
   }
 
   AnalyticsSection _cash() {
