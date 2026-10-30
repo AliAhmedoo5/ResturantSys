@@ -100,6 +100,15 @@ class AnalyticsService {
     await read('physical_counts', 'stock_count_lines', 'SELECT x.*,c.status,c.reason,c.created_by,c.approved_by,c.posted_by,c.posted_at AS created_at FROM stock_count_lines x JOIN stock_counts c ON c.id=x.count_id WHERE ${_intervalScope(query, 'c.posted_at')} AND c.status=\'POSTED\'', intervalArgs);
     e.rows['physical_counts'] = e.get('physical_counts').map((row) => <String, Object?>{...row, 'recorded_estimated_cost_paisa': row['estimated_cost_paisa'], 'estimated_cost_paisa': StockCountValuation.paisa(row)}).toList();
     await read('waste', 'kitchen_wastage', 'SELECT x.id,x.staff_id,x.raw_ingredient_id,x.quantity,x.cost_loss,x.reason,x.created_at FROM kitchen_wastage x WHERE $interval', intervalArgs);
+    await read('all_mandi_purchases', 'mandi_procurements', 'SELECT id,raw_ingredient_id,traditional_unit,quantity,converted_quantity,total_cost,cost_per_recipe_unit,created_at FROM mandi_procurements ORDER BY created_at,id');
+    await read('all_waste', 'kitchen_wastage', 'SELECT id,staff_id,raw_ingredient_id,quantity,cost_loss,reason,created_at FROM kitchen_wastage ORDER BY created_at,id');
+    await read('all_inventory_movements', 'inventory_movements', 'SELECT id,ingredient_id,business_day_id,quantity_delta,balance_after,recorded_at FROM inventory_movements ORDER BY recorded_at,id');
+    if (tables.contains('order_cost_events')) {
+      await read('all_cost_events', 'order_cost_events', 'SELECT id,order_id,ingredient_id,revision,kind,quantity,unit_cost_rupees,cost_paisa,recorded_at FROM order_cost_events ORDER BY recorded_at,id');
+    }
+    if (tables.contains('stock_count_lines')) {
+      await read('all_physical_counts', 'stock_count_lines', "SELECT x.*,c.status,c.reason,c.posted_at AS created_at FROM stock_count_lines x JOIN stock_counts c ON c.id=x.count_id WHERE c.status='POSTED' ORDER BY c.posted_at,x.count_id");
+    }
     await read('vendor_events', 'vendor_transactions', 'SELECT x.id,x.vendor_id,x.shift_id,x.staff_id,x.type,x.amount,COALESCE(x.amount_paisa,CAST(ROUND(x.amount*100) AS INTEGER)) amount_paisa,x.due_date,x.raw_ingredient_id,x.quantity,x.created_at FROM vendor_transactions x WHERE $interval', intervalArgs);
     await read('all_vendor_transactions', 'vendor_transactions', 'SELECT id,vendor_id,shift_id,staff_id,type,amount,COALESCE(amount_paisa,CAST(ROUND(amount*100) AS INTEGER)) amount_paisa,due_date,raw_ingredient_id,quantity,created_at FROM vendor_transactions ORDER BY created_at,id');
     await read('expense_entries', 'expense_entries', 'SELECT x.* FROM expense_entries x JOIN business_days b ON b.id=x.business_day_id WHERE $dayScope', dayArgs);
