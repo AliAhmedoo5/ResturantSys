@@ -4,16 +4,52 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 /// Records the configured acquisition rate at consumption. Returns release the
 /// original lots (latest first); later purchases never reprice earlier food.
 class HistoricalCosts {
-  static Future<void> consume(DatabaseExecutor txn, int orderId, int revision, Map<int, double> quantities) async {
+  static Future<void> consume(
+    DatabaseExecutor txn,
+    int orderId,
+    int revision,
+    Map<int, double> quantities, {
+    Map<int, String>? classifications,
+  }) async {
     for (final entry in quantities.entries.where((e) => e.value > 0)) {
       final row = (await txn.query('raw_ingredients', where: 'id=?', whereArgs: [entry.key])).single;
       final rate = (row['cost_per_recipe_unit'] as num?)?.toDouble();
       final known = rate != null && rate.isFinite && rate > 0;
-      await txn.insert('order_cost_events', {'order_id': orderId, 'ingredient_id': entry.key,
-        'revision': revision, 'kind': 'CONSUME', 'quantity': entry.value,
-        'unit_cost_rupees': known ? rate : null, 'cost_paisa': known ? (entry.value * rate * 100).round() : null,
-        'recorded_at': DateTime.now().toIso8601String()});
+      final classification = classifications?[entry.key] ?? _classifyIngredient(row);
+      await txn.insert('order_cost_events', {
+        'order_id': orderId,
+        'ingredient_id': entry.key,
+        'revision': revision,
+        'kind': 'CONSUME',
+        'quantity': entry.value,
+        'unit_cost_rupees': known ? rate : null,
+        'cost_paisa': known ? (entry.value * rate * 100).round() : null,
+        'classification': classification,
+        'recorded_at': DateTime.now().toIso8601String(),
+      });
     }
+  }
+
+  static String _classifyIngredient(Map<String, Object?> row) {
+    if (row.containsKey('category') && row['category'] != null) {
+      final cat = row['category'].toString().trim().toUpperCase();
+      if (cat == 'PACKAGING') return 'PACKAGING';
+      if (cat == 'FOOD') return 'FOOD';
+    }
+    if (row.containsKey('classification') && row['classification'] != null) {
+      final cls = row['classification'].toString().trim().toUpperCase();
+      if (cls == 'PACKAGING') return 'PACKAGING';
+      if (cls == 'FOOD') return 'FOOD';
+    }
+    if (row.containsKey('is_packaging') && row['is_packaging'] != null) {
+      final val = row['is_packaging'];
+      if (val == 1 || val == true || val == '1' || val == 'true') return 'PACKAGING';
+    }
+    final name = (row['name'] as String? ?? '').toLowerCase();
+    if (name.contains('packaging') || name.contains('takeaway')) {
+      return 'PACKAGING';
+    }
+    return 'FOOD';
   }
 
   static Future<void> remove(DatabaseExecutor txn, int orderId, int revision, Map<int, double> quantities, {required bool restock}) async {
@@ -33,10 +69,19 @@ class HistoricalCosts {
         // Exhausting a lot releases its exact remaining paisa, avoiding drift.
         final cost = rate == null ? null : (take - available).abs() < 0.00000001
           ? (lot['cost_paisa'] as int) - (lot['removed_cost'] as num).toInt() : math.min((lot['cost_paisa'] as int) - (lot['removed_cost'] as num).toInt(), (take * rate * 100).round());
-        await txn.insert('order_cost_events', {'order_id': orderId, 'ingredient_id': entry.key,
-          'revision': revision, 'kind': restock ? 'RETURN' : 'COOKED_WASTE', 'quantity': take,
-          'unit_cost_rupees': rate, 'cost_paisa': cost, 'source_event_id': lot['id'],
-          'recorded_at': DateTime.now().toIso8601String()});
+        final classification = lot['classification'] as String?;
+        await txn.insert('order_cost_events', {
+          'order_id': orderId,
+          'ingredient_id': entry.key,
+          'revision': revision,
+          'kind': restock ? 'RETURN' : 'COOKED_WASTE',
+          'quantity': take,
+          'unit_cost_rupees': rate,
+          'cost_paisa': cost,
+          'classification': classification,
+          'source_event_id': lot['id'],
+          'recorded_at': DateTime.now().toIso8601String(),
+        });
         remaining -= take;
         if (remaining < 0.00000001) break;
       }

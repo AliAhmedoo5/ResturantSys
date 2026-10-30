@@ -15,6 +15,8 @@ class MandiProcurement {
     this.storageUnit = StorageUnit.g,
     this.notes,
     required this.createdAt,
+    this.vendorId,
+    this.vendorTransactionId,
   });
 
   final int id;
@@ -28,6 +30,8 @@ class MandiProcurement {
   final StorageUnit storageUnit;
   final String? notes;
   final DateTime createdAt;
+  final int? vendorId;
+  final int? vendorTransactionId;
 
   factory MandiProcurement.fromMap(
     Map<String, Object?> map, {
@@ -48,6 +52,8 @@ class MandiProcurement {
           : StorageUnit.fromCode((map['storage_unit'] as String?) ?? 'g'),
       notes: map['notes'] as String?,
       createdAt: DateTime.parse(map['created_at'] as String),
+      vendorId: map['vendor_id'] as int?,
+      vendorTransactionId: map['vendor_transaction_id'] as int?,
     );
   }
 
@@ -62,6 +68,8 @@ class MandiProcurement {
       'cost_per_recipe_unit': costPerRecipeUnit,
       'notes': notes,
       'created_at': createdAt.toIso8601String(),
+      'vendor_id': vendorId,
+      'vendor_transaction_id': vendorTransactionId,
     };
   }
 }
