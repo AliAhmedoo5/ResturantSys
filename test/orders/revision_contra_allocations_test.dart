@@ -39,8 +39,8 @@ void main() {
       final auth = AuthService(database: db);
       auth.session.login(cashier);
 
-      bDayId = await shifts.openBusinessDay(openedByStaffId: supervisor.id);
-      shiftId = await shifts.openShift(staffId: cashier.id, openingFloat: 500);
+      bDayId = (await shifts.openBusinessDay(openedByStaffId: supervisor.id)).id;
+      shiftId = (await shifts.openShift(staffId: cashier.id, openingFloat: 500)).id;
     });
 
     tearDown(() => store.close());
@@ -55,9 +55,9 @@ void main() {
       final potato = await catalog.createRawIngredient(name: 'Potato', storageUnit: StorageUnit.count, currentStock: 100, costPerRecipeUnit: 50);
       final syrup = await catalog.createRawIngredient(name: 'Syrup', storageUnit: StorageUnit.count, currentStock: 100, costPerRecipeUnit: 30);
 
-      await catalog.addRecipeItem(menuItemId: burger.id, rawIngredientId: meat.id, quantityPerRecipeUnit: 1.0);
-      await catalog.addRecipeItem(menuItemId: fries.id, rawIngredientId: potato.id, quantityPerRecipeUnit: 1.0);
-      await catalog.addRecipeItem(menuItemId: drink.id, rawIngredientId: syrup.id, quantityPerRecipeUnit: 1.0);
+      await catalog.addOrUpdateRecipeItem(menuItemId: burger.id, rawIngredientId: meat.id, quantity: 1.0);
+      await catalog.addOrUpdateRecipeItem(menuItemId: fries.id, rawIngredientId: potato.id, quantity: 1.0);
+      await catalog.addOrUpdateRecipeItem(menuItemId: drink.id, rawIngredientId: syrup.id, quantity: 1.0);
 
       // Checkout initial order: 2x Burger (PKR 800) + 1x Fries (PKR 200) = PKR 1000
       final checkout = await orders.checkoutOrder(
@@ -193,7 +193,7 @@ void main() {
         currentStock: 100,
         costPerRecipeUnit: 50.0,
       );
-      await catalog.addRecipeItem(menuItemId: meal.id, rawIngredientId: ingredient.id, quantityPerRecipeUnit: 1.0);
+      await catalog.addOrUpdateRecipeItem(menuItemId: meal.id, rawIngredientId: ingredient.id, quantity: 1.0);
 
       // Historic entry in ingredient_cost_history was recorded by trigger
       final historyBefore = await db.query('ingredient_cost_history', where: 'ingredient_id = ?', whereArgs: [ingredient.id]);

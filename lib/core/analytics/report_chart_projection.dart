@@ -132,7 +132,7 @@ class _Charts {
               point('Legacy Unclassified COGS',
                 source('order_cost_events').where((r) => r.cells['classification'] == 'UNCLASSIFIED' && orderCostSign(r.cells['kind']) != 0).toList(),
                 'cost_paisa', signedReturns: true),
-          ].where((p) => p.contributors.isNotEmpty).toList(),
+          ].where((p) => p.rows.isNotEmpty).toList(),
         ),
         ReportChartData(
           id: 'cogs_dining_type',
@@ -152,7 +152,7 @@ class _Charts {
                   source('order_cost_events').where((r) => r.cells['dining_type'] == dt && r.cells['classification'] == 'UNCLASSIFIED' && orderCostSign(r.cells['kind']) != 0).toList(),
                   'cost_paisa', signedReturns: true),
             ],
-          ].where((p) => p.contributors.isNotEmpty).toList(),
+          ].where((p) => p.rows.isNotEmpty).toList(),
         ),
       ],
       dated('cost_dates', 'Recorded COGS postings by date',
