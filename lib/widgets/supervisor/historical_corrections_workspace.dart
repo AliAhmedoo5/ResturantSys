@@ -17,7 +17,10 @@ class _HistoricalCorrectionsWorkspaceState extends State<HistoricalCorrectionsWo
   String? _error;
   bool _busy=false, _adjusted=true;
   final _cutoff=TextEditingController();
-  bool get _authorized => widget.service.auth.session.currentStaff?.role==StaffRole.manager;
+  bool get _authorized {
+    final staff=widget.service.auth.session.currentStaff;
+    return staff!=null && staff.role==StaffRole.manager && staff.isActive && staff.loginEnabled;
+  }
   @override
   void initState(){super.initState();widget.service.auth.session.addListener(_sessionChanged);_loadDays();}
   void _sessionChanged(){if(mounted){setState((){_snapshot=null;_days=[];_day=null;});if(_authorized)_loadDays();}}
