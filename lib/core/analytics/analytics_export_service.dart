@@ -124,7 +124,11 @@ class AnalyticsExportService {
           .map((row) => row.map(_csvCell).join(',')).join('\r\n');
 
   List<List<Object?>> _metadata(AnalyticsSnapshot s, String family) => [
-    ['report_version', 'manager-analytics-v1'],
+    ['report_version', s.reportVersion],
+    ['source_schema_version', s.sourceSchemaVersion ?? 'Unavailable'],
+    ['snapshot_cutoff_utc', s.generatedAt.toUtc().toIso8601String()],
+    ['timestamp_policy', 'Asia/Karachi UTC+05:00; naive legacy values assumed Karachi; original UTC/offset values retained in source columns'],
+    ['identity_policy', 'At-transaction names are retained evidence; current names are separately labeled; unavailable history is not backfilled'],
     ['report_kind', 'Exploratory current-record snapshot; not a sealed Z-report'],
     ['family', family], ['currency', 'PKR; money amounts use integer paisa (100 paisa = PKR 1); decimal unit rates retain labeled PKR/base-unit precision'],
     ['generated_utc', s.generatedAt.toUtc().toIso8601String()],
@@ -132,10 +136,15 @@ class AnalyticsExportService {
     ['timezone', 'Asia/Karachi'], ['generated_by_staff_id', s.generatedByStaffId],
     ['business_date_start', _date(s.query.startDate)],
     ['business_date_end_exclusive', _date(s.query.endDateExclusive)],
+    ['query_start_inclusive', '${s.query.startDate.toIso8601String().replaceAll('Z', '')}+05:00'],
+    ['query_end_exclusive', '${s.query.endDateExclusive.toIso8601String().replaceAll('Z', '')}+05:00'],
     ['business_day_ids', s.businessDayIds.join(';')], ['live', s.query.live.toString()],
     ['cashier_id', s.query.cashierId], ['shift_id', s.query.shiftId],
     ['dining_type', s.query.diningType], ['payment_method', s.query.paymentMethod],
-    ['time_basis', 'Orders/shifts/trips use Business Day IDs; timestamp events use selected actual Business Day intervals. Current stock is current.'],
+    ['time_basis', s.query.timeBasis.name],
+    ['grouping', s.query.grouping.name],
+    ['bucket_definitions', 'Asia/Karachi; start inclusive, end exclusive; Business Day weekday = assigned opening date; calendar weekday = actual creation date; weeks start Monday; months = local calendar months.'],
+    ['non_order_scope', 'Shifts/trips and non-order ledgers retain Business Day scope; current stock is current.'],
     ['filter_scope', 'Order filters apply to order-derived datasets only; each section discloses its scope.'],
     for (final note in s.notes) ['snapshot_note', note],
   ];

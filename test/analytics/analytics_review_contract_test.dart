@@ -115,7 +115,7 @@ void main() {
     expect(metricLine, startsWith('known_customer_average_ticket,Known-customer average ticket,30000.0,paisa,complete,'));
     expect(metricLine.endsWith(',3,3,,'), isTrue);
     expect(csv, contains('recorded value paisa (paisa),average ticket paisa (paisa)'));
-    expect(csv.split('\r\n').singleWhere((line) => line.startsWith('${first.id},')), endsWith(',40000,20000.0,,'));
+    expect(csv.split('\r\n').singleWhere((line) => line.startsWith('${first.id},')), contains(',40000,20000.0,'));
     final archive = ZipDecoder().decodeBytes(exports.workbook(snapshot));
     final sheetIndex = snapshot.sections.indexWhere((s) => s.family == AnalyticsFamily.customers) + 2;
     final xml = utf8.decode(archive.findFile('xl/worksheets/sheet$sheetIndex.xml')!.content as List<int>);

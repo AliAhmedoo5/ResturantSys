@@ -9,6 +9,24 @@ List<ReportChartData> charts(AnalyticsFamily family, List<AnalyticsRow> rows,
   AnalyticsSection(family: family, title: family.name, rows: rows, metrics: metrics));
 
 void main() {
+  for (final spec in [
+    (AnalyticsFamily.procurement, 'mandi_procurements', 'spend_paisa', 'purchase_dates'),
+    (AnalyticsFamily.expenses, 'expense_entries', 'amount_paisa', 'expense_dates'),
+    (AnalyticsFamily.profitability, 'order_cost_events', 'cost_paisa', 'cost_dates'),
+  ]) {
+    test('${spec.$4} groups original UTC evidence after display formatting', () {
+      final source = row(spec.$2, '1', {
+        'kind': 'CONSUME', spec.$3: 125,
+        'created_at': '2026-10-30 00:30:00 +05:00 [Asia/Karachi]',
+        'created_at_source': '2026-10-29T19:30:00Z',
+      });
+      final chart = charts(spec.$1, [source]).singleWhere((chart) => chart.id == spec.$4);
+      expect(chart.points.single.label, '2026-10-30');
+      expect(chart.points.single.value, 125);
+      expect(chart.points.single.rows.single, same(source));
+    });
+  }
+
   test('Order and delivery distributions never count their auxiliary row kinds', () {
     final orders = charts(AnalyticsFamily.orders, [
       row('orders', '1', {'payment_status': 'SETTLED', 'dining_type': 'TAKEAWAY'}),

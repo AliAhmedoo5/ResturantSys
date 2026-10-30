@@ -63,6 +63,34 @@ class SnapshotService implements AnalyticsService {
 }
 
 void main() {
+  testWidgets('Order time basis survives period and grouping changes', (tester) async {
+    final queries = <AnalyticsQuery>[];
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: ManagerAnalyticsWorkspace(
+      service: SnapshotService(onLoad: (query) async {
+        queries.add(query);
+        return SnapshotService.fixture(query);
+      }), clock: () => DateTime(2026, 10, 30, 12),
+    ))));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const ValueKey('analytics_time_basis')));
+    await tester.tap(find.byKey(const ValueKey('analytics_time_basis')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Calendar time').last);
+    await tester.pumpAndSettle();
+    expect(queries.last.timeBasis, AnalyticsTimeBasis.calendarTime);
+    await tester.tap(find.byKey(const ValueKey('analytics_grouping')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Month').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('analytics_period')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Last 7 dates').last);
+    await tester.pumpAndSettle();
+    expect(queries.last.timeBasis, AnalyticsTimeBasis.calendarTime);
+    expect(queries.last.grouping, AnalyticsGrouping.month);
+    expect(queries.last.live, isFalse);
+  });
+
   setUpAll(() async {
     final file = File('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf');
     if (Platform.environment['CAPTURE_DESKTOP'] == 'true' && await file.exists()) {
@@ -249,6 +277,10 @@ void main() {
   });
 
   testWidgets('Order filters validate IDs and apply and clear the selected cohort', (tester) async {
+    tester.view.physicalSize = const Size(1366, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     AnalyticsQuery? requested;
     final service = SnapshotService(onLoad: (query) async {
       requested = query;
@@ -265,10 +297,12 @@ void main() {
     expect(find.text('Positive ID required'), findsOneWidget);
     expect(requested!.cashierId, isNull);
     await tester.enterText(find.byKey(const ValueKey('analytics_cashier')), '7');
+    await tester.ensureVisible(find.byKey(const ValueKey('analytics_apply_filters')));
     await tester.tap(find.byKey(const ValueKey('analytics_apply_filters')));
     await tester.pumpAndSettle();
     expect(requested!.cashierId, 7);
     expect(find.textContaining('Filters applied'), findsOneWidget);
+    await tester.ensureVisible(find.text('Clear'));
     await tester.tap(find.text('Clear'));
     await tester.pumpAndSettle();
     expect(requested!.hasOrderFilters, isFalse);

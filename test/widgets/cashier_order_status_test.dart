@@ -33,6 +33,21 @@ class StatusOrders implements OrderAndCheckoutController {
 }
 
 void main() {
+  testWidgets('Collection Due receipt entry discloses receiving Shift and late actual time', (tester) async {
+    final orders = StatusOrders();
+    orders.order = Order.fromMap({...orders.order.toMap(), 'payment_status': 'COLLECTION_DUE'});
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: CashierOrdersPanel(controller: orders, cashierId: 2, businessDayId: 1, shiftId: 2))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Record receipt'));
+    await tester.pumpAndSettle();
+    expect(find.text('Amount received (Rs)'), findsOneWidget);
+    expect(find.text('Late actual time (optional)'), findsOneWidget);
+    expect(find.textContaining('receiving Shift must be open'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.text('Record customer receipt'), findsNothing);
+  });
+
   testWidgets('Cashier opens Orders and explicitly records ready then collected', (tester) async {
     tester.view.physicalSize = const Size(1366, 768);
     tester.view.devicePixelRatio = 1;

@@ -1,13 +1,16 @@
+import '../../core/time/actual_event_time.dart';
 import 'package:flutter/material.dart';
 import '../../core/orders/dining_type.dart';
 import '../../core/orders/order.dart';
 import '../../core/orders/order_and_checkout_controller.dart';
 import '../../core/orders/token_status.dart';
+import '../../core/orders/payment_method.dart';
 
 /// Cashier records observed fulfillment milestones without a kitchen station.
 class CashierOrdersPanel extends StatefulWidget {
   const CashierOrdersPanel({super.key, required this.controller,
-    required this.cashierId, required this.businessDayId});
+    required this.cashierId, required this.businessDayId, this.shiftId});
+  final int? shiftId;
   final OrderAndCheckoutController controller;
   final int cashierId, businessDayId;
   @override
@@ -43,6 +46,37 @@ class _CashierOrdersPanelState extends State<CashierOrdersPanel> {
     } catch (error) {
       if (mounted) setState(() { _busy = false; _error = error.toString(); });
     }
+  }
+
+  Future<void> _collect(Order order) async {
+    final amount = TextEditingController();
+    final actual = TextEditingController();
+    var method = PaymentMethod.cash;
+    final commandId = 'receipt-${order.id}-${DateTime.now().microsecondsSinceEpoch}';
+    final accepted = await showDialog<bool>(context: context, builder: (context) => StatefulBuilder(builder: (context, change) => AlertDialog(
+      title: const Text('Record customer receipt'),
+      content: SizedBox(width: 420, child: Column(mainAxisSize: MainAxisSize.min, children: [
+        TextField(controller: amount, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Amount received (Rs)')),
+        DropdownButtonFormField<PaymentMethod>(initialValue: method, decoration: const InputDecoration(labelText: 'Manual tender'), items: PaymentMethod.values.where((m) => m != PaymentMethod.cod && m != PaymentMethod.split).map((m) => DropdownMenuItem(value: m, child: Text(m.displayName))).toList(), onChanged: (value) => change(() => method = value!)),
+        TextField(controller: actual, decoration: const InputDecoration(labelText: 'Late actual time (optional)', helperText: 'Pakistan time: YYYY-MM-DD HH:MM. Blank uses entry time.')),
+        const Text('Final cash rounds half-up to whole rupees. The receiving Shift must be open. This does not record a rider handover.'),
+      ])), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Record receipt'))],
+    )));
+    if (accepted == true && mounted) {
+      try {
+        final value = amount.text.trim();
+        if (!RegExp(r'^\d+(\.\d{1,2})?$').hasMatch(value)) throw ArgumentError('Enter a positive amount with at most two decimal places.');
+        final parts = value.split('.');
+        final paisa = int.parse(parts.first) * 100 + (parts.length == 1 ? 0 : int.parse(parts.last.padRight(2, '0')));
+        final input = actual.text.trim();
+        final time = parseActualEventTime(input);
+        await widget.controller.recordCashierReceipt(orderId: order.id, shiftId: widget.shiftId!, cashierId: widget.cashierId, amountPaisa: paisa, method: method, commandId: commandId, actualAt: time);
+        await _load();
+      } catch (error) {
+        if (mounted) setState(() => _error = error.toString());
+      }
+    }
+    amount.dispose(); actual.dispose();
   }
 
   String _stage(Order order) {
@@ -95,6 +129,7 @@ class _CashierOrdersPanelState extends State<CashierOrdersPanel> {
                 ]),
                 if (action != null) FilledButton(onPressed: _busy ? null : () => _advance(order),
                   child: Text(action)),
+                if (widget.shiftId != null && order.paymentStatus == 'COLLECTION_DUE') OutlinedButton(onPressed: _busy ? null : () => _collect(order), child: const Text('Record receipt')),
               ]));
           })),
   ]);

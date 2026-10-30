@@ -381,8 +381,9 @@ void main() {
         notes: 'Cleaning soap',
       );
 
-      // Shift 2 Close: Expected Cash = 3000 (float) + 0 (cash sales, voided order is not settled) - 100 (pay-out) = 2900.0
-      // Cashier counts 2900.0 (clean variance: 0.0)
+      // Voiding is not an explicit refund: its retained receipt remains physical
+      // cash. Expected = 3000 float + 500 retained receipt - 100 pay-out = 3400.
+      // Counting 2900 therefore discloses a 500 shortage instead of erasing cash.
       await shiftController.closeShift(shiftId: shift2.id, staffId: shift2.staffId, countedCash: 2900.0);
 
       // Kitchen wastage log:
@@ -414,6 +415,7 @@ void main() {
         vendorId: vendor.id,
         amount: 2000.0,
         paymentSource: VendorPaymentSource.paidOutsideDrawer,
+        staffId: supervisorId,
         notes: 'Bank transfer',
       );
 
@@ -422,16 +424,16 @@ void main() {
 
       expect(zReport.businessDayId, equals(day.id));
       expect(zReport.totalShiftsCount, equals(2));
-      expect(zReport.cashSales, equals(500.0));
+      expect(zReport.cashSales, equals(1000.0)); // Includes the retained voided-order receipt; no refund occurred.
       expect(zReport.cardSales, equals(1000.0));
       expect(zReport.raastSales, equals(500.0));
       expect(zReport.netSales, equals(2000.0)); // Settled orders only: 500 + 1000 + 500
       expect(zReport.totalOpeningFloat, equals(8000.0)); // 5000 + 3000
       expect(zReport.totalPayIn, equals(200.0));
       expect(zReport.totalPayOut, equals(100.0));
-      expect(zReport.totalExpectedDrawerCash, equals(8600.0)); // 8000 + 500 + 200 - 100
+      expect(zReport.totalExpectedDrawerCash, equals(9100.0)); // 8000 + 1000 + 200 - 100
       expect(zReport.totalCountedCash, equals(8580.0)); // 5680 + 2900
-      expect(zReport.netCashVariance, equals(-20.0)); // 8580 - 8600
+      expect(zReport.netCashVariance, equals(-520.0)); // 8580 - 9100
       expect(zReport.totalVoidCount, equals(1));
       expect(zReport.totalVoidAmount, equals(500.0));
       expect(zReport.totalWastageCount, equals(1));

@@ -4,10 +4,12 @@ import 'package:sqflite_common/sqlite_api.dart';
 import '../auth/auth_service.dart';
 import '../auth/staff_role.dart';
 import '../orders/paisa_engine.dart';
+import '../payments/payment_event.dart';
 import '../inventory/stock_count_valuation.dart';
 import 'analytics_models.dart';
 
 part 'analytics_reports.dart';
+part 'finance_timeline.dart';
 part 'customer_report_details.dart';
 typedef _Record = Map<String, Object?>;
 
@@ -39,29 +41,51 @@ class AnalyticsService {
 
   Future<_Evidence> _read(Transaction txn, AnalyticsQuery query, int actor) async {
     final e = _Evidence(query, actor, DateTime.now().toUtc());
+    e.sourceSchemaVersion = (await txn.rawQuery('PRAGMA user_version')).single.values.first as int;
     final dayScope = _dayScope(query);
     final dayArgs = _dayArgs(query);
-    final orderScope = _orderScope(query);
-    final orderArgs = [...dayArgs, ..._orderArgs(query)];
+    final orderScope = _orderCohortScope(query);
+    final orderArgs = _orderCohortArgs(query);
     final tables = (await txn.rawQuery("SELECT name FROM sqlite_master WHERE type='table'")).map((r) => r['name']).toSet();
     Future<void> read(String key, String table, String sql, [List<Object?> args = const []]) async {
       if (!tables.contains(table)) { e.absent.add(table); e.rows[key] = []; return; }
       e.rows[key] = await txn.rawQuery(sql, args);
     }
     await read('days', 'business_days', 'SELECT b.id,b.opened_at,b.closed_at,b.status FROM business_days b WHERE $dayScope ORDER BY b.opened_at', dayArgs);
-    const fields = 'o.id,o.business_day_id,o.shift_id,o.cashier_id,o.token_number,o.dining_type,o.subtotal,o.discount_amount,o.discount_id,o.tax_amount,o.grand_total,o.payment_status,o.token_status,o.cash_rounding_paisa,o.delivery_area_id,o.delivery_area_name_snapshot,o.delivery_fee_paisa,o.customer_phone,o.created_at';
-    final orderFrom = 'FROM orders o JOIN business_days b ON b.id=o.business_day_id WHERE $dayScope AND $orderScope';
+    const fields = 'o.id,o.business_day_id,o.shift_id,o.cashier_id,o.token_number,o.dining_type,o.subtotal,o.discount_amount,o.discount_id,o.tax_amount,o.grand_total,o.payment_status,o.token_status,o.cash_rounding_paisa,o.delivery_area_id,o.delivery_area_name_snapshot,o.delivery_fee_paisa,o.customer_phone,o.created_at,$outstandingCollectionPaisaSql AS collection_due_paisa';
+    final orderFrom = 'FROM orders o JOIN business_days b ON b.id=o.business_day_id WHERE $orderScope';
     await read('orders', 'orders', 'SELECT $fields $orderFrom ORDER BY o.id', orderArgs);
-    final joinedOrder = 'JOIN orders o ON o.id=x.order_id JOIN business_days b ON b.id=o.business_day_id WHERE $dayScope AND $orderScope';
+    await read('order_days', 'business_days', 'SELECT DISTINCT b.id,b.opened_at,b.closed_at,b.status FROM business_days b JOIN orders o ON o.business_day_id=b.id WHERE $orderScope ORDER BY b.opened_at,b.id', orderArgs);
+    await read('order_shifts', 'shifts', 'SELECT DISTINCT s.* FROM shifts s JOIN orders o ON o.shift_id=s.id JOIN business_days b ON b.id=o.business_day_id WHERE $orderScope ORDER BY s.id', orderArgs);
+    final joinedOrder = 'JOIN orders o ON o.id=x.order_id JOIN business_days b ON b.id=o.business_day_id WHERE $orderScope';
     await read('payments', 'order_payments', 'SELECT x.* FROM order_payments x $joinedOrder', orderArgs);
+    // Independent receiving evidence must survive an originating order outside scope.
+    await read('payment_events', 'payment_events', 'SELECT x.*,o.business_day_id AS originating_business_day_id,o.shift_id AS originating_shift_id,s.staff_id AS shift_owner_id FROM payment_events x LEFT JOIN orders o ON o.id=x.order_id LEFT JOIN shifts s ON s.id=x.shift_id');
+    // Receiving context belongs to independently selected events, including
+    // assignments outside the calendar order cohort. It is not drawer scope.
+    final selectedDayIds = e.get('days').map((d) => d['id']).toSet();
+    final selectedEvents = e.get('payment_events').where((p) {
+      if (query.shiftId != null && p['shift_id'] != query.shiftId) return false;
+      if (query.cashierId != null && p['shift_owner_id'] != query.cashierId) return false;
+      if (['RECEIPT','REFUND'].contains(p['kind']) && query.paymentMethod != null && p['payment_method'] != query.paymentMethod) return false;
+      if (query.timeBasis == AnalyticsTimeBasis.calendarTime) {
+        final actual = _karachi(p['actual_at']);
+        return actual != null && !actual.isBefore(analyticsWallClock(query.startDate)) && actual.isBefore(analyticsWallClock(query.endDateExclusive));
+      }
+      return selectedDayIds.contains(p['business_day_id']);
+    }).toList();
+    final eventDayIds = selectedEvents.map((p) => p['business_day_id']).whereType<int>().toSet().toList();
+    final eventShiftIds = selectedEvents.map((p) => p['shift_id']).whereType<int>().toSet().toList();
+    if (eventDayIds.isNotEmpty) await read('event_days', 'business_days', 'SELECT id,opened_at,closed_at,status FROM business_days WHERE id IN (${List.filled(eventDayIds.length, '?').join(',')})', eventDayIds);
+    if (eventShiftIds.isNotEmpty) await read('event_shifts', 'shifts', 'SELECT * FROM shifts WHERE id IN (${List.filled(eventShiftIds.length, '?').join(',')})', eventShiftIds);
     await read('items', 'order_items', 'SELECT x.id,x.order_id,x.menu_item_id,x.deal_id,x.name,x.quantity,x.unit_price,x.total_price,x.modifiers_json,x.deal_choices_json,x.bom_json FROM order_items x $joinedOrder', orderArgs);
     await read('revisions', 'order_revisions', 'SELECT x.id,x.order_id,x.revision_no,x.action,x.reason,x.cashier_id,x.created_at_utc,x.money_delta_paisa FROM order_revisions x $joinedOrder', orderArgs);
     await read('cost_coverage', 'order_cost_coverage', 'SELECT x.* FROM order_cost_coverage x $joinedOrder', orderArgs);
     await read('cost_events', 'order_cost_events', 'SELECT x.* FROM order_cost_events x $joinedOrder', orderArgs);
     // A physical drawer uses all orders in its shifts; order filters never alter it.
     await read('shifts', 'shifts', 'SELECT s.* FROM shifts s JOIN business_days b ON b.id=s.business_day_id WHERE $dayScope', dayArgs);
-    await read('cash_payments', 'order_payments', "SELECT p.*,o.shift_id FROM order_payments p JOIN orders o ON o.id=p.order_id JOIN business_days b ON b.id=o.business_day_id WHERE $dayScope AND o.payment_status IN ('SETTLED','REFUND_PENDING','CANCELLED','REFUNDED')", dayArgs);
-    await read('movements', 'cash_movements', 'SELECT m.id,m.shift_id,m.staff_id,m.type,m.amount,m.category,m.created_at FROM cash_movements m JOIN shifts s ON s.id=m.shift_id JOIN business_days b ON b.id=s.business_day_id WHERE $dayScope', dayArgs);
+    await read('cash_payments', 'order_payments', "SELECT p.*,COALESCE(pe.shift_id,o.shift_id) AS shift_id FROM order_payments p JOIN orders o ON o.id=p.order_id LEFT JOIN payment_events pe ON pe.tender_id=p.id JOIN business_days b ON b.id=COALESCE(pe.business_day_id,o.business_day_id) WHERE $dayScope AND (pe.id IS NOT NULL OR o.payment_status IN ('SETTLED','REFUND_PENDING','CANCELLED','REFUNDED'))", dayArgs);
+    await read('movements', 'cash_movements', 'SELECT m.id,m.shift_id,m.staff_id,m.type,m.amount,m.category,m.approved_by,m.created_at FROM cash_movements m JOIN shifts s ON s.id=m.shift_id JOIN business_days b ON b.id=s.business_day_id WHERE $dayScope', dayArgs);
     await read('trips', 'rider_trips', 'SELECT t.* FROM rider_trips t JOIN business_days b ON b.id=t.business_day_id WHERE $dayScope', dayArgs);
     await read('attempts', 'rider_trip_orders', 'SELECT x.id,x.order_id,x.trip_id,x.status,x.delivered_at,x.returned_at,t.dispatched_at,t.rider_staff_id FROM rider_trip_orders x JOIN rider_trips t ON t.id=x.trip_id $joinedOrder', orderArgs);
     await read('ingredients', 'raw_ingredients', 'SELECT id,name,storage_unit,current_stock,low_stock_threshold,cost_per_recipe_unit FROM raw_ingredients');
@@ -85,6 +109,8 @@ class AnalyticsService {
     } else {
       e.absent.add('supplier_payment_allocations');
     }
+    await read('identity_snapshots', 'reporting_identity_snapshots', 'SELECT * FROM reporting_identity_snapshots');
+    await read('expense_categories', 'expense_categories', 'SELECT id,name FROM expense_categories');
     await read('vendors', 'vendor_khata', 'SELECT id,name,opening_balance,current_balance,created_at FROM vendor_khata');
     await read('staff', 'staff', 'SELECT s.id,s.name,s.department_id,s.job_role_id,s.role,s.is_active,s.login_enabled,d.name AS department,j.name AS job_role FROM staff s LEFT JOIN departments d ON d.id=s.department_id LEFT JOIN job_roles j ON j.id=s.job_role_id');
     await read('catalog', 'menu_items', 'SELECT id,name,category_id,is_active FROM menu_items');
@@ -95,18 +121,27 @@ class AnalyticsService {
     await read('token_audit', 'checkout_token_audit', 'SELECT x.id,x.order_id,x.token_number,x.action,x.payment_status,x.revision,x.recorded_at FROM checkout_token_audit x $joinedOrder', orderArgs);
     await read('rounding', 'rounding_variance_ledger', 'SELECT x.id,x.order_id,x.shift_id,x.cash_rounding_paisa,x.created_at FROM rounding_variance_ledger x $joinedOrder', orderArgs);
     await read('stock_alerts', 'checkout_stock_alerts', 'SELECT x.order_id,x.ingredient_id,x.stock_at_checkout,x.created_at FROM checkout_stock_alerts x $joinedOrder', orderArgs);
-    await read('all_due', 'orders', "SELECT id,grand_total FROM orders WHERE payment_status='COLLECTION_DUE'");
+    await read('all_due', 'orders', "SELECT o.id,$outstandingCollectionPaisaSql AS collection_due_paisa FROM orders o WHERE o.payment_status='COLLECTION_DUE'");
     await read('all_trips', 'rider_trips', "SELECT id,cash_expected_paisa FROM rider_trips WHERE status IN ('DISPATCHED','RETURNED')");
     if (!query.live) {
-      final duration = _date(query.endDateExclusive).difference(_date(query.startDate));
+      final duration = query.timeBasis == AnalyticsTimeBasis.calendarTime ? query.endDateExclusive.difference(query.startDate) : _date(query.endDateExclusive).difference(_date(query.startDate));
       final prior = query.copyWith(startDate: query.startDate.subtract(duration), endDateExclusive: query.startDate);
-      await read('previous_orders', 'orders', 'SELECT o.id,o.grand_total,o.payment_status FROM orders o JOIN business_days b ON b.id=o.business_day_id WHERE ${_dayScope(prior)} AND ${_orderScope(prior)}', [..._dayArgs(prior), ..._orderArgs(prior)]);
+      await read('previous_orders', 'orders', 'SELECT o.id,o.grand_total,o.payment_status FROM orders o JOIN business_days b ON b.id=o.business_day_id WHERE ${_orderCohortScope(prior)}', _orderCohortArgs(prior));
       final priorIntervalArgs = [..._dayArgs(prior), _sqlTime(_karachi(e.now.toIso8601String())!)];
       await read('previous_purchases', 'mandi_procurements', 'SELECT x.id,x.total_cost FROM mandi_procurements x WHERE ${_intervalScope(prior, 'x.created_at')}', priorIntervalArgs);
       await read('previous_waste', 'kitchen_wastage', 'SELECT x.id,x.cost_loss FROM kitchen_wastage x WHERE ${_intervalScope(prior, 'x.created_at')}', priorIntervalArgs);
     }
     return e;
   }
+
+  // Calendar selection is independent of the assigned Business Day opening date.
+  // Other ledgers retain their explicitly disclosed operational scope.
+  static String _orderCohortScope(AnalyticsQuery q) => '${q.timeBasis == AnalyticsTimeBasis.businessDay ? _dayScope(q) : '(${_localSql('o.created_at')}>=? AND ${_localSql('o.created_at')}<?)'} AND ${_orderScope(q)}';
+  static List<Object?> _orderCohortArgs(AnalyticsQuery q) => [
+    if (q.timeBasis == AnalyticsTimeBasis.businessDay) ..._dayArgs(q)
+    else ...[_sqlTime(q.startDate), _sqlTime(q.endDateExclusive)],
+    ..._orderArgs(q),
+  ];
 
   static String _dayScope(AnalyticsQuery q) => q.live ? "b.status='OPEN'" : '(${_localSql('b.opened_at', dateOnly: true)}>=? AND ${_localSql('b.opened_at', dateOnly: true)}<?)';
   static List<Object?> _dayArgs(AnalyticsQuery q) => q.live ? [] : [_sqlDate(q.startDate), _sqlDate(q.endDateExclusive)];
@@ -122,6 +157,7 @@ class _Evidence {
   final DateTime now;
   final Map<String, List<_Record>> rows = {};
   final Set<String> absent = {};
+  int? sourceSchemaVersion;
   List<_Record> get(String name) => rows[name] ?? const [];
 }
 
@@ -137,9 +173,4 @@ String _localSql(String column, {bool dateOnly = false}) {
   final function = dateOnly ? 'date' : 'datetime';
   return "CASE WHEN $column LIKE '%Z' OR substr($column,-6,1) IN ('+','-') THEN $function($column,'+5 hours') ELSE $function($column) END";
 }
-DateTime? _karachi(Object? raw) {
-  if (raw is! String) return null;
-  final parsed = DateTime.tryParse(raw);
-  if (parsed == null) return null;
-  return parsed.isUtc || RegExp(r'[+-]\d\d:\d\d$').hasMatch(raw) ? parsed.toUtc().add(const Duration(hours: 5)) : DateTime.utc(parsed.year, parsed.month, parsed.day, parsed.hour, parsed.minute, parsed.second);
-}
+DateTime? _karachi(Object? raw) => analyticsKarachiTime(raw);

@@ -1,3 +1,4 @@
+import '../../core/time/actual_event_time.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:resturant_sys/core/khata/vendor.dart';
@@ -5,7 +6,7 @@ import 'package:resturant_sys/core/khata/vendor_payment_source.dart';
 import 'package:resturant_sys/core/theme/theme.dart';
 
 /// Modal dialog for recording Vendor Khata settlements with multi-source payment routing
-/// ('Paid from Active Drawer' vs 'Paid Outside Drawer').
+/// ('Paid from Active Drawer' vs 'Bank / digital (outside drawer)').
 class SettlementPaymentDialog extends StatefulWidget {
   const SettlementPaymentDialog({
     super.key,
@@ -48,6 +49,7 @@ class _SettlementPaymentDialogState extends State<SettlementPaymentDialog> {
   late final TextEditingController _amountController;
   final _slipController = TextEditingController();
   final _notesController = TextEditingController();
+  final _actualController = TextEditingController();
 
   late VendorPaymentSource _paymentSource;
   int? _invoiceId;
@@ -65,7 +67,7 @@ class _SettlementPaymentDialogState extends State<SettlementPaymentDialog> {
     );
     _paymentSource = hasActiveShift
         ? VendorPaymentSource.paidFromActiveDrawer
-        : VendorPaymentSource.paidOutsideDrawer;
+        : VendorPaymentSource.bank;
   }
 
   @override
@@ -73,6 +75,7 @@ class _SettlementPaymentDialogState extends State<SettlementPaymentDialog> {
     _amountController.dispose();
     _slipController.dispose();
     _notesController.dispose();
+    _actualController.dispose();
     super.dispose();
   }
 
@@ -83,6 +86,7 @@ class _SettlementPaymentDialogState extends State<SettlementPaymentDialog> {
 
     Navigator.of(context).pop({
       'amount': amount,
+      'actual_at': parseActualEventTime(_actualController.text),
       'invoice_id': _invoiceId,
       'payment_source': _paymentSource,
       'reference_slip': _slipController.text.trim().isNotEmpty
@@ -153,6 +157,19 @@ class _SettlementPaymentDialogState extends State<SettlementPaymentDialog> {
                   ],
                 ),
                 const SizedBox(height: WarmCounterSpacing.space16),
+
+                RadioListTile<VendorPaymentSource>(
+                  title: const Text('Owner cash (outside drawer)'),
+                  value: VendorPaymentSource.owner, groupValue: _paymentSource,
+                  onChanged: (value) => setState(() => _paymentSource = value!),
+                ),
+                TextFormField(key: const Key('settlement_actual_time_field'), controller: _actualController,
+                  decoration: const InputDecoration(labelText: 'Actual Pakistan time (YYYY-MM-DD HH:MM, blank = now)'),
+                  validator: (value) {
+                    try { parseActualEventTime(value); return null; }
+                    on FormatException { return 'Enter a valid Pakistan time: YYYY-MM-DD HH:MM'; }
+                  }),
+                const SizedBox(height: 12),
 
                 // Current Payable Balance Card
                 Container(
@@ -242,12 +259,12 @@ class _SettlementPaymentDialogState extends State<SettlementPaymentDialog> {
 
                 // Radio 2: Paid Outside Drawer
                 Material(
-                  color: _paymentSource == VendorPaymentSource.paidOutsideDrawer
+                  color: _paymentSource == VendorPaymentSource.bank
                       ? WarmCounterColors.lightPrimaryAction.withAlpha(10)
                       : Colors.transparent,
                   shape: RoundedRectangleBorder(
                     side: BorderSide(
-                      color: _paymentSource == VendorPaymentSource.paidOutsideDrawer
+                      color: _paymentSource == VendorPaymentSource.bank
                           ? WarmCounterColors.lightPrimaryAction
                           : WarmCounterColors.lightBorder,
                     ),
@@ -255,11 +272,11 @@ class _SettlementPaymentDialogState extends State<SettlementPaymentDialog> {
                   ),
                   child: RadioListTile<VendorPaymentSource>(
                     key: const Key('source_external_tile'),
-                    value: VendorPaymentSource.paidOutsideDrawer,
+                    value: VendorPaymentSource.bank,
                     groupValue: _paymentSource,
-                    title: const Text('Paid Outside Drawer'),
+                    title: const Text('Bank / digital (outside drawer)'),
                     subtitle: const Text(
-                      'Bank transfer, cheque, or owner personal pocket. Does not touch cash drawer float.',
+                      'Bank or digital payment. Does not touch cash drawer float.',
                       style: WarmCounterTypography.caption,
                     ),
                     activeColor: WarmCounterColors.lightPrimaryAction,

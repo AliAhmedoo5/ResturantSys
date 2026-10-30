@@ -1,3 +1,4 @@
+import '../../core/time/actual_event_time.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/catalog/menu_item.dart';
@@ -52,6 +53,7 @@ class _CashierOrderRevisionDialogState
   bool _isChoosingItems = false;
   String? _errorMessage;
   int? _pendingRefundPaisa;
+  final _refundActualTime = TextEditingController();
 
   static const List<String> _quickReasons = [
     'Customer changed mind',
@@ -99,6 +101,7 @@ class _CashierOrderRevisionDialogState
 
   @override
   void dispose() {
+    _refundActualTime.dispose();
     _reasonController.dispose();
     super.dispose();
   }
@@ -314,6 +317,7 @@ class _CashierOrderRevisionDialogState
         reason: _reasonController.text.trim().isNotEmpty
             ? _reasonController.text.trim()
             : 'Order revision refund payout',
+        actualAt: parseActualEventTime(_refundActualTime.text),
         commandId: commandId,
       );
 
@@ -453,6 +457,15 @@ class _CashierOrderRevisionDialogState
               const SizedBox(height: 12),
 
               // Pending refund banner (if refund owed)
+              if ((_pendingRefundPaisa ?? 0) > 0)
+                Align(alignment: Alignment.centerLeft, child: TextButton(
+                  onPressed: _isSubmitting ? null : () => showDialog<void>(context: context, builder: (context) => AlertDialog(
+                    title: const Text('Refund actual time'),
+                    content: TextField(controller: _refundActualTime, decoration: const InputDecoration(labelText: 'Pakistan time: YYYY-MM-DD HH:MM', helperText: 'Blank uses entry time. The receiving Shift must be open.')),
+                    actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Done'))],
+                  )),
+                  child: const Text('Set late refund actual time (optional)'),
+                )),
               if ((_pendingRefundPaisa ?? 0) > 0)
                 Container(
                   key: const ValueKey('pending_refund_banner'),
