@@ -81,6 +81,7 @@ class AnalyticsService {
     if (eventDayIds.isNotEmpty) await read('event_days', 'business_days', 'SELECT id,opened_at,closed_at,status FROM business_days WHERE id IN (${List.filled(eventDayIds.length, '?').join(',')})', eventDayIds);
     if (eventShiftIds.isNotEmpty) await read('event_shifts', 'shifts', 'SELECT * FROM shifts WHERE id IN (${List.filled(eventShiftIds.length, '?').join(',')})', eventShiftIds);
     await read('items', 'order_items', 'SELECT x.id,x.order_id,x.menu_item_id,x.deal_id,x.name,x.quantity,x.unit_price,x.total_price,x.modifiers_json,x.deal_choices_json,x.bom_json FROM order_items x $joinedOrder', orderArgs);
+    await read('allocations', 'order_item_allocations', 'SELECT x.* FROM order_item_allocations x $joinedOrder', orderArgs);
     await read('revisions', 'order_revisions', 'SELECT x.id,x.order_id,x.revision_no,x.action,x.reason,x.cashier_id,x.created_at_utc,x.money_delta_paisa FROM order_revisions x $joinedOrder', orderArgs);
     await read('cost_coverage', 'order_cost_coverage', 'SELECT x.* FROM order_cost_coverage x $joinedOrder', orderArgs);
     await read('cost_events', 'order_cost_events', 'SELECT x.* FROM order_cost_events x $joinedOrder', orderArgs);

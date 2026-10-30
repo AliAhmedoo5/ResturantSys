@@ -362,21 +362,37 @@ class _ReportBuilder {
 
   AnalyticsSection _menu() {
     final items = soldItems;
+    final validAllocations = e.get('allocations').where((a) => validIds.contains(a['order_id'])).toList();
+    final allocatedOrderIds = validAllocations.map((a) => a['order_id'] as int).toSet();
+    final allocatedCount = valid.where((o) => allocatedOrderIds.contains(o['id'])).length;
+    final legacyOrders = valid.where((o) => !allocatedOrderIds.contains(o['id'])).toList();
+    final legacyDiscountsPaisa = legacyOrders.fold<int>(0, (sum, o) => sum + _money(o, 'discount_amount'));
+
+    // Index parent allocations (ITEM and DEAL_PARENT) by catalog key
+    final allocationsByCatalogKey = <String, List<_Record>>{};
+    for (final alloc in validAllocations) {
+      if (alloc['line_kind'] == 'DEAL_COMPONENT') continue;
+      final type = alloc['deal_id'] != null ? 'deal' : 'item';
+      final id = alloc['deal_id'] ?? alloc['menu_item_id'];
+      final key = '$type:${id ?? 'archived:${alloc['item_name_snapshot']}'}';
+      allocationsByCatalogKey.putIfAbsent(key, () => []).add(alloc);
+    }
+
     final rows = <AnalyticsRow>[];
     final sold = <String>{};
     final groups = <String, List<_Record>>{};
     for (final item in items) {
       final type = item['deal_id'] != null ? 'deal' : 'item';
-      // Deleted catalog IDs can become NULL. Preserve their snapshotted names
-      // rather than merging every archived item into one anonymous product.
       final key = '$type:${item['deal_id'] ?? item['menu_item_id'] ?? 'archived:${item['name']}'}';
       sold.add(key);
       groups.putIfAbsent(key, () => []).add(item);
     }
+
     final ranked = groups.entries.toList()..sort((a, b) {
       final quantity = _integers(b.value, 'quantity').compareTo(_integers(a.value, 'quantity'));
       return quantity != 0 ? quantity : a.key.compareTo(b.key);
     });
+
     var rank = 0;
     int? previousQuantity;
     for (var index = 0; index < ranked.length; index++) {
@@ -385,37 +401,208 @@ class _ReportBuilder {
       final quantity = _integers(entry.value, 'quantity');
       if (quantity != previousQuantity) rank = index + 1;
       previousQuantity = quantity;
-      rows.add(AnalyticsRow(id: 'menu-${entry.key}', sourceType: 'order_items', sourceId: entry.value.map((i) => i['id']).join(','), cells: {
-        'kind': 'Item/deal aggregate',
-        'catalog_kind': first['deal_id'] != null ? 'deal' : 'item',
-        'catalog_id': first['deal_id'] ?? first['menu_item_id'],
-        'name': entry.value.map((i) => _safeText(i['name'])).toSet().join(' / '),
-        'quantity': quantity,
-        'order_count': entry.value.map((i) => i['order_id']).toSet().length,
-        'line_value_paisa': _sum(entry.value, 'total_price'),
-        'popularity_rank': rank,
-        'modifiers': entry.value.map((i) => _snapshotNames(i['modifiers_json'])).where((name) => name.isNotEmpty).toSet().join(' / '),
-        'choices': entry.value.map((i) => _snapshotNames(i['deal_choices_json'])).where((name) => name.isNotEmpty).toSet().join(' / '),
-      }));
+
+      final allocatedRows = allocationsByCatalogKey[entry.key] ?? const [];
+      final lineGross = _sum(entry.value, 'total_price');
+      final lineAllocatedDiscount = allocatedRows.isNotEmpty
+          ? _integers(allocatedRows, 'allocated_discount_paisa')
+          : 0;
+
+      final unallocatedGross = entry.value
+          .where((i) => !allocatedOrderIds.contains(i['order_id']))
+          .fold<int>(0, (s, i) => s + _money(i, 'total_price'));
+
+      final netSalesPaisa = allocatedRows.isNotEmpty
+          ? (_integers(allocatedRows, 'net_sales_paisa') + unallocatedGross)
+          : lineGross;
+
+      final taxCarveOutPaisa = allocatedRows.isNotEmpty
+          ? _integers(allocatedRows, 'tax_carve_out_paisa')
+          : 0;
+
+      final hasBom = allocatedRows.any((a) => a['bom_recipe_cost_paisa'] != null);
+      final bomCostPaisa = hasBom ? _integers(allocatedRows, 'bom_recipe_cost_paisa') : null;
+      final marginPaisa = (hasBom && bomCostPaisa != null)
+          ? (_integers(allocatedRows, 'net_sales_paisa') - bomCostPaisa)
+          : null;
+      final marginRate = (marginPaisa != null && netSalesPaisa > 0)
+          ? (marginPaisa / netSalesPaisa * 100)
+          : null;
+
+      rows.add(AnalyticsRow(
+        id: 'menu-${entry.key}',
+        sourceType: 'order_items',
+        sourceId: entry.value.map((i) => i['id']).join(','),
+        cells: {
+          'kind': 'Item/deal aggregate',
+          'catalog_kind': first['deal_id'] != null ? 'deal' : 'item',
+          'catalog_id': first['deal_id'] ?? first['menu_item_id'],
+          'deal_id': first['deal_id'],
+          'name': entry.value.map((i) => _safeText(i['name'])).toSet().join(' / '),
+          'quantity': quantity,
+          'order_count': entry.value.map((i) => i['order_id']).toSet().length,
+          'line_value_paisa': lineGross,
+          'allocated_discount_paisa': lineAllocatedDiscount,
+          'net_sales_paisa': netSalesPaisa,
+          'tax_carve_out_paisa': taxCarveOutPaisa,
+          'bom_recipe_cost_paisa': bomCostPaisa,
+          'margin_paisa': marginPaisa,
+          'margin_rate': marginRate,
+          'popularity_rank': rank,
+          'modifiers': entry.value.map((i) => _snapshotNames(i['modifiers_json'])).where((name) => name.isNotEmpty).toSet().join(' / '),
+          'choices': entry.value.map((i) => _snapshotNames(i['deal_choices_json'])).where((name) => name.isNotEmpty).toSet().join(' / '),
+        },
+      ));
     }
+
+    // Deal component expansion rows for deep menu engineering
+    final componentAllocations = validAllocations.where((a) => a['line_kind'] == 'DEAL_COMPONENT').toList();
+    final componentGroups = <String, List<_Record>>{};
+    for (final comp in componentAllocations) {
+      final key = '${comp['deal_id']}:${comp['component_menu_item_id'] ?? comp['item_name_snapshot']}';
+      componentGroups.putIfAbsent(key, () => []).add(comp);
+    }
+    for (final compEntry in componentGroups.entries) {
+      final first = compEntry.value.first;
+      final compGross = _integers(compEntry.value, 'gross_sales_paisa');
+      final compDiscount = _integers(compEntry.value, 'allocated_discount_paisa');
+      final compNet = _integers(compEntry.value, 'net_sales_paisa');
+      final compTax = _integers(compEntry.value, 'tax_carve_out_paisa');
+      final hasBom = compEntry.value.any((a) => a['bom_recipe_cost_paisa'] != null);
+      final compBom = hasBom ? _integers(compEntry.value, 'bom_recipe_cost_paisa') : null;
+      final compMargin = (hasBom && compBom != null) ? (compNet - compBom) : null;
+      final compMarginRate = (compMargin != null && compNet > 0) ? (compMargin / compNet * 100) : null;
+
+      rows.add(AnalyticsRow(
+        id: 'deal-comp-${compEntry.key}',
+        sourceType: 'order_item_allocations',
+        sourceId: compEntry.value.map((a) => a['id']).join(','),
+        cells: {
+          'kind': 'Deal component breakdown',
+          'catalog_kind': 'component',
+          'catalog_id': first['component_menu_item_id'],
+          'deal_id': first['deal_id'],
+          'name': _safeText(first['item_name_snapshot']),
+          'quantity': _integers(compEntry.value, 'quantity'),
+          'order_count': compEntry.value.map((a) => a['order_id']).toSet().length,
+          'line_value_paisa': compGross,
+          'allocated_discount_paisa': compDiscount,
+          'net_sales_paisa': compNet,
+          'tax_carve_out_paisa': compTax,
+          'bom_recipe_cost_paisa': compBom,
+          'margin_paisa': compMargin,
+          'margin_rate': compMarginRate,
+          'status': 'Expanded deal component',
+        },
+      ));
+    }
+
+    // Explicit Legacy Unallocated Order Discounts row (ADR-0021 Section 7)
+    if (legacyDiscountsPaisa > 0 || legacyOrders.isNotEmpty) {
+      rows.add(AnalyticsRow(
+        id: 'menu-legacy-unallocated-discounts',
+        sourceType: 'orders',
+        sourceId: legacyOrders.where((o) => _money(o, 'discount_amount') > 0).map((o) => o['id']).join(','),
+        cells: {
+          'kind': 'Legacy unallocated summary',
+          'catalog_kind': 'legacy',
+          'catalog_id': null,
+          'name': 'Legacy Unallocated Order Discounts',
+          'quantity': 0,
+          'order_count': legacyOrders.where((o) => _money(o, 'discount_amount') > 0).length,
+          'line_value_paisa': 0,
+          'allocated_discount_paisa': legacyDiscountsPaisa,
+          'net_sales_paisa': -legacyDiscountsPaisa,
+          'tax_carve_out_paisa': 0,
+          'bom_recipe_cost_paisa': 0,
+          'margin_paisa': -legacyDiscountsPaisa,
+          'status': 'Legacy orders without verified line allocations',
+        },
+      ));
+    }
+
     var zeroSellers = 0;
     for (final type in ['catalog', 'deals']) {
       for (final item in e.get(type)) {
         if (item['is_active'] != 1 || sold.contains('${type == 'deals' ? 'deal' : 'item'}:${item['id']}')) continue;
         zeroSellers++;
-        rows.add(_row(type == 'deals' ? 'deals' : 'menu_items', item, {'kind': 'Current active zero seller', 'catalog_kind': type == 'deals' ? 'deal' : 'item', 'catalog_id': item['id'], 'name': _safeText(item['name']), 'quantity': 0, 'order_count': 0, 'line_value_paisa': 0, 'status': 'Zero recorded sales in selected cohort'}));
+        rows.add(_row(
+          type == 'deals' ? 'deals' : 'menu_items',
+          item,
+          {
+            'kind': 'Current active zero seller',
+            'catalog_kind': type == 'deals' ? 'deal' : 'item',
+            'catalog_id': item['id'],
+            'name': _safeText(item['name']),
+            'quantity': 0,
+            'order_count': 0,
+            'line_value_paisa': 0,
+            'allocated_discount_paisa': 0,
+            'net_sales_paisa': 0,
+            'tax_carve_out_paisa': 0,
+            'bom_recipe_cost_paisa': 0,
+            'margin_paisa': 0,
+            'status': 'Zero recorded sales in selected cohort',
+          },
+        ));
       }
     }
+
     final discounted = valid.where((o) => _money(o, 'discount_amount') > 0).length;
-    return _section(AnalyticsFamily.menu, 'Menu and deals', [
-      _metric('quantity', 'Recorded sold quantity', _integers(items, 'quantity'), unit: AnalyticsUnit.count, explanation: 'Sum current valid order line quantity, including deal counts; deal components are not separate sold lines.'),
-      _metric('line_value', 'Recorded line value', _sum(items, 'total_price'), explanation: 'Stored eligible line totals before order-level discount/tax/fee allocation; not item net revenue.'),
-      _metric('zero_sellers', 'Active zero sellers', zeroSellers, unit: AnalyticsUnit.count, explanation: 'Current active menu/deal entries with no matching eligible line in filtered range; catalog history incomplete.'),
-      _rate('discount_use', 'Discount utilization', discounted, valid.length, 'Eligible selected orders with a positive stored discount / eligible orders.'),
-      _average('quantity_per_order', 'Mean line quantity per order', _integers(items, 'quantity'), valid.length, AnalyticsUnit.decimal, 'Recorded eligible line quantity / eligible order count.'),
-      _missing('item_net_sales', 'Allocated item net sales', 'Order discount/tax/delivery allocation is not persisted; stored line value must not be mislabeled net sales.'),
-      _missing('item_margin', 'Historical item margin', 'BOM quantity snapshots have no event-time ingredient cost layers.'),
-    ], rows, ['kind', 'catalog_kind', 'catalog_id', 'name', 'quantity', 'order_count', 'line_value_paisa', 'popularity_rank', 'modifiers', 'choices', 'status'], [_orderBasis, 'Item/deal aggregate quantity and stored line value combine all eligible lines by catalog identity; order_count is distinct contributing orders. Popularity rank uses quantity descending with equal ranks for ties. Each aggregate retains every contributing order_item source ID.', 'Ascending quantity identifies slow sellers; zero sellers refer to current active catalog. Snapshotted modifier/choice names are source evidence, not inferred upsell profitability.']);
+    final parentAllocations = validAllocations.where((a) => a['line_kind'] != 'DEAL_COMPONENT').toList();
+    final totalAllocatedNetSales = _integers(parentAllocations, 'net_sales_paisa');
+    final totalAllocatedBomCost = parentAllocations.any((a) => a['bom_recipe_cost_paisa'] != null)
+        ? _integers(parentAllocations, 'bom_recipe_cost_paisa')
+        : 0;
+    final totalAllocatedMargin = totalAllocatedNetSales - totalAllocatedBomCost;
+
+    return _section(
+      AnalyticsFamily.menu,
+      'Menu and deals',
+      [
+        _metric('quantity', 'Recorded sold quantity', _integers(items, 'quantity'), unit: AnalyticsUnit.count, explanation: 'Sum current valid order line quantity, including deal counts; deal components are not separate sold lines.'),
+        _metric('line_value', 'Recorded line value', _sum(items, 'total_price'), explanation: 'Stored eligible line totals before order-level discount/tax/fee allocation; not item net revenue.'),
+        _coverage('allocation_coverage', 'Allocation coverage', allocatedCount, valid.length, 'Orders with verified line allocations / Total eligible orders in selected period.'),
+        _metric('zero_sellers', 'Active zero sellers', zeroSellers, unit: AnalyticsUnit.count, explanation: 'Current active menu/deal entries with no matching eligible line in filtered range; catalog history incomplete.'),
+        _rate('discount_use', 'Discount utilization', discounted, valid.length, 'Eligible selected orders with a positive stored discount / eligible orders.'),
+        _average('quantity_per_order', 'Mean line quantity per order', _integers(items, 'quantity'), valid.length, AnalyticsUnit.decimal, 'Recorded eligible line quantity / eligible order count.'),
+        allocatedCount > 0
+            ? _metric('item_net_sales', 'Allocated item net sales', totalAllocatedNetSales, explanation: 'Net sales from orders with verified line allocations after proportional discount deduction.')
+            : _missing('item_net_sales', 'Allocated item net sales', 'Order discount/tax/delivery allocation is not persisted; stored line value must not be mislabeled net sales.'),
+        allocatedCount > 0
+            ? _metric('item_margin', 'Historical item margin', totalAllocatedMargin, explanation: 'Allocated line net sales minus recipe BOM food cost at event-time ingredient rates.')
+            : _missing('item_margin', 'Historical item margin', 'BOM quantity snapshots have no event-time ingredient cost layers.'),
+      ],
+      rows,
+      [
+        'kind',
+        'catalog_kind',
+        'catalog_id',
+        'deal_id',
+        'name',
+        'quantity',
+        'order_count',
+        'line_value_paisa',
+        'allocated_discount_paisa',
+        'net_sales_paisa',
+        'tax_carve_out_paisa',
+        'bom_recipe_cost_paisa',
+        'margin_paisa',
+        'margin_rate',
+        'popularity_rank',
+        'modifiers',
+        'choices',
+        'status',
+      ],
+      [
+        _orderBasis,
+        'Item and deal net sales, allocated discounts, tax carve-outs, and BOM recipe costs are calculated in signed 64-bit Integer Paisa adhering to ADR-0021.',
+        'Proportional discount allocation uses integer floor division; the zero-leak rounding residual is distributed by adding 1 paisa to lines with the highest gross subtotal.',
+        'Deals are expanded across constituent components weighted by standalone regular catalog prices to determine component contribution margins.',
+        'Orders created prior to line allocation capture disclose exact coverage ratio; legacy order discounts are isolated in the "Legacy Unallocated Order Discounts" row so totals reconcile to Order subtotal and grand total without retroactive estimation.',
+        'Ascending quantity identifies slow sellers; zero sellers refer to current active catalog.',
+      ],
+    );
   }
 
   AnalyticsSection _inventory() {
