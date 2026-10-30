@@ -41,7 +41,7 @@ class _Charts {
         'Filtered committed orders · current stored status, including cancellations'),
       count('dining_mix', 'Orders by Dining Type', source('orders'), 'dining_type',
         'Filtered committed orders · revisions are not counted again'),
-      ...workload(),
+      ...workload(), ...weekdayPeaks(),
     ],
     AnalyticsFamily.delivery => [
       count('attempt_outcomes', 'Delivery attempt outcomes', source('rider_trip_orders'), 'status',
@@ -152,6 +152,20 @@ class _Charts {
       }
     }
     return result;
+  }
+  List<ReportChartData> weekdayPeaks() {
+    final buckets = section.rows.where((r) => r.cells['kind'] == 'Weekday comparison').toList();
+    if (buckets.isEmpty) return [];
+    final sorted = [...buckets]..sort((a, b) {
+      final rank = ((b.cells['orders_per_completed_day'] as num?) ?? -1).compareTo((a.cells['orders_per_completed_day'] as num?) ?? -1);
+      return rank != 0 ? rank : (a.cells['weekday'] as int).compareTo(b.cells['weekday'] as int);
+    });
+    return [ReportChartData(id: 'weekday_average', title: 'Orders per completed Business Day by operational weekday',
+      scope: 'Operational weekday · Asia/Karachi · open days separate', unit: AnalyticsUnit.decimal,
+      note: 'Completed confirmed Orders / completed Business Days, including opened zero-order days. No denominator means unavailable. Order-only filters restrict numerator, not opened-day denominator. Equal averages retain Monday-to-Sunday ties.',
+      points: [for (final row in sorted) ReportChartPoint('${row.cells['period']}', number(row.cells['orders_per_completed_day']),
+        quality: row.cells['orders_per_completed_day'] == null ? AnalyticsQuality.missing : AnalyticsQuality.complete,
+        explanation: '${row.cells['completed_confirmed_orders']} / ${row.cells['completed_business_days']} completed days; aggregate ${row.cells['confirmed_orders']}; open ${row.cells['open_confirmed_orders']} Orders / ${row.cells['open_business_days']} days', rows: [row])])];
   }
   List<ReportChartData> inventory() {
     final positions = section.rows.where((r) => r.cells['kind'] == 'Current position').toList();
@@ -270,3 +284,4 @@ class _Charts {
     return order != 0 ? order : a.label.compareTo(b.label);
   });
 }
+
