@@ -1110,7 +1110,11 @@ class OrderAndCheckoutController {
     required DatabaseExecutor txn,
     required DateTime now,
     Set<int>? targetOrderItemIds,
+    Set<int>? targetMenuItemIds,
+    Set<int>? targetDealIds,
     Map<int, int>? partialReversals,
+    Map<int, int>? partialReversalsByMenuItemId,
+    Map<int, int>? partialReversalsByDealId,
   }) async {
     final rows = await txn.query(
       PosDatabaseConstants.tableOrderItemAllocations,
@@ -1132,7 +1136,21 @@ class OrderAndCheckoutController {
       final baseAlloc = lineRows.firstWhere((a) => a.entryType == 'SALE', orElse: () => lineRows.first);
       final orderItemId = baseAlloc.orderItemId;
 
-      if (targetOrderItemIds != null && (orderItemId == null || !targetOrderItemIds.contains(orderItemId))) {
+      bool isTargeted = false;
+      if (targetOrderItemIds == null && targetMenuItemIds == null && targetDealIds == null) {
+        isTargeted = true;
+      } else {
+        if (targetOrderItemIds != null && orderItemId != null && targetOrderItemIds.contains(orderItemId)) {
+          isTargeted = true;
+        }
+        if (targetMenuItemIds != null && baseAlloc.menuItemId != null && targetMenuItemIds.contains(baseAlloc.menuItemId)) {
+          isTargeted = true;
+        }
+        if (targetDealIds != null && baseAlloc.dealId != null && targetDealIds.contains(baseAlloc.dealId)) {
+          isTargeted = true;
+        }
+      }
+      if (!isTargeted) {
         continue;
       }
 
@@ -1163,11 +1181,16 @@ class OrderAndCheckoutController {
       }
 
       int qtyToReverse = netQty;
+      int? requestedReduction;
       if (partialReversals != null && orderItemId != null && partialReversals.containsKey(orderItemId)) {
-        final req = partialReversals[orderItemId]!;
-        if (req < netQty) {
-          qtyToReverse = req;
-        }
+        requestedReduction = partialReversals[orderItemId];
+      } else if (partialReversalsByMenuItemId != null && baseAlloc.menuItemId != null && partialReversalsByMenuItemId.containsKey(baseAlloc.menuItemId)) {
+        requestedReduction = partialReversalsByMenuItemId[baseAlloc.menuItemId];
+      } else if (partialReversalsByDealId != null && baseAlloc.dealId != null && partialReversalsByDealId.containsKey(baseAlloc.dealId)) {
+        requestedReduction = partialReversalsByDealId[baseAlloc.dealId];
+      }
+      if (requestedReduction != null && requestedReduction < netQty) {
+        qtyToReverse = requestedReduction;
       }
 
       final factor = (netQty == 0) ? 1.0 : (qtyToReverse / netQty);
@@ -2005,7 +2028,11 @@ class OrderAndCheckoutController {
       final linesToInsert = <Map<String, Object?>>[];
       final matchedItemIndices = <int>{};
       final removedOrderItemIds = <int>{};
+      final removedMenuItemIds = <int>{};
+      final removedDealIds = <int>{};
       final partialReversals = <int, int>{};
+      final partialReversalsByMenuItemId = <int, int>{};
+      final partialReversalsByDealId = <int, int>{};
 
       for (final oldItem in oldOrderItems) {
         final matchIdx = newItems.indexWhere((ni) =>
@@ -2015,6 +2042,8 @@ class OrderAndCheckoutController {
 
         if (matchIdx == -1) {
           removedOrderItemIds.add(oldItem.id);
+          if (oldItem.menuItemId != null) removedMenuItemIds.add(oldItem.menuItemId!);
+          if (oldItem.dealId != null) removedDealIds.add(oldItem.dealId!);
           final itemBom = oldItem.decodedBom ?? await _computeBOMForOrderItem(oldItem, txn);
           final disposition = isUnstartedPrep ? 'RESTOCK_RAW' : 'WASTED_COOKED';
           linesToInsert.add({
@@ -2040,6 +2069,14 @@ class OrderAndCheckoutController {
               final reduction = oldQty - newQty;
               partialReversals[oldItem.id] = reduction;
               removedOrderItemIds.add(oldItem.id);
+              if (oldItem.menuItemId != null) {
+                removedMenuItemIds.add(oldItem.menuItemId!);
+                partialReversalsByMenuItemId[oldItem.menuItemId!] = reduction;
+              }
+              if (oldItem.dealId != null) {
+                removedDealIds.add(oldItem.dealId!);
+                partialReversalsByDealId[oldItem.dealId!] = reduction;
+              }
             }
             final priceDelta = PaisaEngine.rupeesToPaisa(matchedNew.totalPrice) - PaisaEngine.rupeesToPaisa(oldItem.totalPrice);
             final itemBom = await _lineBom(matchedNew, txn);
@@ -2266,14 +2303,18 @@ class OrderAndCheckoutController {
       );
 
       // Contra-allocations for removed/reduced lines only (ADR-0021 Section 5)
-      if (removedOrderItemIds.isNotEmpty) {
+      if (removedOrderItemIds.isNotEmpty || removedMenuItemIds.isNotEmpty || removedDealIds.isNotEmpty) {
         await _recordContraAllocations(
           orderId: orderId,
           revision: nextRevisionNo,
           txn: txn,
           now: now,
-          targetOrderItemIds: removedOrderItemIds,
+          targetOrderItemIds: removedOrderItemIds.isNotEmpty ? removedOrderItemIds : null,
+          targetMenuItemIds: removedMenuItemIds.isNotEmpty ? removedMenuItemIds : null,
+          targetDealIds: removedDealIds.isNotEmpty ? removedDealIds : null,
           partialReversals: partialReversals.isNotEmpty ? partialReversals : null,
+          partialReversalsByMenuItemId: partialReversalsByMenuItemId.isNotEmpty ? partialReversalsByMenuItemId : null,
+          partialReversalsByDealId: partialReversalsByDealId.isNotEmpty ? partialReversalsByDealId : null,
         );
       }
 

@@ -1,0 +1,586 @@
+{
+  "parent": 60,
+  "status": "superseded-by-published-grouped-plan",
+  "conventions": {
+    "dependencies": "Only prerequisites, not preferred release order. Numbers are local proposal IDs until publication.",
+    "priority": "Deliver 1–9 first; other independent tickets may proceed when prioritized. Policy decisions do not gate unrelated work.",
+    "verification": "Use authorized domain commands and real temporary SQLite through analytics snapshots, with existing widget/export checks where needed. All framework tests and builds run only in GitHub Actions.",
+    "invariants": "Retain standalone SQLite, in-place migrations, two interactive roles, Integer Paisa, settlement locks, original closed reports and immutable recording times. Use Context7 before implementation/refactoring. Each implementation includes scoped UI, safe source details, matching exports, coverage explanations, documentation and remote CI checks; reuse existing schema where sufficient."
+  },
+  "tickets": [
+    {
+      "id": 1,
+      "title": "Show auditable identities, Pakistan time and snapshot provenance",
+      "label": "ready-for-agent",
+      "blocked_by": [],
+      "delivers": "Report rows and CSV/XLSX/PDF distinguish Shift-owner Cashier from recording/approval actors, display known timestamps in Asia/Karachi and retain the source schema version.",
+      "acceptance": [
+        "Display Business Day and Shift start/end where known; distinguish event and recording timestamps without fabricating missing fields.",
+        "Preserve original UTC/offset evidence and disclose naive legacy assumptions, including local-midnight examples.",
+        "Capture schema/report version at snapshot load; show/export scope, cutoff and quality consistently, with Manager authorization preserved."
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Record independent checkout receipts and refund events",
+      "label": "ready-for-agent",
+      "blocked_by": [],
+      "delivers": "Cashiers record cash/digital receipts and refunds with their actual time, immutable recording time and receiving Shift independently of the originating Order.",
+      "acceptance": [
+        "Persist stable event/order/tender/movement links, signed Integer Paisa, Payment Source, receiving Business Day/Shift and actors atomically with the authorized operation; retain change and rounding evidence.",
+        "Default prompt entries to entry time; support explicit late actual time only within authorized open-period operations; do not create a closed-day correction workflow.",
+        "Expose events and originating/receiving relationships in Manager source rows and exports, including cross-Shift collections; prevent retry duplicates and partial writes.",
+        "Migration preserves legacy balances and sealed reports; unknown historical timing/attribution remains disclosed rather than backfilled."
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Trace COD settlement to the actual receiving Shift",
+      "label": "ready-for-agent",
+      "blocked_by": [
+        2
+      ],
+      "delivers": "Managers can trace a rider handover or confirmed digital settlement to its actual receiving Shift without moving the original Order or counting both tender and Cash Movement.",
+      "acceptance": [
+        "Use stable settlement/event/movement links and actual handover time; preserve existing settlement locks and Cashier-only tender authority.",
+        "Display order origin, receiving Shift and recorded-by separately; direct digital settlement adds no drawer cash.",
+        "Show unavailable customer-to-rider collection evidence honestly; delivered status and expected pouch amounts remain insufficient proof of collection."
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Report finance payments by actual time and Payment Source",
+      "label": "ready-for-agent",
+      "blocked_by": [],
+      "delivers": "Expense, supplier and payroll/advance payments appear in a dated finance timeline with drawer, bank/digital and owner streams separated.",
+      "acceptance": [
+        "Retain actual and recording time plus stable links to existing finance records and physical Cash Movements, adding evidence atomically where absent.",
+        "Show Manager recorder separately from Shift owner; non-drawer payments legitimately have no physical Shift and never alter drawer cash.",
+        "Exclude accruals and unpaid credit purchases from flow, classify internal transfers separately and prevent linked finance/movement double counting.",
+        "Prompt and authorized open-period late entries are supported; unknown historical times stay unknown and closed-period corrections are excluded."
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Reconcile one selected Cashier Shift end to end",
+      "label": "ready-for-agent",
+      "blocked_by": [
+        2,
+        3,
+        4
+      ],
+      "delivers": "Selecting a Cashier/Shift produces one reconciled physical cash bridge with matching source rows and exports.",
+      "acceptance": [
+        "Reconcile Opening Float, customer receipts, rider handovers, pay-ins, refunds, expenses, supplier payments, payroll/advances and cash drops exactly once.",
+        "Show expected cash, Blind Count and signed counted-minus-expected Discrepancy; an uncounted Shift has unavailable variance.",
+        "Use receiving/owning Shift scope, retain cross-cohort collections and keep recorded-by distinct; label order-only breakdowns without narrowing whole-drawer accountability.",
+        "Show legacy gaps and withheld complete totals where authoritative reconciliation is impossible; do not deduplicate by amount/time similarity."
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Select Business Day or calendar-time order activity",
+      "label": "ready-for-agent",
+      "blocked_by": [],
+      "delivers": "Managers switch Order activity between assigned Business Days and actual Asia/Karachi calendar date/time, with matching ranges and exports.",
+      "acceptance": [
+        "Default to Business Day; use inclusive-start/exclusive-end boundaries and preserve distinct Business Day IDs even on one opening date.",
+        "Show both order timestamp and assigned Business Day; an overnight Order changes calendar bucket without changing its assignment.",
+        "Persist time basis/grouping in the query and immutable snapshot; explain calendar versus operational weekday, Monday-start weeks and local months."
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Rank busiest Order days and hours separately from sales value",
+      "label": "ready-for-agent",
+      "blocked_by": [
+        6
+      ],
+      "delivers": "Managers see distinct daily/hourly workload and value rankings, with cancellations, refunds and average ticket explained separately.",
+      "acceptance": [
+        "Count every confirmed Order once including later cancellations/refunds; Holds and Order Revisions create no extra Orders.",
+        "Retain valid-sales definitions and label value/average-ticket eligibility; use corresponding eligible count rather than workload count indiscriminately.",
+        "Include all tied peaks, sort ties chronologically and show 24 observed hourly buckets; distinguish true zero from missing coverage.",
+        "Chart, contributors and exports reconcile for both time bases; preserve distinct Business Days."
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Compare weekdays fairly and explore recurring Order peaks",
+      "label": "ready-for-agent",
+      "blocked_by": [
+        7
+      ],
+      "delivers": "Managers see weekday totals, completed-Business-Day averages, weekday-by-hour activity and weekly/monthly trends.",
+      "acceptance": [
+        "Primary weekday ranking displays completed-day numerator/denominator, includes opened zero-order days, separates open days and returns unavailable for zero denominator.",
+        "Label operational weekday versus actual calendar weekday, including post-midnight hours; do not invent unopened Business Days.",
+        "Render a weekday/hour table or heatmap and Monday-start weekly/local-month trends with identical export buckets and coverage."
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Explore actual-time inflow, outflow and net-flow peaks",
+      "label": "ready-for-agent",
+      "blocked_by": [
+        5,
+        6
+      ],
+      "delivers": "Managers rank money-flow periods by actual time and funding stream, independently of Order workload or sales value.",
+      "acceptance": [
+        "Apply the explicit time-basis query to canonical finance and receipt evidence, including receiving events whose Orders are outside the selected cohort.",
+        "Show nonnegative inflow/outflow magnitudes and signed net; rank highest inflow/outflow and greatest/least net with all ties.",
+        "Separate drawer, bank/digital and owner streams, disclose internal transfers and exclude accruals, unpaid purchases and duplicate custody legs from consolidated receipts.",
+        "Unknown event time/receiving attribution is excluded from unsupported buckets with coverage; retain a clearly labeled legacy order-cohort view."
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Preserve transaction-time staff, supplier and category names",
+      "label": "ready-for-agent",
+      "blocked_by": [],
+      "delivers": "New relevant records retain historical names while reports distinguish transaction-time and current identities.",
+      "acceptance": [
+        "Keep stable IDs and existing snapshots; add missing event-time snapshots at relevant writes without rewriting old history.",
+        "Display/export current names only as separately labeled context and mark unavailable old names.",
+        "Verify rename/archive scenarios across representative staff, supplier and category records with existing authorization unchanged."
+      ]
+    },
+    {
+      "id": 11,
+      "title": "Decide closed-day correction authority and reconciliation policy",
+      "label": "ready-for-human",
+      "blocked_by": [],
+      "delivers": "A reviewed policy resolves who may append historical corrections and how they reconcile while preserving the two-role boundary.",
+      "acceptance": [
+        "Decide approval authority, append-only evidence, source links, reversals, reconciliation and correction cutoff semantics, with worked late-payment examples.",
+        "Keep sealed reports/hashes immutable and forbid a new current-day drawer movement for cash already moved historically.",
+        "Resolve how to record historical evidence without giving Managers live tender/Shift authority; record explicit approval before enabling implementation."
+      ]
+    },
+    {
+      "id": 12,
+      "title": "Append approved historical corrections and show adjusted reports",
+      "label": "ready-for-agent",
+      "blocked_by": [
+        5,
+        11
+      ],
+      "delivers": "Authorized users can append policy-backed historical corrections and Managers can compare original and correction-adjusted results.",
+      "acceptance": [
+        "Implement the approved authority/reversal rules and link actual time, recording time, affected Business Day and original evidence.",
+        "Display adjustment bridge and cutoff separately from immutable original X/Z reports; export both bases clearly.",
+        "Reject duplicate or unreconciled physical effects; prove original balances, sealed content/hashes and recording timestamps are unchanged."
+      ]
+    },
+    {
+      "id": 13,
+      "title": "Decide earned-period payroll and labor allocation rules",
+      "label": "ready-for-human",
+      "blocked_by": [],
+      "delivers": "A reviewed policy defines monthly earned payroll and the attendance/department allocation inputs needed for reliable labor reporting.",
+      "acceptance": [
+        "Resolve partial months, effective changes, advances/offsets, retroactive corrections, rounding and earned versus posting period with examples.",
+        "Define worked-hours eligibility and effective department attribution, distinguishing actual attendance from Cashier Shift duration.",
+        "Keep salary payment separate from expense recognition and original posting/recording/sealed reports unchanged; record explicit approval."
+      ]
+    },
+    {
+      "id": 14,
+      "title": "Show monthly earned payroll alongside posting and payment views",
+      "label": "ready-for-agent",
+      "blocked_by": [
+        4,
+        13
+      ],
+      "delivers": "October earned salary appears in October while November payment remains in November money flow under the approved allocation policy.",
+      "acceptance": [
+        "Implement approved earned-period rules with salary accrued/paid/unpaid and advances clearly distinguished.",
+        "Retain posting and immutable recording evidence and payment-source links; never recognize salary expense twice.",
+        "Explain unsupported historical allocation and reconcile UI/export values without rewriting closed reports."
+      ]
+    },
+    {
+      "id": 15,
+      "title": "Decide preparation and delivery measurement definitions",
+      "label": "ready-for-human",
+      "blocked_by": [],
+      "delivers": "A reviewed measurement contract defines observed milestones, repeated transitions, late thresholds, delivery final outcomes and aging clocks.",
+      "acceptance": [
+        "Specify preparation/ready endpoints, repeated-transition handling, eligible samples and percentile conventions.",
+        "Specify area/rider delivery endpoints, late SLA, final-failure evidence and unsettled-aging origin; returned attempt alone is not final failure.",
+        "Document coverage and examples for missing/out-of-order events; explicitly approve business thresholds rather than inferring them."
+      ]
+    },
+    {
+      "id": 16,
+      "title": "Report observed preparation and ready times",
+      "label": "ready-for-agent",
+      "blocked_by": [
+        15
+      ],
+      "delivers": "Managers see preparation/ready durations, median/p90 and late counts from recorded lifecycle events.",
+      "acceptance": [
+        "Apply approved milestone/repetition rules and show sample/population coverage in rows, charts and exports.",
+        "Keep missing old milestones unavailable and preparation separate from delivery travel.",
+        "Replace blanket claims that lifecycle events are absent while preserving real historical limits."
+      ]
+    },
+    {
+      "id": 17,
+      "title": "Show current Hold age and Cashier ownership",
+      "label": "ready-for-agent",
+      "blocked_by": [],
+      "delivers": "Managers can inspect persisted active Holds, their age and Cashier, with an explicit configurable stale threshold.",
+      "acceptance": [
+        "Read current stored Holds and display creation/age consistently in Pakistan time, with safe source/export details.",
+        "Label the stale threshold and avoid claiming deleted Hold history exists.",
+        "Keep Holds outside confirmed Order counts, Tokens and revenue; replace stale memory-only explanations."
+      ]
+    },
+    {
+      "id": 18,
+      "title": "Retain and report Hold lifecycle history",
+      "label": "ready-for-agent",
+      "blocked_by": [
+        17
+      ],
+      "delivers": "Recall, replacement, discard and conversion become durable observed Hold events that Managers can report over time.",
+      "acceptance": [
+        "Persist lifecycle events atomically at authorized Hold operations with stable Hold/source links and actors.",
+        "Show historical lifecycle counts/ages only from observed events, with pre-feature coverage caveats.",
+        "Conversion links to its eventual Order without counting the Hold as another Order or allocating extra Tokens."
+      ]
+    },
+    {
+      "id": 19,
+      "title": "Report recorded delivery reasons and reattempts",
+      "label": "ready-for-agent",
+      "blocked_by": [],
+      "delivers": "Managers inspect safely projected recorded delivery reasons and distinguish attempts from unique Orders and reattempts.",
+      "acceptance": [
+        "Load stored reason evidence with safe redaction and link attempts to Orders, riders and Delivery Areas.",
+        "Show reason/attempt breakdowns without interpreting returned attempts as final failures or delivery as collection.",
+        "Ensure contributor rows and exports reconcile and disclose absent historical reason evidence."
+      ]
+    },
+    {
+      "id": 20,
+      "title": "Report delivery timing, final outcomes and unsettled aging",
+      "label": "ready-for-agent",
+      "blocked_by": [
+        15,
+        19
+      ],
+      "delivers": "Managers compare valid area/rider timing, late delivery and unsettled aging under approved measurement rules.",
+      "acceptance": [
+        "Use approved endpoints, SLA, final-outcome evidence and aging clocks with sample coverage.",
+        "Separate unique final-failed Orders from attempts/returns and travel from preparation.",
+        "Show missing events as unavailable across metrics, contributors and exports."
+      ]
+    },
+    {
+      "id": 21,
+      "title": "Separate verified rider-held cash from customer debt",
+      "label": "ready-for-agent",
+      "blocked_by": [
+        3
+      ],
+      "delivers": "Cashiers retain independent customer collection evidence and Managers reconcile verified rider-held cash to actual handovers.",
+      "acceptance": [
+        "Capture authorized confirmed collection with actual/recording time and stable Order/rider links; retain collection-before-handover separation.",
+        "Reconcile independently confirmed collection, accepted handover and recorded authorized shortage/write-off evidence; do not invent write-off authority or new settlement privileges.",
+        "Display Collection Due, rider-held cash and accepted drawer cash separately with coverage, source links and matching exports; keep settled-trip locks intact."
+      ]
+    },
+    {
+      "id": 22,
+      "title": "Classify first-time and returning customers across available history",
+      "label": "ready-for-agent",
+      "blocked_by": [],
+      "delivers": "Managers see first-time versus returning customers based on the first eligible purchase in available history.",
+      "acceptance": [
+        "Look beyond the selected cohort to first eligible purchase and preserve selected-range repeat rate as a distinct measure.",
+        "Disclose earlier-history and guest/phone-identity limits; preserve masking and contact-information authorization.",
+        "Verify repeat customers outside the selected range and unavailable identity/history in report rows and exports."
+      ]
+    },
+    {
+      "id": 23,
+      "title": "Expose stored configuration and operations audit safely",
+      "label": "ready-for-agent",
+      "blocked_by": [],
+      "delivers": "Managers inspect recorded management/configuration actions with actor, action, time and safely redacted source changes.",
+      "acceptance": [
+        "Project existing evidence rather than claiming all security/configuration history is absent.",
+        "Allowlist safe change fields; never expose raw configuration JSON, credentials, PIN hashes or sensitive customer information.",
+        "Preserve Manager authorization, source provenance and safe export parity, with missing authentication history disclosed."
+      ]
+    },
+    {
+      "id": 24,
+      "title": "Decide security-event access and retention policy",
+      "label": "ready-for-human",
+      "blocked_by": [],
+      "delivers": "An approved policy defines which authentication/PIN events are retained, for how long and who may inspect them.",
+      "acceptance": [
+        "Define failed-login, PIN-reset and other required security event fields, retention/deletion and Manager access.",
+        "Exclude credentials, PIN hashes and unnecessary personal data; decide safe failure/reason categories.",
+        "Provide approved examples and retention boundaries before collection/reporting is extended."
+      ]
+    },
+    {
+      "id": 25,
+      "title": "Capture and report missing authentication and PIN events",
+      "label": "ready-for-agent",
+      "blocked_by": [
+        23,
+        24
+      ],
+      "delivers": "New required authentication/PIN events appear in the authorized audit view under the approved access/retention policy.",
+      "acceptance": [
+        "Persist safe event evidence without changing login throttles, PIN authorization or exposing secrets.",
+        "Apply approved retention and show newly observed coverage rather than fabricating older history.",
+        "Verify access, redaction and export behavior for successful/failed and reset scenarios."
+      ]
+    },
+    {
+      "id": 26,
+      "title": "Persist verified backup attempts and health history",
+      "label": "ready-for-agent",
+      "blocked_by": [],
+      "delivers": "Managers see last verified backup success age, primary/secondary results and failed attempts from durable evidence.",
+      "acceptance": [
+        "Persist attempt time, initiator, target-specific outcome, verification status and safe failure category.",
+        "Distinguish configured or scheduled-but-never-run work from verified success; preserve failed attempts and secondary warnings.",
+        "Show authorized health/source details and exports without inferring old history from paths or archives."
+      ]
+    },
+    {
+      "id": 27,
+      "title": "Reconcile supplier payables and aging at a historical cutoff",
+      "label": "ready-for-agent",
+      "blocked_by": [],
+      "delivers": "Managers see an as-of opening-to-closing Vendor Khata bridge and nonoverlapping payable aging buckets.",
+      "acceptance": [
+        "Retain allocation/reversal and opening-adjustment history needed for future cutoffs; do not reconstruct unversioned prior edits as fact.",
+        "Reconcile opening plus purchases/adjustments minus payments/credits to closing using only evidence available at the disclosed cutoff.",
+        "Partition known-due outstanding into current/not-yet-due, 0–7, 8–30, 31–60 and over-60 overdue days; separate unknown due dates.",
+        "UI/export disclose coverage and supplier archiving; do not use current/all-time allocations as historical balances."
+      ]
+    },
+    {
+      "id": 28,
+      "title": "Decide line-level sales and cost allocation policy",
+      "label": "ready-for-human",
+      "blocked_by": [],
+      "delivers": "An approved allocation policy explains Menu Item/Deal discounts, tax, fees, modifiers, ingredient costs and rounding.",
+      "acceptance": [
+        "Specify allocation units, rounding residuals, Deal expansion and revision/return behavior with worked reconciled examples.",
+        "Reconcile line allocations to Order/global sales and cost totals without claiming existing global COGS is absent.",
+        "Define legacy missing-allocation coverage and record explicit policy approval before implementing margins."
+      ]
+    },
+    {
+      "id": 29,
+      "title": "Report allocated Menu Item and Deal net sales and margins",
+      "label": "ready-for-agent",
+      "blocked_by": [
+        28
+      ],
+      "delivers": "Managers see defensible line/Deal/modifier net sales and margins under the approved allocation policy.",
+      "acceptance": [
+        "Persist required allocations at authorized sale/revision/return operations and apply the approved rounding policy.",
+        "Reconcile line costs/values to Order/global totals and expose safe contributors in reports/exports.",
+        "Keep legacy unallocated history explicit instead of silently estimating old item profits."
+      ]
+    },
+    {
+      "id": 30,
+      "title": "Reconcile ingredient opening-to-ending quantities",
+      "label": "ready-for-agent",
+      "blocked_by": [],
+      "delivers": "Managers inspect normalized-unit stock bridges from opening through receipts, consumption, waste, returns and adjustments to ending quantity.",
+      "acceptance": [
+        "Classify retained movement causes, BOM and posted physical-count evidence without double counting.",
+        "Reconcile known opening/ending balances and disclose missing openings or gaps.",
+        "Expose ingredient contributors and export parity; describe recorded cost history separately from stock valuation."
+      ]
+    },
+    {
+      "id": 31,
+      "title": "Decide historical inventory valuation policy",
+      "label": "ready-for-human",
+      "blocked_by": [],
+      "delivers": "A reviewed policy chooses historical stock valuation and defines its evidence/coverage boundaries.",
+      "acceptance": [
+        "Resolve method, normalized units, returns/adjustments, negative stock and rounding with worked examples.",
+        "Distinguish acquisition-rate sales COGS from inventory valuation and preserve existing cost events.",
+        "Approve the method and legacy coverage limits explicitly before reporting stock values."
+      ]
+    },
+    {
+      "id": 32,
+      "title": "Value reconciled historical inventory under the approved policy",
+      "label": "ready-for-agent",
+      "blocked_by": [
+        30,
+        31
+      ],
+      "delivers": "Managers see historical inventory values that reconcile to the quantity bridge under the approved valuation method.",
+      "acceptance": [
+        "Persist required valuation evidence and apply approved return/adjustment/negative-stock rules.",
+        "Show method, cutoff, unavailable/estimated coverage and contributing values in UI/exports.",
+        "Reconcile bridge totals and preserve existing acquisition-rate sales COGS without relabeling it."
+      ]
+    },
+    {
+      "id": 33,
+      "title": "Compare normalized acquisition prices and purchase frequency",
+      "label": "ready-for-agent",
+      "blocked_by": [],
+      "delivers": "Managers compare ingredient/base-unit acquisition trends and unified supplier purchases.",
+      "acceptance": [
+        "Normalize recorded quantities/prices and use stable procurement/Vendor Khata links to count a purchase once.",
+        "Show supplier breakdowns, price series and purchase frequency with exact scope and matching exports.",
+        "Identify unlinked purchases and unavailable units/history rather than guessing matches."
+      ]
+    },
+    {
+      "id": 34,
+      "title": "Capture promised and actual supplier receipt evidence",
+      "label": "ready-for-agent",
+      "blocked_by": [],
+      "delivers": "Authorized procurement users retain promised/actual receipt evidence and Managers see evidence-backed supplier punctuality.",
+      "acceptance": [
+        "Preserve promised time, actual receipt time and recording time with acquisition/supplier links; retain changes rather than overwriting earlier promises silently.",
+        "Compare actual receipt with the recorded commitment and disclose unknown promises/receipts instead of classifying them as failed deliveries.",
+        "Show valid-sample coverage and safe contributors in report/export output without inventing unapproved SLA or supplier scores."
+      ]
+    },
+    {
+      "id": 35,
+      "title": "Separate food and packaging COGS using event-time classification",
+      "label": "ready-for-agent",
+      "blocked_by": [],
+      "delivers": "Managers see food versus packaging costs by Order and Dining Type, reconciled to existing combined COGS.",
+      "acceptance": [
+        "Snapshot ingredient food/packaging classification when future cost events occur and preserve it through revisions/returns.",
+        "Keep legacy unclassified costs explicit and do not rewrite history after category/name changes.",
+        "Reconcile subtotals and contributors to combined COGS across UI/charts/exports."
+      ]
+    },
+    {
+      "id": 36,
+      "title": "Capture worked hours and report labor productivity",
+      "label": "ready-for-agent",
+      "blocked_by": [
+        13
+      ],
+      "delivers": "Managers record policy-backed worked-hours evidence and see eligible Orders per labor hour with department/coverage context.",
+      "acceptance": [
+        "Retain effective staff/department and worked-hours evidence under approved definitions; Cashier Shift duration is not attendance.",
+        "Use eligible denominators and distinguish absent/zero hours; expose coverage before productivity or allocation totals.",
+        "Apply only approved department/labor allocation rules and avoid salary-payment expense duplication in reports/exports."
+      ]
+    },
+    {
+      "id": 37,
+      "title": "Filter Order, menu, delivery and customer reports by their domains",
+      "label": "ready-for-agent",
+      "blocked_by": [],
+      "delivers": "Managers narrow relevant reports by Menu Item/category/Deal/discount, Delivery Area/rider and customer segment.",
+      "acceptance": [
+        "Use stable IDs and readable names with clear/reset; define segment membership from supported evidence and disclose unavailable lifetime classifications until supported.",
+        "Apply identical predicates to metrics, charts, contributors and exports, including historical-dimension coverage.",
+        "Label unrelated report domains outside scope; do not silently filter physical drawer balances through an Order dimension."
+      ]
+    },
+    {
+      "id": 38,
+      "title": "Filter supplier, expense and staff reports by their domains",
+      "label": "ready-for-agent",
+      "blocked_by": [],
+      "delivers": "Managers select suppliers, expense categories and departments in their applicable financial/staff reports.",
+      "acceptance": [
+        "Add stable-ID controls, clear/reset and readable names without implying unsupported historical department/category snapshots.",
+        "Match applicable totals/contributors/export filters and explicitly label outside-scope current-state balances.",
+        "Retain current authorization and disclose missing historical dimensions."
+      ]
+    },
+    {
+      "id": 39,
+      "title": "Filter inventory and procurement reports by stock dimensions",
+      "label": "ready-for-agent",
+      "blocked_by": [],
+      "delivers": "Managers select applicable stock categories, ingredients and supplier acquisition dimensions in inventory/procurement reporting.",
+      "acceptance": [
+        "Use meaningful stable-ID controls with clear/reset and explain unsupported historical categories.",
+        "Ensure report totals, chart buckets, contributors and exported scope use the same predicates.",
+        "Keep unrelated domains explicitly outside scope and retain current report behaviors when no filter is chosen."
+      ]
+    },
+    {
+      "id": 40,
+      "title": "Save private/shared Manager report presets and operational shortcuts",
+      "label": "ready-for-agent",
+      "blocked_by": [],
+      "delivers": "Managers save/reopen/edit/delete named report configurations across restarts and use true Month to date and documented shortcuts.",
+      "acceptance": [
+        "Persist report/family and supported filters; distinguish dynamic relative dates from fixed date windows.",
+        "Implement private ownership and Manager-shared access without a separate Owner tier.",
+        "Revalidate access and unsupported/deleted filters on reopen; show the resolved range and preserve safe metadata on subsequent exports."
+      ]
+    },
+    {
+      "id": 41,
+      "title": "Choose preceding-period or comparable-weekday report comparisons",
+      "label": "ready-for-agent",
+      "blocked_by": [
+        6
+      ],
+      "delivers": "Managers select meaningful comparisons for supported activity/flow measures with explicit windows and coverage.",
+      "acceptance": [
+        "Show exact current/prior windows, values, absolute change, denominator and coverage for each supported measure.",
+        "Keep zero-baseline percentages unavailable and withhold incomplete/live comparisons without equivalent elapsed evidence.",
+        "Do not compare current balances as historical snapshots; mark unsupported families clearly and export comparator provenance."
+      ]
+    },
+    {
+      "id": 42,
+      "title": "Open KPI contributors and authorized underlying records",
+      "label": "ready-for-agent",
+      "blocked_by": [],
+      "delivers": "Selecting a supported KPI opens its exact contributing snapshot rows and read-only Order, stock, Vendor Khata, payroll or expense source.",
+      "acceptance": [
+        "Reconcile contributor values to the metric formula, including signed components and aggregate metrics.",
+        "Preserve original query/snapshot/cutoff provenance when inspecting a source; label subsequent source changes rather than recomputing the displayed snapshot.",
+        "Revalidate Manager access, preserve masking and handle missing/archived legacy sources safely; reuse existing source/chart inspection."
+      ]
+    },
+    {
+      "id": 43,
+      "title": "Print the selected report through the Windows print dialog",
+      "label": "ready-for-agent",
+      "blocked_by": [],
+      "delivers": "Managers explicitly print the displayed immutable report snapshot while retaining Save PDF.",
+      "acceptance": [
+        "Open the standard Windows dialog only on explicit action and include period, filter and quality metadata.",
+        "Cancellation prints nothing and authorization expiry fails safely; no customer Receipt hardware-printing flow is added.",
+        "Verify report contents through existing snapshot/export checks and use remote Windows CI plus documented native-dialog manual acceptance where needed."
+      ]
+    },
+    {
+      "id": 44,
+      "title": "Cancel large exports with progress and durable completed outputs",
+      "label": "ready-for-agent",
+      "blocked_by": [],
+      "delivers": "Managers see stage/row progress and can cancel export generation or writing without losing the last completed output or blocking the application.",
+      "acceptance": [
+        "Provide cancellation during generation and writing, partial-file cleanup and a durable completed destination.",
+        "Keep source snapshot, privacy and CSV/XLSX/PDF formula protections unchanged; handle authorization/session expiry during export.",
+        "Exercise representative large exports in remote CI and measure UI/Cashier responsiveness; move serialization off the UI isolate where necessary."
+      ]
+    }
+  ]
+}

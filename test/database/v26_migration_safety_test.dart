@@ -16,9 +16,9 @@ void main() {
     final store = PosDatabase(factory: databaseFactoryFfi, customPath: dbPath);
     var db = await store.initialize();
 
-    // Verify current fresh install is at version 26
+    // Verify current fresh install is at latest schema version
     final currentVersion = await db.getVersion();
-    expect(currentVersion, 26);
+    expect(currentVersion, PosDatabaseConstants.schemaVersion);
 
     // Simulate a database that was migrated at version 21 without category / classification columns
     // We recreate raw_ingredients and order_cost_events without those columns, then set version to 21
@@ -58,10 +58,10 @@ void main() {
     await db.setVersion(21);
     await store.close();
 
-    // Re-initialize to trigger _onUpgrade from 21 -> 26
+    // Re-initialize to trigger _onUpgrade from 21 -> latest
     db = await store.initialize();
     final newVersion = await db.getVersion();
-    expect(newVersion, 26);
+    expect(newVersion, PosDatabaseConstants.schemaVersion);
 
     // 1. raw_ingredients must safely have category column
     final ingCols = await db.rawQuery('PRAGMA table_info(raw_ingredients)');

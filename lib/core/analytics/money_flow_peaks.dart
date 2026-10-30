@@ -98,7 +98,8 @@ class _MoneyFlowPeaks {
       final greatest = rank(net), least = rank(net, ascending: true);
       final external = entry.value.where((p) => !transfer(p)).toList();
       final open = entry.value.any((p) => days[p['business_day_id']]?['status'] != 'CLOSED');
-      rows.add(AnalyticsRow(id: 'money-bucket-${entry.key}', sourceType: 'money_flow_bucket', sourceId: null, cells: {
+      rows.add(AnalyticsRow(id: 'money-bucket-${entry.key}', sourceType: 'money_flow_bucket',
+        sourceId: entry.value.map((p) => p['id']).join(','), cells: {
         'kind': kind == 'hour' ? 'Hourly money flow' : 'Period money flow',
         'period': kind == 'hour' ? '$label:00' : label, 'hour': kind == 'hour' ? int.parse(label) : null,
         'funding_stream': source, 'time_basis': e.query.timeBasis.name,
@@ -119,7 +120,8 @@ class _MoneyFlowPeaks {
         'coverage_cutoff': analyticsTimestamp(e.now.toIso8601String()),
       }));
     }
-    rows.add(AnalyticsRow(id: 'money-flow-coverage', sourceType: 'money_flow_coverage', cells: {
+    rows.add(AnalyticsRow(id: 'money-flow-coverage', sourceType: 'money_flow_coverage',
+      sourceId: known.isNotEmpty ? known.map((p) => p['id']).join(',') : 'none', cells: {
       'kind': 'Money flow coverage', 'included_events': known.length,
       'unknown_time_events': unknown.length, 'unknown_time_paisa': unknown.fold<int>(0, (sum, p) => sum + amount(p).abs()),
       'legacy_movement_count': legacyMovements.length, 'legacy_tender_count': legacyTenders.length,

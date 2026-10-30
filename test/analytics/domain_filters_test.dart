@@ -142,10 +142,11 @@ void main() {
     final discounts = <DiscountPreset>[];
     for (final name in ['First saving', 'Second saving']) {
       final preset = await catalog.createDiscountPreset(name: name, type: DiscountType.flat, value: 10);
-      await catalog.saveManagedDiscount(managerId: manager['id'] as int, preset: DiscountPreset(
+      final managed = DiscountPreset(
         id: preset.id, name: name, type: DiscountType.flat, value: 10, isActive: true,
-        rules: const DiscountRules(stackable: true)));
-      discounts.add(preset);
+        rules: const DiscountRules(stackable: true));
+      await catalog.saveManagedDiscount(managerId: manager['id'] as int, preset: managed);
+      discounts.add(managed);
     }
     await orders.checkoutOrder(businessDayId: day.id, shiftId: shift.id,
       cashierId: cashierId, diningType: DiningType.takeaway,

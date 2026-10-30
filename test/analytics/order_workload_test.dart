@@ -68,7 +68,7 @@ void main() {
     expect(future.cells['confirmed_orders'], isNull);
     expect(future.cells['period_status'], contains('Not yet observed'));
     final calendar = await service.load(query.copyWith(timeBasis: AnalyticsTimeBasis.calendarTime,
-      startDate: today, endDateExclusive: today.add(const Duration(days: 1))));
+      startDate: operationalDate, endDateExclusive: operationalDate.add(const Duration(days: 1))));
     final date = calendar.section(AnalyticsFamily.orders).rows.singleWhere((r) => r.cells['kind'] == 'Daily workload');
     expect(date.cells['period_complete'], isFalse);
     expect(date.cells['open_business_day_ids'], '${open.id}');

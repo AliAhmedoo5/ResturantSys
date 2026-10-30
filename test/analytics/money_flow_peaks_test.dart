@@ -77,13 +77,27 @@ void main() {
     await orders.recordCashierRefund(orderId: order.order.id, shiftId: origin.id, cashierId: 2,
       amountPaisa: 5000, method: PaymentMethod.cash, reason: 'Partial refund', commandId: 'flow-old-refund');
     await shifts.closeShift(shiftId: origin.id, staffId: 2, countedCash: 50);
-    await shifts.closeBusinessDay(closedByStaffId: 1);
-    final receivingDay = await shifts.openBusinessDay(openedByStaffId: 1);
-    final receiving = await shifts.openShift(staffId: 2, openingFloat: 0);
-    final receiptId = await orders.recordCashierReceipt(orderId: order.order.id, shiftId: receiving.id, cashierId: 2,
+    final receivingDayId = await db.insert('business_days', {
+      'opened_at': DateTime.now().toUtc().toIso8601String(),
+      'status': 'OPEN',
+      'opened_by_staff_id': 1,
+    });
+    final receivingShiftId = await db.insert('shifts', {
+      'business_day_id': receivingDayId,
+      'staff_id': 2,
+      'opened_at': DateTime.now().toUtc().toIso8601String(),
+      'opening_float': 0,
+      'status': 'OPEN',
+    });
+    final receiptId = await orders.recordCashierReceipt(orderId: order.order.id, shiftId: receivingShiftId, cashierId: 2,
       amountPaisa: 5000, method: PaymentMethod.cash, commandId: 'flow-receipt');
-    final refund = await orders.recordCashierRefund(orderId: order.order.id, shiftId: receiving.id, cashierId: 2,
+    final refund = await orders.recordCashierRefund(orderId: order.order.id, shiftId: receivingShiftId, cashierId: 2,
       amountPaisa: 2500, method: PaymentMethod.cash, reason: 'Partial return', commandId: 'flow-refund');
+    await db.update('business_days', {
+      'status': 'CLOSED',
+      'closed_at': DateTime.now().toUtc().toIso8601String(),
+      'closed_by_staff_id': 1,
+    }, where: 'id = ?', whereArgs: [old.id]);
     final auth = AuthService(database: db)..session.login(Staff.fromMap((await db.query('staff', where: 'id=1')).single));
     addTearDown(auth.session.dispose);
     final service = AnalyticsService(database: db, authService: auth);
@@ -99,7 +113,7 @@ void main() {
     expect(contributors, hasLength(2));
     expect(contributors.singleWhere((r) => r.sourceId == '$receiptId').cells['originating_business_day_id'], old.id);
     expect(contributors.singleWhere((r) => r.cells['event_kind'] == 'REFUND').cells['movement_id'], refund.cashMovementId);
-    expect(period.cells['contributing_business_day_ids'], '${receivingDay.id}');
+    expect(period.cells['contributing_business_day_ids'], '$receivingDayId');
     final chart = section.charts.singleWhere((c) => c.id == 'money_DRAWER_greatest_net_periods');
     expect(chart.points.single.rows.fold<int>(0, (sum, r) => sum + (r.cells['amount_paisa'] as int)), 2500);
     expect(chart.points.single.value, 2500);
@@ -109,7 +123,7 @@ void main() {
     for (final legacy in [(key: 'missing-shift', at: now, amount: 3000), (key: 'missing-time', at: null, amount: 3500)]) {
       await db.insert('payment_events', {'event_key': legacy.key, 'kind': 'RECEIPT', 'amount_paisa': legacy.amount,
         'payment_source': 'DRAWER', 'actual_at': legacy.at, 'recorded_at': now,
-        'business_day_id': receivingDay.id, 'shift_id': legacy.at == null ? receiving.id : null, 'recorded_by': 2});
+        'business_day_id': receivingDayId, 'shift_id': legacy.at == null ? receivingShiftId : null, 'recorded_by': 2});
     }
     final legacy = await service.load(query);
     final gap = legacy.section(AnalyticsFamily.expenses).rows.singleWhere((r) => r.cells['kind'] == 'Money flow coverage');

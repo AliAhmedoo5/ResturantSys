@@ -186,12 +186,12 @@ class HistoricalCorrectionSnapshot {
       AnalyticsColumn(key:'target_entity_type',label:'Original evidence type'), AnalyticsColumn(key:'target_entity_id',label:'Original evidence ID'),
       AnalyticsColumn(key:'affected_shift_id',label:'Affected Shift'), AnalyticsColumn(key:'reverses_correction_id',label:'Reverses correction'), AnalyticsColumn(key:'original_source_table',label:'Original source table'), AnalyticsColumn(key:'original_source_id',label:'Original source ID')];
     final rows = <AnalyticsRow>[];
-    void value(String basis,String measure,int? amount) => rows.add(AnalyticsRow(id:'$basis:$measure',sourceType:'report_runs',cells:{'basis':basis,'measure':measure,'amount':amount}));
+    void value(String basis,String measure,int? amount) => rows.add(AnalyticsRow(id:'$basis:$measure',sourceType:'report_runs',sourceId:'$basis:$measure',cells:{'basis':basis,'measure':measure,'amount':amount}));
     var sealedRow = 0;
     for (final section in _sections.cast<Map<String,dynamic>>()) {
       final headers = (section['headers'] as List<dynamic>).join(' | ');
       for (final row in section['rows'] as List<dynamic>) {
-        rows.add(AnalyticsRow(id:'sealed:${sealedRow++}',sourceType:'report_runs',cells:{'basis':'Original sealed','measure':section['title'],'sealed_evidence':'$headers :: ' + (row as List<dynamic>).join(' | ')}));
+        rows.add(AnalyticsRow(id:'sealed:${sealedRow++}',sourceType:'report_runs',sourceId:'$sealedRow',cells:{'basis':'Original sealed','measure':section['title'],'sealed_evidence':'$headers :: ' + (row as List<dynamic>).join(' | ')}));
       }
     }
     value('Original sealed','Cash receipts',originalCashReceiptsPaisa);

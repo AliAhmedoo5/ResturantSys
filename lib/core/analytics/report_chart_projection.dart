@@ -85,6 +85,9 @@ class _Charts {
       summed('purchase_ingredients', 'Purchase spend by ingredient', source('mandi_procurements'),
         'ingredient_id', 'spend_paisa', AnalyticsUnit.paisa,
         'Selected interval Mandi records · purchase spend is not sales COGS', labelPrefix: 'Ingredient #'),
+      dated('supplier_acquisition_dates', 'Supplier acquisition spend by date',
+        section.rows.where((r) => r.cells['kind'] == 'Supplier credit delivery').toList(),
+        'spend_paisa', 'created_at', 'Recorded supplier acquisition dates · Asia/Karachi'),
     ],
     AnalyticsFamily.suppliers => [
       ranked('supplier_payable', 'Current payable by supplier', source('vendor_khata'),
