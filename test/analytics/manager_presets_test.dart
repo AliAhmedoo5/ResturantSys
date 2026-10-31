@@ -25,8 +25,8 @@ void main() {
       auth = AuthService(database: db);
 
       final staffRows = await db.query('staff');
-      final managers = staffRows.where((r) => r['role'] == 'MANAGER').toList();
-      manager1 = Staff.fromMap(managers[0]);
+      final managerRow = staffRows.firstWhere((r) => r['role'] != 'CASHIER');
+      manager1 = Staff.fromMap(managerRow);
 
       // Insert second manager for sharing/ownership tests
       final mgr2Id = await db.insert('staff', {
