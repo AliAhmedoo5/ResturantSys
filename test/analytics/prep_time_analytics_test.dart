@@ -37,7 +37,7 @@ void main() {
     final orderController = OrderAndCheckoutController(database: db);
 
     // 1. Order 1: confirmed at 12:00, ready at 12:15 -> 15 mins
-    final o1 = await orderController.checkoutOrder(
+    final o1 = (await orderController.checkoutOrder(
       commandId: 'order-1',
       businessDayId: bDay.id,
       shiftId: shift.id,
@@ -45,7 +45,7 @@ void main() {
       diningType: DiningType.dineIn,
       items: [CartItem(menuItem: await catalog.getMenuItem(item.id))],
       payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 500)],
-    );
+    )).order;
     await db.update('orders', {'created_at': '2026-10-31T12:00:00+05:00'}, where: 'id = ?', whereArgs: [o1.id]);
     await db.insert('order_status_events', {
       'order_id': o1.id,
@@ -56,7 +56,7 @@ void main() {
     });
 
     // 2. Order 2: confirmed at 12:00, ready at 12:25 -> 25 mins
-    final o2 = await orderController.checkoutOrder(
+    final o2 = (await orderController.checkoutOrder(
       commandId: 'order-2',
       businessDayId: bDay.id,
       shiftId: shift.id,
@@ -64,7 +64,7 @@ void main() {
       diningType: DiningType.dineIn,
       items: [CartItem(menuItem: await catalog.getMenuItem(item.id))],
       payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 500)],
-    );
+    )).order;
     await db.update('orders', {'created_at': '2026-10-31T12:00:00+05:00'}, where: 'id = ?', whereArgs: [o2.id]);
     await db.insert('order_status_events', {
       'order_id': o2.id,
@@ -76,7 +76,7 @@ void main() {
 
     // 3. Order 3 (rework): confirmed at 12:00, ready at 12:10, then back to PREPARING at 12:12, then READY at 12:20
     // First READY milestone at 12:10 is preserved (10 mins); rework cycle is tracked.
-    final o3 = await orderController.checkoutOrder(
+    final o3 = (await orderController.checkoutOrder(
       commandId: 'order-3',
       businessDayId: bDay.id,
       shiftId: shift.id,
@@ -84,7 +84,7 @@ void main() {
       diningType: DiningType.dineIn,
       items: [CartItem(menuItem: await catalog.getMenuItem(item.id))],
       payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 500)],
-    );
+    )).order;
     await db.update('orders', {'created_at': '2026-10-31T12:00:00+05:00'}, where: 'id = ?', whereArgs: [o3.id]);
     await db.insert('order_status_events', {
       'order_id': o3.id,
@@ -109,7 +109,7 @@ void main() {
     });
 
     // 4. Order 4: missing READY milestone
-    final o4 = await orderController.checkoutOrder(
+    final o4 = (await orderController.checkoutOrder(
       commandId: 'order-4',
       businessDayId: bDay.id,
       shiftId: shift.id,
@@ -117,11 +117,11 @@ void main() {
       diningType: DiningType.dineIn,
       items: [CartItem(menuItem: await catalog.getMenuItem(item.id))],
       payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 500)],
-    );
+    )).order;
     await db.update('orders', {'created_at': '2026-10-31T12:00:00+05:00'}, where: 'id = ?', whereArgs: [o4.id]);
 
     // 5. Order 5: out-of-order sequence (ready timestamp before confirmed timestamp)
-    final o5 = await orderController.checkoutOrder(
+    final o5 = (await orderController.checkoutOrder(
       commandId: 'order-5',
       businessDayId: bDay.id,
       shiftId: shift.id,
@@ -129,7 +129,7 @@ void main() {
       diningType: DiningType.dineIn,
       items: [CartItem(menuItem: await catalog.getMenuItem(item.id))],
       payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 500)],
-    );
+    )).order;
     await db.update('orders', {'created_at': '2026-10-31T12:00:00+05:00'}, where: 'id = ?', whereArgs: [o5.id]);
     await db.insert('order_status_events', {
       'order_id': o5.id,
