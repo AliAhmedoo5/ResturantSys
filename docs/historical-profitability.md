@@ -14,6 +14,25 @@ This is an event-time acquisition-rate policy, not FIFO or weighted-average
 stock valuation. The underlying unit rates retain decimal precision; extended
 money is rounded once into integer paisa.
 
+### Inventory valuation vs. Sales COGS separation (ADR-0023)
+
+As formalized in [ADR-0023](adr/0023-historical-inventory-valuation-policy.md),
+realized sales COGS and on-hand inventory valuation operate under strict separation:
+1. **Sales COGS Immutability**: Historical sales capture acquisition rates at the
+   time of sale (`order_items.bom_json`). Past sales COGS is immutable and is never
+   recalculated or overwritten when current inventory rates or replacement costs change.
+2. **Moving Weighted Average Cost (Moving WAC)**: On-hand ending inventory is valued
+   using Moving WAC, recomputed upon each purchase receipt using signed 64-bit integer
+   paisa precision without physical FIFO batch tracking.
+3. **Perpetual Negative Stock**: When recipe consumption outpaces purchase data entry
+   (e.g., morning Mandi deliveries), cashier checkout never blocks. While stock is
+   negative, balance-sheet asset value is reported as PKR 0.00 with unit cost pegged to
+   the Last Known Valid Unit Cost and flagged with `Estimated valuation: item in temporary negative balance`.
+   Delayed purchase invoices reconcile negative quantities without double deductions.
+4. **Unknown Cost Disclosure**: Ingredients lacking purchase history are marked
+   `CostQuality.unknownCost` and reported with explicit valuation coverage metrics
+   (e.g., `Valuation Coverage: 96% of active inventory lines`) rather than defaulting to zero.
+
 ### Food and packaging classification
 
 Each recorded cost event snapshots the ingredient's classification (`FOOD` vs

@@ -112,6 +112,38 @@ _Avoid_: Stock check, recipe lock, publish block
 An inventory ledger policy where ingredient and packaging consumption is posted immediately at checkout and sales are never blocked by zero or negative stock.
 _Avoid_: Stock bypass, negative override, unconstrained inventory
 
+**Moving Weighted Average Cost (Moving WAC)**:
+The perpetual inventory valuation methodology that recomputes an ingredient's average unit cost in integer paisa upon each inbound purchase receipt using the weighted formula $\frac{(Q_{\text{current}} \times \bar{C}_{\text{old}}) + (Q_{\text{purchase}} \times C_{\text{purchase}})}{Q_{\text{current}} + Q_{\text{purchase}}}$, eliminating FIFO batch fragmentation.
+_Avoid_: FIFO valuation, average cost estimate, periodic WAC
+
+**Perpetual Negative Stock**:
+An inventory state where on-hand quantity drops below zero due to continuous cashier checkout and real-time BOM consumption prior to the entry of physical purchase invoices.
+_Avoid_: Stock deficit, unbilled negative balance, stockout breach
+
+**Pegged Last Known Cost**:
+The valuation rule holding an ingredient's unit cost constant at its last verified valid purchase rate while on-hand quantity remains negative, ensuring valuation consistency until new invoice reconciliation.
+_Avoid_: Estimated fallback rate, zero-cost fallback, arbitrary cost peg
+
+**Negative Balance Valuation Badge**:
+An explicit report and UI transparency indicator (`Estimated valuation: item in temporary negative balance`) alerting managers that an inventory line's asset value is reported as PKR 0.00 while awaiting supplier invoice entry.
+_Avoid_: Negative asset warning, stock error flag, inventory deficit alert
+
+**Mandi Unit Conversion Snapshot**:
+The immutable conversion multiplier and base unit permanently recorded on a purchase invoice row at entry time (e.g., 1 Mann = 40 kg = 40,000 g), guaranteeing that future unit configuration changes never distort historical stock quantities or valuation.
+_Avoid_: Unit configuration link, live unit factor, dynamic conversion
+
+**Acquisition-Rate Sales COGS**:
+The immutable cost of goods sold snapshotted into order items (`bom_json`) at the time of sale based on event-time ingredient acquisition rates, strictly decoupled from subsequent inventory valuation fluctuations.
+_Avoid_: Revalued COGS, replacement food cost, retroactive COGS
+
+**Inventory Quantity Bridge**:
+The mathematical reconciliation verifying that ending inventory at any historical cutoff equals opening stock plus purchases minus sales BOM consumption, packaging, kitchen wastage, and physical adjustments.
+_Avoid_: Stock reconciliation formula, inventory equation, stock balance proof
+
+**Unknown Cost Quality**:
+An explicit metadata classification (`CostQuality.unknownCost`) assigned to inventory lines lacking purchase cost evidence in early operational history, preventing silent zero-cost assumptions and enabling honest coverage disclosure.
+_Avoid_: Missing cost flag, zero cost fallback, uncosted inventory
+
 **Desi Unit**:
 A localized traditional wholesale packaging unit (such as Mann [40kg], Darjan [dozen], Peti [crate], or Bori [sack]) mapped to metric stock balances.
 _Avoid_: Informal measure, market unit
@@ -202,3 +234,46 @@ _Avoid_: Item discount, line reduction
 **Unallocated Legacy Order**:
 A closed historical order created before line-level allocation ledgers were introduced, presented in reports with honest missing-allocation disclosure rather than fabricated line splits.
 _Avoid_: Incomplete order, corrupted order
+
+## Kitchen & Delivery Fulfillment
+
+**Preparation Duration (Prep Time)**:
+The elapsed duration from order confirmation ($T_{\text{confirmed}}$) to the initial kitchen milestone marked READY ($T_{\text{ready}}$), summarized via median (p50) and 90th percentile (p90) rather than simple arithmetic means.
+_Avoid_: Cooking speed, kitchen latency, average prep time
+
+**Rework Cycle**:
+An append-only kitchen transition moving an order back from READY to PREPARING (and back to READY) for remakes, heat-lamp warming, or customer changes without overwriting the primary READY milestone timestamp.
+_Avoid_: Prep reset, kitchen retry, remake overwrite
+
+**Milestone Sample Coverage**:
+The ratio of eligible orders possessing observed, non-null milestone timestamps divided by total orders in the period, ensuring missing taps are disclosed with sample counts rather than synthesized as zero minutes.
+_Avoid_: Milestone completeness, timer uptime, tap score
+
+**Rider Travel Time**:
+The transit duration measured from courier trip departure ($T_{\text{dispatched}}$) to delivery completion ($T_{\text{delivered}}$) recorded at the doorstep or upon counter return.
+_Avoid_: Trip length, ride duration, delivery transit
+
+**Delivery Area Target ETA**:
+The manager-configured expected fulfillment duration in minutes assigned to a specific delivery area (also referred to as Area Target ETA), used as the benchmark for evaluating on-time delivery performance.
+_Avoid_: Zone Target ETA, area deadline, zone SLA, standard delay
+
+**Delivery SLA**:
+The service level threshold evaluated against the Delivery Area Target ETA (or a 45-minute fallback from confirmation) to classify orders as on-time or late.
+_Avoid_: Delivery commitment, dropoff guarantee, speed quota
+
+**Reattempted Delivery**:
+A subsequent courier delivery dispatch following a returned, incomplete trip attempt (e.g. unreachable customer or gated address), tracked distinctly without counting as an order failure.
+_Avoid_: Delivery failure (for temporary return), second trip, retry penalty
+
+**Final Delivery Failure**:
+A terminal fulfillment failure reached when an order is explicitly canceled before delivery (`CANCELLED_UNDELIVERED`) or returned with food written off to kitchen wastage (`RETURNED_WASTED`).
+_Avoid_: Returned run, failed attempt, courier bounce
+
+**Unsettled COD Aging Clock**:
+The operational duration counter tracking uncollected Cash on Delivery funds beginning at courier trip return ($T_{\text{trip\_return}}$) at the counter, rather than from order creation.
+_Avoid_: COD age, cash delay, driver debt timer
+
+**Aging Bands**:
+The operational classification of unsettled COD exposure categorizing pending collections into Current Shift, Overdue / Unsettled (0–24h), Aged (1–3 days), and Critical (>3 days).
+_Avoid_: Overdue buckets, debt stages, aging brackets
+
