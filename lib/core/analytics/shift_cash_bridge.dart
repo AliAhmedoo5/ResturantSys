@@ -66,9 +66,10 @@ class _ShiftCashBridge {
     final counted = shifts.where((s) => s['counted_cash'] != null).toList();
     final complete = !missing && shifts.isNotEmpty && counted.length == shifts.length;
     const scope = 'Whole selected owning/receiving Shifts, including collections from Orders outside the cohort. Dining Type, payment method and calendar event windows apply to separately labeled activity rows only.';
-    AnalyticsMetric metric(String id, String label, num? value, {bool unavailable = false}) => AnalyticsMetric(
+    AnalyticsMetric metric(String id, String label, num? value, {bool unavailable = false, bool isBalance = false}) => AnalyticsMetric(
       id: id, label: label, value: unavailable ? null : value, unit: AnalyticsUnit.paisa,
       quality: unavailable ? AnalyticsQuality.missing : AnalyticsQuality.complete,
+      isBalance: isBalance,
       explanation: '$scope Opening Float + signed physical effects. Linked event/tender/movement evidence contributes once.');
     for (final shift in shifts) {
       final expected = _money(shift, 'opening_float') + effects.where((r) => r['shift_id'] == shift['id']).fold<int>(0, (total, r) => total + (r['amount_paisa'] as int));
@@ -95,7 +96,7 @@ class _ShiftCashBridge {
       }));
     }
     return builder._section(AnalyticsFamily.cash, 'Cash and shifts', [
-      metric('opening_float', 'Opening float', opening),
+      metric('opening_float', 'Opening float', opening, isBalance: true),
       metric('cash_receipts', 'Customer cash accepted', sum('customer_receipts')),
       metric('rider_handovers', 'Rider handovers', sum('rider_handovers')),
       metric('pay_in', 'Other pay-ins', sum('other_pay_ins')),
@@ -106,10 +107,10 @@ class _ShiftCashBridge {
       metric('cash_drops', 'Cash drops', -sum('cash_drops')),
       metric('other_outflows', 'Other drawer outflows', -sum('other_outflows')),
       metric('pay_out', 'Total physical outflow', -effects.where((r) => (r['amount_paisa'] as int) < 0).fold<int>(0, (total, r) => total + (r['amount_paisa'] as int))),
-      metric('evidenced_balance', 'Balance from retained evidence (coverage required)', evidenced),
-      metric('expected_drawer', 'Expected drawer', evidenced, unavailable: missing),
-      metric('blind_count', 'Blind Count', _sum(counted, 'counted_cash'), unavailable: counted.length != shifts.length || shifts.isEmpty),
-      metric('variance', 'Discrepancy (counted minus expected)', _sum(counted, 'counted_cash') - evidenced, unavailable: !complete),
+      metric('evidenced_balance', 'Balance from retained evidence (coverage required)', evidenced, isBalance: true),
+      metric('expected_drawer', 'Expected drawer', evidenced, unavailable: missing, isBalance: true),
+      metric('blind_count', 'Blind Count', _sum(counted, 'counted_cash'), unavailable: counted.length != shifts.length || shifts.isEmpty, isBalance: true),
+      metric('variance', 'Discrepancy (counted minus expected)', _sum(counted, 'counted_cash') - evidenced, unavailable: !complete, isBalance: true),
       _ReportBuilder._coverage('count_coverage', 'Counted shift coverage', counted.length, shifts.length, 'Uncounted Shift variance is unavailable.'),
       builder._metric('cash_evidence_gaps', 'Cash evidence gaps', gaps.length, unit: AnalyticsUnit.count, explanation: 'Unlinked legacy tenders and inconsistent stable links; complete expected balances withheld.'),
       builder._metric('open_shifts', 'Open shifts', shifts.where((s) => s['status'] == 'OPEN').length, unit: AnalyticsUnit.count, explanation: scope),
