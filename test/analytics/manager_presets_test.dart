@@ -289,5 +289,50 @@ void main() {
       expect(query.domainFilters[AnalyticsDimension.menuCategory], '12');
       expect(query.domainFilters.containsKey(AnalyticsDimension.customerSegment), isFalse); // Sanitized
     });
+
+    test('resolvePresetQuery drops domain filters when not present in availableFilters', () {
+      final preset = ManagerReportPreset(
+        id: 4,
+        name: 'Preset with deleted option',
+        ownerStaffId: manager1.id,
+        isShared: false,
+        family: AnalyticsFamily.sales,
+        periodKind: PresetPeriodKind.dynamic,
+        dynamicPeriod: 'today',
+        timeBasis: AnalyticsTimeBasis.businessDay,
+        grouping: AnalyticsGrouping.day,
+        filters: const {
+          'domainFilters': {
+            'menuCategory': '12', // Not in availableFilters
+            'menuItem': '101',     // Present in availableFilters
+            'supplier': '5',       // Not in availableFilters
+          },
+        },
+        createdAt: DateTime.utc(2026, 10, 1),
+        updatedAt: DateTime.utc(2026, 10, 1),
+      );
+
+      final availableFilters = const [
+        AnalyticsFilterOption(
+          dimension: AnalyticsDimension.menuItem,
+          id: '101',
+          label: 'Burger',
+        ),
+        AnalyticsFilterOption(
+          dimension: AnalyticsDimension.menuCategory,
+          id: '99',
+          label: 'Sides',
+        ),
+      ];
+
+      final query = service.resolvePresetQuery(preset, availableFilters: availableFilters);
+
+      // 'menuItem' 101 is valid and present
+      expect(query.domainFilters[AnalyticsDimension.menuItem], '101');
+      // 'menuCategory' 12 is NOT in availableFilters (even though category 99 is) -> dropped
+      expect(query.domainFilters.containsKey(AnalyticsDimension.menuCategory), isFalse);
+      // 'supplier' 5 is NOT in availableFilters -> dropped
+      expect(query.domainFilters.containsKey(AnalyticsDimension.supplier), isFalse);
+    });
   });
 }

@@ -76,7 +76,7 @@ class AnalyticsQuery {
     this.paymentMethod,
     this.timeBasis = AnalyticsTimeBasis.businessDay,
     this.grouping = AnalyticsGrouping.day,
-    this.comparisonMode = AnalyticsComparisonMode.precedingPeriod,
+    this.comparisonMode = AnalyticsComparisonMode.none,
     this.holdStaleMinutes = 30,
     this.fundingStream,
     Map<AnalyticsDimension, String> domainFilters = const {},

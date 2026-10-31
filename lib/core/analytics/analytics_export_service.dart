@@ -12,8 +12,12 @@ enum AnalyticsExportFormat { csv, xlsx, pdf }
 typedef ExportProgressCallback = void Function(String stage, int current, int total);
 
 class ExportCancellationToken {
+  final bool Function()? _check;
   bool _isCancelled = false;
-  bool get isCancelled => _isCancelled;
+
+  ExportCancellationToken([this._check]);
+
+  bool get isCancelled => _isCancelled || (_check?.call() ?? false);
   void cancel() => _isCancelled = true;
 }
 
@@ -105,11 +109,10 @@ class AnalyticsExportService {
     String directory, {
     bool Function()? canWrite,
     ExportProgressCallback? onProgress,
-    bool Function()? isCancelled,
     ExportCancellationToken? cancellationToken,
   }) async {
-    bool checkCancelled() =>
-        (isCancelled?.call() ?? false) || (cancellationToken?.isCancelled ?? false);
+    final token = cancellationToken ?? ExportCancellationToken();
+    bool checkCancelled() => token.isCancelled;
 
     if (checkCancelled()) throw const ExportCancelledException();
     if (canWrite != null && !canWrite()) throw StateError('Export authorization expired.');

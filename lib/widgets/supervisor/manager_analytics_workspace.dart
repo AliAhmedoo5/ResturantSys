@@ -35,6 +35,21 @@ const _familyLabels = <AnalyticsFamily, String>{
   AnalyticsFamily.audit: 'Control & audit',
 };
 
+const _snapshotBalanceFamilies = <AnalyticsFamily>{
+  AnalyticsFamily.inventory,
+  AnalyticsFamily.suppliers,
+  AnalyticsFamily.staff,
+};
+
+const _phoneColumnKeys = <String>{'phone', 'customer_phone', 'rider_phone'};
+
+String _formatPhoneMasked(Object? value) {
+  if (value == null) return 'Unavailable';
+  final str = value.toString().trim();
+  if (str.isEmpty || str == '—') return '—';
+  return '[phone masked]';
+}
+
 /// Read-only reporting over one immutable, authorized SQLite snapshot.
 class ManagerAnalyticsWorkspace extends StatefulWidget {
   const ManagerAnalyticsWorkspace({
@@ -503,7 +518,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
             SelectableText('Source IDs: ${row.sourceId ?? row.id}'),
             const SizedBox(height: 12),
             for (final column in section.columns) Padding(padding: const EdgeInsets.only(bottom: 8),
-              child: SelectableText('${column.label}: ${_format(row.cells[column.key], column.unit)}')),
+              child: SelectableText('${column.label}: ${_phoneColumnKeys.contains(column.key) ? _formatPhoneMasked(row.cells[column.key]) : _format(row.cells[column.key], column.unit)}')),
           ]))),
         actions: [TextButton(onPressed: _dismissSource, child: const Text('Close'))],
       );
@@ -828,6 +843,29 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
         if (snapshot == null && !_busy && _error == null) const Text('No analytics snapshot available.'),
         if (snapshot != null) ...[
           if (snapshot.businessDayIds.isEmpty) _note('No Business Days match this selection. Current-state datasets may still be available.'),
+          if (_query.comparisonMode != AnalyticsComparisonMode.none && _snapshotBalanceFamilies.contains(_family))
+            Container(
+              key: const ValueKey('unsupported_comparison_banner'),
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: StreetFoodMafiaColors.cardSurface,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: StreetFoodMafiaColors.border),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, size: 20, color: StreetFoodMafiaColors.cartelYellow),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Historical comparison is unsupported for snapshot balance families: ${_familyLabels[_family]}. Current balances are not historical snapshots.',
+                      style: const TextStyle(fontSize: 13, color: StreetFoodMafiaColors.cartelYellow),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           if (_family == AnalyticsFamily.overview) _overview(snapshot) else ..._report(snapshot),
           ExpansionTile(tilePadding: EdgeInsets.zero,
             title: const Text('Reporting scope & methodology', style: TextStyle(fontSize: 13)),
@@ -1073,7 +1111,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
 String _format(Object? value, AnalyticsUnit? unit) {
   if (value == null) return 'Unavailable';
   if (value is! num) {
-    return value.toString().replaceAll(RegExp(r'(?:\+?92[ -]?|0)3\d{2}[ -]?\d{7}'), '[phone masked]');
+    return value.toString();
   }
   return switch (unit) {
     AnalyticsUnit.paisa => 'PKR ${NumberFormat('#,##0.00').format(value / 100)}',
@@ -1282,6 +1320,9 @@ class _SourceTableState extends State<_SourceTable> {
       final local = analyticsKarachiTime(source);
       return Text(local == null ? '—' : DateFormat(column.key == 'business_date'
         ? 'dd MMM yyyy' : 'dd MMM, HH:mm').format(local));
+    }
+    if (_phoneColumnKeys.contains(column.key)) {
+      return Text(_formatPhoneMasked(value));
     }
     return Text(_format(value, column.unit));
   }

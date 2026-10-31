@@ -14,7 +14,7 @@ Future<void> createHoldLifecycleSchema(DatabaseExecutor db) async {
     CHECK (event_type != 'CONVERTED' OR order_id IS NOT NULL),
     CHECK (event_type != 'REPLACED' OR previous_hold_id IS NOT NULL),
     CHECK (order_id IS NULL OR event_type = 'CONVERTED'),
-    CHECK (previous_hold_id IS NULL OR event_type = 'REPLACED')
+    CHECK (previous_hold_id IS NULL OR event_type IN ('REPLACED', 'CREATED'))
   )''');
 
   await db.execute('CREATE INDEX IF NOT EXISTS hold_lifecycle_hold_id ON hold_lifecycle_events(hold_id)');

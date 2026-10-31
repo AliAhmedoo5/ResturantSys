@@ -151,7 +151,7 @@ abstract final class KpiContributors {
         family: section.family,
         formula: 'Average Ticket = Total Value (${_formatPaisa(totalVal)}) / Total Orders ($totalOrders) = ${_formatPaisa(avg)}',
         formulaTotal: avg,
-        isReconciled: (avg - (metric.value ?? 0)).abs() < 1.0,
+        isReconciled: avg == metric.value,
         contributingRows: dailyRows,
         columns: const [
           AnalyticsColumn(key: 'business_date', label: 'Business date'),
@@ -448,20 +448,20 @@ abstract final class KpiContributors {
         .where((r) => r.cells['kind'] == 'Mandi procurement' || r.sourceType == 'mandi_procurements')
         .toList();
     final total = mandiRows.fold<num>(
-        0, (sum, r) => sum + (r.cells['spend_paisa'] as num? ?? (r.cells['total_cost'] as num? ?? 0) * 100));
+        0, (sum, r) => sum + (r.cells['spend_paisa'] as num? ?? 0));
 
     return KpiContributorResult(
       metric: metric,
       family: section.family,
       formula: '${metric.label} = Sum of ${mandiRows.length} procurement orders = ${_formatPaisa(total)}',
       formulaTotal: total,
-      isReconciled: true,
+      isReconciled: total == (metric.value ?? 0),
       contributingRows: mandiRows,
       columns: const [
         AnalyticsColumn(key: 'purchase_id', label: 'Purchase #'),
         AnalyticsColumn(key: 'supplier_name', label: 'Supplier / Source'),
-        AnalyticsColumn(key: 'converted_quantity', label: 'Quantity', unit: AnalyticsUnit.decimal),
-        AnalyticsColumn(key: 'total_cost', label: 'Total Cost', unit: AnalyticsUnit.paisa),
+        AnalyticsColumn(key: 'base_quantity', label: 'Quantity', unit: AnalyticsUnit.decimal),
+        AnalyticsColumn(key: 'spend_paisa', label: 'Total Cost', unit: AnalyticsUnit.paisa),
       ],
     );
   }
@@ -478,7 +478,7 @@ abstract final class KpiContributors {
       family: section.family,
       formula: '${metric.label} = Outstanding balance across ${supplierRows.length} suppliers = ${_formatPaisa(total)}',
       formulaTotal: total,
-      isReconciled: true,
+      isReconciled: total == (metric.value ?? 0),
       contributingRows: supplierRows,
       columns: const [
         AnalyticsColumn(key: 'supplier_name', label: 'Supplier'),
@@ -499,7 +499,7 @@ abstract final class KpiContributors {
       family: section.family,
       formula: '${metric.label} = Sum of ${expenseRows.length} expenses = ${_formatPaisa(total)}',
       formulaTotal: total,
-      isReconciled: true,
+      isReconciled: total == (metric.value ?? 0),
       contributingRows: expenseRows,
       columns: const [
         AnalyticsColumn(key: 'category', label: 'Category'),
@@ -514,12 +514,19 @@ abstract final class KpiContributors {
         .where((r) => r.sourceType == 'staff' || r.sourceType == 'staff_payroll')
         .toList();
 
+    final num formulaTotal = switch (metric.id) {
+      'staff_count' => staffRows.length,
+      'active_staff' => staffRows.where((r) => r.cells['is_active'] == 1 || r.cells['is_active'] == true).length,
+      'login_enabled' => staffRows.where((r) => r.cells['login_enabled'] == 1 || r.cells['login_enabled'] == true).length,
+      _ => metric.value ?? staffRows.length,
+    };
+
     return KpiContributorResult(
       metric: metric,
       family: section.family,
       formula: '${metric.label} across ${staffRows.length} staff records',
-      formulaTotal: metric.value,
-      isReconciled: true,
+      formulaTotal: formulaTotal,
+      isReconciled: formulaTotal == (metric.value ?? 0),
       contributingRows: staffRows,
       columns: section.columns.isNotEmpty
           ? section.columns

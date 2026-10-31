@@ -381,5 +381,162 @@ void main() {
       expect(result.contributingRows, isEmpty);
       expect(result.emptyOrMissingNote, contains('Missing'));
     });
+
+    test('Procurement reconciles with integer spend_paisa and base_quantity columns dynamically', () {
+      final mandiRows = [
+        AnalyticsRow(
+          id: 'proc-1',
+          sourceType: 'mandi_procurements',
+          sourceId: '101',
+          cells: {
+            'kind': 'Mandi procurement',
+            'purchase_id': 101,
+            'supplier_name': 'Mandi Vendor A',
+            'base_quantity': 25.5,
+            'spend_paisa': 1250000,
+          },
+        ),
+        AnalyticsRow(
+          id: 'proc-2',
+          sourceType: 'mandi_procurements',
+          sourceId: '102',
+          cells: {
+            'kind': 'Mandi procurement',
+            'purchase_id': 102,
+            'supplier_name': 'Mandi Vendor B',
+            'base_quantity': 10.0,
+            'spend_paisa': 500000,
+          },
+        ),
+      ];
+
+      const matchingMetric = AnalyticsMetric(
+        id: 'procurement_spend',
+        label: 'Procurement spend',
+        value: 1750000,
+        unit: AnalyticsUnit.paisa,
+      );
+
+      const mismatchMetric = AnalyticsMetric(
+        id: 'procurement_spend',
+        label: 'Procurement spend',
+        value: 9999999, // Mismatched value
+        unit: AnalyticsUnit.paisa,
+      );
+
+      final section = AnalyticsSection(
+        family: AnalyticsFamily.procurement,
+        title: 'Procurement',
+        metrics: const [matchingMetric, mismatchMetric],
+        rows: mandiRows,
+      );
+
+      final snapshot = AnalyticsSnapshot(
+        query: AnalyticsQuery(
+          startDate: DateTime(2026, 10, 25),
+          endDateExclusive: DateTime(2026, 10, 26),
+        ),
+        generatedAt: DateTime(2026, 10, 26, 12),
+        businessDayIds: const [1],
+        sections: [section],
+      );
+
+      final matched = KpiContributors.resolve(
+        snapshot: snapshot,
+        section: section,
+        metric: matchingMetric,
+      );
+      expect(matched.isReconciled, isTrue);
+      expect(matched.formulaTotal, 1750000);
+      expect(matched.columns.map((c) => c.key), containsAll(['purchase_id', 'supplier_name', 'base_quantity', 'spend_paisa']));
+
+      final mismatched = KpiContributors.resolve(
+        snapshot: snapshot,
+        section: section,
+        metric: mismatchMetric,
+      );
+      expect(mismatched.isReconciled, isFalse);
+    });
+
+    test('Suppliers, Expenses, and Staff set isReconciled dynamically against metric value', () {
+      // 1. Suppliers
+      final supplierRows = [
+        AnalyticsRow(
+          id: 'supp-1',
+          sourceType: 'vendor_khata',
+          sourceId: '1',
+          cells: {'supplier_name': 'Supplier A', 'current_balance_paisa': 45000},
+        ),
+      ];
+      final supplierSection = AnalyticsSection(
+        family: AnalyticsFamily.suppliers,
+        title: 'Suppliers',
+        metrics: const [
+          AnalyticsMetric(id: 'closing_payable', label: 'Closing payable', value: 45000, unit: AnalyticsUnit.paisa),
+          AnalyticsMetric(id: 'mismatched_payable', label: 'Closing payable', value: 10000, unit: AnalyticsUnit.paisa),
+        ],
+        rows: supplierRows,
+      );
+
+      // 2. Expenses
+      final expenseRows = [
+        AnalyticsRow(
+          id: 'exp-1',
+          sourceType: 'cash_movements',
+          sourceId: '1',
+          cells: {'category': 'Utilities', 'amount_paisa': 15000},
+        ),
+      ];
+      final expenseSection = AnalyticsSection(
+        family: AnalyticsFamily.expenses,
+        title: 'Expenses',
+        metrics: const [
+          AnalyticsMetric(id: 'total_expenses', label: 'Total expenses', value: 15000, unit: AnalyticsUnit.paisa),
+          AnalyticsMetric(id: 'mismatched_expenses', label: 'Total expenses', value: 9999, unit: AnalyticsUnit.paisa),
+        ],
+        rows: expenseRows,
+      );
+
+      // 3. Staff
+      final staffRows = [
+        AnalyticsRow(
+          id: 'staff-1',
+          sourceType: 'staff',
+          sourceId: '1',
+          cells: {'name': 'Ali', 'role': 'MANAGER', 'is_active': 1},
+        ),
+      ];
+      final staffSection = AnalyticsSection(
+        family: AnalyticsFamily.staff,
+        title: 'Staff',
+        metrics: const [
+          AnalyticsMetric(id: 'staff_count', label: 'Current staff', value: 1, unit: AnalyticsUnit.count),
+          AnalyticsMetric(id: 'mismatched_staff', label: 'Current staff', value: 5, unit: AnalyticsUnit.count),
+        ],
+        rows: staffRows,
+      );
+
+      final snapshot = AnalyticsSnapshot(
+        query: AnalyticsQuery(
+          startDate: DateTime(2026, 10, 25),
+          endDateExclusive: DateTime(2026, 10, 26),
+        ),
+        generatedAt: DateTime(2026, 10, 26, 12),
+        businessDayIds: const [1],
+        sections: [supplierSection, expenseSection, staffSection],
+      );
+
+      // Verify suppliers dynamic reconciliation
+      expect(KpiContributors.resolve(snapshot: snapshot, section: supplierSection, metric: supplierSection.metrics[0]).isReconciled, isTrue);
+      expect(KpiContributors.resolve(snapshot: snapshot, section: supplierSection, metric: supplierSection.metrics[1]).isReconciled, isFalse);
+
+      // Verify expenses dynamic reconciliation
+      expect(KpiContributors.resolve(snapshot: snapshot, section: expenseSection, metric: expenseSection.metrics[0]).isReconciled, isTrue);
+      expect(KpiContributors.resolve(snapshot: snapshot, section: expenseSection, metric: expenseSection.metrics[1]).isReconciled, isFalse);
+
+      // Verify staff dynamic reconciliation
+      expect(KpiContributors.resolve(snapshot: snapshot, section: staffSection, metric: staffSection.metrics[0]).isReconciled, isTrue);
+      expect(KpiContributors.resolve(snapshot: snapshot, section: staffSection, metric: staffSection.metrics[1]).isReconciled, isFalse);
+    });
   });
 }

@@ -5,14 +5,21 @@ import 'analytics_export_service.dart';
 import 'analytics_models.dart';
 
 typedef PlatformPrintHandler = Future<bool> Function(List<int> bytes, {String? documentTitle});
+typedef ProcessRunner = Future<ProcessResult> Function(
+  String executable,
+  List<String> arguments,
+);
 
 /// Platform adapter for opening the standard Windows print dialog for a report PDF.
 class WindowsReportPrintAdapter {
   final PlatformPrintHandler? _handler;
+  final ProcessRunner? _processRunner;
 
   const WindowsReportPrintAdapter({
     PlatformPrintHandler? printHandler,
-  }) : _handler = printHandler;
+    ProcessRunner? processRunner,
+  })  : _handler = printHandler,
+        _processRunner = processRunner;
 
   /// Sends the PDF to the Windows print system.
   /// Returns `true` if accepted/printed, `false` if cancelled or unavailable.
@@ -20,7 +27,7 @@ class WindowsReportPrintAdapter {
     if (_handler != null) {
       return await _handler(pdfBytes, documentTitle: documentTitle);
     }
-    if (!Platform.isWindows) {
+    if (!Platform.isWindows && _processRunner == null) {
       return false;
     }
     return await _printWindowsNative(pdfBytes, documentTitle: documentTitle);
@@ -33,24 +40,61 @@ class WindowsReportPrintAdapter {
     );
     try {
       await tempFile.writeAsBytes(pdfBytes, flush: true);
-      final result = await Process.run(
+      final escapedPath = tempFile.path.replaceAll("'", "''");
+      final psScript = '''
+Add-Type -AssemblyName System.Windows.Forms
+[System.Windows.Forms.Application]::EnableVisualStyles()
+\$dialog = New-Object System.Windows.Forms.PrintDialog
+\$dialog.UseEXDialog = \$true
+\$dialog.AllowSomePages = \$false
+\$dialog.AllowSelection = \$false
+\$res = \$dialog.ShowDialog()
+if (\$res -eq [System.Windows.Forms.DialogResult]::OK) {
+  \$printer = \$dialog.PrinterSettings.PrinterName
+  Start-Process -FilePath '$escapedPath' -Verb PrintTo -ArgumentList "`"\$printer`"" -PassThru | ForEach-Object { \$_ | Wait-Process -Timeout 30 -ErrorAction SilentlyContinue }
+  Write-Output "SUCCESS"
+  exit 0
+} else {
+  Write-Output "CANCELLED"
+  exit 1
+}
+''';
+      final runner = _processRunner ?? Process.run;
+      final result = await runner(
         'powershell',
         [
           '-NoProfile',
-          '-NonInteractive',
+          '-STA',
           '-Command',
-          'Start-Process -FilePath "${tempFile.path}" -Verb Print -PassThru | ForEach-Object { \$_ | Wait-Process -Timeout 30 -ErrorAction SilentlyContinue }',
+          psScript,
         ],
       );
-      return result.exitCode == 0;
-    } catch (_) {
-      return false;
+
+      final stdoutStr = result.stdout.toString();
+      final stderrStr = result.stderr.toString();
+
+      if (result.exitCode == 0 && stdoutStr.contains('SUCCESS')) {
+        return true;
+      } else if (result.exitCode == 1 || stdoutStr.contains('CANCELLED')) {
+        return false;
+      } else {
+        throw ProcessException(
+          'powershell',
+          ['-Command', psScript],
+          'Print dialog invocation failed: ${stderrStr.isNotEmpty ? stderrStr : stdoutStr}',
+          result.exitCode,
+        );
+      }
     } finally {
-      try {
-        if (await tempFile.exists()) {
-          await tempFile.delete();
-        }
-      } catch (_) {}
+      // Do not prematurely delete the temp PDF while the background spooler is active.
+      // Schedule cleanup after a delay.
+      Future.delayed(const Duration(minutes: 5), () async {
+        try {
+          if (await tempFile.exists()) {
+            await tempFile.delete();
+          }
+        } catch (_) {}
+      });
     }
   }
 }

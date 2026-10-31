@@ -375,6 +375,10 @@ class ManagerPresetsService {
         final valStr = entry.value.toString();
         final dim = AnalyticsDimension.values.where((d) => d.name == keyStr).firstOrNull;
         if (dim != null) {
+          if (availableFilters != null) {
+            final exists = availableFilters.any((opt) => opt.dimension == dim && opt.id == valStr);
+            if (!exists) continue;
+          }
           if (dim == AnalyticsDimension.customerSegment) {
             if (['known', 'guest'].contains(valStr)) {
               domainFilters[dim] = valStr;
