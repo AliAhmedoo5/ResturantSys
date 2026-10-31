@@ -285,8 +285,7 @@ class _ReportBuilder {
     for (final a in delivered) {
       final dispatch = _karachi(a['dispatched_at']);
       final end = _karachi(a['delivered_at']);
-      final confirmed = _karachi(a['order_created_at']);
-      if (dispatch != null && end != null && !end.isBefore(dispatch) && (confirmed == null || !end.isBefore(confirmed))) {
+      if (dispatch != null && end != null && !end.isBefore(dispatch)) {
         times.add(end.difference(dispatch).inSeconds / 60);
       }
     }
