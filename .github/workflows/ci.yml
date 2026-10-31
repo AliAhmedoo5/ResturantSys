@@ -142,7 +142,7 @@ jobs:
             read -r -a test_paths <<< "$TEST_PATHS"
             flutter test --timeout 2m "${test_paths[@]}"
           else
-            flutter test --timeout 2m --total-shards 4 --shard-index ${{ matrix.shard }} --shard-by-suite
+            flutter test --timeout 2m --total-shards 4 --shard-index ${{ matrix.shard }}
           fi
 
       - name: Upload desktop layout previews
