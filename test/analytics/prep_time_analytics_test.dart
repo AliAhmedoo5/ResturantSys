@@ -171,7 +171,7 @@ void main() {
     expect(reworkCycles.value, 1);
 
     // Ensure blanket missing claim is replaced
-    expect(section.metrics.any((m) => m.id == 'prep_time' && m.unavailable), isFalse);
+    expect(section.metrics.any((m) => m.id == 'prep_time'), isFalse);
 
     // Check rows for prep duration and quality
     final orderRows = section.rows.where((r) => r.sourceType == 'orders').toList();
