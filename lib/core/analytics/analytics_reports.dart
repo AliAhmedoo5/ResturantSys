@@ -964,8 +964,8 @@ class _ReportBuilder {
       }
       ingPurchases.sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
-      final initialCostPaisa = (unitCostRate != null && (unitCostRate as num) > 0)
-          ? PaisaEngine.rupeesToPaisa(unitCostRate as num)
+      final initialCostPaisa = (unitCostRate is num && unitCostRate > 0)
+          ? PaisaEngine.rupeesToPaisa(unitCostRate)
           : 0;
 
       double runningWacPaisa = initialCostPaisa > 0 ? initialCostPaisa.toDouble() : 0.0;
@@ -1002,6 +1002,7 @@ class _ReportBuilder {
       String costQuality;
 
       if (endingQty < 0) {
+        movingWacPaisa = lastKnownWacPaisa.round();
         valuationPaisa = 0;
         valuationBadge = 'Estimated valuation: item in temporary negative balance';
         costQuality = 'temporary_negative';
@@ -2177,6 +2178,7 @@ class _ReportBuilder {
     num? previous,
     bool unavailable = false,
     AnalyticsQuality unavailableQuality = AnalyticsQuality.notApplicable,
+    AnalyticsQuality? quality,
     int? sampleCount,
     int? populationCount,
     bool isBalance = false,
@@ -2190,7 +2192,7 @@ class _ReportBuilder {
       value: unavailable ? null : value,
       unit: unit,
       explanation: explanation ?? _orderBasis,
-      quality: unavailable ? unavailableQuality : AnalyticsQuality.complete,
+      quality: quality ?? (unavailable ? unavailableQuality : AnalyticsQuality.complete),
       sampleCount: sampleCount,
       populationCount: populationCount,
       changeAbsolute: difference,
