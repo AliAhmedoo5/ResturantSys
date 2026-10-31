@@ -6,6 +6,7 @@ import 'package:resturant_sys/core/analytics/analytics_export_service.dart';
 import 'package:resturant_sys/core/auth/auth_service.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
+import 'package:resturant_sys/core/catalog/storage_unit.dart';
 import 'package:resturant_sys/core/database/pos_database.dart';
 import 'package:resturant_sys/core/database/pos_database_constants.dart';
 import 'package:resturant_sys/core/orders/cart_item.dart';
@@ -37,7 +38,10 @@ void main() {
         colorHex: '#FF0000',
       );
       final menuItem = await catalog.createMenuItem(categoryId: category.id, name: 'Burger', basePrice: 500);
-      testItem = CartItem(menuItem: menuItem);
+      final ingredient = await catalog.createRawIngredient(name: 'Fixture ingredient', storageUnit: StorageUnit.count, currentStock: 1000);
+      await catalog.setRecipeForMenuItem(menuItemId: menuItem.id, items: [(rawIngredientId: ingredient.id, quantity: 1.0)]);
+      await catalog.toggleMenuItemActive(menuItem.id, true);
+      testItem = CartItem(menuItem: await catalog.getMenuItem(menuItem.id));
     });
 
     tearDown(() => store.close());

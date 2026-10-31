@@ -67,6 +67,11 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
+    // Select Sales report to inspect Sales section metrics
+    tester.widget<DropdownButtonFormField<AnalyticsFamily>>(
+      find.byKey(const ValueKey('analytics_family'))).onChanged!(AnalyticsFamily.sales);
+    await tester.pumpAndSettle();
+
     // Verify comparison dropdown exists
     final dropdownFinder = find.byKey(const ValueKey('analytics_comparison_mode'));
     expect(dropdownFinder, findsOneWidget);
