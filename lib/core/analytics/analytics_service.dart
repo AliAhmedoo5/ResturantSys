@@ -203,13 +203,14 @@ class AnalyticsService {
     await read('stock_alerts', 'checkout_stock_alerts', 'SELECT x.order_id,x.ingredient_id,x.stock_at_checkout,x.created_at FROM checkout_stock_alerts x $joinedOrder', orderArgs);
     await read('all_due', 'orders', "SELECT o.id,$outstandingCollectionPaisaSql AS collection_due_paisa FROM orders o WHERE o.payment_status='COLLECTION_DUE'");
     await read('all_trips', 'rider_trips', 'SELECT id,status,cash_expected_paisa FROM rider_trips');
-    if (!query.live) {
-      final duration = query.timeBasis == AnalyticsTimeBasis.calendarTime ? query.endDateExclusive.difference(query.startDate) : _date(query.endDateExclusive).difference(_date(query.startDate));
-      final prior = query.copyWith(startDate: query.startDate.subtract(duration), endDateExclusive: query.startDate);
-      await read('previous_orders', 'orders', 'SELECT o.id,o.grand_total,o.payment_status FROM orders o JOIN business_days b ON b.id=o.business_day_id WHERE ${_orderCohortScope(prior)}', _orderCohortArgs(prior));
-      final priorIntervalArgs = [..._dayArgs(prior), _sqlTime(_karachi(e.now.toIso8601String())!)];
-      await read('previous_purchases', 'mandi_procurements', 'SELECT x.id,x.total_cost FROM mandi_procurements x WHERE ${_intervalScope(prior, 'x.created_at')}', priorIntervalArgs);
-      await read('previous_waste', 'kitchen_wastage', 'SELECT x.id,x.cost_loss FROM kitchen_wastage x WHERE ${_intervalScope(prior, 'x.created_at')}', priorIntervalArgs);
+    if (!query.live && query.comparisonMode != AnalyticsComparisonMode.none) {
+      final prior = query.priorQuery;
+      if (prior != null) {
+        await read('previous_orders', 'orders', 'SELECT o.id,o.grand_total,o.payment_status FROM orders o JOIN business_days b ON b.id=o.business_day_id WHERE ${_orderCohortScope(prior)}', _orderCohortArgs(prior));
+        final priorIntervalArgs = [..._dayArgs(prior), _sqlTime(_karachi(e.now.toIso8601String())!)];
+        await read('previous_purchases', 'mandi_procurements', 'SELECT x.id,x.total_cost FROM mandi_procurements x WHERE ${_intervalScope(prior, 'x.created_at')}', priorIntervalArgs);
+        await read('previous_waste', 'kitchen_wastage', 'SELECT x.id,x.cost_loss FROM kitchen_wastage x WHERE ${_intervalScope(prior, 'x.created_at')}', priorIntervalArgs);
+      }
     }
     final optionSources = <AnalyticsDimension, String>{
       AnalyticsDimension.menuItem: 'catalog', AnalyticsDimension.menuCategory: 'menu_categories',

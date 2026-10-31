@@ -754,6 +754,16 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
             DropdownMenuItem(value: AnalyticsGrouping.month, child: Text('Month'))],
           onChanged: (value) { if (value != null) _changeQuery(_query.copyWith(grouping: value)); },
         )),
+        SizedBox(width: compact ? 150 : 190, child: DropdownButtonFormField<AnalyticsComparisonMode>(
+          key: const ValueKey('analytics_comparison_mode'), value: _query.comparisonMode, isExpanded: true,
+          decoration: const InputDecoration(labelText: 'Comparison', isDense: true, border: OutlineInputBorder()),
+          items: const [
+            DropdownMenuItem(value: AnalyticsComparisonMode.none, child: Text('No comparison')),
+            DropdownMenuItem(value: AnalyticsComparisonMode.precedingPeriod, child: Text('Preceding period')),
+            DropdownMenuItem(value: AnalyticsComparisonMode.comparableWeekday, child: Text('Comparable weekday')),
+          ],
+          onChanged: (mode) { if (mode != null) _changeQuery(_query.copyWith(comparisonMode: mode)); },
+        )),
         if (compact) ..._quickFilterFields(compact: true),
         IconButton.outlined(key: const ValueKey('analytics_refresh'), tooltip: 'Refresh analytics',
           onPressed: _busy ? null : _load, icon: const Icon(Icons.refresh)),
@@ -776,6 +786,10 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
         ' • Asia/Karachi • ${_query.live ? 'Active Business Day' : '${DateFormat('dd MMM yyyy').format(_query.startDate)} to ${DateFormat('dd MMM yyyy').format(_query.endDateExclusive)} (end exclusive)'}'
         '${snapshot == null ? '' : ' • ${snapshot.businessDayIds.length} Business Days'}',
         style: const TextStyle(color: StreetFoodMafiaColors.secondaryText, fontSize: 12)),
+      if (!_query.live && _query.comparisonMode != AnalyticsComparisonMode.none && _query.priorStartDate != null && _query.priorEndDateExclusive != null)
+        Text('Comparison: ${_query.comparisonMode == AnalyticsComparisonMode.comparableWeekday ? "Comparable weekday (last week)" : "Preceding period"}'
+          ' • ${DateFormat('dd MMM yyyy').format(_query.priorStartDate!)} to ${DateFormat('dd MMM yyyy').format(_query.priorEndDateExclusive!)} (end exclusive)',
+          style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
       Text('Order activity: ${_query.timeBasis == AnalyticsTimeBasis.businessDay ? 'assigned Business Day weekday' : 'actual calendar weekday'} • ${_query.grouping.name} • weeks start Monday • local calendar months. Other ledgers retain Business Day scope.', style: const TextStyle(fontSize: 12)),
       if (snapshot != null && _family != AnalyticsFamily.overview) Text(
         'Updated ${DateFormat('dd MMM yyyy HH:mm:ss').format(snapshot.generatedAt.isUtc ? snapshot.generatedAt.add(const Duration(hours: 5)) : snapshot.generatedAt)}'
@@ -1013,10 +1027,21 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
             ])),
           if (metric.sampleCount != null && !compact) Text('Coverage: ${metric.sampleCount}'
             '${metric.populationCount == null ? ' valid samples' : ' / ${metric.populationCount}'}', style: const TextStyle(fontSize: 12)),
-          if (metric.changeAbsolute != null) Text('Change: ${metric.changeAbsolute! >= 0 ? '+' : ''}'
-            '${_format(metric.changeAbsolute, metric.unit)} vs preceding comparable period', style: const TextStyle(fontSize: 12)),
-          if (metric.changePercent != null) Text('${metric.changePercent! >= 0 ? '+' : ''}'
-            '${metric.changePercent!.toStringAsFixed(1)}% vs preceding comparable period', style: const TextStyle(fontSize: 12)),
+          if (metric.isBalance && _query.comparisonMode != AnalyticsComparisonMode.none)
+            const Text('Comparison: Not applicable (snapshot balance)',
+              style: TextStyle(fontSize: 11, color: StreetFoodMafiaColors.secondaryText)),
+          if (!metric.isBalance && _query.comparisonMode != AnalyticsComparisonMode.none) ...[
+            if (metric.priorValue != null)
+              Text('Prior: ${_format(metric.priorValue, metric.unit)}',
+                style: const TextStyle(fontSize: 12)),
+            if (metric.changeAbsolute != null) Text('Change: ${metric.changeAbsolute! >= 0 ? '+' : ''}'
+              '${_format(metric.changeAbsolute, metric.unit)} vs ${_query.comparisonMode == AnalyticsComparisonMode.comparableWeekday ? "comparable weekday" : "preceding comparable period"}', style: const TextStyle(fontSize: 12)),
+            if (metric.changePercent != null) Text('${metric.changePercent! >= 0 ? '+' : ''}'
+              '${metric.changePercent!.toStringAsFixed(1)}% vs ${_query.comparisonMode == AnalyticsComparisonMode.comparableWeekday ? "comparable weekday" : "preceding comparable period"}', style: const TextStyle(fontSize: 12)),
+            if (metric.changePercent == null && metric.priorValue == 0)
+              const Text('Percent change: Unavailable (zero baseline)',
+                style: TextStyle(fontSize: 11, color: StreetFoodMafiaColors.secondaryText)),
+          ],
         ]))),
     );
   }
