@@ -252,12 +252,19 @@ void main() {
     // Trip 1 above is in shift (currently OPEN), expected cash 60000.
 
     // Trip B: shift was closed, returned 5 hours ago -> Overdue 0-24h
-    final closedShift1 = await shifts.openShift(staffId: 2, openingFloat: 0, openedAt: DateTime.now().subtract(const Duration(hours: 10)));
-    await shifts.closeShift(shiftId: closedShift1.id, staffId: 2, countedCash: 0);
+    final closedShift1Id = await db.insert('shifts', {
+      'business_day_id': bDay.id,
+      'staff_id': 2,
+      'opened_at': DateTime.now().subtract(const Duration(hours: 10)).toIso8601String(),
+      'closed_at': DateTime.now().subtract(const Duration(hours: 4)).toIso8601String(),
+      'opening_float': 0,
+      'status': 'CLOSED',
+      'discrepancy_status': 'CLEAN',
+    });
     await db.insert('rider_trips', {
       'trip_name': 'Trip Overdue',
       'rider_staff_id': 2,
-      'shift_id': closedShift1.id,
+      'shift_id': closedShift1Id,
       'business_day_id': bDay.id,
       'status': 'RETURNED',
       'cash_expected_paisa': 25000,
@@ -268,12 +275,19 @@ void main() {
     });
 
     // Trip C: shift was closed, returned 36 hours ago -> Aged 1-3d
-    final closedShift2 = await shifts.openShift(staffId: 2, openingFloat: 0, openedAt: DateTime.now().subtract(const Duration(hours: 48)));
-    await shifts.closeShift(shiftId: closedShift2.id, staffId: 2, countedCash: 0);
+    final closedShift2Id = await db.insert('shifts', {
+      'business_day_id': bDay.id,
+      'staff_id': 2,
+      'opened_at': DateTime.now().subtract(const Duration(hours: 48)).toIso8601String(),
+      'closed_at': DateTime.now().subtract(const Duration(hours: 35)).toIso8601String(),
+      'opening_float': 0,
+      'status': 'CLOSED',
+      'discrepancy_status': 'CLEAN',
+    });
     await db.insert('rider_trips', {
       'trip_name': 'Trip Aged',
       'rider_staff_id': 2,
-      'shift_id': closedShift2.id,
+      'shift_id': closedShift2Id,
       'business_day_id': bDay.id,
       'status': 'RETURNED',
       'cash_expected_paisa': 35000,
@@ -284,12 +298,19 @@ void main() {
     });
 
     // Trip D: shift was closed, returned 80 hours ago -> Critical >3d
-    final closedShift3 = await shifts.openShift(staffId: 2, openingFloat: 0, openedAt: DateTime.now().subtract(const Duration(hours: 90)));
-    await shifts.closeShift(shiftId: closedShift3.id, staffId: 2, countedCash: 0);
+    final closedShift3Id = await db.insert('shifts', {
+      'business_day_id': bDay.id,
+      'staff_id': 2,
+      'opened_at': DateTime.now().subtract(const Duration(hours: 90)).toIso8601String(),
+      'closed_at': DateTime.now().subtract(const Duration(hours: 79)).toIso8601String(),
+      'opening_float': 0,
+      'status': 'CLOSED',
+      'discrepancy_status': 'CLEAN',
+    });
     await db.insert('rider_trips', {
       'trip_name': 'Trip Critical',
       'rider_staff_id': 2,
-      'shift_id': closedShift3.id,
+      'shift_id': closedShift3Id,
       'business_day_id': bDay.id,
       'status': 'RETURNED',
       'cash_expected_paisa': 45000,
