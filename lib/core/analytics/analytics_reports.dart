@@ -165,6 +165,58 @@ class _ReportBuilder {
       final due = ['CANCELLED', 'VOIDED', 'REFUNDED'].contains(o['payment_status']) ? 0 : _money(o, 'grand_total');
       exposure += math.max(0, retained - due);
     }
+    final statusEvents = e.get('order_status_events');
+    final eventsByOrder = <int, List<_Record>>{};
+    for (final ev in statusEvents) {
+      final oid = ev['order_id'];
+      if (oid is int) {
+        eventsByOrder.putIfAbsent(oid, () => []).add(ev);
+      }
+    }
+    final prepTimes = <double>[];
+    int totalReworkCycles = 0;
+    final orderPrepData = <int, Map<String, Object?>>{};
+    for (final o in orders) {
+      final oid = o['id'] as int;
+      final oEvents = eventsByOrder[oid] ?? const [];
+      final confirmedAt = _karachi(o['created_at']);
+      final readyEvents = oEvents.where((ev) => ev['to_status'] == 'READY').toList();
+      final reworkMoves = oEvents.where((ev) => ev['from_status'] == 'READY').length;
+      final reworkCount = reworkMoves > 0 ? reworkMoves : (readyEvents.length > 1 ? readyEvents.length - 1 : 0);
+      totalReworkCycles += reworkCount;
+
+      if (readyEvents.isEmpty || confirmedAt == null) {
+        orderPrepData[oid] = {
+          'prep_duration_minutes': null,
+          'prep_quality': 'Missing milestone',
+          'rework_cycles': reworkCount,
+        };
+      } else {
+        final firstReadyAt = _karachi(readyEvents.first['recorded_at']);
+        if (firstReadyAt == null) {
+          orderPrepData[oid] = {
+            'prep_duration_minutes': null,
+            'prep_quality': 'Missing milestone',
+            'rework_cycles': reworkCount,
+          };
+        } else if (firstReadyAt.isBefore(confirmedAt)) {
+          orderPrepData[oid] = {
+            'prep_duration_minutes': null,
+            'prep_quality': 'Invalid sequence',
+            'rework_cycles': reworkCount,
+          };
+        } else {
+          final durationMinutes = firstReadyAt.difference(confirmedAt).inSeconds / 60.0;
+          prepTimes.add(durationMinutes);
+          orderPrepData[oid] = {
+            'prep_duration_minutes': durationMinutes,
+            'prep_quality': 'Valid',
+            'rework_cycles': reworkCount,
+          };
+        }
+      }
+    }
+    prepTimes.sort();
     final metrics = <AnalyticsMetric>[
       _metric('committed_orders', 'Committed orders', orders.length, unit: AnalyticsUnit.count, explanation: 'All selected committed Orders, including cancellation states. Persisted current Holds are unconfirmed drafts outside Orders, Tokens and revenue.'),
       _metric('revised_orders', 'Orders revised', revisedIds.length, unit: AnalyticsUnit.count, explanation: 'Distinct selected order IDs with append-only revision evidence.'),
@@ -174,7 +226,10 @@ class _ReportBuilder {
       _rate('cancel_rate', 'Cancel/refund rate', cancelled.length, orders.length, 'Distinct cancelled/refunded orders / all committed selected orders; refunded states included.'),
       _metric('refunds', 'Explicit refunds', -_sum(refunds, 'amount_tendered'), explanation: 'Negative payment records only; cancellation does not itself disburse cash.'),
       _metric('refund_exposure', 'Retained funds above current payable', exposure, explanation: 'Per order max(0, net collected - current payable), using zero payable for cancelled/refunded orders. This is exposure, not a completed refund.'),
-      _missing('prep_time', 'Preparation time', 'No persisted confirmed/preparing/ready lifecycle timestamps. Current state cannot establish historical durations.', unit: AnalyticsUnit.minutes),
+      _duration('prep_median', 'Median preparation time', _percentile(prepTimes, .5), prepTimes.length, orders.length),
+      _duration('prep_p90', '90th percentile preparation', _percentile(prepTimes, .9), prepTimes.length, orders.length),
+      _coverage('prep_coverage', 'Preparation milestone coverage', prepTimes.length, orders.length, 'Orders with verified confirmed-to-ready lifecycle milestones. Missing milestones are excluded rather than assumed zero.'),
+      _metric('rework_cycles', 'Kitchen rework cycles', totalReworkCycles, unit: AnalyticsUnit.count, explanation: 'Observed kitchen return/re-prepare transitions after initial ready milestone.'),
       ..._HoldAging(e).metrics,
     ];
     for (final key in ['payment_status', 'token_status']) {
@@ -186,9 +241,28 @@ class _ReportBuilder {
 
       ..._HoldAging(e).rows,
       ..._OrderWorkload(this).build(), ..._WeekdayOrderPeaks(this).build(),
-      ...orders.map((o) => _row('orders', o, {'order_id': o['id'], 'business_day_id': o['business_day_id'], 'cashier_id': o['cashier_id'], 'shift_id': o['shift_id'], 'token': o['token_number'], 'dining_type': o['dining_type'], 'payment_status': o['payment_status'], 'token_status': o['token_status'], 'recorded_value_paisa': _money(o, 'grand_total'), 'collection_due_paisa': o['payment_status'] == 'COLLECTION_DUE' ? o['collection_due_paisa'] : 0, 'created_at': o['created_at'], 'assigned_business_date': _karachi(daysById[o['business_day_id']]?['opened_at']) == null ? null : _sqlDate(_karachi(daysById[o['business_day_id']]!['opened_at'])!)})),
+      ...orders.map((o) {
+        final prep = orderPrepData[o['id'] as int] ?? const {};
+        return _row('orders', o, {
+          'order_id': o['id'],
+          'business_day_id': o['business_day_id'],
+          'cashier_id': o['cashier_id'],
+          'shift_id': o['shift_id'],
+          'token': o['token_number'],
+          'dining_type': o['dining_type'],
+          'payment_status': o['payment_status'],
+          'token_status': o['token_status'],
+          'recorded_value_paisa': _money(o, 'grand_total'),
+          'collection_due_paisa': o['payment_status'] == 'COLLECTION_DUE' ? o['collection_due_paisa'] : 0,
+          'prep_duration_minutes': prep['prep_duration_minutes'],
+          'prep_quality': prep['prep_quality'],
+          'rework_cycles': prep['rework_cycles'],
+          'created_at': o['created_at'],
+          'assigned_business_date': _karachi(daysById[o['business_day_id']]?['opened_at']) == null ? null : _sqlDate(_karachi(daysById[o['business_day_id']]!['opened_at'])!),
+        });
+      }),
       ...revisions.map((r) => _row('order_revisions', r, {'order_id': r['order_id'], 'revision': r['revision_no'], 'action': r['action'], 'reason': _safeText(r['reason']), 'cashier_id': r['cashier_id'], 'delta_paisa': r['money_delta_paisa'], 'created_at': r['created_at_utc']})),
-    ], ['order_id', 'business_day_id', 'assigned_business_date', 'token', 'cashier_id', 'shift_id', 'dining_type', 'payment_status', 'token_status', 'recorded_value_paisa', 'collection_due_paisa', 'action', 'revision', 'delta_paisa', 'reason', 'created_at', 'hold_id', 'event_type', 'previous_hold_id', 'age_minutes'], [_orderBasis, _WeekdayOrderPeaks.note, 'Workload counts every confirmed Order once, including cancellations and refunds. Holds and revisions add no Orders. Daily and hourly rows are independent projections; never add them together. Rankings use count and eligible value independently; rank 1 includes every tie, shown chronologically. Hourly buckets are actual Asia/Karachi creation clock hours across the selected cohort, not a promise of trading in every hour. Observed cohort zeros differ from unavailable source/time evidence. Calendar dates without Orders or observed Business Days are not invented. Daily workload stays daily regardless of Sales grouping.', 'Order and revision source rows are separate kinds. Their counts/amounts must not be added together.', ..._HoldAging(e).notes]);
+    ], ['order_id', 'business_day_id', 'assigned_business_date', 'token', 'cashier_id', 'shift_id', 'dining_type', 'payment_status', 'token_status', 'recorded_value_paisa', 'collection_due_paisa', 'prep_duration_minutes', 'prep_quality', 'rework_cycles', 'action', 'revision', 'delta_paisa', 'reason', 'created_at', 'hold_id', 'event_type', 'previous_hold_id', 'age_minutes'], [_orderBasis, _WeekdayOrderPeaks.note, 'Workload counts every confirmed Order once, including cancellations and refunds. Holds and revisions add no Orders. Daily and hourly rows are independent projections; never add them together. Rankings use count and eligible value independently; rank 1 includes every tie, shown chronologically. Hourly buckets are actual Asia/Karachi creation clock hours across the selected cohort, not a promise of trading in every hour. Observed cohort zeros differ from unavailable source/time evidence. Calendar dates without Orders or observed Business Days are not invented. Daily workload stays daily regardless of Sales grouping.', 'Order and revision source rows are separate kinds. Their counts/amounts must not be added together.', ..._HoldAging(e).notes]);
 
   }
 
