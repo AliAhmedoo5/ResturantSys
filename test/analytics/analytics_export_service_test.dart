@@ -102,8 +102,8 @@ void main() {
     addTearDown(() => directory.delete(recursive: true));
     final service = AnalyticsExportService();
 
-    expect(
-      () => service.saveToDirectory(
+    await expectLater(
+      service.saveToDirectory(
         fixture(),
         AnalyticsFamily.sales,
         AnalyticsExportFormat.csv,
@@ -130,8 +130,8 @@ void main() {
     final token = ExportCancellationToken();
     var progressCount = 0;
 
-    expect(
-      () => service.saveToDirectory(
+    await expectLater(
+      service.saveToDirectory(
         fixture(),
         AnalyticsFamily.sales,
         AnalyticsExportFormat.csv,
@@ -162,8 +162,8 @@ void main() {
     final service = AnalyticsExportService();
     var calls = 0;
 
-    expect(
-      () => service.saveToDirectory(
+    await expectLater(
+      service.saveToDirectory(
         fixture(),
         AnalyticsFamily.sales,
         AnalyticsExportFormat.csv,
