@@ -152,7 +152,7 @@ class _HoldAging {
         id: 'hold_conversion_rate',
         label: 'Hold conversion rate',
         value: conversionRate,
-        unit: AnalyticsUnit.percentage,
+        unit: AnalyticsUnit.percent,
         quality: conversionRate == null ? AnalyticsQuality.missing : AnalyticsQuality.complete,
         explanation: conversionRate == null
             ? 'No observed Hold creations in selected period; conversion rate is unavailable.'
