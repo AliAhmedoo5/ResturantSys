@@ -98,6 +98,7 @@ class AnalyticsService {
     await read('items', 'order_items', 'SELECT x.id,x.order_id,x.menu_item_id,x.deal_id,x.name,x.quantity,x.unit_price,x.total_price,x.modifiers_json,x.deal_choices_json,x.bom_json FROM order_items x $joinedOrder', orderArgs);
     await read('allocations', 'order_item_allocations', 'SELECT x.* FROM order_item_allocations x $joinedOrder', orderArgs);
     await read('revisions', 'order_revisions', 'SELECT x.id,x.order_id,x.revision_no,x.action,x.reason,x.cashier_id,x.created_at_utc,x.money_delta_paisa FROM order_revisions x $joinedOrder', orderArgs);
+    await read('order_status_events', 'order_status_events', 'SELECT x.* FROM order_status_events x $joinedOrder ORDER BY x.id', orderArgs);
     await read('cost_coverage', 'order_cost_coverage', 'SELECT x.* FROM order_cost_coverage x $joinedOrder', orderArgs);
     await read('cost_events', 'order_cost_events', 'SELECT x.* FROM order_cost_events x $joinedOrder', orderArgs);
     // A physical drawer uses all orders in its shifts; order filters never alter it.
@@ -117,7 +118,9 @@ class AnalyticsService {
       await read('bridge_days', 'business_days', 'SELECT DISTINCT b.* FROM business_days b JOIN shifts s ON s.business_day_id=b.id WHERE s.id IN ($slots)', bridgeIds);
     }
     await read('trips', 'rider_trips', 'SELECT t.* FROM rider_trips t JOIN business_days b ON b.id=t.business_day_id WHERE $dayScope', dayArgs);
-    await read('attempts', 'rider_trip_orders', 'SELECT x.id,x.order_id,x.trip_id,x.status,x.assigned_at,x.delivered_at,x.returned_at,x.notes,t.dispatched_at,t.rider_staff_id,o.delivery_area_id,o.delivery_area_name_snapshot FROM rider_trip_orders x JOIN rider_trips t ON t.id=x.trip_id $joinedOrder ORDER BY x.id', orderArgs);
+    final joinAreas = tables.contains('delivery_areas') ? 'LEFT JOIN delivery_areas da ON da.id=o.delivery_area_id' : '';
+    final daEtaCol = tables.contains('delivery_areas') ? 'da.target_eta_minutes' : 'NULL AS target_eta_minutes';
+    await read('attempts', 'rider_trip_orders', 'SELECT x.id,x.order_id,x.trip_id,x.status,x.assigned_at,x.delivered_at,x.returned_at,x.notes,t.dispatched_at,t.returned_at AS trip_returned_at,t.rider_staff_id,t.shift_id AS trip_shift_id,o.delivery_area_id,o.delivery_area_name_snapshot,o.created_at AS order_created_at,o.payment_status AS order_payment_status,$daEtaCol FROM rider_trip_orders x JOIN rider_trips t ON t.id=x.trip_id JOIN orders o ON o.id=x.order_id $joinAreas JOIN business_days b ON b.id=o.business_day_id WHERE $orderScope ORDER BY x.id', orderArgs);
     await read('ingredients', 'raw_ingredients', 'SELECT id,name,storage_unit,current_stock,low_stock_threshold,cost_per_recipe_unit FROM raw_ingredients');
     await read('inventory', 'inventory_movements', 'SELECT m.* FROM inventory_movements m JOIN business_days b ON b.id=m.business_day_id WHERE $dayScope', dayArgs);
     final cutoff = e.get('days').map((d) => _karachi(d['closed_at']) ?? _karachi(e.now.toIso8601String())!).fold<DateTime?>(null, (latest, time) => latest == null || time.isAfter(latest) ? time : latest);
@@ -203,7 +206,8 @@ class AnalyticsService {
     await read('rounding', 'rounding_variance_ledger', 'SELECT x.id,x.order_id,x.shift_id,x.cash_rounding_paisa,x.created_at FROM rounding_variance_ledger x $joinedOrder', orderArgs);
     await read('stock_alerts', 'checkout_stock_alerts', 'SELECT x.order_id,x.ingredient_id,x.stock_at_checkout,x.created_at FROM checkout_stock_alerts x $joinedOrder', orderArgs);
     await read('all_due', 'orders', "SELECT o.id,$outstandingCollectionPaisaSql AS collection_due_paisa FROM orders o WHERE o.payment_status='COLLECTION_DUE'");
-    await read('all_trips', 'rider_trips', 'SELECT id,status,cash_expected_paisa FROM rider_trips');
+    await read('all_trips', 'rider_trips', 'SELECT id,status,cash_expected_paisa,dispatched_at,returned_at,shift_id,business_day_id FROM rider_trips');
+    await read('all_shifts', 'shifts', 'SELECT id,business_day_id,status,opened_at,closed_at FROM shifts');
     if (!query.live && query.comparisonMode != AnalyticsComparisonMode.none) {
       final prior = query.priorQuery;
       if (prior != null) {

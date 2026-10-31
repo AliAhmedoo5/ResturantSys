@@ -165,6 +165,58 @@ class _ReportBuilder {
       final due = ['CANCELLED', 'VOIDED', 'REFUNDED'].contains(o['payment_status']) ? 0 : _money(o, 'grand_total');
       exposure += math.max(0, retained - due);
     }
+    final statusEvents = e.get('order_status_events');
+    final eventsByOrder = <int, List<_Record>>{};
+    for (final ev in statusEvents) {
+      final oid = ev['order_id'];
+      if (oid is int) {
+        eventsByOrder.putIfAbsent(oid, () => []).add(ev);
+      }
+    }
+    final prepTimes = <double>[];
+    int totalReworkCycles = 0;
+    final orderPrepData = <int, Map<String, Object?>>{};
+    for (final o in orders) {
+      final oid = o['id'] as int;
+      final oEvents = eventsByOrder[oid] ?? const [];
+      final confirmedAt = _karachi(o['created_at']);
+      final readyEvents = oEvents.where((ev) => ev['to_status'] == 'READY').toList();
+      final reworkMoves = oEvents.where((ev) => ev['from_status'] == 'READY').length;
+      final reworkCount = reworkMoves > 0 ? reworkMoves : (readyEvents.length > 1 ? readyEvents.length - 1 : 0);
+      totalReworkCycles += reworkCount;
+
+      if (readyEvents.isEmpty || confirmedAt == null) {
+        orderPrepData[oid] = {
+          'prep_duration_minutes': null,
+          'prep_quality': 'Missing milestone',
+          'rework_cycles': reworkCount,
+        };
+      } else {
+        final firstReadyAt = _karachi(readyEvents.first['recorded_at']);
+        if (firstReadyAt == null) {
+          orderPrepData[oid] = {
+            'prep_duration_minutes': null,
+            'prep_quality': 'Missing milestone',
+            'rework_cycles': reworkCount,
+          };
+        } else if (firstReadyAt.isBefore(confirmedAt)) {
+          orderPrepData[oid] = {
+            'prep_duration_minutes': null,
+            'prep_quality': 'Invalid sequence',
+            'rework_cycles': reworkCount,
+          };
+        } else {
+          final durationMinutes = firstReadyAt.difference(confirmedAt).inSeconds / 60.0;
+          prepTimes.add(durationMinutes);
+          orderPrepData[oid] = {
+            'prep_duration_minutes': durationMinutes,
+            'prep_quality': 'Valid',
+            'rework_cycles': reworkCount,
+          };
+        }
+      }
+    }
+    prepTimes.sort();
     final metrics = <AnalyticsMetric>[
       _metric('committed_orders', 'Committed orders', orders.length, unit: AnalyticsUnit.count, explanation: 'All selected committed Orders, including cancellation states. Persisted current Holds are unconfirmed drafts outside Orders, Tokens and revenue.'),
       _metric('revised_orders', 'Orders revised', revisedIds.length, unit: AnalyticsUnit.count, explanation: 'Distinct selected order IDs with append-only revision evidence.'),
@@ -174,7 +226,10 @@ class _ReportBuilder {
       _rate('cancel_rate', 'Cancel/refund rate', cancelled.length, orders.length, 'Distinct cancelled/refunded orders / all committed selected orders; refunded states included.'),
       _metric('refunds', 'Explicit refunds', -_sum(refunds, 'amount_tendered'), explanation: 'Negative payment records only; cancellation does not itself disburse cash.'),
       _metric('refund_exposure', 'Retained funds above current payable', exposure, explanation: 'Per order max(0, net collected - current payable), using zero payable for cancelled/refunded orders. This is exposure, not a completed refund.'),
-      _missing('prep_time', 'Preparation time', 'No persisted confirmed/preparing/ready lifecycle timestamps. Current state cannot establish historical durations.', unit: AnalyticsUnit.minutes),
+      _duration('prep_median', 'Median preparation time', _percentile(prepTimes, .5), prepTimes.length, orders.length),
+      _duration('prep_p90', '90th percentile preparation', _percentile(prepTimes, .9), prepTimes.length, orders.length),
+      _coverage('prep_coverage', 'Preparation milestone coverage', prepTimes.length, orders.length, 'Orders with verified confirmed-to-ready lifecycle milestones. Missing milestones are excluded rather than assumed zero.'),
+      _metric('rework_cycles', 'Kitchen rework cycles', totalReworkCycles, unit: AnalyticsUnit.count, explanation: 'Observed kitchen return/re-prepare transitions after initial ready milestone.'),
       ..._HoldAging(e).metrics,
     ];
     for (final key in ['payment_status', 'token_status']) {
@@ -186,9 +241,28 @@ class _ReportBuilder {
 
       ..._HoldAging(e).rows,
       ..._OrderWorkload(this).build(), ..._WeekdayOrderPeaks(this).build(),
-      ...orders.map((o) => _row('orders', o, {'order_id': o['id'], 'business_day_id': o['business_day_id'], 'cashier_id': o['cashier_id'], 'shift_id': o['shift_id'], 'token': o['token_number'], 'dining_type': o['dining_type'], 'payment_status': o['payment_status'], 'token_status': o['token_status'], 'recorded_value_paisa': _money(o, 'grand_total'), 'collection_due_paisa': o['payment_status'] == 'COLLECTION_DUE' ? o['collection_due_paisa'] : 0, 'created_at': o['created_at'], 'assigned_business_date': _karachi(daysById[o['business_day_id']]?['opened_at']) == null ? null : _sqlDate(_karachi(daysById[o['business_day_id']]!['opened_at'])!)})),
+      ...orders.map((o) {
+        final prep = orderPrepData[o['id'] as int] ?? const {};
+        return _row('orders', o, {
+          'order_id': o['id'],
+          'business_day_id': o['business_day_id'],
+          'cashier_id': o['cashier_id'],
+          'shift_id': o['shift_id'],
+          'token': o['token_number'],
+          'dining_type': o['dining_type'],
+          'payment_status': o['payment_status'],
+          'token_status': o['token_status'],
+          'recorded_value_paisa': _money(o, 'grand_total'),
+          'collection_due_paisa': o['payment_status'] == 'COLLECTION_DUE' ? o['collection_due_paisa'] : 0,
+          'prep_duration_minutes': prep['prep_duration_minutes'],
+          'prep_quality': prep['prep_quality'],
+          'rework_cycles': prep['rework_cycles'],
+          'created_at': o['created_at'],
+          'assigned_business_date': _karachi(daysById[o['business_day_id']]?['opened_at']) == null ? null : _sqlDate(_karachi(daysById[o['business_day_id']]!['opened_at'])!),
+        });
+      }),
       ...revisions.map((r) => _row('order_revisions', r, {'order_id': r['order_id'], 'revision': r['revision_no'], 'action': r['action'], 'reason': _safeText(r['reason']), 'cashier_id': r['cashier_id'], 'delta_paisa': r['money_delta_paisa'], 'created_at': r['created_at_utc']})),
-    ], ['order_id', 'business_day_id', 'assigned_business_date', 'token', 'cashier_id', 'shift_id', 'dining_type', 'payment_status', 'token_status', 'recorded_value_paisa', 'collection_due_paisa', 'action', 'revision', 'delta_paisa', 'reason', 'created_at', 'hold_id', 'event_type', 'previous_hold_id', 'age_minutes'], [_orderBasis, _WeekdayOrderPeaks.note, 'Workload counts every confirmed Order once, including cancellations and refunds. Holds and revisions add no Orders. Daily and hourly rows are independent projections; never add them together. Rankings use count and eligible value independently; rank 1 includes every tie, shown chronologically. Hourly buckets are actual Asia/Karachi creation clock hours across the selected cohort, not a promise of trading in every hour. Observed cohort zeros differ from unavailable source/time evidence. Calendar dates without Orders or observed Business Days are not invented. Daily workload stays daily regardless of Sales grouping.', 'Order and revision source rows are separate kinds. Their counts/amounts must not be added together.', ..._HoldAging(e).notes]);
+    ], ['order_id', 'business_day_id', 'assigned_business_date', 'token', 'cashier_id', 'shift_id', 'dining_type', 'payment_status', 'token_status', 'recorded_value_paisa', 'collection_due_paisa', 'prep_duration_minutes', 'prep_quality', 'rework_cycles', 'action', 'revision', 'delta_paisa', 'reason', 'created_at', 'hold_id', 'event_type', 'previous_hold_id', 'age_minutes'], [_orderBasis, _WeekdayOrderPeaks.note, 'Workload counts every confirmed Order once, including cancellations and refunds. Holds and revisions add no Orders. Daily and hourly rows are independent projections; never add them together. Rankings use count and eligible value independently; rank 1 includes every tie, shown chronologically. Hourly buckets are actual Asia/Karachi creation clock hours across the selected cohort, not a promise of trading in every hour. Observed cohort zeros differ from unavailable source/time evidence. Calendar dates without Orders or observed Business Days are not invented. Daily workload stays daily regardless of Sales grouping.', 'Order and revision source rows are separate kinds. Their counts/amounts must not be added together.', ..._HoldAging(e).notes]);
 
   }
 
@@ -211,11 +285,72 @@ class _ReportBuilder {
     for (final a in delivered) {
       final dispatch = _karachi(a['dispatched_at']);
       final end = _karachi(a['delivered_at']);
-      if (dispatch != null && end != null && !end.isBefore(dispatch)) times.add(end.difference(dispatch).inSeconds / 60);
+      if (dispatch != null && end != null && !end.isBefore(dispatch)) {
+        times.add(end.difference(dispatch).inSeconds / 60);
+      }
     }
     times.sort();
+    int lateDeliveries = 0;
+    int validDeliveredOrders = 0;
+    final deliveredOrderIds = <int>{};
+    for (final a in delivered) {
+      final oid = a['order_id'];
+      if (oid is! int || deliveredOrderIds.contains(oid)) continue;
+      final end = _karachi(a['delivered_at']);
+      final confirmed = _karachi(a['order_created_at']);
+      final dispatch = _karachi(a['dispatched_at']);
+      if (end == null || confirmed == null || dispatch == null || end.isBefore(dispatch) || end.isBefore(confirmed)) continue;
+      deliveredOrderIds.add(oid);
+      validDeliveredOrders++;
+      final targetEta = (a['target_eta_minutes'] as num?)?.toDouble() ?? 45.0;
+      final elapsed = end.difference(confirmed).inSeconds / 60.0;
+      if (elapsed > targetEta) {
+        lateDeliveries++;
+      }
+    }
+    int finalDeliveryFailures = 0;
+    for (final entry in attemptsByOrder.entries) {
+      final oAttempts = entry.value;
+      final hasDelivered = oAttempts.any((att) => att['status'] == 'DELIVERED');
+      if (!hasDelivered) {
+        final paymentStatus = oAttempts.first['order_payment_status'] as String? ?? '';
+        final isCancelled = ['CANCELLED', 'VOIDED', 'REFUNDED'].contains(paymentStatus);
+        final isExplicitFailure = oAttempts.any((att) {
+          final notes = (att['notes'] as String? ?? '').toUpperCase();
+          return notes.contains('CANCELLED_UNDELIVERED') || notes.contains('WASTED') || notes.contains('RESTOCKED');
+        });
+        if (isCancelled || isExplicitFailure) {
+          finalDeliveryFailures++;
+        }
+      }
+    }
     final trips = e.get('trips');
     final allTrips = e.get('all_trips');
+    final allShifts = e.get('all_shifts');
+    final shiftsById = {for (final s in allShifts) s['id']: s};
+    int agingCurrentShiftPaisa = 0;
+    int aging0to24hPaisa = 0;
+    int aging1to3dPaisa = 0;
+    int agingCriticalPaisa = 0;
+
+    for (final t in allTrips.where((t) => t['status'] == 'RETURNED')) {
+      final returnedAt = _karachi(t['returned_at']);
+      final expectedPaisa = (t['cash_expected_paisa'] as num?)?.toInt() ?? 0;
+      if (returnedAt == null || expectedPaisa <= 0) continue;
+      final shift = shiftsById[t['shift_id']];
+      if (shift != null && shift['status'] == 'OPEN') {
+        agingCurrentShiftPaisa += expectedPaisa;
+      } else {
+        final ageHours = e.now.difference(returnedAt).inMinutes / 60.0;
+        if (ageHours <= 24.0) {
+          aging0to24hPaisa += expectedPaisa;
+        } else if (ageHours <= 72.0) {
+          aging1to3dPaisa += expectedPaisa;
+        } else {
+          agingCriticalPaisa += expectedPaisa;
+        }
+      }
+    }
     final settledTripIds = allTrips.where((t) => t['status'] == 'SETTLED').map((t) => t['id']).toSet();
     final allEvents = e.get('payment_events');
     final activeCollections = allEvents.where((p) => p['kind'] == 'RIDER_COLLECTION' && !settledTripIds.contains(p['settlement_id'])).toList();
@@ -253,6 +388,14 @@ class _ReportBuilder {
       _duration('travel_mean', 'Mean travel time', times.isEmpty ? null : times.reduce((a, b) => a + b) / times.length, times.length, delivered.length),
       _duration('travel_median', 'Median travel time', _percentile(times, .5), times.length, delivered.length),
       _duration('travel_p90', '90th percentile travel', _percentile(times, .9), times.length, delivered.length),
+      _metric('late_deliveries', 'Late delivery orders', lateDeliveries, unit: AnalyticsUnit.count, explanation: 'Delivered orders exceeding delivery area target ETA or 45-minute fallback SLA.'),
+      _rate('late_delivery_rate', 'Late delivery rate', lateDeliveries, validDeliveredOrders, 'Orders exceeding area SLA target ETA (or 45m fallback) / delivered orders with valid delivery evidence.'),
+      _metric('final_delivery_failures', 'Final delivery failures', finalDeliveryFailures, unit: AnalyticsUnit.count, explanation: 'Unique dispatched orders that reached terminal failed disposition; returned attempts that were redelivered are excluded.'),
+      _rate('final_delivery_failure_rate', 'Final delivery failure rate', finalDeliveryFailures, uniqueAttemptedOrders, 'Unique dispatched delivery orders with final failed outcome / total unique dispatched delivery orders.'),
+      _metric('cod_aging_current_shift_paisa', 'Unsettled COD: Current shift', agingCurrentShiftPaisa, explanation: 'Returned COD trips awaiting cashier shift handover.'),
+      _metric('cod_aging_0_24h_paisa', 'Unsettled COD: Overdue (0-24h)', aging0to24hPaisa, explanation: 'Unsettled COD from closed shifts returned within 24 hours.'),
+      _metric('cod_aging_1_3d_paisa', 'Unsettled COD: Aged (1-3 days)', aging1to3dPaisa, explanation: 'Unsettled COD carried across closed business days (1 to 3 days).'),
+      _metric('cod_aging_critical_paisa', 'Unsettled COD: Critical (>3 days)', agingCriticalPaisa, explanation: 'Unsettled COD aged beyond 3 days requiring manager investigation.'),
     ];
     String reasonFor(Object? raw) {
       if (raw is String && raw.trim().isNotEmpty) return _safeText(raw.trim());
@@ -277,6 +420,23 @@ class _ReportBuilder {
         final orderAttempts = attemptsByOrder[a['order_id']] ?? const <_Record>[];
         final isReattempt = orderAttempts.isNotEmpty && a['id'] != orderAttempts.first['id'];
         final reason = a['status'] == 'RETURNED' ? reasonFor(a['notes']) : null;
+        final dispatch = _karachi(a['dispatched_at']);
+        final end = _karachi(a['delivered_at']);
+        final confirmed = _karachi(a['order_created_at']);
+        double? travelMinutes;
+        String deliveryQuality;
+        if (a['status'] == 'DELIVERED') {
+          if (dispatch == null || end == null) {
+            deliveryQuality = 'Missing milestone';
+          } else if (end.isBefore(dispatch) || (confirmed != null && end.isBefore(confirmed))) {
+            deliveryQuality = 'Invalid sequence';
+          } else {
+            travelMinutes = end.difference(dispatch).inSeconds / 60.0;
+            deliveryQuality = 'Valid';
+          }
+        } else {
+          deliveryQuality = 'Attempt not delivered';
+        }
         return _row('rider_trip_orders', a, {
           'kind': 'Delivery attempt',
           'order_id': a['order_id'],
@@ -286,12 +446,14 @@ class _ReportBuilder {
           'status': a['status'],
           'is_reattempt': isReattempt ? 'Yes' : 'No',
           'return_reason': reason ?? 'N/A',
+          'travel_minutes': travelMinutes,
+          'delivery_quality': deliveryQuality,
           'dispatched_at': a['dispatched_at'],
           'delivered_at': a['delivered_at'],
           'returned_at': a['returned_at'],
         });
       }),
-    ], ['kind', 'order_id', 'trip_id', 'rider_id', 'shift_id', 'selected_order_load', 'area', 'fee_paisa', 'payment_status', 'status', 'is_reattempt', 'return_reason', 'expected_paisa', 'counted_paisa', 'dispatched_at', 'delivered_at', 'returned_at', 'settled_at'], ['Order/attempt rows and selected-order load use order filters; trip rows and trip exposure use whole selected Business Days. All-outstanding measures explicitly ignore date/order filters.', 'Settlement event rows use receiving Shift/Business Day or actual calendar time, independently of the originating Order cohort. Counted handover is one linked custody transfer; COD settlement value is not verified customer collection. Legacy settled trips without events have unavailable receiving Shift, actors, confirmed collections and immutable recording time. Do not sum settlement attribution, digital receipt, rider-held collections and counted pouch rows.', 'Returned attempts are delivery run outcomes, not final order failures. Reattempts represent subsequent dispatch runs for the same order. Legacy returned attempts without recorded notes disclose absent historical reason evidence rather than inferring reasons. Delivered status is not proof of payment collection.', 'Confirmed customer collections held by riders are distinct from customer debt and cashier drawer cash. Expected pouch cash is exposure, not verified debt until independently confirmed.', 'Travel excludes invalid/missing timestamps and reports coverage. Percentiles interpolate sorted valid minutes. No final failure/reattempt or unrecorded failure-reason inference.']);
+    ], ['kind', 'order_id', 'trip_id', 'rider_id', 'shift_id', 'selected_order_load', 'area', 'fee_paisa', 'payment_status', 'status', 'is_reattempt', 'return_reason', 'travel_minutes', 'delivery_quality', 'expected_paisa', 'counted_paisa', 'dispatched_at', 'delivered_at', 'returned_at', 'settled_at'], ['Order/attempt rows and selected-order load use order filters; trip rows and trip exposure use whole selected Business Days. All-outstanding measures explicitly ignore date/order filters.', 'Settlement event rows use receiving Shift/Business Day or actual calendar time, independently of the originating Order cohort. Counted handover is one linked custody transfer; COD settlement value is not verified customer collection. Legacy settled trips without events have unavailable receiving Shift, actors, confirmed collections and immutable recording time. Do not sum settlement attribution, digital receipt, rider-held collections and counted pouch rows.', 'Returned attempts are delivery run outcomes, not final order failures. Reattempts represent subsequent dispatch runs for the same order. Legacy returned attempts without recorded notes disclose absent historical reason evidence rather than inferring reasons. Delivered status is not proof of payment collection.', 'Confirmed customer collections held by riders are distinct from customer debt and cashier drawer cash. Expected pouch cash is exposure, not verified debt until independently confirmed.', 'Travel excludes invalid/missing timestamps and reports coverage. Percentiles interpolate sorted valid minutes. No final failure/reattempt or unrecorded failure-reason inference.']);
   }
 
   AnalyticsSection _customers() {
@@ -654,6 +816,9 @@ class _ReportBuilder {
     int reconciledIngredientsCount = 0;
     int openingEvidenceCount = 0;
     int missingOpeningCount = 0;
+    int totalEndingValuationPaisa = 0;
+    int coveredIngredientsCount = 0;
+    int negativeBalanceCount = 0;
 
     for (final ing in ingredients) {
       final ingId = ing['id'] as int;
@@ -770,6 +935,102 @@ class _ReportBuilder {
         reconciledIngredientsCount++;
       }
 
+      // --- Moving WAC Calculation (ADR-0023 / Ticket #91) ---
+      final ingPurchases = <_ProcurementReceipt>[];
+      for (final p in allPurchases.where((p) => p['raw_ingredient_id'] == ingId &&
+          (p['created_at'] as String).compareTo(cutoffTime) <= 0)) {
+        final qty = ((p['converted_quantity'] ?? p['quantity']) as num).toDouble();
+        final costPaisa = _money(p, 'total_cost');
+        if (qty > 0) {
+          ingPurchases.add(_ProcurementReceipt(
+            timestamp: p['created_at'] as String,
+            quantity: qty,
+            costPaisa: costPaisa,
+          ));
+        }
+      }
+      for (final t in allCreditTxns.where((t) => t['raw_ingredient_id'] == ingId && t['type'] == 'PURCHASE_CREDIT' &&
+          (t['created_at'] as String).compareTo(cutoffTime) <= 0)) {
+        final qty = ((t['quantity'] ?? 0) as num).toDouble();
+        final costPaisa = (t['amount_paisa'] as int?) ?? (t['amount'] != null ? ((t['amount'] as num) * 100).round() : 0);
+        if (qty > 0) {
+          ingPurchases.add(_ProcurementReceipt(
+            timestamp: t['created_at'] as String,
+            quantity: qty,
+            costPaisa: costPaisa,
+          ));
+        }
+      }
+      ingPurchases.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+      final initialCostPaisa = (unitCostRate is num && unitCostRate > 0)
+          ? PaisaEngine.rupeesToPaisa(unitCostRate)
+          : 0;
+
+      double runningWacPaisa = initialCostPaisa > 0 ? initialCostPaisa.toDouble() : 0.0;
+      double lastKnownWacPaisa = runningWacPaisa;
+      bool hasCostEvidence = initialCostPaisa > 0 || ingPurchases.isNotEmpty;
+
+      // Chronologically advance WAC through purchases
+      for (final p in ingPurchases) {
+        final priorMovements = allMovements.where((m) => m['ingredient_id'] == ingId &&
+            (m['recorded_at'] as String).compareTo(p.timestamp) < 0).toList();
+        final stockBefore = priorMovements.isNotEmpty
+            ? (priorMovements.last['balance_after'] as num).toDouble()
+            : 0.0;
+
+        final unitRate = p.costPaisa / p.quantity;
+        if (stockBefore <= 0) {
+          // Deficit covered at new purchase rate (ADR-0023 Section 2)
+          runningWacPaisa = unitRate;
+          lastKnownWacPaisa = unitRate;
+        } else {
+          if (runningWacPaisa > 0) {
+            runningWacPaisa = ((stockBefore * runningWacPaisa) + p.costPaisa) / (stockBefore + p.quantity);
+            lastKnownWacPaisa = runningWacPaisa;
+          } else {
+            runningWacPaisa = unitRate;
+            lastKnownWacPaisa = unitRate;
+          }
+        }
+      }
+
+      int movingWacPaisa = runningWacPaisa.round();
+      int? valuationPaisa;
+      String valuationBadge;
+      String costQuality;
+
+      if (endingQty < 0) {
+        movingWacPaisa = lastKnownWacPaisa.round();
+        valuationPaisa = 0;
+        valuationBadge = 'Estimated valuation: item in temporary negative balance';
+        costQuality = 'temporary_negative';
+      } else if (endingQty == 0) {
+        valuationPaisa = 0;
+        valuationBadge = 'Zero stock balance';
+        costQuality = 'verified';
+      } else {
+        if (hasCostEvidence && movingWacPaisa > 0) {
+          valuationPaisa = (endingQty * movingWacPaisa).round();
+          valuationBadge = 'Verified Moving WAC';
+          costQuality = 'verified';
+        } else {
+          valuationPaisa = null;
+          valuationBadge = 'Missing purchase cost evidence';
+          costQuality = 'unknown';
+        }
+      }
+
+      if (hasCostEvidence) {
+        coveredIngredientsCount++;
+      }
+      if (endingQty < 0) {
+        negativeBalanceCount++;
+      }
+      if (valuationPaisa != null) {
+        totalEndingValuationPaisa += valuationPaisa;
+      }
+
       bridgeRows.add(AnalyticsRow(
         id: 'stock-bridge-$ingId',
         sourceType: 'raw_ingredients',
@@ -793,6 +1054,12 @@ class _ReportBuilder {
           'has_opening_evidence': hasOpeningEvidence ? 'Verified' : 'Missing opening evidence',
           'balance_evidence_at': openingEvidenceAt,
           'recorded_cost_rate': unitCostRate,
+          'moving_wac_paisa': movingWacPaisa,
+          'valuation_paisa': valuationPaisa,
+          'valuation_policy': 'Moving Weighted Average Cost (WAC)',
+          'valuation_badge': valuationBadge,
+          'cost_quality': costQuality,
+          'valuation_cutoff': cutoffTime,
           'status': currentStock < 0 ? 'Negative' : currentStock <= threshold ? 'Low' : 'Within threshold',
         },
       ));
@@ -842,6 +1109,12 @@ class _ReportBuilder {
         rows.add(AnalyticsRow(id: 'order_items-${item['id']}-bom-${entry.key}', sourceType: 'order_items', sourceId: '${item['id']}', cells: {'kind': 'BOM quantity snapshot', 'order_id': item['order_id'], 'ingredient_id': entry.key, 'quantity': entry.value}));
       }
     }
+    final valuationQuality = coveredIngredientsCount == ingredients.length && negativeBalanceCount == 0
+        ? AnalyticsQuality.complete
+        : coveredIngredientsCount > 0
+            ? AnalyticsQuality.estimated
+            : AnalyticsQuality.missing;
+
     return _section(AnalyticsFamily.inventory, 'Inventory', [
       _metric('ingredients', 'Current ingredients', ingredients.length, unit: AnalyticsUnit.count, explanation: _currentBasis, isBalance: true),
       _metric('reconciled_ingredients', 'Reconciled stock bridges', reconciledIngredientsCount, unit: AnalyticsUnit.count, explanation: 'Ingredients whose opening + receipts - consumption - waste + returns + adjustments exactly equals ending quantity.'),
@@ -853,20 +1126,26 @@ class _ReportBuilder {
       _metric('movement_count', 'Recorded movements', e.get('inventory').length, unit: AnalyticsUnit.count, explanation: 'Movement rows attributed by Business Day FK since v14 capture; no fabricated pre-upgrade history.'),
       _coverage('as_of_coverage', 'As-of balance evidence coverage', balances.length, ingredients.length, 'Latest recorded balance_after no later than last selected close/refresh. No evidence means unknown, not opening balance zero.', isBalance: true),
       _coverage('bom_coverage', 'Sold-line BOM quantity coverage', bomCovered, soldItems.length, 'Valid sold lines with readable quantity snapshot. Quantity evidence is not event-time costing.'),
-      _missing('stock_valuation', 'Historical stock valuation', 'No historical cost layers. Current unit cost cannot rewrite past valuation.'),
+      _metric('stock_valuation', 'Historical stock valuation', totalEndingValuationPaisa, quality: valuationQuality, explanation: 'Ending inventory asset valuation under Moving Weighted Average Cost (WAC) at cutoff. Temporary negative stock balances contribute PKR 0.00 to balance-sheet assets.', unavailable: coveredIngredientsCount == 0),
+      _coverage('valuation_coverage', 'Inventory valuation coverage', coveredIngredientsCount, ingredients.length, 'Tracked ingredients with verified acquisition cost layers under Moving WAC at cutoff.'),
+      _metric('negative_stock_asset_value', 'Negative stock balance-sheet asset value', 0, explanation: 'Per ADR-0023, items with negative on-hand balance contribute PKR 0.00 to balance-sheet assets.'),
       _metric('physical_variance', 'Posted physical count lines', e.get('physical_counts').length, unit: AnalyticsUnit.count, explanation: 'Posted observations in selected Business Day intervals. Inspect per-ingredient variances below; incompatible units are never totaled.'),
       _metric('physical_variance_cost', 'Estimated physical variance value', _integers(e.get('physical_counts'), 'estimated_cost_paisa'), explanation: 'Signed event-time count estimates; unknown rates prevent a complete total.', unavailable: e.get('physical_counts').any((c) => c['estimated_cost_paisa'] == null)),
     ], rows, [
       'kind', 'ingredient_id', 'name', 'unit', 'opening_qty', 'receipts_qty', 'consumption_qty', 'waste_qty',
       'returns_qty', 'adjustments_qty', 'unexplained_variance', 'ending_qty', 'reconciliation_status',
+      'moving_wac_paisa', 'valuation_paisa', 'valuation_policy', 'valuation_badge', 'cost_quality', 'valuation_cutoff',
       'current_stock', 'threshold', 'has_opening_evidence', 'balance_evidence_at', 'recorded_cost_rate',
       'as_of_balance', 'quantity_delta', 'balance_after', 'quantity', 'spend_paisa', 'loss_paisa', 'count_id',
       'expected', 'counted', 'variance', 'estimated_cost_paisa', 'recorded_estimated_cost_paisa',
-      'valuation_policy', 'movement_id', 'snapshot_sequence', 'created_by', 'approved_by', 'posted_by',
+      'movement_id', 'snapshot_sequence', 'created_by', 'approved_by', 'posted_by',
       'reason', 'status', 'recorded_at'
     ], [
       'Normalized stock bridges reconcile in each ingredient\'s base unit (g, ml, count); never sum quantities across different unit dimensions.',
       'Opening plus receipts minus consumption minus waste plus returns plus adjustments equals ending quantity without double counting.',
+      'Inventory valuation method: Moving Weighted Average Cost (WAC) evaluated at cutoff $cutoffTime.',
+      'Per ADR-0023, items with negative on-hand balance contribute PKR 0.00 asset value to the balance sheet with an explicit temporary negative balance badge.',
+      'Historical acquisition-rate sales COGS is strictly preserved and never retroactively recalculated by subsequent procurement receipts or cost drift.',
       'Recorded unit cost rates represent historical master-data rate evidence; they are described separately from stock valuation.',
       'Missing opening balance evidence is disclosed rather than backfilled as zero.',
       _currentBasis,
@@ -1898,6 +2177,7 @@ class _ReportBuilder {
     num? previous,
     bool unavailable = false,
     AnalyticsQuality unavailableQuality = AnalyticsQuality.notApplicable,
+    AnalyticsQuality? quality,
     int? sampleCount,
     int? populationCount,
     bool isBalance = false,
@@ -1911,7 +2191,7 @@ class _ReportBuilder {
       value: unavailable ? null : value,
       unit: unit,
       explanation: explanation ?? _orderBasis,
-      quality: unavailable ? unavailableQuality : AnalyticsQuality.complete,
+      quality: quality ?? (unavailable ? unavailableQuality : AnalyticsQuality.complete),
       sampleCount: sampleCount,
       populationCount: populationCount,
       changeAbsolute: difference,
@@ -2065,4 +2345,15 @@ class _EvaluatedCommitment {
   final String recordedAt;
   final int recordedBy;
   final _Record record;
+}
+
+class _ProcurementReceipt {
+  _ProcurementReceipt({
+    required this.timestamp,
+    required this.quantity,
+    required this.costPaisa,
+  });
+  final String timestamp;
+  final double quantity;
+  final int costPaisa;
 }
