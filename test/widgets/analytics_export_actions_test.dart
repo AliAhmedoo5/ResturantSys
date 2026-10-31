@@ -169,12 +169,20 @@ void main() {
       final cancelFinder = find.byKey(const ValueKey('analytics_export_cancel_button'));
       if (cancelFinder.evaluate().isNotEmpty) {
         await tester.tap(cancelFinder);
-        await tester.pumpAndSettle();
+      }
+
+      for (var attempt = 0; attempt < 100; attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        await tester.pump();
+        if (find.byKey(const ValueKey('analytics_export_cancel_button')).evaluate().isEmpty) {
+          break;
+        }
       }
     });
 
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('analytics_export_cancel_button')), findsNothing);
+    expect(find.text('Export cancelled.'), findsOneWidget);
   });
 
   testWidgets('compact menu includes Print report action', (tester) async {
