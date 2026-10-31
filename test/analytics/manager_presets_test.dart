@@ -31,6 +31,7 @@ void main() {
       // Insert second manager for sharing/ownership tests
       final mgr2Id = await db.insert('staff', {
         'name': 'Assistant Manager',
+        'department_id': 1,
         'role': 'MANAGER',
         'pin_hash': 'synthetic_hash',
         'is_active': 1,
@@ -40,6 +41,8 @@ void main() {
       manager2 = Staff(
         id: mgr2Id,
         name: 'Assistant Manager',
+        departmentId: 1,
+        pinHash: 'synthetic_hash',
         role: StaffRole.manager,
         isActive: true,
         loginEnabled: true,
@@ -267,7 +270,7 @@ void main() {
           'paymentMethod': 'CASH',
           'fundingStream': 'INVALID_STREAM',
           'domainFilters': {
-            'category': '12',
+            'menuCategory': '12',
             'unknown_dimension': '99',
             'customerSegment': 'malicious_segment',
           },
@@ -283,7 +286,7 @@ void main() {
       expect(query.diningType, isNull); // Dropped unknown dining type
       expect(query.paymentMethod, 'CASH');
       expect(query.fundingStream, isNull); // Dropped invalid stream
-      expect(query.domainFilters[AnalyticsDimension.category], '12');
+      expect(query.domainFilters[AnalyticsDimension.menuCategory], '12');
       expect(query.domainFilters.containsKey(AnalyticsDimension.customerSegment), isFalse); // Sanitized
     });
   });

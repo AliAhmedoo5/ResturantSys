@@ -311,7 +311,7 @@ void main() {
         ],
       );
 
-      final overviewMetric = const AnalyticsMetric(
+      const overviewMetric = AnalyticsMetric(
         id: 'recorded_value',
         label: 'Recorded order value',
         value: 80000,

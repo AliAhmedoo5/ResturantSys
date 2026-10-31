@@ -95,6 +95,8 @@ void main() {
   final manager = Staff(
     id: 1,
     name: 'Lead Manager',
+    departmentId: 1,
+    pinHash: 'synthetic_hash',
     role: StaffRole.manager,
     isActive: true,
     loginEnabled: true,
