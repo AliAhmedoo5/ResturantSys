@@ -11,7 +11,6 @@ import 'package:resturant_sys/core/orders/dining_type.dart';
 import 'package:resturant_sys/core/orders/payment_method.dart';
 import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
 import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
-import 'package:resturant_sys/core/delivery/rider_trip_controller.dart';
 import '../orders/order_and_checkout_controller_test.dart' show publishFixtures;
 
 void main() {
