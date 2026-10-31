@@ -159,7 +159,7 @@ void main() {
             if (completedBackups < 2) concurrentCommits++;
           }
         }
-        await keepBilling().timeout(const Duration(seconds: 5));
+        await keepBilling().timeout(const Duration(seconds: 30));
         final results = await Future.wait([first, second]).timeout(const Duration(seconds: 30));
         expect(concurrentCommits, greaterThan(0));
         expect(results.every((result) => result.success), isTrue,

@@ -254,7 +254,7 @@ class OrderAndCheckoutController {
         await txn.delete('held_carts', where: 'id = ? AND cashier_id = ?', whereArgs: [previousHoldId, cashierId]);
       }
       return txn.insert('held_carts', {'cashier_id': cashierId, 'label': label.trim(),
-        'created_at': DateTime.now().toUtc().toIso8601String(), 'payload': jsonEncode({
+        'created_at': DateTime.now().toIso8601String(), 'payload': jsonEncode({
           'items': items.map(encodeDraftLine).toList(), 'dining_type': diningType.code,
           'customer_id': customerId, 'discount_id': discountId, 'discount_ids': discountIds,
           'delivery': delivery == null ? null : {'area_id': delivery.areaId, 'fee': delivery.quotedFeePaisa,
@@ -1113,8 +1113,8 @@ class OrderAndCheckoutController {
     Set<int>? targetMenuItemIds,
     Set<int>? targetDealIds,
     Map<int, int>? partialReversals,
-    Map<int, int>? partialReversalsByMenuItemId,
-    Map<int, int>? partialReversalsByDealId,
+    Map<int, int>? partialMenuItemReversals,
+    Map<int, int>? partialDealReversals,
   }) async {
     final rows = await txn.query(
       PosDatabaseConstants.tableOrderItemAllocations,
@@ -1136,21 +1136,11 @@ class OrderAndCheckoutController {
       final baseAlloc = lineRows.firstWhere((a) => a.entryType == 'SALE', orElse: () => lineRows.first);
       final orderItemId = baseAlloc.orderItemId;
 
-      bool isTargeted = false;
-      if (targetOrderItemIds == null && targetMenuItemIds == null && targetDealIds == null) {
-        isTargeted = true;
-      } else {
-        if (targetOrderItemIds != null && orderItemId != null && targetOrderItemIds.contains(orderItemId)) {
-          isTargeted = true;
-        }
-        if (targetMenuItemIds != null && baseAlloc.menuItemId != null && targetMenuItemIds.contains(baseAlloc.menuItemId)) {
-          isTargeted = true;
-        }
-        if (targetDealIds != null && baseAlloc.dealId != null && targetDealIds.contains(baseAlloc.dealId)) {
-          isTargeted = true;
-        }
-      }
-      if (!isTargeted) {
+      final matchesTarget = (targetOrderItemIds == null && targetMenuItemIds == null && targetDealIds == null) ||
+          (targetOrderItemIds != null && orderItemId != null && targetOrderItemIds.contains(orderItemId)) ||
+          (targetMenuItemIds != null && baseAlloc.menuItemId != null && targetMenuItemIds.contains(baseAlloc.menuItemId)) ||
+          (targetDealIds != null && baseAlloc.dealId != null && targetDealIds.contains(baseAlloc.dealId));
+      if (!matchesTarget) {
         continue;
       }
 
@@ -1181,16 +1171,21 @@ class OrderAndCheckoutController {
       }
 
       int qtyToReverse = netQty;
-      int? requestedReduction;
       if (partialReversals != null && orderItemId != null && partialReversals.containsKey(orderItemId)) {
-        requestedReduction = partialReversals[orderItemId];
-      } else if (partialReversalsByMenuItemId != null && baseAlloc.menuItemId != null && partialReversalsByMenuItemId.containsKey(baseAlloc.menuItemId)) {
-        requestedReduction = partialReversalsByMenuItemId[baseAlloc.menuItemId];
-      } else if (partialReversalsByDealId != null && baseAlloc.dealId != null && partialReversalsByDealId.containsKey(baseAlloc.dealId)) {
-        requestedReduction = partialReversalsByDealId[baseAlloc.dealId];
-      }
-      if (requestedReduction != null && requestedReduction < netQty) {
-        qtyToReverse = requestedReduction;
+        final req = partialReversals[orderItemId]!;
+        if (req < netQty) {
+          qtyToReverse = req;
+        }
+      } else if (partialMenuItemReversals != null && baseAlloc.menuItemId != null && partialMenuItemReversals.containsKey(baseAlloc.menuItemId)) {
+        final req = partialMenuItemReversals[baseAlloc.menuItemId]!;
+        if (req < netQty) {
+          qtyToReverse = req;
+        }
+      } else if (partialDealReversals != null && baseAlloc.dealId != null && partialDealReversals.containsKey(baseAlloc.dealId)) {
+        final req = partialDealReversals[baseAlloc.dealId]!;
+        if (req < netQty) {
+          qtyToReverse = req;
+        }
       }
 
       final factor = (netQty == 0) ? 1.0 : (qtyToReverse / netQty);
@@ -1532,8 +1527,8 @@ class OrderAndCheckoutController {
   /// Retrieves the immutable void audit record for a voided order, if any.
   Future<OrderVoid?> getOrderVoid(int orderId) async {
     final rows = await database.rawQuery('''
-      SELECT ov.*,
-             s1.name as supervisor_name,
+      SELECT ov.*, 
+             s1.name as supervisor_name, 
              s2.name as cashier_name
       FROM ${PosDatabaseConstants.tableOrderVoids} ov
       LEFT JOIN ${PosDatabaseConstants.tableStaff} s1 ON ov.voided_by_supervisor_id = s1.id
@@ -2031,8 +2026,8 @@ class OrderAndCheckoutController {
       final removedMenuItemIds = <int>{};
       final removedDealIds = <int>{};
       final partialReversals = <int, int>{};
-      final partialReversalsByMenuItemId = <int, int>{};
-      final partialReversalsByDealId = <int, int>{};
+      final partialMenuItemReversals = <int, int>{};
+      final partialDealReversals = <int, int>{};
 
       for (final oldItem in oldOrderItems) {
         final matchIdx = newItems.indexWhere((ni) =>
@@ -2071,11 +2066,11 @@ class OrderAndCheckoutController {
               removedOrderItemIds.add(oldItem.id);
               if (oldItem.menuItemId != null) {
                 removedMenuItemIds.add(oldItem.menuItemId!);
-                partialReversalsByMenuItemId[oldItem.menuItemId!] = reduction;
+                partialMenuItemReversals[oldItem.menuItemId!] = reduction;
               }
               if (oldItem.dealId != null) {
                 removedDealIds.add(oldItem.dealId!);
-                partialReversalsByDealId[oldItem.dealId!] = reduction;
+                partialDealReversals[oldItem.dealId!] = reduction;
               }
             }
             final priceDelta = PaisaEngine.rupeesToPaisa(matchedNew.totalPrice) - PaisaEngine.rupeesToPaisa(oldItem.totalPrice);
@@ -2313,8 +2308,8 @@ class OrderAndCheckoutController {
           targetMenuItemIds: removedMenuItemIds.isNotEmpty ? removedMenuItemIds : null,
           targetDealIds: removedDealIds.isNotEmpty ? removedDealIds : null,
           partialReversals: partialReversals.isNotEmpty ? partialReversals : null,
-          partialReversalsByMenuItemId: partialReversalsByMenuItemId.isNotEmpty ? partialReversalsByMenuItemId : null,
-          partialReversalsByDealId: partialReversalsByDealId.isNotEmpty ? partialReversalsByDealId : null,
+          partialMenuItemReversals: partialMenuItemReversals.isNotEmpty ? partialMenuItemReversals : null,
+          partialDealReversals: partialDealReversals.isNotEmpty ? partialDealReversals : null,
         );
       }
 
