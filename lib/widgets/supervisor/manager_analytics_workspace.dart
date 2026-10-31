@@ -71,6 +71,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
   bool get _authorized => _reports.authorized;
   AnalyticsSnapshot? _sourceSnapshot;
   DialogRoute<void>? _sourceRoute;
+  DialogRoute<void>? _kpiRoute;
   AnalyticsFamily _family = AnalyticsFamily.overview;
   bool _filtersExpanded = false;
   String _preset = 'live';
@@ -106,6 +107,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
   void _reportsChanged() {
     if (!identical(_sourceSnapshot, _snapshot)) {
       _dismissSource();
+      _dismissKpi();
       _sourceSnapshot = _snapshot;
     }
     setState(() {});
@@ -433,12 +435,30 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
   @override
   void dispose() {
     _dismissSource();
+    _dismissKpi();
     _reports.removeListener(_reportsChanged);
     _reports.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _cashier.dispose();
     _shift.dispose();
     super.dispose();
+  }
+
+  void _dismissKpi() {
+    final route = _kpiRoute;
+    _kpiRoute = null;
+    if (route == null) return;
+    void remove() {
+      final navigator = route.navigator;
+      if (navigator != null && navigator.mounted && route.isActive) {
+        navigator.removeRoute(route);
+      }
+    }
+    if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => remove());
+    } else {
+      remove();
+    }
   }
 
   // The route belongs to this authorized snapshot, rather than to the root
@@ -497,7 +517,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
   void _openKpiContributors(AnalyticsMetric metric) {
     final snapshot = _snapshot;
     if (snapshot == null || !_authorized) return;
-    _dismissSource();
+    _dismissKpi();
 
     final result = KpiContributors.resolve(
       snapshot: snapshot,
@@ -648,7 +668,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
           ),
           actions: [
             TextButton(
-              onPressed: _dismissSource,
+              onPressed: _dismissKpi,
               child: const Text('Close'),
             ),
           ],
@@ -656,9 +676,9 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
       },
     );
 
-    _sourceRoute = route;
+    _kpiRoute = route;
     Navigator.of(context, rootNavigator: true).push(route).whenComplete(() {
-      if (identical(_sourceRoute, route)) _sourceRoute = null;
+      if (identical(_kpiRoute, route)) _kpiRoute = null;
     });
   }
 
@@ -1007,7 +1027,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
               size: 16, color: StreetFoodMafiaColors.secondaryText)),
           ]),
           const SizedBox(height: 12),
-          SelectableText(_format(metric.value, metric.unit),
+          Text(_format(metric.value, metric.unit),
             style: TextStyle(fontSize: available ? 25 : 22, height: 1.2,
               letterSpacing: -0.6, fontWeight: FontWeight.w700, color: StreetFoodMafiaColors.offWhite)),
           if (metric.quality != AnalyticsQuality.complete) ...[
