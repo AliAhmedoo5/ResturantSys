@@ -1560,7 +1560,7 @@ class _ReportBuilder {
                 : 'Customer-to-rider collection evidence unavailable; delivery and expected pouch are insufficient proof',
         if (p['kind'] == 'COD_SETTLEMENT') 'value_basis': 'Remaining contractual Order settlement, not allocated physical pouch cash',
         'recorded_by': p['recorded_by'], 'approved_by': p['approved_by'],
-        'recorded_by_name_snapshot': p['recorded_by_name_snapshot'], 'shift_owner_name_snapshot': p['shift_owner_name_snapshot'],
+        'recorded_by_name_snapshot': p['recorded_by_name_snapshot'] == null ? null : _safeText(p['recorded_by_name_snapshot']), 'shift_owner_name_snapshot': p['shift_owner_name_snapshot'] == null ? null : _safeText(p['shift_owner_name_snapshot']),
         'change_paisa': p['change_paisa'], 'rounding_paisa': p['rounding_paisa'],
       })),
   ];

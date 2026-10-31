@@ -76,8 +76,8 @@ class _MoneyFlowPeaks {
         'source_table': event['source_table'], 'source_id': event['source_id'],
         'actual_at': event['actual_at'], 'recorded_at': event['recorded_at'],
         'recorded_by': event['recorded_by'], 'approved_by': event['approved_by'],
-        'recorded_by_name_snapshot': event['recorded_by_name_snapshot'],
-        'shift_owner_name_snapshot': event['shift_owner_name_snapshot'],
+        'recorded_by_name_snapshot': event['recorded_by_name_snapshot'] == null ? null : _ReportBuilder._safeText(event['recorded_by_name_snapshot']),
+        'shift_owner_name_snapshot': event['shift_owner_name_snapshot'] == null ? null : _ReportBuilder._safeText(event['shift_owner_name_snapshot']),
         'internal_transfer': transfer(event),
         'consolidated_business_effect': !transfer(event),
       });

@@ -12,7 +12,7 @@ List<String> _domainOrderSql(AnalyticsQuery q) {
   final usable = "length($phone) BETWEEN 7 AND 15 AND $phone NOT GLOB '*[^0-9]*'";
   return [
     if (lines.isNotEmpty) 'EXISTS(SELECT 1 FROM order_items di WHERE di.order_id=o.id AND ${lines.join(' AND ')})',
-    if (f.containsKey(AnalyticsDimension.discount)) 'o.discount_id=?',
+    if (f.containsKey(AnalyticsDimension.discount)) '(o.discount_id=? OR EXISTS(SELECT 1 FROM order_discounts od WHERE od.order_id=o.id AND od.discount_id=?))',
     if (f.containsKey(AnalyticsDimension.deliveryArea)) 'o.delivery_area_id=?',
     if (f.containsKey(AnalyticsDimension.rider)) 'EXISTS(SELECT 1 FROM rider_trip_orders dr JOIN rider_trips dt ON dt.id=dr.trip_id WHERE dr.order_id=o.id AND dt.rider_staff_id=?)',
     if (f[AnalyticsDimension.customerSegment] == 'known') '($usable)',
@@ -23,7 +23,11 @@ List<String> _domainOrderSql(AnalyticsQuery q) {
 List<Object?> _domainOrderArgs(AnalyticsQuery q) => [
   for (final d in [AnalyticsDimension.menuItem, AnalyticsDimension.menuCategory,
     AnalyticsDimension.deal, AnalyticsDimension.discount, AnalyticsDimension.deliveryArea,
-    AnalyticsDimension.rider]) if (q.domainFilters[d] != null) int.parse(q.domainFilters[d]!),
+    AnalyticsDimension.rider])
+    if (q.domainFilters[d] != null) ...[
+      int.parse(q.domainFilters[d]!),
+      if (d == AnalyticsDimension.discount) int.parse(q.domainFilters[d]!),
+    ],
 ];
 
 /// Each family receives its own evidence view. Filtering a financial posting
