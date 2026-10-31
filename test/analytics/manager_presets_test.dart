@@ -312,7 +312,7 @@ void main() {
         updatedAt: DateTime.utc(2026, 10, 1),
       );
 
-      final availableFilters = const [
+      const availableFilters = [
         AnalyticsFilterOption(
           dimension: AnalyticsDimension.menuItem,
           id: '101',

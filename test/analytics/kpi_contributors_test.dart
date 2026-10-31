@@ -415,6 +415,7 @@ void main() {
         label: 'Procurement spend',
         value: 1750000,
         unit: AnalyticsUnit.paisa,
+        explanation: 'Total mandi spend',
       );
 
       const mismatchMetric = AnalyticsMetric(
@@ -422,6 +423,7 @@ void main() {
         label: 'Procurement spend',
         value: 9999999, // Mismatched value
         unit: AnalyticsUnit.paisa,
+        explanation: 'Mismatched spend',
       );
 
       final section = AnalyticsSection(
@@ -472,8 +474,8 @@ void main() {
         family: AnalyticsFamily.suppliers,
         title: 'Suppliers',
         metrics: const [
-          AnalyticsMetric(id: 'closing_payable', label: 'Closing payable', value: 45000, unit: AnalyticsUnit.paisa),
-          AnalyticsMetric(id: 'mismatched_payable', label: 'Closing payable', value: 10000, unit: AnalyticsUnit.paisa),
+          AnalyticsMetric(id: 'closing_payable', label: 'Closing payable', value: 45000, unit: AnalyticsUnit.paisa, explanation: 'Vendor payable'),
+          AnalyticsMetric(id: 'mismatched_payable', label: 'Closing payable', value: 10000, unit: AnalyticsUnit.paisa, explanation: 'Mismatched payable'),
         ],
         rows: supplierRows,
       );
@@ -491,8 +493,8 @@ void main() {
         family: AnalyticsFamily.expenses,
         title: 'Expenses',
         metrics: const [
-          AnalyticsMetric(id: 'total_expenses', label: 'Total expenses', value: 15000, unit: AnalyticsUnit.paisa),
-          AnalyticsMetric(id: 'mismatched_expenses', label: 'Total expenses', value: 9999, unit: AnalyticsUnit.paisa),
+          AnalyticsMetric(id: 'total_expenses', label: 'Total expenses', value: 15000, unit: AnalyticsUnit.paisa, explanation: 'Total expenses'),
+          AnalyticsMetric(id: 'mismatched_expenses', label: 'Total expenses', value: 9999, unit: AnalyticsUnit.paisa, explanation: 'Mismatched expenses'),
         ],
         rows: expenseRows,
       );
@@ -510,8 +512,8 @@ void main() {
         family: AnalyticsFamily.staff,
         title: 'Staff',
         metrics: const [
-          AnalyticsMetric(id: 'staff_count', label: 'Current staff', value: 1, unit: AnalyticsUnit.count),
-          AnalyticsMetric(id: 'mismatched_staff', label: 'Current staff', value: 5, unit: AnalyticsUnit.count),
+          AnalyticsMetric(id: 'staff_count', label: 'Current staff', value: 1, unit: AnalyticsUnit.count, explanation: 'Active staff count'),
+          AnalyticsMetric(id: 'mismatched_staff', label: 'Current staff', value: 5, unit: AnalyticsUnit.count, explanation: 'Mismatched staff count'),
         ],
         rows: staffRows,
       );
