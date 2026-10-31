@@ -5,6 +5,7 @@ import 'package:resturant_sys/core/analytics/analytics_service.dart';
 import 'package:resturant_sys/core/analytics/analytics_export_service.dart';
 import 'package:resturant_sys/core/auth/auth_service.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
+import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
 import 'package:resturant_sys/core/catalog/menu_item.dart';
 import 'package:resturant_sys/core/database/pos_database.dart';
 import 'package:resturant_sys/core/database/pos_database_constants.dart';
@@ -22,12 +23,18 @@ void main() {
     late Database db;
     late OrderAndCheckoutController orders;
     late ShiftAndCashController shifts;
+    late CatalogAndRecipeController catalog;
+    late CartItem testItem;
 
     setUp(() async {
       store = PosDatabase(factory: databaseFactoryFfi, customPath: inMemoryDatabasePath);
       db = await store.initialize();
       orders = OrderAndCheckoutController(database: db);
       shifts = ShiftAndCashController(database: db);
+      catalog = CatalogAndRecipeController(database: db);
+      final category = await catalog.createCategory(name: 'Main');
+      final menuItem = await catalog.createMenuItem(categoryId: category.id, name: 'Burger', basePrice: 500);
+      testItem = CartItem(menuItem: menuItem);
     });
 
     tearDown(() => store.close());
@@ -83,7 +90,7 @@ void main() {
     });
 
     test('holdCart, recallHold, replace, removeHold and checkout record lifecycle events atomically', () async {
-      final line = CartItem(menuItem: const MenuItem(id: 991, categoryId: 1, name: 'Burger', basePrice: 500));
+      final line = testItem;
       final day = await shifts.openBusinessDay(openedByStaffId: 1);
       final shift = await shifts.openShift(staffId: 2, openingFloat: 1000);
 
@@ -178,7 +185,7 @@ void main() {
     });
 
     test('Manager reports historical hold lifecycle counts and ages from observed events with privacy protection', () async {
-      final line = CartItem(menuItem: const MenuItem(id: 991, categoryId: 1, name: 'Burger', basePrice: 500));
+      final line = testItem;
       final day = await shifts.openBusinessDay(openedByStaffId: 1);
       final shift = await shifts.openShift(staffId: 2, openingFloat: 1000);
 
