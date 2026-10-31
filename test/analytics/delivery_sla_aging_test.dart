@@ -11,6 +11,7 @@ import 'package:resturant_sys/core/orders/dining_type.dart';
 import 'package:resturant_sys/core/orders/payment_method.dart';
 import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
 import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
+import 'package:resturant_sys/core/delivery/delivery_controller.dart' show DeliveryDetails;
 import '../orders/order_and_checkout_controller_test.dart' show publishFixtures;
 
 void main() {
@@ -60,7 +61,13 @@ void main() {
       cashierId: 2,
       diningType: DiningType.delivery,
       items: [CartItem(menuItem: await catalog.getMenuItem(menuItem.id))],
-      payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 600)],
+      delivery: DeliveryDetails(
+        areaId: areaAId,
+        quotedFeePaisa: 10000,
+        phone: '03001111111',
+        fullAddress: 'Street 1, Area Fast',
+      ),
+      payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 700)],
     )).order;
     await db.update('orders', {
       'created_at': '2026-10-31T12:00:00+05:00',
@@ -76,7 +83,13 @@ void main() {
       cashierId: 2,
       diningType: DiningType.delivery,
       items: [CartItem(menuItem: await catalog.getMenuItem(menuItem.id))],
-      payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 600)],
+      delivery: DeliveryDetails(
+        areaId: areaAId,
+        quotedFeePaisa: 10000,
+        phone: '03002222222',
+        fullAddress: 'Street 2, Area Fast',
+      ),
+      payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 700)],
     )).order;
     await db.update('orders', {
       'created_at': '2026-10-31T12:00:00+05:00',
@@ -93,7 +106,13 @@ void main() {
       cashierId: 2,
       diningType: DiningType.delivery,
       items: [CartItem(menuItem: await catalog.getMenuItem(menuItem.id))],
-      payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 600)],
+      delivery: DeliveryDetails(
+        areaId: areaBId,
+        quotedFeePaisa: 15000,
+        phone: '03003333333',
+        fullAddress: 'Street 3, Area Fallback',
+      ),
+      payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 750)],
     )).order;
     await db.update('orders', {
       'created_at': '2026-10-31T12:00:00+05:00',
@@ -109,7 +128,13 @@ void main() {
       cashierId: 2,
       diningType: DiningType.delivery,
       items: [CartItem(menuItem: await catalog.getMenuItem(menuItem.id))],
-      payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 600)],
+      delivery: DeliveryDetails(
+        areaId: areaAId,
+        quotedFeePaisa: 10000,
+        phone: '03004444444',
+        fullAddress: 'Street 4, Area Fast',
+      ),
+      payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 700)],
     )).order;
     await db.update('orders', {
       'created_at': '2026-10-31T12:00:00+05:00',
@@ -126,7 +151,13 @@ void main() {
       cashierId: 2,
       diningType: DiningType.delivery,
       items: [CartItem(menuItem: await catalog.getMenuItem(menuItem.id))],
-      payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 600)],
+      delivery: DeliveryDetails(
+        areaId: areaAId,
+        quotedFeePaisa: 10000,
+        phone: '03005555555',
+        fullAddress: 'Street 5, Area Fast',
+      ),
+      payments: [const PaymentTender(method: PaymentMethod.cash, amountTendered: 700)],
     )).order;
     await db.update('orders', {
       'created_at': '2026-10-31T12:00:00+05:00',
