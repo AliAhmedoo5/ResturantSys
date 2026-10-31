@@ -285,11 +285,73 @@ class _ReportBuilder {
     for (final a in delivered) {
       final dispatch = _karachi(a['dispatched_at']);
       final end = _karachi(a['delivered_at']);
-      if (dispatch != null && end != null && !end.isBefore(dispatch)) times.add(end.difference(dispatch).inSeconds / 60);
+      final confirmed = _karachi(a['order_created_at']);
+      if (dispatch != null && end != null && !end.isBefore(dispatch) && (confirmed == null || !end.isBefore(confirmed))) {
+        times.add(end.difference(dispatch).inSeconds / 60);
+      }
     }
     times.sort();
+    int lateDeliveries = 0;
+    int validDeliveredOrders = 0;
+    final deliveredOrderIds = <int>{};
+    for (final a in delivered) {
+      final oid = a['order_id'];
+      if (oid is! int || deliveredOrderIds.contains(oid)) continue;
+      final end = _karachi(a['delivered_at']);
+      final confirmed = _karachi(a['order_created_at']);
+      final dispatch = _karachi(a['dispatched_at']);
+      if (end == null || confirmed == null || dispatch == null || end.isBefore(dispatch) || end.isBefore(confirmed)) continue;
+      deliveredOrderIds.add(oid);
+      validDeliveredOrders++;
+      final targetEta = (a['target_eta_minutes'] as num?)?.toDouble() ?? 45.0;
+      final elapsed = end.difference(confirmed).inSeconds / 60.0;
+      if (elapsed > targetEta) {
+        lateDeliveries++;
+      }
+    }
+    int finalDeliveryFailures = 0;
+    for (final entry in attemptsByOrder.entries) {
+      final oAttempts = entry.value;
+      final hasDelivered = oAttempts.any((att) => att['status'] == 'DELIVERED');
+      if (!hasDelivered) {
+        final paymentStatus = oAttempts.first['order_payment_status'] as String? ?? '';
+        final isCancelled = ['CANCELLED', 'VOIDED', 'REFUNDED'].contains(paymentStatus);
+        final isExplicitFailure = oAttempts.any((att) {
+          final notes = (att['notes'] as String? ?? '').toUpperCase();
+          return notes.contains('CANCELLED_UNDELIVERED') || notes.contains('WASTED') || notes.contains('RESTOCKED');
+        });
+        if (isCancelled || isExplicitFailure) {
+          finalDeliveryFailures++;
+        }
+      }
+    }
     final trips = e.get('trips');
     final allTrips = e.get('all_trips');
+    final allShifts = e.get('all_shifts');
+    final shiftsById = {for (final s in allShifts) s['id']: s};
+    int agingCurrentShiftPaisa = 0;
+    int aging0to24hPaisa = 0;
+    int aging1to3dPaisa = 0;
+    int agingCriticalPaisa = 0;
+
+    for (final t in allTrips.where((t) => t['status'] == 'RETURNED')) {
+      final returnedAt = _karachi(t['returned_at']);
+      final expectedPaisa = (t['cash_expected_paisa'] as num?)?.toInt() ?? 0;
+      if (returnedAt == null || expectedPaisa <= 0) continue;
+      final shift = shiftsById[t['shift_id']];
+      if (shift != null && shift['status'] == 'OPEN') {
+        agingCurrentShiftPaisa += expectedPaisa;
+      } else {
+        final ageHours = e.now.difference(returnedAt).inMinutes / 60.0;
+        if (ageHours <= 24.0) {
+          aging0to24hPaisa += expectedPaisa;
+        } else if (ageHours <= 72.0) {
+          aging1to3dPaisa += expectedPaisa;
+        } else {
+          agingCriticalPaisa += expectedPaisa;
+        }
+      }
+    }
     final settledTripIds = allTrips.where((t) => t['status'] == 'SETTLED').map((t) => t['id']).toSet();
     final allEvents = e.get('payment_events');
     final activeCollections = allEvents.where((p) => p['kind'] == 'RIDER_COLLECTION' && !settledTripIds.contains(p['settlement_id'])).toList();
@@ -327,6 +389,14 @@ class _ReportBuilder {
       _duration('travel_mean', 'Mean travel time', times.isEmpty ? null : times.reduce((a, b) => a + b) / times.length, times.length, delivered.length),
       _duration('travel_median', 'Median travel time', _percentile(times, .5), times.length, delivered.length),
       _duration('travel_p90', '90th percentile travel', _percentile(times, .9), times.length, delivered.length),
+      _metric('late_deliveries', 'Late delivery orders', lateDeliveries, unit: AnalyticsUnit.count, explanation: 'Delivered orders exceeding delivery area target ETA or 45-minute fallback SLA.'),
+      _rate('late_delivery_rate', 'Late delivery rate', lateDeliveries, validDeliveredOrders, 'Orders exceeding area SLA target ETA (or 45m fallback) / delivered orders with valid delivery evidence.'),
+      _metric('final_delivery_failures', 'Final delivery failures', finalDeliveryFailures, unit: AnalyticsUnit.count, explanation: 'Unique dispatched orders that reached terminal failed disposition; returned attempts that were redelivered are excluded.'),
+      _rate('final_delivery_failure_rate', 'Final delivery failure rate', finalDeliveryFailures, uniqueAttemptedOrders, 'Unique dispatched delivery orders with final failed outcome / total unique dispatched delivery orders.'),
+      _metric('cod_aging_current_shift_paisa', 'Unsettled COD: Current shift', agingCurrentShiftPaisa, explanation: 'Returned COD trips awaiting cashier shift handover.'),
+      _metric('cod_aging_0_24h_paisa', 'Unsettled COD: Overdue (0-24h)', aging0to24hPaisa, explanation: 'Unsettled COD from closed shifts returned within 24 hours.'),
+      _metric('cod_aging_1_3d_paisa', 'Unsettled COD: Aged (1-3 days)', aging1to3dPaisa, explanation: 'Unsettled COD carried across closed business days (1 to 3 days).'),
+      _metric('cod_aging_critical_paisa', 'Unsettled COD: Critical (>3 days)', agingCriticalPaisa, explanation: 'Unsettled COD aged beyond 3 days requiring manager investigation.'),
     ];
     String reasonFor(Object? raw) {
       if (raw is String && raw.trim().isNotEmpty) return _safeText(raw.trim());
@@ -351,6 +421,23 @@ class _ReportBuilder {
         final orderAttempts = attemptsByOrder[a['order_id']] ?? const <_Record>[];
         final isReattempt = orderAttempts.isNotEmpty && a['id'] != orderAttempts.first['id'];
         final reason = a['status'] == 'RETURNED' ? reasonFor(a['notes']) : null;
+        final dispatch = _karachi(a['dispatched_at']);
+        final end = _karachi(a['delivered_at']);
+        final confirmed = _karachi(a['order_created_at']);
+        double? travelMinutes;
+        String deliveryQuality;
+        if (a['status'] == 'DELIVERED') {
+          if (dispatch == null || end == null) {
+            deliveryQuality = 'Missing milestone';
+          } else if (end.isBefore(dispatch) || (confirmed != null && end.isBefore(confirmed))) {
+            deliveryQuality = 'Invalid sequence';
+          } else {
+            travelMinutes = end.difference(dispatch).inSeconds / 60.0;
+            deliveryQuality = 'Valid';
+          }
+        } else {
+          deliveryQuality = 'Attempt not delivered';
+        }
         return _row('rider_trip_orders', a, {
           'kind': 'Delivery attempt',
           'order_id': a['order_id'],
@@ -360,12 +447,14 @@ class _ReportBuilder {
           'status': a['status'],
           'is_reattempt': isReattempt ? 'Yes' : 'No',
           'return_reason': reason ?? 'N/A',
+          'travel_minutes': travelMinutes,
+          'delivery_quality': deliveryQuality,
           'dispatched_at': a['dispatched_at'],
           'delivered_at': a['delivered_at'],
           'returned_at': a['returned_at'],
         });
       }),
-    ], ['kind', 'order_id', 'trip_id', 'rider_id', 'shift_id', 'selected_order_load', 'area', 'fee_paisa', 'payment_status', 'status', 'is_reattempt', 'return_reason', 'expected_paisa', 'counted_paisa', 'dispatched_at', 'delivered_at', 'returned_at', 'settled_at'], ['Order/attempt rows and selected-order load use order filters; trip rows and trip exposure use whole selected Business Days. All-outstanding measures explicitly ignore date/order filters.', 'Settlement event rows use receiving Shift/Business Day or actual calendar time, independently of the originating Order cohort. Counted handover is one linked custody transfer; COD settlement value is not verified customer collection. Legacy settled trips without events have unavailable receiving Shift, actors, confirmed collections and immutable recording time. Do not sum settlement attribution, digital receipt, rider-held collections and counted pouch rows.', 'Returned attempts are delivery run outcomes, not final order failures. Reattempts represent subsequent dispatch runs for the same order. Legacy returned attempts without recorded notes disclose absent historical reason evidence rather than inferring reasons. Delivered status is not proof of payment collection.', 'Confirmed customer collections held by riders are distinct from customer debt and cashier drawer cash. Expected pouch cash is exposure, not verified debt until independently confirmed.', 'Travel excludes invalid/missing timestamps and reports coverage. Percentiles interpolate sorted valid minutes. No final failure/reattempt or unrecorded failure-reason inference.']);
+    ], ['kind', 'order_id', 'trip_id', 'rider_id', 'shift_id', 'selected_order_load', 'area', 'fee_paisa', 'payment_status', 'status', 'is_reattempt', 'return_reason', 'travel_minutes', 'delivery_quality', 'expected_paisa', 'counted_paisa', 'dispatched_at', 'delivered_at', 'returned_at', 'settled_at'], ['Order/attempt rows and selected-order load use order filters; trip rows and trip exposure use whole selected Business Days. All-outstanding measures explicitly ignore date/order filters.', 'Settlement event rows use receiving Shift/Business Day or actual calendar time, independently of the originating Order cohort. Counted handover is one linked custody transfer; COD settlement value is not verified customer collection. Legacy settled trips without events have unavailable receiving Shift, actors, confirmed collections and immutable recording time. Do not sum settlement attribution, digital receipt, rider-held collections and counted pouch rows.', 'Returned attempts are delivery run outcomes, not final order failures. Reattempts represent subsequent dispatch runs for the same order. Legacy returned attempts without recorded notes disclose absent historical reason evidence rather than inferring reasons. Delivered status is not proof of payment collection.', 'Confirmed customer collections held by riders are distinct from customer debt and cashier drawer cash. Expected pouch cash is exposure, not verified debt until independently confirmed.', 'Travel excludes invalid/missing timestamps and reports coverage. Percentiles interpolate sorted valid minutes. No final failure/reattempt or unrecorded failure-reason inference.']);
   }
 
   AnalyticsSection _customers() {
