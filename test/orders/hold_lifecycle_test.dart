@@ -39,10 +39,10 @@ void main() {
 
     tearDown(() => store.close());
 
-    test('hold_lifecycle_events table is created at schema v28 and is immutable', () async {
-      expect(PosDatabaseConstants.schemaVersion, 28);
+    test('hold_lifecycle_events table is created at schema v29 and is immutable', () async {
+      expect(PosDatabaseConstants.schemaVersion, 29);
       final userVersion = (await db.rawQuery('PRAGMA user_version')).single.values.first;
-      expect(userVersion, 28);
+      expect(userVersion, 29);
 
       final tableInfo = await db.rawQuery("PRAGMA table_info('hold_lifecycle_events')");
       expect(tableInfo, isNotEmpty);
@@ -74,17 +74,17 @@ void main() {
       );
     });
 
-    test('database upgrading from v27 to v28 creates hold_lifecycle_events table and triggers', () async {
+    test('database upgrading from v28 to v29 creates hold_lifecycle_events table and triggers', () async {
       await db.execute('DROP TABLE IF EXISTS hold_lifecycle_events');
       await db.execute('DROP TRIGGER IF EXISTS hold_lifecycle_events_no_update');
       await db.execute('DROP TRIGGER IF EXISTS hold_lifecycle_events_no_delete');
-      await db.setVersion(27);
+      await db.setVersion(28);
       await store.close();
 
       store = PosDatabase(factory: databaseFactoryFfi, customPath: inMemoryDatabasePath);
       db = await store.initialize();
 
-      expect(await db.getVersion(), 28);
+      expect(await db.getVersion(), 29);
       final tableInfo = await db.rawQuery("PRAGMA table_info('hold_lifecycle_events')");
       expect(tableInfo, isNotEmpty);
     });
@@ -258,7 +258,6 @@ void main() {
 
       // Privacy checks on rows and exports
       final lifecycleRows = report.rows.where((r) => r.sourceType == 'hold_lifecycle_events').toList();
-      expect(lifecycleRows, hasLength(6)); // created A, recalled A, replaced A, created B, created discard, discarded, converted B -> 7 events? Let's check:
       // Events:
       // 1: CREATED holdA
       // 2: RECALLED holdA
@@ -267,7 +266,7 @@ void main() {
       // 5: CREATED discardHold
       // 6: DISCARDED discardHold
       // 7: CONVERTED holdB
-      expect(lifecycleRows.length, 7);
+      expect(lifecycleRows, hasLength(7));
 
       final convertedRow = lifecycleRows.firstWhere((r) => r.cells['event_type'] == 'CONVERTED');
       expect(convertedRow.cells['order_id'], isNotNull);

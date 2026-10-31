@@ -1,6 +1,8 @@
 import 'analytics_domain_filters.dart';
 import 'historical_corrections_workspace.dart';
 import '../../core/analytics/historical_corrections.dart';
+import '../../core/analytics/manager_presets_service.dart';
+import '../../core/analytics/kpi_contributors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:intl/intl.dart';
@@ -38,6 +40,7 @@ class ManagerAnalyticsWorkspace extends StatefulWidget {
   const ManagerAnalyticsWorkspace({
     super.key,
     required this.service,
+    this.presetsService,
     this.session,
     this.clock,
     this.refreshInterval = const Duration(seconds: 30),
@@ -45,6 +48,7 @@ class ManagerAnalyticsWorkspace extends StatefulWidget {
   });
 
   final AnalyticsService service;
+  final ManagerPresetsService? presetsService;
   final SessionState? session;
   final DateTime Function()? clock;
   final Duration refreshInterval;
@@ -59,6 +63,7 @@ class ManagerAnalyticsWorkspace extends StatefulWidget {
 class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
     with WidgetsBindingObserver {
   late final ManagerReportController _reports;
+  ManagerPresetsService? _presetsService;
   AnalyticsQuery get _query => _reports.query;
   AnalyticsSnapshot? get _snapshot => _reports.snapshot;
   bool get _busy => _reports.busy;
@@ -66,6 +71,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
   bool get _authorized => _reports.authorized;
   AnalyticsSnapshot? _sourceSnapshot;
   DialogRoute<void>? _sourceRoute;
+  DialogRoute<void>? _kpiRoute;
   AnalyticsFamily _family = AnalyticsFamily.overview;
   bool _filtersExpanded = false;
   String _preset = 'live';
@@ -81,6 +87,14 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
   @override
   void initState() {
     super.initState();
+    try {
+      _presetsService = widget.presetsService ??
+          ManagerPresetsService(
+              database: widget.service.database,
+              authService: widget.service.authService);
+    } catch (_) {
+      _presetsService = widget.presetsService;
+    }
     _reports = ManagerReportController(service: widget.service, session: widget.session,
       query: AnalyticsQuery(startDate: _today,
         endDateExclusive: _today.add(const Duration(days: 1)), live: true),
@@ -93,6 +107,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
   void _reportsChanged() {
     if (!identical(_sourceSnapshot, _snapshot)) {
       _dismissSource();
+      _dismissKpi();
       _sourceSnapshot = _snapshot;
     }
     setState(() {});
@@ -135,10 +150,214 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
       _changeQuery(_withDates(range.start, range.end.add(const Duration(days: 1)), live: false));
       return;
     }
+    if (value == 'month_to_date') {
+      setState(() => _preset = value);
+      final start = DateTime(_now.year, _now.month, 1);
+      final end = _today.add(const Duration(days: 1));
+      _changeQuery(_withDates(start, end, live: true));
+      return;
+    }
     setState(() => _preset = value);
     final days = value == 'week' ? 7 : value == 'month' ? 30 : 1;
     final end = value == 'yesterday' ? _today : _today.add(const Duration(days: 1));
     _changeQuery(_withDates(end.subtract(Duration(days: days)), end, live: value == 'live'));
+  }
+
+  Future<void> _showPresetsDialog() async {
+    final service = _presetsService;
+    if (service == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Presets service is unavailable.')),
+      );
+      return;
+    }
+    final staffId = widget.session?.currentStaff?.id ?? 0;
+    List<ManagerReportPreset> presets = [];
+    try {
+      presets = await service.listPresets(staffId: staffId);
+    } catch (_) {}
+
+    if (!mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Saved report presets'),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ElevatedButton.icon(
+                    key: const ValueKey('analytics_save_preset_button'),
+                    icon: const Icon(Icons.bookmark_add_outlined),
+                    label: const Text('Save current report as preset'),
+                    onPressed: () async {
+                      Navigator.of(context).pop();
+                      await _promptSavePreset();
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  if (presets.isEmpty)
+                    const Text('No saved presets yet.')
+                  else
+                    for (final preset in presets)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(
+                          preset.isShared ? Icons.people_outline : Icons.lock_outline,
+                          color: preset.isShared ? StreetFoodMafiaColors.statusReady : StreetFoodMafiaColors.secondaryText,
+                        ),
+                        title: Text(preset.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: Text(
+                          '${_familyLabels[preset.family] ?? preset.family.name} • '
+                          '${preset.periodKind == PresetPeriodKind.dynamic ? (preset.dynamicPeriod ?? 'dynamic') : 'fixed dates'}'
+                          '${preset.ownerStaffId == staffId ? ' (You)' : preset.ownerStaffName != null ? ' (by ${preset.ownerStaffName})' : ''}',
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (preset.ownerStaffId == staffId)
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline, size: 18),
+                                tooltip: 'Delete preset',
+                                onPressed: () async {
+                                  await service.deletePreset(presetId: preset.id!, staffId: staffId);
+                                  final reloaded = await service.listPresets(staffId: staffId);
+                                  setDialogState(() {
+                                    presets = reloaded;
+                                  });
+                                },
+                              ),
+                          ],
+                        ),
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          _applyPreset(preset);
+                        },
+                      ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _promptSavePreset() async {
+    final service = _presetsService;
+    if (service == null) return;
+    final staffId = widget.session?.currentStaff?.id ?? 0;
+    final nameCtrl = TextEditingController(text: '${_familyLabels[_family] ?? _family.name} workflow');
+    bool isShared = false;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => AlertDialog(
+          title: const Text('Save report preset'),
+          content: SizedBox(
+            width: 400,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Preset name',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                CheckboxListTile(
+                  title: const Text('Share with other Managers'),
+                  value: isShared,
+                  onChanged: (val) => setModalState(() => isShared = val ?? false),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed == true && nameCtrl.text.trim().isNotEmpty) {
+      final periodKind = _preset == 'custom' ? PresetPeriodKind.fixed : PresetPeriodKind.dynamic;
+      await service.createPreset(
+        name: nameCtrl.text.trim(),
+        ownerStaffId: staffId,
+        isShared: isShared,
+        family: _family,
+        periodKind: periodKind,
+        dynamicPeriod: periodKind == PresetPeriodKind.dynamic ? _preset : null,
+        startDate: _query.startDate,
+        endDateExclusive: _query.endDateExclusive,
+        timeBasis: _query.timeBasis,
+        grouping: _query.grouping,
+        filters: {
+          if (_query.cashierId != null) 'cashierId': _query.cashierId,
+          if (_query.shiftId != null) 'shiftId': _query.shiftId,
+          if (_query.diningType != null) 'diningType': _query.diningType,
+          if (_query.paymentMethod != null) 'paymentMethod': _query.paymentMethod,
+          if (_query.fundingStream != null) 'fundingStream': _query.fundingStream,
+          'holdStaleMinutes': _query.holdStaleMinutes,
+          'domainFilters': {
+            for (final entry in _query.domainFilters.entries)
+              entry.key.name: entry.value,
+          },
+        },
+      );
+    }
+  }
+
+  void _applyPreset(ManagerReportPreset preset) {
+    final service = _presetsService;
+    if (service == null) return;
+    setState(() {
+      _family = preset.family;
+      if (preset.periodKind == PresetPeriodKind.dynamic) {
+        _preset = preset.dynamicPeriod ?? 'live';
+      } else {
+        _preset = 'custom';
+      }
+    });
+
+    final resolvedQuery = service.resolvePresetQuery(
+      preset,
+      clock: widget.clock,
+      availableFilters: _snapshot?.filterOptions,
+    );
+
+    _cashier.text = resolvedQuery.cashierId?.toString() ?? '';
+    _shift.text = resolvedQuery.shiftId?.toString() ?? '';
+    setState(() {
+      _dining = resolvedQuery.diningType;
+      _payment = resolvedQuery.paymentMethod;
+    });
+
+    _changeQuery(resolvedQuery);
   }
 
   void _applyFilters() {
@@ -216,12 +435,30 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
   @override
   void dispose() {
     _dismissSource();
+    _dismissKpi();
     _reports.removeListener(_reportsChanged);
     _reports.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _cashier.dispose();
     _shift.dispose();
     super.dispose();
+  }
+
+  void _dismissKpi() {
+    final route = _kpiRoute;
+    _kpiRoute = null;
+    if (route == null) return;
+    void remove() {
+      final navigator = route.navigator;
+      if (navigator != null && navigator.mounted && route.isActive) {
+        navigator.removeRoute(route);
+      }
+    }
+    if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => remove());
+    } else {
+      remove();
+    }
   }
 
   // The route belongs to this authorized snapshot, rather than to the root
@@ -255,7 +492,14 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
         title: Text(_sourceLabel(row)),
         content: SizedBox(width: 520, child: SingleChildScrollView(child: Column(
           crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-            const Text('Safe reporting projection • source values from this snapshot'),
+            const Text('Safe reporting projection • source values from this snapshot',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            const SizedBox(height: 4),
+            Text('Snapshot cutoff: ${DateFormat('dd MMM yyyy HH:mm:ss').format(snapshot.generatedAt.isUtc ? snapshot.generatedAt.add(const Duration(hours: 5)) : snapshot.generatedAt)} • Schema v${snapshot.sourceSchemaVersion ?? 28}',
+              style: const TextStyle(fontSize: 11, color: StreetFoodMafiaColors.secondaryText)),
+            const Text('Original snapshot projection (subsequent live changes are not reflected)',
+              style: TextStyle(fontSize: 11, color: StreetFoodMafiaColors.secondaryText, fontStyle: FontStyle.italic)),
+            const SizedBox(height: 8),
             SelectableText('Source IDs: ${row.sourceId ?? row.id}'),
             const SizedBox(height: 12),
             for (final column in section.columns) Padding(padding: const EdgeInsets.only(bottom: 8),
@@ -267,6 +511,174 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
     _sourceRoute = route;
     Navigator.of(context, rootNavigator: true).push(route).whenComplete(() {
       if (identical(_sourceRoute, route)) _sourceRoute = null;
+    });
+  }
+
+  void _openKpiContributors(AnalyticsMetric metric) {
+    final snapshot = _snapshot;
+    if (snapshot == null || !_authorized) return;
+    _dismissKpi();
+
+    final result = KpiContributors.resolve(
+      snapshot: snapshot,
+      section: snapshot.section(_family),
+      metric: metric,
+    );
+
+    final route = DialogRoute<void>(
+      context: context,
+      builder: (context) {
+        if (!mounted || !_authorized || !identical(_snapshot, snapshot)) {
+          return const SizedBox.shrink();
+        }
+        return AlertDialog(
+          key: const ValueKey('kpi_contributor_dialog'),
+          title: Row(
+            children: [
+              const Icon(Icons.analytics_outlined, color: StreetFoodMafiaColors.cartelYellow),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${metric.label} • KPI contributors',
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 860,
+            height: 520,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: StreetFoodMafiaColors.cardSurface,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: StreetFoodMafiaColors.border),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              result.isReconciled ? Icons.check_circle_outline : Icons.info_outline,
+                              size: 16,
+                              color: result.isReconciled
+                                  ? StreetFoodMafiaColors.statusReady
+                                  : StreetFoodMafiaColors.burntGold,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              result.isReconciled
+                                  ? 'Reconciled to formula'
+                                  : 'Formula approximation / missing data',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: result.isReconciled
+                                    ? StreetFoodMafiaColors.statusReady
+                                    : StreetFoodMafiaColors.burntGold,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        SelectableText(
+                          result.formula,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: StreetFoodMafiaColors.offWhite,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Snapshot cutoff: ${DateFormat('dd MMM yyyy HH:mm:ss').format(snapshot.generatedAt.isUtc ? snapshot.generatedAt.add(const Duration(hours: 5)) : snapshot.generatedAt)}'
+                          ' • Schema ${snapshot.sourceSchemaVersion ?? 28} • ${snapshot.reportVersion}',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: StreetFoodMafiaColors.secondaryText,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  if (result.emptyOrMissingNote != null)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        result.emptyOrMissingNote!,
+                        style: const TextStyle(
+                          color: StreetFoodMafiaColors.burntGold,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  if (result.contributingRows.isNotEmpty) ...[
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Contributing snapshot records (${result.contributingRows.length})',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const Text(
+                          'Safe read-only projection',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: StreetFoodMafiaColors.secondaryText,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    _SourceTable(
+                      key: ValueKey('kpi_table_${metric.id}'),
+                      title: '${metric.label} contributors',
+                      section: AnalyticsSection(
+                        family: result.family,
+                        title: metric.label,
+                        columns: result.columns,
+                        rows: result.contributingRows,
+                      ),
+                      onShowSource: (row) => _showSource(
+                        AnalyticsSection(
+                          family: result.family,
+                          title: metric.label,
+                          columns: result.columns,
+                          rows: result.contributingRows,
+                        ),
+                        row,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: _dismissKpi,
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+
+    _kpiRoute = route;
+    Navigator.of(context, rootNavigator: true).push(route).whenComplete(() {
+      if (identical(_kpiRoute, route)) _kpiRoute = null;
     });
   }
 
@@ -340,6 +752,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
             DropdownMenuItem(value: 'live', child: Text('Active day')),
             DropdownMenuItem(value: 'today', child: Text('Today')),
             DropdownMenuItem(value: 'yesterday', child: Text('Previous day')),
+            DropdownMenuItem(value: 'month_to_date', child: Text('Month to date')),
             DropdownMenuItem(value: 'week', child: Text('Last 7 dates')),
             DropdownMenuItem(value: 'month', child: Text('Last 30 dates')),
             DropdownMenuItem(value: 'custom', child: Text('Custom range…')),
@@ -374,6 +787,9 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
         if (compact) ..._quickFilterFields(compact: true),
         IconButton.outlined(key: const ValueKey('analytics_refresh'), tooltip: 'Refresh analytics',
           onPressed: _busy ? null : _load, icon: const Icon(Icons.refresh)),
+        TextButton.icon(key: const ValueKey('analytics_presets_button'),
+          onPressed: _showPresetsDialog,
+          icon: const Icon(Icons.bookmark_border_rounded, size: 18), label: const Text('Presets')),
         TextButton.icon(key: const ValueKey('analytics_filters_toggle'),
           onPressed: () => setState(() => _filtersExpanded = !_filtersExpanded),
           icon: const Icon(Icons.tune_rounded, size: 18), label: const Text('Filters')),
@@ -586,63 +1002,68 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
       'negative_stock' => 'Current inventory position',
       _ => metric.explanation,
     } : metric.explanation;
-    return Container(constraints: BoxConstraints(minHeight: compact ? 124 : 134),
-      decoration: BoxDecoration(color: StreetFoodMafiaColors.darkNavy,
-        border: Border.all(color: StreetFoodMafiaColors.border),
-        borderRadius: BorderRadius.circular(12)),
-      child: Padding(padding: const EdgeInsets.all(16),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Icon(icon, size: 22, color: StreetFoodMafiaColors.cartelYellow),
-          const SizedBox(width: 10),
-          Expanded(child: Text(compact ? switch (metric.id) {
-            'collection_due' => 'Collection Due',
-            'all_collection_due' => 'Outstanding collections',
-            'negative_stock' => 'Negative stock items',
-            _ => metric.label,
-          } : metric.label, style: const TextStyle(fontSize: 12,
-            fontWeight: FontWeight.w600, color: StreetFoodMafiaColors.secondaryText))),
-          const SizedBox(width: 8),
-          Tooltip(message: metric.explanation, child: const Icon(Icons.info_outline,
-            size: 16, color: StreetFoodMafiaColors.secondaryText)),
-        ]),
-        const SizedBox(height: 12),
-        SelectableText(_format(metric.value, metric.unit),
-          style: TextStyle(fontSize: available ? 25 : 22, height: 1.2,
-            letterSpacing: -0.6, fontWeight: FontWeight.w700, color: StreetFoodMafiaColors.offWhite)),
-        if (metric.quality != AnalyticsQuality.complete) ...[
+    return InkWell(
+      key: ValueKey('metric_card_${metric.id}'),
+      borderRadius: BorderRadius.circular(12),
+      onTap: () => _openKpiContributors(metric),
+      child: Container(constraints: BoxConstraints(minHeight: compact ? 124 : 134),
+        decoration: BoxDecoration(color: StreetFoodMafiaColors.darkNavy,
+          border: Border.all(color: StreetFoodMafiaColors.border),
+          borderRadius: BorderRadius.circular(12)),
+        child: Padding(padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Icon(icon, size: 22, color: StreetFoodMafiaColors.cartelYellow),
+            const SizedBox(width: 10),
+            Expanded(child: Text(compact ? switch (metric.id) {
+              'collection_due' => 'Collection Due',
+              'all_collection_due' => 'Outstanding collections',
+              'negative_stock' => 'Negative stock items',
+              _ => metric.label,
+            } : metric.label, style: const TextStyle(fontSize: 12,
+              fontWeight: FontWeight.w600, color: StreetFoodMafiaColors.secondaryText))),
+            const SizedBox(width: 8),
+            Tooltip(message: metric.explanation, child: const Icon(Icons.info_outline,
+              size: 16, color: StreetFoodMafiaColors.secondaryText)),
+          ]),
+          const SizedBox(height: 12),
+          Text(_format(metric.value, metric.unit),
+            style: TextStyle(fontSize: available ? 25 : 22, height: 1.2,
+              letterSpacing: -0.6, fontWeight: FontWeight.w700, color: StreetFoodMafiaColors.offWhite)),
+          if (metric.quality != AnalyticsQuality.complete) ...[
+            const SizedBox(height: 8),
+            Text(quality, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
+              color: StreetFoodMafiaColors.burntGold)),
+          ],
           const SizedBox(height: 8),
-          Text(quality, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
-            color: StreetFoodMafiaColors.burntGold)),
-        ],
-        const SizedBox(height: 8),
-        Tooltip(message: metric.explanation, child: Text(summary,
-          maxLines: 2, overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 11, height: 1.5, color: StreetFoodMafiaColors.secondaryText))),
-        if (metric.id == 'negative_stock' && metric.value == 0 && metric.quality == AnalyticsQuality.complete)
-          const Padding(padding: EdgeInsets.only(top: 6), child: Row(children: [
-            Icon(Icons.check_circle, size: 15, color: StreetFoodMafiaColors.statusReady),
-            SizedBox(width: 6), Text('No negative stock', style: TextStyle(fontSize: 11,
-              color: StreetFoodMafiaColors.statusReady)),
-          ])),
-        if (metric.sampleCount != null && !compact) Text('Coverage: ${metric.sampleCount}'
-          '${metric.populationCount == null ? ' valid samples' : ' / ${metric.populationCount}'}', style: const TextStyle(fontSize: 12)),
-        if (metric.isBalance && _query.comparisonMode != AnalyticsComparisonMode.none)
-          const Text('Comparison: Not applicable (snapshot balance)',
-            style: TextStyle(fontSize: 11, color: StreetFoodMafiaColors.secondaryText)),
-        if (!metric.isBalance && _query.comparisonMode != AnalyticsComparisonMode.none) ...[
-          if (metric.priorValue != null)
-            Text('Prior: ${_format(metric.priorValue, metric.unit)}',
-              style: const TextStyle(fontSize: 12)),
-          if (metric.changeAbsolute != null) Text('Change: ${metric.changeAbsolute! >= 0 ? '+' : ''}'
-            '${_format(metric.changeAbsolute, metric.unit)} vs ${_query.comparisonMode == AnalyticsComparisonMode.comparableWeekday ? "comparable weekday" : "preceding comparable period"}', style: const TextStyle(fontSize: 12)),
-          if (metric.changePercent != null) Text('${metric.changePercent! >= 0 ? '+' : ''}'
-            '${metric.changePercent!.toStringAsFixed(1)}% vs ${_query.comparisonMode == AnalyticsComparisonMode.comparableWeekday ? "comparable weekday" : "preceding comparable period"}', style: const TextStyle(fontSize: 12)),
-          if (metric.changePercent == null && metric.priorValue == 0)
-            const Text('Percent change: Unavailable (zero baseline)',
+          Tooltip(message: metric.explanation, child: Text(summary,
+            maxLines: 2, overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 11, height: 1.5, color: StreetFoodMafiaColors.secondaryText))),
+          if (metric.id == 'negative_stock' && metric.value == 0 && metric.quality == AnalyticsQuality.complete)
+            const Padding(padding: EdgeInsets.only(top: 6), child: Row(children: [
+              Icon(Icons.check_circle, size: 15, color: StreetFoodMafiaColors.statusReady),
+              SizedBox(width: 6), Text('No negative stock', style: TextStyle(fontSize: 11,
+                color: StreetFoodMafiaColors.statusReady)),
+            ])),
+          if (metric.sampleCount != null && !compact) Text('Coverage: ${metric.sampleCount}'
+            '${metric.populationCount == null ? ' valid samples' : ' / ${metric.populationCount}'}', style: const TextStyle(fontSize: 12)),
+          if (metric.isBalance && _query.comparisonMode != AnalyticsComparisonMode.none)
+            const Text('Comparison: Not applicable (snapshot balance)',
               style: TextStyle(fontSize: 11, color: StreetFoodMafiaColors.secondaryText)),
-        ],
-      ])));
+          if (!metric.isBalance && _query.comparisonMode != AnalyticsComparisonMode.none) ...[
+            if (metric.priorValue != null)
+              Text('Prior: ${_format(metric.priorValue, metric.unit)}',
+                style: const TextStyle(fontSize: 12)),
+            if (metric.changeAbsolute != null) Text('Change: ${metric.changeAbsolute! >= 0 ? '+' : ''}'
+              '${_format(metric.changeAbsolute, metric.unit)} vs ${_query.comparisonMode == AnalyticsComparisonMode.comparableWeekday ? "comparable weekday" : "preceding comparable period"}', style: const TextStyle(fontSize: 12)),
+            if (metric.changePercent != null) Text('${metric.changePercent! >= 0 ? '+' : ''}'
+              '${metric.changePercent!.toStringAsFixed(1)}% vs ${_query.comparisonMode == AnalyticsComparisonMode.comparableWeekday ? "comparable weekday" : "preceding comparable period"}', style: const TextStyle(fontSize: 12)),
+            if (metric.changePercent == null && metric.priorValue == 0)
+              const Text('Percent change: Unavailable (zero baseline)',
+                style: TextStyle(fontSize: 11, color: StreetFoodMafiaColors.secondaryText)),
+          ],
+        ]))),
+    );
   }
 
   Widget _note(String text) => Padding(padding: const EdgeInsets.symmetric(vertical: 5),
@@ -651,7 +1072,9 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
 
 String _format(Object? value, AnalyticsUnit? unit) {
   if (value == null) return 'Unavailable';
-  if (value is! num) return value.toString();
+  if (value is! num) {
+    return value.toString().replaceAll(RegExp(r'(?:\+?92[ -]?|0)3\d{2}[ -]?\d{7}'), '[phone masked]');
+  }
   return switch (unit) {
     AnalyticsUnit.paisa => 'PKR ${NumberFormat('#,##0.00').format(value / 100)}',
     AnalyticsUnit.percent => '${value.toStringAsFixed(1)}%',
@@ -826,7 +1249,11 @@ class _SourceTableState extends State<_SourceTable> {
         ), const DataColumn(label: Text('Source'))],
         rows: [for (final row in rows.sublist(start, end)) DataRow(cells: [
           for (final column in section.columns) DataCell(_cell(row, column)),
-          DataCell(TextButton(onPressed: () => widget.onShowSource(row), child: Text(_sourceLabel(row)))),
+          DataCell(TextButton(
+            key: ValueKey('kpi_inspect_source_${row.id}'),
+            onPressed: () => widget.onShowSource(row),
+            child: Text(_sourceLabel(row)),
+          )),
         ])],
       )))),
       Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: Wrap(alignment: WrapAlignment.end,
