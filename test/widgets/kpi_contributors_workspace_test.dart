@@ -214,6 +214,7 @@ void main() {
     // Find the row's inspect source button
     final inspectFinder = find.byKey(const ValueKey('kpi_inspect_source_day-1'));
     expect(inspectFinder, findsOneWidget);
+    await tester.ensureVisible(inspectFinder);
     await tester.tap(inspectFinder);
     await tester.pumpAndSettle();
 
@@ -222,8 +223,17 @@ void main() {
     expect(find.textContaining('Source IDs: 101'), findsOneWidget);
 
     // Close source detail dialog
+    await tester.tap(find.text('Close').last);
+    await tester.pumpAndSettle();
+
+    // Source dialog should be closed while KPI contributor dialog remains active
+    expect(find.textContaining('Safe reporting projection'), findsNothing);
+    expect(find.byKey(const ValueKey('kpi_contributor_dialog')), findsOneWidget);
+
+    // Close KPI contributor dialog
     await tester.tap(find.text('Close'));
     await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('kpi_contributor_dialog')), findsNothing);
   });
 
   testWidgets('Allows saving, listing, and switching report presets', (tester) async {

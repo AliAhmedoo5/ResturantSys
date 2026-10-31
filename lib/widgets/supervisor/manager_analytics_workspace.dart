@@ -546,7 +546,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
             ],
           ),
           content: SizedBox(
-            width: 780,
+            width: 860,
             height: 520,
             child: SingleChildScrollView(
               child: Column(
