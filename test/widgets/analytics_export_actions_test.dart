@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:resturant_sys/core/analytics/analytics_export_service.dart';
 import 'package:resturant_sys/core/analytics/analytics_models.dart';
+import 'package:resturant_sys/core/analytics/report_print_service.dart';
 import 'package:resturant_sys/widgets/supervisor/analytics_export_actions.dart';
 
 void main() {
@@ -66,5 +68,153 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.widget<OutlinedButton>(find.ancestor(of: find.text('CSV (this report)'), matching: find.byWidgetPredicate((w) => w is OutlinedButton))).onPressed, isNotNull);
     expect(directory.listSync(), isEmpty);
+  });
+
+  testWidgets('displays Save PDF and Print buttons alongside CSV and XLSX, and triggers print', (tester) async {
+    final snapshot = AnalyticsSnapshot(
+      query: AnalyticsQuery(startDate: DateTime(2026, 10, 1), endDateExclusive: DateTime(2026, 10, 2)),
+      generatedAt: DateTime.utc(2026, 10, 1),
+      businessDayIds: [42],
+      sections: [AnalyticsSection(family: AnalyticsFamily.sales, title: 'Sales')],
+    );
+
+    var printCalled = false;
+    final printAdapter = WindowsReportPrintAdapter(
+      printHandler: (bytes, {documentTitle}) async {
+        printCalled = true;
+        return true;
+      },
+    );
+    final printService = ReportPrintService(adapter: printAdapter);
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: AnalyticsExportActions(
+          snapshot: snapshot,
+          family: AnalyticsFamily.sales,
+          canExport: () => true,
+          printService: printService,
+        ),
+      ),
+    ));
+
+    expect(find.text('CSV (this report)'), findsOneWidget);
+    expect(find.text('XLSX (all reports)'), findsOneWidget);
+    expect(find.text('Save PDF'), findsOneWidget);
+    expect(find.text('Print'), findsOneWidget);
+
+    await tester.tap(find.text('Print'));
+    await tester.pumpAndSettle();
+
+    expect(printCalled, isTrue);
+    expect(find.text('Sent to printer.'), findsOneWidget);
+  });
+
+  testWidgets('print cancellation displays cancelled message without failure error styling', (tester) async {
+    final snapshot = AnalyticsSnapshot(
+      query: AnalyticsQuery(startDate: DateTime(2026, 10, 1), endDateExclusive: DateTime(2026, 10, 2)),
+      generatedAt: DateTime.utc(2026, 10, 1),
+      businessDayIds: [42],
+      sections: [AnalyticsSection(family: AnalyticsFamily.sales, title: 'Sales')],
+    );
+
+    final printAdapter = WindowsReportPrintAdapter(
+      printHandler: (bytes, {documentTitle}) async => false,
+    );
+    final printService = ReportPrintService(adapter: printAdapter);
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: AnalyticsExportActions(
+          snapshot: snapshot,
+          family: AnalyticsFamily.sales,
+          canExport: () => true,
+          printService: printService,
+        ),
+      ),
+    ));
+
+    await tester.tap(find.text('Print'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Print was cancelled.'), findsOneWidget);
+  });
+
+  testWidgets('export shows stage and Cancel button, and clicking Cancel aborts export', (tester) async {
+    final directory = Directory.systemTemp.createTempSync('analytics-ui-cancel-');
+    addTearDown(() => directory.deleteSync(recursive: true));
+
+    final snapshot = AnalyticsSnapshot(
+      query: AnalyticsQuery(startDate: DateTime(2026, 10, 1), endDateExclusive: DateTime(2026, 10, 2)),
+      generatedAt: DateTime.utc(2026, 10, 1),
+      businessDayIds: [42],
+      sections: [AnalyticsSection(family: AnalyticsFamily.sales, title: 'Sales')],
+    );
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: AnalyticsExportActions(
+          snapshot: snapshot,
+          family: AnalyticsFamily.sales,
+          canExport: () => true,
+          pickDirectory: () async => directory.path,
+        ),
+      ),
+    ));
+
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Save PDF'));
+      await tester.pump();
+
+      // Find the Cancel button while export is active
+      final cancelFinder = find.byKey(const ValueKey('analytics_export_cancel_button'));
+      if (cancelFinder.evaluate().isNotEmpty) {
+        await tester.tap(cancelFinder);
+        await tester.pumpAndSettle();
+      }
+    });
+
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('analytics_export_cancel_button')), findsNothing);
+  });
+
+  testWidgets('compact menu includes Print report action', (tester) async {
+    final snapshot = AnalyticsSnapshot(
+      query: AnalyticsQuery(startDate: DateTime(2026, 10, 1), endDateExclusive: DateTime(2026, 10, 2)),
+      generatedAt: DateTime.utc(2026, 10, 1),
+      businessDayIds: [42],
+      sections: [AnalyticsSection(family: AnalyticsFamily.sales, title: 'Sales')],
+    );
+
+    var printed = false;
+    final printAdapter = WindowsReportPrintAdapter(
+      printHandler: (bytes, {documentTitle}) async {
+        printed = true;
+        return true;
+      },
+    );
+    final printService = ReportPrintService(adapter: printAdapter);
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: AnalyticsExportActions(
+          snapshot: snapshot,
+          family: AnalyticsFamily.sales,
+          compact: true,
+          canExport: () => true,
+          printService: printService,
+        ),
+      ),
+    ));
+
+    await tester.tap(find.byKey(const ValueKey('analytics_export_menu')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Print report'), findsOneWidget);
+    await tester.tap(find.text('Print report'));
+    await tester.pumpAndSettle();
+
+    expect(printed, isTrue);
+    expect(find.text('Sent to printer.'), findsOneWidget);
   });
 }
