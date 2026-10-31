@@ -72,4 +72,112 @@ void main() {
     expect(csv, contains('Sum eligible committed orders'));
     expect(csv, isNot(contains('No event-time costing')));
   });
+
+  test('saveToDirectory reports stage and progress updates monotonically', () async {
+    final directory = await Directory.systemTemp.createTemp('analytics-progress-');
+    addTearDown(() => directory.delete(recursive: true));
+    final service = AnalyticsExportService();
+    final stages = <String>[];
+    final progressValues = <int>[];
+
+    final file = await service.saveToDirectory(
+      fixture(),
+      AnalyticsFamily.sales,
+      AnalyticsExportFormat.csv,
+      directory.path,
+      onProgress: (stage, current, total) {
+        stages.add(stage);
+        progressValues.add(current);
+        expect(current, lessThanOrEqualTo(total));
+      },
+    );
+
+    expect(await file.exists(), isTrue);
+    expect(stages, isNotEmpty);
+    expect(progressValues, isNotEmpty);
+  });
+
+  test('saveToDirectory aborts immediately and cleans up partial file when cancelled', () async {
+    final directory = await Directory.systemTemp.createTemp('analytics-cancel-');
+    addTearDown(() => directory.delete(recursive: true));
+    final service = AnalyticsExportService();
+
+    await expectLater(
+      service.saveToDirectory(
+        fixture(),
+        AnalyticsFamily.sales,
+        AnalyticsExportFormat.csv,
+        directory.path,
+        isCancelled: () => true,
+      ),
+      throwsA(isA<ExportCancelledException>()),
+    );
+
+    final files = directory.listSync();
+    expect(files.where((f) => f.path.endsWith('.partial')), isEmpty);
+    expect(files.where((f) => f.path.endsWith('.csv')), isEmpty);
+  });
+
+  test('cancellation preserves pre-existing completed destination file without overwrite or deletion', () async {
+    final directory = await Directory.systemTemp.createTemp('analytics-preserve-');
+    addTearDown(() => directory.delete(recursive: true));
+    final service = AnalyticsExportService();
+
+    // Create a pre-existing completed file in the directory
+    final existingFile = File('${directory.path}/manager-analytics-sales-preexisting.csv');
+    await existingFile.writeAsString('ORIGINAL_CONTENT_PRESERVED', flush: true);
+
+    final token = ExportCancellationToken();
+    var progressCount = 0;
+
+    await expectLater(
+      service.saveToDirectory(
+        fixture(),
+        AnalyticsFamily.sales,
+        AnalyticsExportFormat.csv,
+        directory.path,
+        cancellationToken: token,
+        onProgress: (stage, current, total) {
+          progressCount++;
+          // Cancel during progress
+          token.cancel();
+        },
+      ),
+      throwsA(isA<ExportCancelledException>()),
+    );
+
+    expect(progressCount, greaterThan(0));
+    // Verify existing file is completely intact
+    expect(await existingFile.exists(), isTrue);
+    expect(await existingFile.readAsString(), 'ORIGINAL_CONTENT_PRESERVED');
+
+    // Verify no partial file remains
+    final files = directory.listSync();
+    expect(files.where((f) => f.path.endsWith('.partial')), isEmpty);
+  });
+
+  test('saveToDirectory cleans partial file if authorization expires during export', () async {
+    final directory = await Directory.systemTemp.createTemp('analytics-expiry-');
+    addTearDown(() => directory.delete(recursive: true));
+    final service = AnalyticsExportService();
+    var calls = 0;
+
+    await expectLater(
+      service.saveToDirectory(
+        fixture(),
+        AnalyticsFamily.sales,
+        AnalyticsExportFormat.csv,
+        directory.path,
+        canWrite: () {
+          calls++;
+          // Fail authorization after initial checks
+          return calls <= 1;
+        },
+      ),
+      throwsA(isA<StateError>()),
+    );
+
+    final files = directory.listSync();
+    expect(files.where((f) => f.path.endsWith('.partial')), isEmpty);
+  });
 }
