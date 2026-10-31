@@ -817,6 +817,9 @@ class _ReportBuilder {
     int reconciledIngredientsCount = 0;
     int openingEvidenceCount = 0;
     int missingOpeningCount = 0;
+    int totalEndingValuationPaisa = 0;
+    int coveredIngredientsCount = 0;
+    int negativeBalanceCount = 0;
 
     for (final ing in ingredients) {
       final ingId = ing['id'] as int;
@@ -933,6 +936,101 @@ class _ReportBuilder {
         reconciledIngredientsCount++;
       }
 
+      // --- Moving WAC Calculation (ADR-0023 / Ticket #91) ---
+      final ingPurchases = <_ProcurementReceipt>[];
+      for (final p in allPurchases.where((p) => p['raw_ingredient_id'] == ingId &&
+          (p['created_at'] as String).compareTo(cutoffTime) <= 0)) {
+        final qty = ((p['converted_quantity'] ?? p['quantity']) as num).toDouble();
+        final costPaisa = _money(p, 'total_cost');
+        if (qty > 0) {
+          ingPurchases.add(_ProcurementReceipt(
+            timestamp: p['created_at'] as String,
+            quantity: qty,
+            costPaisa: costPaisa,
+          ));
+        }
+      }
+      for (final t in allCreditTxns.where((t) => t['raw_ingredient_id'] == ingId && t['type'] == 'PURCHASE_CREDIT' &&
+          (t['created_at'] as String).compareTo(cutoffTime) <= 0)) {
+        final qty = ((t['quantity'] ?? 0) as num).toDouble();
+        final costPaisa = (t['amount_paisa'] as int?) ?? (t['amount'] != null ? ((t['amount'] as num) * 100).round() : 0);
+        if (qty > 0) {
+          ingPurchases.add(_ProcurementReceipt(
+            timestamp: t['created_at'] as String,
+            quantity: qty,
+            costPaisa: costPaisa,
+          ));
+        }
+      }
+      ingPurchases.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+      final initialCostPaisa = (unitCostRate != null && (unitCostRate as num) > 0)
+          ? PaisaEngine.rupeesToPaisa(unitCostRate as num)
+          : 0;
+
+      double runningWacPaisa = initialCostPaisa > 0 ? initialCostPaisa.toDouble() : 0.0;
+      double lastKnownWacPaisa = runningWacPaisa;
+      bool hasCostEvidence = initialCostPaisa > 0 || ingPurchases.isNotEmpty;
+
+      // Chronologically advance WAC through purchases
+      for (final p in ingPurchases) {
+        final priorMovements = allMovements.where((m) => m['ingredient_id'] == ingId &&
+            (m['recorded_at'] as String).compareTo(p.timestamp) < 0).toList();
+        final stockBefore = priorMovements.isNotEmpty
+            ? (priorMovements.last['balance_after'] as num).toDouble()
+            : 0.0;
+
+        final unitRate = p.costPaisa / p.quantity;
+        if (stockBefore <= 0) {
+          // Deficit covered at new purchase rate (ADR-0023 Section 2)
+          runningWacPaisa = unitRate;
+          lastKnownWacPaisa = unitRate;
+        } else {
+          if (runningWacPaisa > 0) {
+            runningWacPaisa = ((stockBefore * runningWacPaisa) + p.costPaisa) / (stockBefore + p.quantity);
+            lastKnownWacPaisa = runningWacPaisa;
+          } else {
+            runningWacPaisa = unitRate;
+            lastKnownWacPaisa = unitRate;
+          }
+        }
+      }
+
+      int movingWacPaisa = runningWacPaisa.round();
+      int? valuationPaisa;
+      String valuationBadge;
+      String costQuality;
+
+      if (endingQty < 0) {
+        valuationPaisa = 0;
+        valuationBadge = 'Estimated valuation: item in temporary negative balance';
+        costQuality = 'temporary_negative';
+      } else if (endingQty == 0) {
+        valuationPaisa = 0;
+        valuationBadge = 'Zero stock balance';
+        costQuality = 'verified';
+      } else {
+        if (hasCostEvidence && movingWacPaisa > 0) {
+          valuationPaisa = (endingQty * movingWacPaisa).round();
+          valuationBadge = 'Verified Moving WAC';
+          costQuality = 'verified';
+        } else {
+          valuationPaisa = null;
+          valuationBadge = 'Missing purchase cost evidence';
+          costQuality = 'unknown';
+        }
+      }
+
+      if (hasCostEvidence) {
+        coveredIngredientsCount++;
+      }
+      if (endingQty < 0) {
+        negativeBalanceCount++;
+      }
+      if (valuationPaisa != null) {
+        totalEndingValuationPaisa += valuationPaisa;
+      }
+
       bridgeRows.add(AnalyticsRow(
         id: 'stock-bridge-$ingId',
         sourceType: 'raw_ingredients',
@@ -956,6 +1054,12 @@ class _ReportBuilder {
           'has_opening_evidence': hasOpeningEvidence ? 'Verified' : 'Missing opening evidence',
           'balance_evidence_at': openingEvidenceAt,
           'recorded_cost_rate': unitCostRate,
+          'moving_wac_paisa': movingWacPaisa,
+          'valuation_paisa': valuationPaisa,
+          'valuation_policy': 'Moving Weighted Average Cost (WAC)',
+          'valuation_badge': valuationBadge,
+          'cost_quality': costQuality,
+          'valuation_cutoff': cutoffTime,
           'status': currentStock < 0 ? 'Negative' : currentStock <= threshold ? 'Low' : 'Within threshold',
         },
       ));
@@ -1005,6 +1109,12 @@ class _ReportBuilder {
         rows.add(AnalyticsRow(id: 'order_items-${item['id']}-bom-${entry.key}', sourceType: 'order_items', sourceId: '${item['id']}', cells: {'kind': 'BOM quantity snapshot', 'order_id': item['order_id'], 'ingredient_id': entry.key, 'quantity': entry.value}));
       }
     }
+    final valuationQuality = coveredIngredientsCount == ingredients.length && negativeBalanceCount == 0
+        ? AnalyticsQuality.good
+        : coveredIngredientsCount > 0
+            ? AnalyticsQuality.estimated
+            : AnalyticsQuality.missing;
+
     return _section(AnalyticsFamily.inventory, 'Inventory', [
       _metric('ingredients', 'Current ingredients', ingredients.length, unit: AnalyticsUnit.count, explanation: _currentBasis, isBalance: true),
       _metric('reconciled_ingredients', 'Reconciled stock bridges', reconciledIngredientsCount, unit: AnalyticsUnit.count, explanation: 'Ingredients whose opening + receipts - consumption - waste + returns + adjustments exactly equals ending quantity.'),
@@ -1016,20 +1126,26 @@ class _ReportBuilder {
       _metric('movement_count', 'Recorded movements', e.get('inventory').length, unit: AnalyticsUnit.count, explanation: 'Movement rows attributed by Business Day FK since v14 capture; no fabricated pre-upgrade history.'),
       _coverage('as_of_coverage', 'As-of balance evidence coverage', balances.length, ingredients.length, 'Latest recorded balance_after no later than last selected close/refresh. No evidence means unknown, not opening balance zero.', isBalance: true),
       _coverage('bom_coverage', 'Sold-line BOM quantity coverage', bomCovered, soldItems.length, 'Valid sold lines with readable quantity snapshot. Quantity evidence is not event-time costing.'),
-      _missing('stock_valuation', 'Historical stock valuation', 'No historical cost layers. Current unit cost cannot rewrite past valuation.'),
+      _metric('stock_valuation', 'Historical stock valuation', totalEndingValuationPaisa, quality: valuationQuality, explanation: 'Ending inventory asset valuation under Moving Weighted Average Cost (WAC) at cutoff. Temporary negative stock balances contribute PKR 0.00 to balance-sheet assets.', unavailable: coveredIngredientsCount == 0),
+      _coverage('valuation_coverage', 'Inventory valuation coverage', coveredIngredientsCount, ingredients.length, 'Tracked ingredients with verified acquisition cost layers under Moving WAC at cutoff.'),
+      _metric('negative_stock_asset_value', 'Negative stock balance-sheet asset value', 0, explanation: 'Per ADR-0023, items with negative on-hand balance contribute PKR 0.00 to balance-sheet assets.'),
       _metric('physical_variance', 'Posted physical count lines', e.get('physical_counts').length, unit: AnalyticsUnit.count, explanation: 'Posted observations in selected Business Day intervals. Inspect per-ingredient variances below; incompatible units are never totaled.'),
       _metric('physical_variance_cost', 'Estimated physical variance value', _integers(e.get('physical_counts'), 'estimated_cost_paisa'), explanation: 'Signed event-time count estimates; unknown rates prevent a complete total.', unavailable: e.get('physical_counts').any((c) => c['estimated_cost_paisa'] == null)),
     ], rows, [
       'kind', 'ingredient_id', 'name', 'unit', 'opening_qty', 'receipts_qty', 'consumption_qty', 'waste_qty',
       'returns_qty', 'adjustments_qty', 'unexplained_variance', 'ending_qty', 'reconciliation_status',
+      'moving_wac_paisa', 'valuation_paisa', 'valuation_policy', 'valuation_badge', 'cost_quality', 'valuation_cutoff',
       'current_stock', 'threshold', 'has_opening_evidence', 'balance_evidence_at', 'recorded_cost_rate',
       'as_of_balance', 'quantity_delta', 'balance_after', 'quantity', 'spend_paisa', 'loss_paisa', 'count_id',
       'expected', 'counted', 'variance', 'estimated_cost_paisa', 'recorded_estimated_cost_paisa',
-      'valuation_policy', 'movement_id', 'snapshot_sequence', 'created_by', 'approved_by', 'posted_by',
+      'movement_id', 'snapshot_sequence', 'created_by', 'approved_by', 'posted_by',
       'reason', 'status', 'recorded_at'
     ], [
       'Normalized stock bridges reconcile in each ingredient\'s base unit (g, ml, count); never sum quantities across different unit dimensions.',
       'Opening plus receipts minus consumption minus waste plus returns plus adjustments equals ending quantity without double counting.',
+      'Inventory valuation method: Moving Weighted Average Cost (WAC) evaluated at cutoff $cutoffTime.',
+      'Per ADR-0023, items with negative on-hand balance contribute PKR 0.00 asset value to the balance sheet with an explicit temporary negative balance badge.',
+      'Historical acquisition-rate sales COGS is strictly preserved and never retroactively recalculated by subsequent procurement receipts or cost drift.',
       'Recorded unit cost rates represent historical master-data rate evidence; they are described separately from stock valuation.',
       'Missing opening balance evidence is disclosed rather than backfilled as zero.',
       _currentBasis,
@@ -2228,4 +2344,15 @@ class _EvaluatedCommitment {
   final String recordedAt;
   final int recordedBy;
   final _Record record;
+}
+
+class _ProcurementReceipt {
+  _ProcurementReceipt({
+    required this.timestamp,
+    required this.quantity,
+    required this.costPaisa,
+  });
+  final String timestamp;
+  final double quantity;
+  final int costPaisa;
 }

@@ -411,9 +411,10 @@ void main() {
         (bridgeRow.cells['adjustments_qty'] as double);
     expect(calculatedEnding, equals(1260.0));
 
-    // Verify stock valuation metric remains honestly missing (policy undecided until #90)
+    // Verify stock valuation metric under approved Moving WAC policy (ADR-0023 / Ticket #91)
     final valMetric = invSection.metrics.firstWhere((m) => m.id == 'stock_valuation');
-    expect(valMetric.quality, equals(AnalyticsQuality.missing));
+    expect(valMetric.value, equals(107100)); // 1260g * 85 paisa/g = 107,100 paisa (PKR 1,071.00)
+    expect(valMetric.quality, equals(AnalyticsQuality.good));
 
     // Reconciled ingredients metric
     final recMetric = invSection.metrics.firstWhere((m) => m.id == 'reconciled_ingredients');
