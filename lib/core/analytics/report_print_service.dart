@@ -18,7 +18,7 @@ class WindowsReportPrintAdapter {
   /// Returns `true` if accepted/printed, `false` if cancelled or unavailable.
   Future<bool> printPdf(List<int> pdfBytes, {String? documentTitle}) async {
     if (_handler != null) {
-      return await _handler!(pdfBytes, documentTitle: documentTitle);
+      return await _handler(pdfBytes, documentTitle: documentTitle);
     }
     if (!Platform.isWindows) {
       return false;
