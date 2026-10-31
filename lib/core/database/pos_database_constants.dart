@@ -1,6 +1,6 @@
 /// Constants and default configuration for the SQLite database.
 abstract final class PosDatabaseConstants {
-  static const int schemaVersion = 27;
+  static const int schemaVersion = 28;
   static const String databaseFileName = 'pos.db';
   static const String defaultProgramDataFolder = 'ResturantPOS';
   static const String defaultDataSubFolder = 'data';
@@ -61,6 +61,9 @@ abstract final class PosDatabaseConstants {
 
   // Rounding Variance Ledger (Schema v9)
   static const String tableRoundingVarianceLedger = 'rounding_variance_ledger';
+
+  // Manager Report Presets (Schema v28)
+  static const String tableManagerReportPresets = 'manager_report_presets';
 
   // Settings Keys
   static const String settingDiscrepancyThreshold = 'discrepancy_threshold';
