@@ -98,6 +98,7 @@ class AnalyticsService {
     await read('items', 'order_items', 'SELECT x.id,x.order_id,x.menu_item_id,x.deal_id,x.name,x.quantity,x.unit_price,x.total_price,x.modifiers_json,x.deal_choices_json,x.bom_json FROM order_items x $joinedOrder', orderArgs);
     await read('allocations', 'order_item_allocations', 'SELECT x.* FROM order_item_allocations x $joinedOrder', orderArgs);
     await read('revisions', 'order_revisions', 'SELECT x.id,x.order_id,x.revision_no,x.action,x.reason,x.cashier_id,x.created_at_utc,x.money_delta_paisa FROM order_revisions x $joinedOrder', orderArgs);
+    await read('order_status_events', 'order_status_events', 'SELECT x.* FROM order_status_events x $joinedOrder ORDER BY x.id', orderArgs);
     await read('cost_coverage', 'order_cost_coverage', 'SELECT x.* FROM order_cost_coverage x $joinedOrder', orderArgs);
     await read('cost_events', 'order_cost_events', 'SELECT x.* FROM order_cost_events x $joinedOrder', orderArgs);
     // A physical drawer uses all orders in its shifts; order filters never alter it.
