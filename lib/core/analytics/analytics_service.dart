@@ -70,6 +70,7 @@ class AnalyticsService {
     // Current Holds have no Business Day/Shift assignment or retained deleted
     // lifecycle. Never read private draft content into reporting evidence.
     await read('active_holds', 'held_carts', 'SELECT id,cashier_id,created_at FROM held_carts${query.cashierId == null ? '' : ' WHERE cashier_id=?'} ORDER BY created_at,id', [if (query.cashierId != null) query.cashierId]);
+    await read('hold_lifecycle_events', 'hold_lifecycle_events', 'SELECT id,hold_id,cashier_id,event_type,order_id,previous_hold_id,recorded_at FROM hold_lifecycle_events${query.cashierId == null ? '' : ' WHERE cashier_id=?'} ORDER BY recorded_at,id', [if (query.cashierId != null) query.cashierId]);
     await read('first_purchases', 'orders', "SELECT o.id,o.customer_phone,o.created_at FROM orders o WHERE o.customer_phone IS NOT NULL AND o.customer_phone != '' AND o.payment_status NOT IN ('CANCELLED','VOIDED','REFUNDED') ORDER BY o.id");
     await read('order_days', 'business_days', 'SELECT DISTINCT b.id,b.opened_at,b.closed_at,b.status FROM business_days b JOIN orders o ON o.business_day_id=b.id WHERE $orderScope ORDER BY b.opened_at,b.id', orderArgs);
     await read('order_shifts', 'shifts', 'SELECT DISTINCT s.* FROM shifts s JOIN orders o ON o.shift_id=s.id JOIN business_days b ON b.id=o.business_day_id WHERE $orderScope ORDER BY s.id', orderArgs);
