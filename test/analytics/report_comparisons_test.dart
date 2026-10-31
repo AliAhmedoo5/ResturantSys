@@ -109,7 +109,7 @@ void main() {
       final dayId = await db.insert('business_days', {
         'opened_at': '$openDate 18:00:00',
         'closed_at': '$closeDate 02:00:00',
-        'status': status,
+        'status': 'OPEN',
         'opened_by_staff_id': manager['id'],
       });
       final shiftId = await db.insert('shifts', {
@@ -140,6 +140,9 @@ void main() {
           'change_returned': 0,
           'change_returned_paisa': 0,
         });
+      }
+      if (status == 'CLOSED') {
+        await db.update('business_days', {'status': 'CLOSED'}, where: 'id = ?', whereArgs: [dayId]);
       }
       return dayId;
     }

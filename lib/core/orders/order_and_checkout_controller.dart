@@ -250,16 +250,43 @@ class OrderAndCheckoutController {
     return database.transaction((txn) async {
       await _requireActiveCashier(txn, cashierId);
       if (items.isEmpty || label.trim().isEmpty) throw ArgumentError('Enter a hold label and add items.');
+      final nowUtc = DateTime.now().toUtc().toIso8601String();
       if (previousHoldId != null) {
-        await txn.delete('held_carts', where: 'id = ? AND cashier_id = ?', whereArgs: [previousHoldId, cashierId]);
+        final existing = await txn.query('held_carts', where: 'id = ? AND cashier_id = ?', whereArgs: [previousHoldId, cashierId]);
+        if (existing.isNotEmpty) {
+          final old = existing.single;
+          await txn.insert('hold_lifecycle_events', {
+            'hold_id': previousHoldId,
+            'cashier_id': cashierId,
+            'event_type': 'REPLACED',
+            'order_id': null,
+            'previous_hold_id': previousHoldId,
+            'label': old['label'] as String,
+            'payload': old['payload'] as String,
+            'recorded_at': nowUtc,
+          });
+          await txn.delete('held_carts', where: 'id = ? AND cashier_id = ?', whereArgs: [previousHoldId, cashierId]);
+        }
       }
-      return txn.insert('held_carts', {'cashier_id': cashierId, 'label': label.trim(),
-        'created_at': DateTime.now().toUtc().toIso8601String(), 'payload': jsonEncode({
-          'items': items.map(encodeDraftLine).toList(), 'dining_type': diningType.code,
-          'customer_id': customerId, 'discount_id': discountId, 'discount_ids': discountIds,
-          'delivery': delivery == null ? null : {'area_id': delivery.areaId, 'fee': delivery.quotedFeePaisa,
-            'phone': delivery.phone, 'name': delivery.customerName, 'address': delivery.fullAddress,
-            'landmark': delivery.landmark, 'notes': delivery.notes}})});
+      final payload = jsonEncode({
+        'items': items.map(encodeDraftLine).toList(), 'dining_type': diningType.code,
+        'customer_id': customerId, 'discount_id': discountId, 'discount_ids': discountIds,
+        'delivery': delivery == null ? null : {'area_id': delivery.areaId, 'fee': delivery.quotedFeePaisa,
+          'phone': delivery.phone, 'name': delivery.customerName, 'address': delivery.fullAddress,
+          'landmark': delivery.landmark, 'notes': delivery.notes}});
+      final newHoldId = await txn.insert('held_carts', {'cashier_id': cashierId, 'label': label.trim(),
+        'created_at': nowUtc, 'payload': payload});
+      await txn.insert('hold_lifecycle_events', {
+        'hold_id': newHoldId,
+        'cashier_id': cashierId,
+        'event_type': 'CREATED',
+        'order_id': null,
+        'previous_hold_id': null,
+        'label': label.trim(),
+        'payload': payload,
+        'recorded_at': nowUtc,
+      });
+      return newHoldId;
     });
   }
 
@@ -268,12 +295,47 @@ class OrderAndCheckoutController {
     return database.query('held_carts', where: 'cashier_id = ?', whereArgs: [cashierId], orderBy: 'id DESC');
   }
 
+  Future<Map<String, Object?>> recallHold(int cashierId, int id) async {
+    return database.transaction((txn) async {
+      await _requireActiveCashier(txn, cashierId);
+      final rows = await txn.query('held_carts', where: 'id = ? AND cashier_id = ?', whereArgs: [id, cashierId]);
+      if (rows.isEmpty) throw StateError('Hold no longer exists.');
+      final hold = rows.single;
+      final nowUtc = DateTime.now().toUtc().toIso8601String();
+      await txn.insert('hold_lifecycle_events', {
+        'hold_id': id,
+        'cashier_id': cashierId,
+        'event_type': 'RECALLED',
+        'order_id': null,
+        'previous_hold_id': null,
+        'label': hold['label'] as String,
+        'payload': hold['payload'] as String,
+        'recorded_at': nowUtc,
+      });
+      return hold;
+    });
+  }
+
   Future<void> removeHold(int cashierId, int id) async {
     await database.transaction((txn) async {
       await _requireActiveCashier(txn, cashierId);
+      final rows = await txn.query('held_carts', where: 'id = ? AND cashier_id = ?', whereArgs: [id, cashierId]);
+      if (rows.isEmpty) throw StateError('Hold no longer exists.');
+      final hold = rows.single;
       if (await txn.delete('held_carts', where: 'id = ? AND cashier_id = ?', whereArgs: [id, cashierId]) != 1) {
         throw StateError('Hold no longer exists.');
       }
+      final nowUtc = DateTime.now().toUtc().toIso8601String();
+      await txn.insert('hold_lifecycle_events', {
+        'hold_id': id,
+        'cashier_id': cashierId,
+        'event_type': 'DISCARDED',
+        'order_id': null,
+        'previous_hold_id': null,
+        'label': hold['label'] as String,
+        'payload': hold['payload'] as String,
+        'recorded_at': nowUtc,
+      });
     });
   }
 
@@ -496,9 +558,13 @@ class OrderAndCheckoutController {
       // 1. Daily Sequential Token
       final tokenNumber = await getNextTokenNumber(businessDayId, txn);
 
-      if (heldCartId != null && await txn.delete('held_carts', where: 'id = ? AND cashier_id = ?',
-          whereArgs: [heldCartId, cashierId]) != 1) {
-        throw StateError('Held cart was already checked out or removed.');
+      Map<String, Object?>? heldCartRow;
+      if (heldCartId != null) {
+        final existing = await txn.query('held_carts', where: 'id = ? AND cashier_id = ?', whereArgs: [heldCartId, cashierId]);
+        if (existing.isEmpty || await txn.delete('held_carts', where: 'id = ? AND cashier_id = ?', whereArgs: [heldCartId, cashierId]) != 1) {
+          throw StateError('Held cart was already checked out or removed.');
+        }
+        heldCartRow = existing.single;
       }
       if (customerId == null && delivery != null) {
         final phone = DeliveryController.normalizePhone(delivery.phone);
@@ -552,6 +618,19 @@ class OrderAndCheckoutController {
           'created_at': formattedNow,
         },
       );
+
+      if (heldCartId != null && heldCartRow != null) {
+        await txn.insert('hold_lifecycle_events', {
+          'hold_id': heldCartId,
+          'cashier_id': cashierId,
+          'event_type': 'CONVERTED',
+          'order_id': orderId,
+          'previous_hold_id': null,
+          'label': heldCartRow['label'] as String,
+          'payload': heldCartRow['payload'] as String,
+          'recorded_at': DateTime.now().toUtc().toIso8601String(),
+        });
+      }
 
       for (final discount in selectedDiscounts) {
         await txn.insert('order_discounts', {'order_id': orderId, 'discount_id': discount.id,

@@ -423,7 +423,8 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
               })),
         ])), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))])));
     if (selected == null || !mounted) return;
-    final payload = jsonDecode(selected['payload'] as String) as Map<String, dynamic>;
+    final recalled = await controller.recallHold(widget.currentStaff.id, selected['id'] as int);
+    final payload = jsonDecode(recalled['payload'] as String) as Map<String, dynamic>;
     final lines = await controller.restoreDraftLines(payload['items'] as List<dynamic>);
     Customer? customer;
     final customerId = payload['customer_id'] as int?;
@@ -442,7 +443,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
       landmark: raw['landmark'] as String, notes: raw['notes'] as String);
     if (!mounted) return;
     setState(() { _cartItems.addAll(lines); _selectedDiningType = DiningType.fromCode(payload['dining_type'] as String);
-      _deliveryDetails = delivery; _selectedDiscounts..clear()..addAll(selectedDiscounts); _customer = customer; _recalledHoldId = selected['id'] as int; });
+      _deliveryDetails = delivery; _selectedDiscounts..clear()..addAll(selectedDiscounts); _customer = customer; _recalledHoldId = recalled['id'] as int; });
   });
 
   Future<void> _customers() => _draftAction(() async {
