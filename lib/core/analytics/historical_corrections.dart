@@ -156,6 +156,7 @@ class HistoricalCorrectionSnapshot {
   final int dayId,actorId,sourceSchemaVersion;
   final DateTime cutoff;
   final String originalSnapshotJson,originalHash,originalRecordedAt;
+  static String _safeText(Object? value) => '${value ?? ''}'.replaceAll(RegExp(r'(?:\+?92[ -]?|0)3\d{2}[ -]?\d{7}'), '[phone masked]');
   final List<Map<String,Object?>> entries;
   List<dynamic> get _sections => (jsonDecode(originalSnapshotJson) as Map<String,dynamic>)['sections'] as List<dynamic>? ?? const <dynamic>[];
   int? get originalCollectionDuePaisa {
@@ -199,7 +200,7 @@ class HistoricalCorrectionSnapshot {
     value('Original sealed','Drawer variance',originalVariancePaisa);
     if (adjusted) {
       for (final entry in entries) {
-        rows.add(AnalyticsRow(id:'correction:${entry['id']}',sourceType:'historical_corrections',sourceId:'${entry['id']}',cells:{...entry,'manager_name_snapshot':entry['manager_name_snapshot']==null?null:_ReportBuilder._safeText(entry['manager_name_snapshot']),'basis':'Adjustment bridge','measure':entry['correction_type'],'amount':entry['delta_amount_paisa']}));
+        rows.add(AnalyticsRow(id:'correction:${entry['id']}',sourceType:'historical_corrections',sourceId:'${entry['id']}',cells:{...entry,'manager_name_snapshot':entry['manager_name_snapshot']==null?null:_safeText(entry['manager_name_snapshot']),'basis':'Adjustment bridge','measure':entry['correction_type'],'amount':entry['delta_amount_paisa']}));
       }
       value('Correction-adjusted','Cash receipts',adjustedCashReceiptsPaisa);
       value('Correction-adjusted','Collection Due',adjustedCollectionDuePaisa);
