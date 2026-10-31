@@ -38,6 +38,25 @@ unknown promises or receipts are disclosed honestly rather than classified as fa
 Stable cross-references between Mandi wholesale procurements and Vendor Khata credit purchases
 unify acquisition spend and purchase counts without double-counting.
 
+### Mandi wholesale units and Moving WAC valuation (ADR-0023)
+
+Under [ADR-0023](adr/0023-historical-inventory-valuation-policy.md), wholesale
+procurements from traditional Pakistani markets (*Sabzi Mandi* and poultry vendors)
+support localized Desi purchasing units (Mann = 40kg, Pao = 250g, Dharri = 5kg, Bori = 50kg,
+Darjan = 12pcs, Peti/crate item-specific):
+- **Conversion Snapshots**: Purchase invoices snapshot the exact unit conversion
+  multiplier and base stock unit at the moment of invoice entry (`unit_multiplier`,
+  `base_unit`). Subsequent changes to unit configuration never alter historical
+  stock ledger quantities or purchase rates.
+- **Moving Weighted Average Cost (Moving WAC)**: Each posted purchase invoice
+  updates the ingredient's Moving WAC in signed 64-bit integer paisa via:
+  $$\bar{C}_{\text{new}} = \frac{(Q_{\text{current}} \times \bar{C}_{\text{old}}) + (Q_{\text{purchase}} \times C_{\text{purchase}})}{Q_{\text{current}} + Q_{\text{purchase}}}$$
+- **Negative Stock Deficit Reconciliation**: When physical deliveries arrive and are
+  consumed during rush hours before invoice entry, on-hand stock may drop below zero.
+  Posting the delayed invoice covers the negative stock deficit at the new invoice
+  rate, establishes the remaining positive stock at the invoice rate, and clears the
+  temporary negative balance badge without double-deduction or checkout block.
+
 ## Payroll
 
 Manager Portal → **Payroll** includes staff without POS login and retains inactive

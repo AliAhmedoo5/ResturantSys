@@ -112,6 +112,38 @@ _Avoid_: Stock check, recipe lock, publish block
 An inventory ledger policy where ingredient and packaging consumption is posted immediately at checkout and sales are never blocked by zero or negative stock.
 _Avoid_: Stock bypass, negative override, unconstrained inventory
 
+**Moving Weighted Average Cost (Moving WAC)**:
+The perpetual inventory valuation methodology that recomputes an ingredient's average unit cost in integer paisa upon each inbound purchase receipt using the weighted formula $\frac{(Q_{\text{current}} \times \bar{C}_{\text{old}}) + (Q_{\text{purchase}} \times C_{\text{purchase}})}{Q_{\text{current}} + Q_{\text{purchase}}}$, eliminating FIFO batch fragmentation.
+_Avoid_: FIFO valuation, average cost estimate, periodic WAC
+
+**Perpetual Negative Stock**:
+An inventory state where on-hand quantity drops below zero due to continuous cashier checkout and real-time BOM consumption prior to the entry of physical purchase invoices.
+_Avoid_: Stock deficit, unbilled negative balance, stockout breach
+
+**Pegged Last Known Cost**:
+The valuation rule holding an ingredient's unit cost constant at its last verified valid purchase rate while on-hand quantity remains negative, ensuring valuation consistency until new invoice reconciliation.
+_Avoid_: Estimated fallback rate, zero-cost fallback, arbitrary cost peg
+
+**Negative Balance Valuation Badge**:
+An explicit report and UI transparency indicator (`Estimated valuation: item in temporary negative balance`) alerting managers that an inventory line's asset value is reported as PKR 0.00 while awaiting supplier invoice entry.
+_Avoid_: Negative asset warning, stock error flag, inventory deficit alert
+
+**Mandi Unit Conversion Snapshot**:
+The immutable conversion multiplier and base unit permanently recorded on a purchase invoice row at entry time (e.g., 1 Mann = 40 kg = 40,000 g), guaranteeing that future unit configuration changes never distort historical stock quantities or valuation.
+_Avoid_: Unit configuration link, live unit factor, dynamic conversion
+
+**Acquisition-Rate Sales COGS**:
+The immutable cost of goods sold snapshotted into order items (`bom_json`) at the time of sale based on event-time ingredient acquisition rates, strictly decoupled from subsequent inventory valuation fluctuations.
+_Avoid_: Revalued COGS, replacement food cost, retroactive COGS
+
+**Inventory Quantity Bridge**:
+The mathematical reconciliation verifying that ending inventory at any historical cutoff equals opening stock plus purchases minus sales BOM consumption, packaging, kitchen wastage, and physical adjustments.
+_Avoid_: Stock reconciliation formula, inventory equation, stock balance proof
+
+**Unknown Cost Quality**:
+An explicit metadata classification (`CostQuality.unknownCost`) assigned to inventory lines lacking purchase cost evidence in early operational history, preventing silent zero-cost assumptions and enabling honest coverage disclosure.
+_Avoid_: Missing cost flag, zero cost fallback, uncosted inventory
+
 **Desi Unit**:
 A localized traditional wholesale packaging unit (such as Mann [40kg], Darjan [dozen], Peti [crate], or Bori [sack]) mapped to metric stock balances.
 _Avoid_: Informal measure, market unit
