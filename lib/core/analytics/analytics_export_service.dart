@@ -141,11 +141,16 @@ class AnalyticsExportService {
     ['business_day_ids', s.businessDayIds.join(';')], ['live', s.query.live.toString()],
     ['cashier_id', s.query.cashierId], ['shift_id', s.query.shiftId],
     ['dining_type', s.query.diningType], ['payment_method', s.query.paymentMethod],
+    ['funding_stream', s.query.fundingStream],
+    for (final entry in s.query.domainFilters.entries)
+      ['domain_filter_${entry.key.name}', entry.value,
+        s.filterOptions.where((o) => o.dimension == entry.key && o.id == entry.value).firstOrNull?.label ?? 'Unknown / archived ID'],
     ['time_basis', s.query.timeBasis.name],
     ['grouping', s.query.grouping.name],
+    ['hold_stale_threshold_minutes', s.query.holdStaleMinutes],
     ['bucket_definitions', 'Asia/Karachi; start inclusive, end exclusive; Business Day weekday = assigned opening date; calendar weekday = actual creation date; weeks start Monday; months = local calendar months.'],
     ['non_order_scope', 'Shifts/trips and non-order ledgers retain Business Day scope; current stock is current.'],
-    ['filter_scope', 'Order filters apply to order-derived datasets only; each section discloses its scope.'],
+    ['filter_scope', 'Order cohorts, receiving/owning drawers and current Hold ownership have distinct scopes; each section discloses applicable filters. Current Holds use Cashier ownership only and ignore historical date/Shift/order predicates.'],
     for (final note in s.notes) ['snapshot_note', note],
   ];
 
