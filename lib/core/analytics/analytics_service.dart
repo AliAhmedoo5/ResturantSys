@@ -70,6 +70,7 @@ class AnalyticsService {
     // Current Holds have no Business Day/Shift assignment or retained deleted
     // lifecycle. Never read private draft content into reporting evidence.
     await read('active_holds', 'held_carts', 'SELECT id,cashier_id,created_at FROM held_carts${query.cashierId == null ? '' : ' WHERE cashier_id=?'} ORDER BY created_at,id', [if (query.cashierId != null) query.cashierId]);
+    await read('hold_lifecycle_events', 'hold_lifecycle_events', 'SELECT id,hold_id,cashier_id,event_type,order_id,previous_hold_id,recorded_at FROM hold_lifecycle_events${query.cashierId == null ? '' : ' WHERE cashier_id=?'} ORDER BY recorded_at,id', [if (query.cashierId != null) query.cashierId]);
     await read('first_purchases', 'orders', "SELECT o.id,o.customer_phone,o.created_at FROM orders o WHERE o.customer_phone IS NOT NULL AND o.customer_phone != '' AND o.payment_status NOT IN ('CANCELLED','VOIDED','REFUNDED') ORDER BY o.id");
     await read('order_days', 'business_days', 'SELECT DISTINCT b.id,b.opened_at,b.closed_at,b.status FROM business_days b JOIN orders o ON o.business_day_id=b.id WHERE $orderScope ORDER BY b.opened_at,b.id', orderArgs);
     await read('order_shifts', 'shifts', 'SELECT DISTINCT s.* FROM shifts s JOIN orders o ON o.shift_id=s.id JOIN business_days b ON b.id=o.business_day_id WHERE $orderScope ORDER BY s.id', orderArgs);
@@ -203,13 +204,14 @@ class AnalyticsService {
     await read('stock_alerts', 'checkout_stock_alerts', 'SELECT x.order_id,x.ingredient_id,x.stock_at_checkout,x.created_at FROM checkout_stock_alerts x $joinedOrder', orderArgs);
     await read('all_due', 'orders', "SELECT o.id,$outstandingCollectionPaisaSql AS collection_due_paisa FROM orders o WHERE o.payment_status='COLLECTION_DUE'");
     await read('all_trips', 'rider_trips', 'SELECT id,status,cash_expected_paisa FROM rider_trips');
-    if (!query.live) {
-      final duration = query.timeBasis == AnalyticsTimeBasis.calendarTime ? query.endDateExclusive.difference(query.startDate) : _date(query.endDateExclusive).difference(_date(query.startDate));
-      final prior = query.copyWith(startDate: query.startDate.subtract(duration), endDateExclusive: query.startDate);
-      await read('previous_orders', 'orders', 'SELECT o.id,o.grand_total,o.payment_status FROM orders o JOIN business_days b ON b.id=o.business_day_id WHERE ${_orderCohortScope(prior)}', _orderCohortArgs(prior));
-      final priorIntervalArgs = [..._dayArgs(prior), _sqlTime(_karachi(e.now.toIso8601String())!)];
-      await read('previous_purchases', 'mandi_procurements', 'SELECT x.id,x.total_cost FROM mandi_procurements x WHERE ${_intervalScope(prior, 'x.created_at')}', priorIntervalArgs);
-      await read('previous_waste', 'kitchen_wastage', 'SELECT x.id,x.cost_loss FROM kitchen_wastage x WHERE ${_intervalScope(prior, 'x.created_at')}', priorIntervalArgs);
+    if (!query.live && query.comparisonMode != AnalyticsComparisonMode.none) {
+      final prior = query.priorQuery;
+      if (prior != null) {
+        await read('previous_orders', 'orders', 'SELECT o.id,o.grand_total,o.payment_status FROM orders o JOIN business_days b ON b.id=o.business_day_id WHERE ${_orderCohortScope(prior)}', _orderCohortArgs(prior));
+        final priorIntervalArgs = [..._dayArgs(prior), _sqlTime(_karachi(e.now.toIso8601String())!)];
+        await read('previous_purchases', 'mandi_procurements', 'SELECT x.id,x.total_cost FROM mandi_procurements x WHERE ${_intervalScope(prior, 'x.created_at')}', priorIntervalArgs);
+        await read('previous_waste', 'kitchen_wastage', 'SELECT x.id,x.cost_loss FROM kitchen_wastage x WHERE ${_intervalScope(prior, 'x.created_at')}', priorIntervalArgs);
+      }
     }
     final optionSources = <AnalyticsDimension, String>{
       AnalyticsDimension.menuItem: 'catalog', AnalyticsDimension.menuCategory: 'menu_categories',

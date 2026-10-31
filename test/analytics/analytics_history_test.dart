@@ -78,7 +78,11 @@ void main() {
     await db.update('business_days', {'status': 'CLOSED'},
         where: 'id IN (?, ?)', whereArgs: [previous, selected]);
     final report = await AnalyticsService(database: db, authService: auth).load(
-      AnalyticsQuery(startDate: DateTime(2026, 10, 24), endDateExclusive: DateTime(2026, 10, 26)),
+      AnalyticsQuery(
+        startDate: DateTime(2026, 10, 24),
+        endDateExclusive: DateTime(2026, 10, 26),
+        comparisonMode: AnalyticsComparisonMode.precedingPeriod,
+      ),
     );
     AnalyticsMetric metric(AnalyticsFamily family, String id) =>
         report.section(family).metrics.firstWhere((value) => value.id == id);

@@ -44,6 +44,13 @@ class _ReportBuilder {
       'Source schema version: ${e.sourceSchemaVersion ?? "unavailable"}; snapshot cutoff ${e.now.toIso8601String()}. Event time and immutable recording time are separate where stored. Missing evidence stays unavailable.',
       'Naive legacy timestamps are assumed Asia/Karachi; original values and explicit UTC/offset evidence remain in source details. Historical names are captured only from migration onward; current names are separate context.',
       if (e.query.hasOrderFilters) 'Order filters affect sales/orders/customers/menu, related delivery attempts and order audits. Current inventory/staff/Khata and whole-day cash/procurement/expense totals keep their labeled scope.',
+      if (e.query.comparisonMode == AnalyticsComparisonMode.none)
+        'Comparison mode: none. Historical prior window comparisons are disabled.'
+      else if (e.query.comparisonMode == AnalyticsComparisonMode.comparableWeekday && e.query.priorStartDate != null)
+        'Comparison mode: comparableWeekday. Comparing against the previous week equivalent window (${_sqlDate(e.query.priorStartDate!)} to ${_sqlDate(e.query.priorEndDateExclusive!)}).'
+      else if (e.query.comparisonMode == AnalyticsComparisonMode.precedingPeriod && e.query.priorStartDate != null)
+        'Comparison mode: precedingPeriod. Comparing against the preceding equal window (${_sqlDate(e.query.priorStartDate!)} to ${_sqlDate(e.query.priorEndDateExclusive!)}).',
+      'Snapshot balances (inventory current stock, closing vendor payables, drawer custody, staff counts) are not historical flow measures and are excluded from comparisons.',
       if (partial) 'Percentage comparisons withheld: selected coverage contains a live/open Business Day and equivalent elapsed prior coverage is not established.',
       if (e.get('days').isEmpty) 'No Business Days match the selected date range.',
       if (e.absent.isNotEmpty) 'Missing source tables: ${e.absent.join(', ')}. No unavailable dataset is represented as a reliable zero.',
@@ -67,7 +74,15 @@ class _ReportBuilder {
       _metric('collected_tender', 'Collected tender', payments.fold<int>(0, (sum, p) => sum + _money(p, 'amount_tendered') - _money(p, 'change_returned')), explanation: 'Tender minus change, including negative explicit refunds; retained funds in SETTLED/REFUND_PENDING/CANCELLED/REFUNDED orders. Selected Order cohort, not receipt-event date. ${e.query.paymentMethod == null ? 'All methods.' : 'Only ${e.query.paymentMethod} tender lines; full matching orders remain the sales cohort.'}'),
       _average('average_ticket', 'Average ticket', value, valid.length, AnalyticsUnit.paisa, 'Recorded eligible order value / eligible order count; denominator shown. $_orderBasis'),
       _metric('recognized_revenue', 'Tax-exclusive recognized revenue', _sum(valid, 'grand_total') - _sum(valid, 'tax_amount'), explanation: 'Recognized on confirmation including COD receivables and delivery fees, less stored tax carve-out; cancellations/revisions use current recorded totals.'),
-      _metric('recorded_value_change', 'Change from preceding window', value - _sum(prior, 'grand_total'), explanation: partial ? 'Unavailable for incomplete open-day coverage.' : 'Absolute current minus preceding equal selected-basis date-window recorded value.', unavailable: partial),
+      _metric(
+        'recorded_value_change',
+        e.query.comparisonMode == AnalyticsComparisonMode.comparableWeekday ? 'Change from comparable weekday' : 'Change from preceding window',
+        value - _sum(prior, 'grand_total'),
+        explanation: (partial || e.query.comparisonMode == AnalyticsComparisonMode.none)
+            ? (partial ? 'Unavailable for incomplete open-day coverage.' : 'No comparison selected.')
+            : 'Absolute current minus ${e.query.comparisonMode == AnalyticsComparisonMode.comparableWeekday ? "comparable weekday" : "preceding equal"} selected-basis date-window recorded value.',
+        unavailable: partial || e.query.comparisonMode == AnalyticsComparisonMode.none,
+      ),
     ];
     final dimensions = <AnalyticsRow>[];
     for (final key in ['dining_type', 'cashier_id', 'shift_id']) {
@@ -161,7 +176,6 @@ class _ReportBuilder {
       _metric('refund_exposure', 'Retained funds above current payable', exposure, explanation: 'Per order max(0, net collected - current payable), using zero payable for cancelled/refunded orders. This is exposure, not a completed refund.'),
       _missing('prep_time', 'Preparation time', 'No persisted confirmed/preparing/ready lifecycle timestamps. Current state cannot establish historical durations.', unit: AnalyticsUnit.minutes),
       ..._HoldAging(e).metrics,
-      _missing('held_history', 'Historical Holds', 'Current Holds are persisted. Complete deleted/recalled Hold lifecycle history is unavailable; current rows cannot reconstruct a historical population.', unit: AnalyticsUnit.count),
     ];
     for (final key in ['payment_status', 'token_status']) {
       for (final group in _group(orders, key).entries) {
@@ -174,7 +188,7 @@ class _ReportBuilder {
       ..._OrderWorkload(this).build(), ..._WeekdayOrderPeaks(this).build(),
       ...orders.map((o) => _row('orders', o, {'order_id': o['id'], 'business_day_id': o['business_day_id'], 'cashier_id': o['cashier_id'], 'shift_id': o['shift_id'], 'token': o['token_number'], 'dining_type': o['dining_type'], 'payment_status': o['payment_status'], 'token_status': o['token_status'], 'recorded_value_paisa': _money(o, 'grand_total'), 'collection_due_paisa': o['payment_status'] == 'COLLECTION_DUE' ? o['collection_due_paisa'] : 0, 'created_at': o['created_at'], 'assigned_business_date': _karachi(daysById[o['business_day_id']]?['opened_at']) == null ? null : _sqlDate(_karachi(daysById[o['business_day_id']]!['opened_at'])!)})),
       ...revisions.map((r) => _row('order_revisions', r, {'order_id': r['order_id'], 'revision': r['revision_no'], 'action': r['action'], 'reason': _safeText(r['reason']), 'cashier_id': r['cashier_id'], 'delta_paisa': r['money_delta_paisa'], 'created_at': r['created_at_utc']})),
-    ], ['order_id', 'business_day_id', 'assigned_business_date', 'token', 'cashier_id', 'shift_id', 'dining_type', 'payment_status', 'token_status', 'recorded_value_paisa', 'collection_due_paisa', 'action', 'revision', 'delta_paisa', 'reason', 'created_at'], [_orderBasis, _WeekdayOrderPeaks.note, 'Workload counts every confirmed Order once, including cancellations and refunds. Holds and revisions add no Orders. Daily and hourly rows are independent projections; never add them together. Rankings use count and eligible value independently; rank 1 includes every tie, shown chronologically. Hourly buckets are actual Asia/Karachi creation clock hours across the selected cohort, not a promise of trading in every hour. Observed cohort zeros differ from unavailable source/time evidence. Calendar dates without Orders or observed Business Days are not invented. Daily workload stays daily regardless of Sales grouping.', 'Order and revision source rows are separate kinds. Their counts/amounts must not be added together.', ..._HoldAging(e).notes]);
+    ], ['order_id', 'business_day_id', 'assigned_business_date', 'token', 'cashier_id', 'shift_id', 'dining_type', 'payment_status', 'token_status', 'recorded_value_paisa', 'collection_due_paisa', 'action', 'revision', 'delta_paisa', 'reason', 'created_at', 'hold_id', 'event_type', 'previous_hold_id', 'age_minutes'], [_orderBasis, _WeekdayOrderPeaks.note, 'Workload counts every confirmed Order once, including cancellations and refunds. Holds and revisions add no Orders. Daily and hourly rows are independent projections; never add them together. Rankings use count and eligible value independently; rank 1 includes every tie, shown chronologically. Hourly buckets are actual Asia/Karachi creation clock hours across the selected cohort, not a promise of trading in every hour. Observed cohort zeros differ from unavailable source/time evidence. Calendar dates without Orders or observed Business Days are not invented. Daily workload stays daily regardless of Sales grouping.', 'Order and revision source rows are separate kinds. Their counts/amounts must not be added together.', ..._HoldAging(e).notes]);
 
   }
 
@@ -829,15 +843,15 @@ class _ReportBuilder {
       }
     }
     return _section(AnalyticsFamily.inventory, 'Inventory', [
-      _metric('ingredients', 'Current ingredients', ingredients.length, unit: AnalyticsUnit.count, explanation: _currentBasis),
+      _metric('ingredients', 'Current ingredients', ingredients.length, unit: AnalyticsUnit.count, explanation: _currentBasis, isBalance: true),
       _metric('reconciled_ingredients', 'Reconciled stock bridges', reconciledIngredientsCount, unit: AnalyticsUnit.count, explanation: 'Ingredients whose opening + receipts - consumption - waste + returns + adjustments exactly equals ending quantity.'),
       _coverage('opening_evidence_coverage', 'Opening balance evidence coverage', openingEvidenceCount, ingredients.length, 'Ingredients with verified prior movement balance_after evidence. Missing opening evidence is disclosed rather than assumed zero.'),
-      _metric('missing_opening_count', 'Missing opening balance evidence', missingOpeningCount, unit: AnalyticsUnit.count, explanation: 'Tracked ingredients lacking verified pre-interval balance evidence.'),
-      _metric('low_stock', 'Current low stock', low, unit: AnalyticsUnit.count, explanation: 'Current quantity <= configured threshold in each ingredient base unit. $_currentBasis'),
-      _metric('negative_stock', 'Current negative stock', negative, unit: AnalyticsUnit.count, explanation: 'Current quantity < 0; sales never blocked. $_currentBasis'),
-      _rate('low_stock_share', 'Current low-stock share', low, ingredients.length, 'Low-stock ingredient count / current tracked ingredients. $_currentBasis'),
+      _metric('missing_opening_count', 'Missing opening balance evidence', missingOpeningCount, unit: AnalyticsUnit.count, explanation: 'Tracked ingredients lacking verified pre-interval balance evidence.', isBalance: true),
+      _metric('low_stock', 'Current low stock', low, unit: AnalyticsUnit.count, explanation: 'Current quantity <= configured threshold in each ingredient base unit. $_currentBasis', isBalance: true),
+      _metric('negative_stock', 'Current negative stock', negative, unit: AnalyticsUnit.count, explanation: 'Current quantity < 0; sales never blocked. $_currentBasis', isBalance: true),
+      _rate('low_stock_share', 'Current low-stock share', low, ingredients.length, 'Low-stock ingredient count / current tracked ingredients. $_currentBasis', isBalance: true),
       _metric('movement_count', 'Recorded movements', e.get('inventory').length, unit: AnalyticsUnit.count, explanation: 'Movement rows attributed by Business Day FK since v14 capture; no fabricated pre-upgrade history.'),
-      _coverage('as_of_coverage', 'As-of balance evidence coverage', balances.length, ingredients.length, 'Latest recorded balance_after no later than last selected close/refresh. No evidence means unknown, not opening balance zero.'),
+      _coverage('as_of_coverage', 'As-of balance evidence coverage', balances.length, ingredients.length, 'Latest recorded balance_after no later than last selected close/refresh. No evidence means unknown, not opening balance zero.', isBalance: true),
       _coverage('bom_coverage', 'Sold-line BOM quantity coverage', bomCovered, soldItems.length, 'Valid sold lines with readable quantity snapshot. Quantity evidence is not event-time costing.'),
       _missing('stock_valuation', 'Historical stock valuation', 'No historical cost layers. Current unit cost cannot rewrite past valuation.'),
       _metric('physical_variance', 'Posted physical count lines', e.get('physical_counts').length, unit: AnalyticsUnit.count, explanation: 'Posted observations in selected Business Day intervals. Inspect per-ingredient variances below; incompatible units are never totaled.'),
@@ -1465,20 +1479,20 @@ class _ReportBuilder {
     final paidIds = payments.map((t) => t['vendor_id']).toSet();
 
     return _section(AnalyticsFamily.suppliers, 'Supplier Khata', [
-      _metric('khata_opening_payable', 'Vendor Khata opening payable', totalOpeningPayable, unit: AnalyticsUnit.paisa, explanation: 'Historical payable at start of selected interval based on pre-period evidence.'),
+      _metric('khata_opening_payable', 'Vendor Khata opening payable', totalOpeningPayable, unit: AnalyticsUnit.paisa, explanation: 'Historical payable at start of selected interval based on pre-period evidence.', isBalance: true),
       _metric('credit_purchases', 'Recorded credit deliveries', totalPurchasesInRange, unit: AnalyticsUnit.paisa, explanation: 'Credit purchases in selected interval affecting stock/payable; not cash payments. $_intervalBasis'),
       _metric('khata_payments', 'Recorded supplier payments', totalPaymentsInRange, unit: AnalyticsUnit.paisa, explanation: 'Selected interval supplier settlements from cash drawer and external management accounts.'),
       _metric('khata_adjustments', 'Opening balance adjustments', totalAdjsInRange, unit: AnalyticsUnit.paisa, explanation: 'Net versioned opening balance adjustments in selected interval.'),
-      _metric('khata_closing_payable', 'Vendor Khata closing payable', totalClosingPayable, unit: AnalyticsUnit.paisa, explanation: 'Opening + purchases + adjustments - payments reconciled at disclosed cutoff.'),
-      _metric('aging_current', 'Current (not yet due) payable', totalCurrent, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable with due date strictly after disclosed cutoff date.'),
-      _metric('aging_0_7', 'Payable overdue 0–7 days', totalDays0to7, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable 0 to 7 days past due date (including due today at cutoff).'),
-      _metric('aging_8_30', 'Payable overdue 8–30 days', totalDays8to30, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable 8 to 30 days past due date as of cutoff.'),
-      _metric('aging_31_60', 'Payable overdue 31–60 days', totalDays31to60, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable 31 to 60 days past due date as of cutoff.'),
-      _metric('aging_over_60', 'Payable overdue over 60 days', totalOver60, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable more than 60 days past due date as of cutoff.'),
-      _metric('aging_unknown', 'Payable with unknown due date', totalUnknownDue, unit: AnalyticsUnit.paisa, explanation: 'Undated invoices and unallocated opening balances without explicit due dates.'),
+      _metric('khata_closing_payable', 'Vendor Khata closing payable', totalClosingPayable, unit: AnalyticsUnit.paisa, explanation: 'Opening + purchases + adjustments - payments reconciled at disclosed cutoff.', isBalance: true),
+      _metric('aging_current', 'Current (not yet due) payable', totalCurrent, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable with due date strictly after disclosed cutoff date.', isBalance: true),
+      _metric('aging_0_7', 'Payable overdue 0–7 days', totalDays0to7, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable 0 to 7 days past due date (including due today at cutoff).', isBalance: true),
+      _metric('aging_8_30', 'Payable overdue 8–30 days', totalDays8to30, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable 8 to 30 days past due date as of cutoff.', isBalance: true),
+      _metric('aging_31_60', 'Payable overdue 31–60 days', totalDays31to60, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable 31 to 60 days past due date as of cutoff.', isBalance: true),
+      _metric('aging_over_60', 'Payable overdue over 60 days', totalOver60, unit: AnalyticsUnit.paisa, explanation: 'Invoiced payable more than 60 days past due date as of cutoff.', isBalance: true),
+      _metric('aging_unknown', 'Payable with unknown due date', totalUnknownDue, unit: AnalyticsUnit.paisa, explanation: 'Undated invoices and unallocated opening balances without explicit due dates.', isBalance: true),
       _coverage('supplier_coverage', 'Active and archived supplier coverage', activeCount, vendors.length, 'Active suppliers vs total registered suppliers including archived historical vendors.'),
       _coverage('invoice_due_date_coverage', 'Invoice due-date coverage', datedInvoiceCount, totalInvoicesCount, 'Invoices with recorded due dates vs total credit invoices up to cutoff.'),
-      _metric('current_payable', 'Current supplier payable', _sum(vendors, 'current_balance'), explanation: 'Stored current balances across existing suppliers. $_currentBasis'),
+      _metric('current_payable', 'Current supplier payable', _sum(vendors, 'current_balance'), explanation: 'Stored current balances across existing suppliers. $_currentBasis', isBalance: true),
       _metric('drawer_payments', 'Supplier drawer payments', _sum(payments.where((t) => t['type'] == 'PAYMENT_DRAWER'), 'amount'), explanation: 'Selected interval supplier settlements from drawer; these are not operating expenses.'),
       _metric('external_payments', 'Supplier external payments', _sum(payments.where((t) => t['type'] == 'PAYMENT_EXTERNAL'), 'amount'), explanation: 'Selected interval supplier settlements from external management funds.'),
       _metric('no_payments_in_range', 'Suppliers with no payments in range', vendors.where((v) => !paidIds.contains(v['id'])).length, unit: AnalyticsUnit.count, explanation: 'Existing suppliers with no selected interval settlement.'),
@@ -1601,12 +1615,12 @@ class _ReportBuilder {
     final staff = e.get('staff');
     final payroll = _EarnedPayroll(e);
     return _section(AnalyticsFamily.staff, 'Staff and payroll', [
-      _metric('staff_count', 'Current staff', staff.length, unit: AnalyticsUnit.count, explanation: _currentBasis),
-      _metric('active_staff', 'Current active staff', staff.where((s) => s['is_active'] == 1).length, unit: AnalyticsUnit.count, explanation: _currentBasis),
-      _metric('login_enabled', 'Current login-enabled staff', staff.where((s) => s['login_enabled'] == 1).length, unit: AnalyticsUnit.count, explanation: _currentBasis),
-      _metric('departments', 'Assigned departments', staff.map((s) => s['department_id']).toSet().length, unit: AnalyticsUnit.count, explanation: 'Distinct current assigned department IDs, not labor-cost allocations.'),
-      _metric('job_roles', 'Assigned job roles', staff.where((s) => s['job_role_id'] != null).map((s) => s['job_role_id']).toSet().length, unit: AnalyticsUnit.count, explanation: 'Distinct current assigned job-role IDs.'),
-      e.get('payroll_balances').isEmpty ? _missing('salary_due', 'Current recorded salary due', 'No payroll has been posted; legacy staff salary liabilities are unknown.') : _metric('salary_due', 'Current recorded salary due', _integers(e.get('payroll_balances'), 'payable_paisa') - _integers(e.get('payroll_balances'), 'advance_paisa'), explanation: 'Current accrued payable less outstanding advances. No unposted salary is inferred.'),
+      _metric('staff_count', 'Current staff', staff.length, unit: AnalyticsUnit.count, explanation: _currentBasis, isBalance: true),
+      _metric('active_staff', 'Current active staff', staff.where((s) => s['is_active'] == 1).length, unit: AnalyticsUnit.count, explanation: _currentBasis, isBalance: true),
+      _metric('login_enabled', 'Current login-enabled staff', staff.where((s) => s['login_enabled'] == 1).length, unit: AnalyticsUnit.count, explanation: _currentBasis, isBalance: true),
+      _metric('departments', 'Assigned departments', staff.map((s) => s['department_id']).toSet().length, unit: AnalyticsUnit.count, explanation: 'Distinct current assigned department IDs, not labor-cost allocations.', isBalance: true),
+      _metric('job_roles', 'Assigned job roles', staff.where((s) => s['job_role_id'] != null).map((s) => s['job_role_id']).toSet().length, unit: AnalyticsUnit.count, explanation: 'Distinct current assigned job-role IDs.', isBalance: true),
+      e.get('payroll_balances').isEmpty ? _missing('salary_due', 'Current recorded salary due', 'No payroll has been posted; legacy staff salary liabilities are unknown.') : _metric('salary_due', 'Current recorded salary due', _integers(e.get('payroll_balances'), 'payable_paisa') - _integers(e.get('payroll_balances'), 'advance_paisa'), explanation: 'Current accrued payable less outstanding advances. No unposted salary is inferred.', isBalance: true),
       _metric('labor_cost', 'Posted salary accruals', e.get('payroll_entries').fold<int>(0, (sum, p) => sum + (p['kind']=='ACCRUAL' || (p['kind']=='REVERSAL' && p['source']=='NONE' && p['advance_delta_paisa']==0) ? p['payable_delta_paisa'] as int : 0)), explanation: 'Salary accruals and their reversals posted in selected day intervals. Payments and advances never count as another expense; earned-period profit allocation remains separate.'),
       ...payroll.metrics,
       _missing('labor_productivity', 'Orders per labor hour', 'Cashier shift duration is not paid attendance or worked labor-hour evidence.', unit: AnalyticsUnit.decimal),
@@ -1878,19 +1892,38 @@ class _ReportBuilder {
     ], rows, ['kind', 'business_day_id', 'order_id', 'shift_id', 'ingredient_id', 'token', 'revision', 'action', 'reason', 'staff_id', 'delta_paisa', 'hash', 'channel', 'status', 'attempts', 'stock_at_checkout', 'created_at'], ['Order revisions/tokens/rounding/checkout alerts use filtered order cohort. Report runs/outbox use whole selected Business Days. Delivery audit uses selected actual intervals.', 'Configuration and operations audits project authorized management actions with safe field allowlisting. Raw JSON, credentials, PIN hashes, passwords and sensitive customer data are strictly excluded. Authentication events (login failures, PIN resets) have no persistent event ledger and remain disclosed as missing.', 'Immutable Z-report provenance is shown; this explorer never rewrites snapshots. Sensitive payloads, errors, recipients, credentials and raw customer contact fields are excluded.']);
   }
 
-  AnalyticsMetric _metric(String id, String label, num value, {AnalyticsUnit unit = AnalyticsUnit.paisa, String? explanation, num? previous, bool unavailable = false, AnalyticsQuality unavailableQuality = AnalyticsQuality.notApplicable, int? sampleCount, int? populationCount}) {
-    final difference = !partial && !unavailable && previous != null ? value - previous : null;
-    return AnalyticsMetric(id: id, label: label, value: unavailable ? null : value, unit: unit, explanation: explanation ?? _orderBasis,
+  AnalyticsMetric _metric(String id, String label, num value, {
+    AnalyticsUnit unit = AnalyticsUnit.paisa,
+    String? explanation,
+    num? previous,
+    bool unavailable = false,
+    AnalyticsQuality unavailableQuality = AnalyticsQuality.notApplicable,
+    int? sampleCount,
+    int? populationCount,
+    bool isBalance = false,
+  }) {
+    final hasComparison = !partial && !unavailable && !isBalance && e.query.comparisonMode != AnalyticsComparisonMode.none && previous != null;
+    final difference = hasComparison ? value - previous : null;
+    final prior = hasComparison ? previous : null;
+    return AnalyticsMetric(
+      id: id,
+      label: label,
+      value: unavailable ? null : value,
+      unit: unit,
+      explanation: explanation ?? _orderBasis,
       quality: unavailable ? unavailableQuality : AnalyticsQuality.complete,
       sampleCount: sampleCount,
       populationCount: populationCount,
       changeAbsolute: difference,
-      changePercent: difference != null && previous != null && previous != 0 ? difference / previous.abs() * 100 : null);
+      changePercent: difference != null && previous != null && previous != 0 ? difference / previous.abs() * 100 : null,
+      priorValue: prior,
+      isBalance: isBalance,
+    );
   }
   static AnalyticsMetric _missing(String id, String label, String explanation, {AnalyticsUnit unit = AnalyticsUnit.paisa}) => AnalyticsMetric(id: id, label: label, unit: unit, explanation: explanation, quality: AnalyticsQuality.missing);
   static AnalyticsMetric _average(String id, String label, num numerator, int count, AnalyticsUnit unit, String explanation) => AnalyticsMetric(id: id, label: label, value: count == 0 ? null : numerator / count, unit: unit, explanation: explanation, quality: count == 0 ? AnalyticsQuality.notApplicable : AnalyticsQuality.complete, sampleCount: count, populationCount: count);
-  static AnalyticsMetric _rate(String id, String label, int sample, int population, String explanation) => AnalyticsMetric(id: id, label: label, value: population == 0 ? null : sample / population * 100, unit: AnalyticsUnit.percent, explanation: explanation, quality: population == 0 ? AnalyticsQuality.notApplicable : AnalyticsQuality.complete, sampleCount: sample, populationCount: population);
-  static AnalyticsMetric _coverage(String id, String label, int sample, int population, String explanation) => AnalyticsMetric(id: id, label: label, value: population == 0 ? null : sample / population * 100, unit: AnalyticsUnit.percent, explanation: explanation, quality: population == 0 ? AnalyticsQuality.notApplicable : sample == population ? AnalyticsQuality.complete : AnalyticsQuality.estimated, sampleCount: sample, populationCount: population);
+  static AnalyticsMetric _rate(String id, String label, int sample, int population, String explanation, {bool isBalance = false}) => AnalyticsMetric(id: id, label: label, value: population == 0 ? null : sample / population * 100, unit: AnalyticsUnit.percent, explanation: explanation, quality: population == 0 ? AnalyticsQuality.notApplicable : AnalyticsQuality.complete, sampleCount: sample, populationCount: population, isBalance: isBalance);
+  static AnalyticsMetric _coverage(String id, String label, int sample, int population, String explanation, {bool isBalance = false}) => AnalyticsMetric(id: id, label: label, value: population == 0 ? null : sample / population * 100, unit: AnalyticsUnit.percent, explanation: explanation, quality: population == 0 ? AnalyticsQuality.notApplicable : sample == population ? AnalyticsQuality.complete : AnalyticsQuality.estimated, sampleCount: sample, populationCount: population, isBalance: isBalance);
   static AnalyticsMetric _duration(String id, String label, double? value, int sample, int population) => AnalyticsMetric(id: id, label: label, value: value, unit: AnalyticsUnit.minutes, explanation: 'Per-order delivered_at minus containing trip dispatched_at in minutes. Missing/reversed timestamps excluded; coverage shown.', quality: value == null ? (population == 0 ? AnalyticsQuality.notApplicable : AnalyticsQuality.missing) : sample < population ? AnalyticsQuality.estimated : AnalyticsQuality.complete, sampleCount: sample, populationCount: population);
   static double? _percentile(List<double> sorted, double p) {
     if (sorted.isEmpty) return null;

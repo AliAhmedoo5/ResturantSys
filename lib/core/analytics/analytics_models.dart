@@ -11,9 +11,23 @@ enum AnalyticsUnit { count, paisa, percent, decimal, minutes }
 enum AnalyticsQuality { complete, estimated, missing, notApplicable }
 enum AnalyticsTimeBasis { businessDay, calendarTime }
 enum AnalyticsGrouping { day, week, month }
+enum AnalyticsComparisonMode { none, precedingPeriod, comparableWeekday }
 
 class AnalyticsMetric {
-  const AnalyticsMetric({required this.id, required this.label, this.value, required this.unit, required this.explanation, this.quality = AnalyticsQuality.complete, this.sampleCount, this.populationCount, this.changePercent, this.changeAbsolute});
+  const AnalyticsMetric({
+    required this.id,
+    required this.label,
+    this.value,
+    required this.unit,
+    required this.explanation,
+    this.quality = AnalyticsQuality.complete,
+    this.sampleCount,
+    this.populationCount,
+    this.changePercent,
+    this.changeAbsolute,
+    this.priorValue,
+    this.isBalance = false,
+  });
   final String id, label, explanation;
   final num? value;
   final AnalyticsUnit unit;
@@ -21,6 +35,8 @@ class AnalyticsMetric {
   final int? sampleCount, populationCount;
   final double? changePercent;
   final num? changeAbsolute;
+  final num? priorValue;
+  final bool isBalance;
 }
 
 class AnalyticsColumn {
@@ -50,7 +66,21 @@ class AnalyticsSection {
 const _unchanged = Object();
 
 class AnalyticsQuery {
-  AnalyticsQuery({required this.startDate, required this.endDateExclusive, this.live = false, this.cashierId, this.shiftId, this.diningType, this.paymentMethod, this.timeBasis = AnalyticsTimeBasis.businessDay, this.grouping = AnalyticsGrouping.day, this.holdStaleMinutes = 30, this.fundingStream, Map<AnalyticsDimension, String> domainFilters = const {}}) : domainFilters = Map.unmodifiable(domainFilters) {
+  AnalyticsQuery({
+    required this.startDate,
+    required this.endDateExclusive,
+    this.live = false,
+    this.cashierId,
+    this.shiftId,
+    this.diningType,
+    this.paymentMethod,
+    this.timeBasis = AnalyticsTimeBasis.businessDay,
+    this.grouping = AnalyticsGrouping.day,
+    this.comparisonMode = AnalyticsComparisonMode.none,
+    this.holdStaleMinutes = 30,
+    this.fundingStream,
+    Map<AnalyticsDimension, String> domainFilters = const {},
+  }) : domainFilters = Map.unmodifiable(domainFilters) {
     if (fundingStream != null && !['DRAWER','BANK','OWNER','RIDER_HELD','EXTERNAL_UNKNOWN'].contains(fundingStream)) throw ArgumentError('Unknown funding stream.');
     for (final entry in domainFilters.entries) {
       if (entry.key == AnalyticsDimension.customerSegment) {
@@ -69,16 +99,81 @@ class AnalyticsQuery {
   final bool live;
   final AnalyticsTimeBasis timeBasis;
   final AnalyticsGrouping grouping;
+  final AnalyticsComparisonMode comparisonMode;
   final int holdStaleMinutes;
   final int? cashierId, shiftId;
   final String? diningType, paymentMethod, fundingStream;
   final Map<AnalyticsDimension, String> domainFilters;
   bool get hasOrderFilters => domainFilters.keys.any((d) => d.isOrder) || cashierId != null || shiftId != null || diningType != null || paymentMethod != null;
-  AnalyticsQuery copyWith({DateTime? startDate, DateTime? endDateExclusive, bool? live, AnalyticsTimeBasis? timeBasis, AnalyticsGrouping? grouping, int? holdStaleMinutes, Map<AnalyticsDimension, String>? domainFilters, Object? fundingStream = _unchanged, Object? cashierId = _unchanged, Object? shiftId = _unchanged, Object? diningType = _unchanged, Object? paymentMethod = _unchanged}) => AnalyticsQuery(startDate: startDate ?? this.startDate, endDateExclusive: endDateExclusive ?? this.endDateExclusive, live: live ?? this.live, timeBasis: timeBasis ?? this.timeBasis, grouping: grouping ?? this.grouping, holdStaleMinutes: holdStaleMinutes ?? this.holdStaleMinutes, domainFilters: domainFilters ?? this.domainFilters, fundingStream: identical(fundingStream, _unchanged) ? this.fundingStream : fundingStream as String?, cashierId: identical(cashierId, _unchanged) ? this.cashierId : cashierId as int?, shiftId: identical(shiftId, _unchanged) ? this.shiftId : shiftId as int?, diningType: identical(diningType, _unchanged) ? this.diningType : diningType as String?, paymentMethod: identical(paymentMethod, _unchanged) ? this.paymentMethod : paymentMethod as String?);
+
+  DateTime? get priorStartDate {
+    switch (comparisonMode) {
+      case AnalyticsComparisonMode.none:
+        return null;
+      case AnalyticsComparisonMode.precedingPeriod:
+        final duration = timeBasis == AnalyticsTimeBasis.calendarTime
+            ? endDateExclusive.difference(startDate)
+            : DateTime.utc(endDateExclusive.year, endDateExclusive.month, endDateExclusive.day)
+                .difference(DateTime.utc(startDate.year, startDate.month, startDate.day));
+        return startDate.subtract(duration);
+      case AnalyticsComparisonMode.comparableWeekday:
+        return startDate.subtract(const Duration(days: 7));
+    }
+  }
+
+  DateTime? get priorEndDateExclusive {
+    switch (comparisonMode) {
+      case AnalyticsComparisonMode.none:
+        return null;
+      case AnalyticsComparisonMode.precedingPeriod:
+        return startDate;
+      case AnalyticsComparisonMode.comparableWeekday:
+        return endDateExclusive.subtract(const Duration(days: 7));
+    }
+  }
+
+  AnalyticsQuery? get priorQuery {
+    final start = priorStartDate;
+    final end = priorEndDateExclusive;
+    if (start == null || end == null) return null;
+    return copyWith(startDate: start, endDateExclusive: end, live: false);
+  }
+
+  AnalyticsQuery copyWith({
+    DateTime? startDate,
+    DateTime? endDateExclusive,
+    bool? live,
+    AnalyticsTimeBasis? timeBasis,
+    AnalyticsGrouping? grouping,
+    AnalyticsComparisonMode? comparisonMode,
+    int? holdStaleMinutes,
+    Map<AnalyticsDimension, String>? domainFilters,
+    Object? fundingStream = _unchanged,
+    Object? cashierId = _unchanged,
+    Object? shiftId = _unchanged,
+    Object? diningType = _unchanged,
+    Object? paymentMethod = _unchanged,
+  }) => AnalyticsQuery(
+    startDate: startDate ?? this.startDate,
+    endDateExclusive: endDateExclusive ?? this.endDateExclusive,
+    live: live ?? this.live,
+    timeBasis: timeBasis ?? this.timeBasis,
+    grouping: grouping ?? this.grouping,
+    comparisonMode: comparisonMode ?? this.comparisonMode,
+    holdStaleMinutes: holdStaleMinutes ?? this.holdStaleMinutes,
+    domainFilters: domainFilters ?? this.domainFilters,
+    fundingStream: identical(fundingStream, _unchanged) ? this.fundingStream : fundingStream as String?,
+    cashierId: identical(cashierId, _unchanged) ? this.cashierId : cashierId as int?,
+    shiftId: identical(shiftId, _unchanged) ? this.shiftId : shiftId as int?,
+    diningType: identical(diningType, _unchanged) ? this.diningType : diningType as String?,
+    paymentMethod: identical(paymentMethod, _unchanged) ? this.paymentMethod : paymentMethod as String?,
+  );
+
   @override
-  bool operator ==(Object other) => other is AnalyticsQuery && startDate == other.startDate && endDateExclusive == other.endDateExclusive && live == other.live && timeBasis == other.timeBasis && grouping == other.grouping && holdStaleMinutes == other.holdStaleMinutes && cashierId == other.cashierId && shiftId == other.shiftId && diningType == other.diningType && paymentMethod == other.paymentMethod && fundingStream == other.fundingStream && domainFilters.length == other.domainFilters.length && domainFilters.entries.every((e) => other.domainFilters[e.key] == e.value);
+  bool operator ==(Object other) => other is AnalyticsQuery && startDate == other.startDate && endDateExclusive == other.endDateExclusive && live == other.live && timeBasis == other.timeBasis && grouping == other.grouping && comparisonMode == other.comparisonMode && holdStaleMinutes == other.holdStaleMinutes && cashierId == other.cashierId && shiftId == other.shiftId && diningType == other.diningType && paymentMethod == other.paymentMethod && fundingStream == other.fundingStream && domainFilters.length == other.domainFilters.length && domainFilters.entries.every((e) => other.domainFilters[e.key] == e.value);
+
   @override
-  int get hashCode => Object.hash(startDate, endDateExclusive, live, cashierId, shiftId, diningType, paymentMethod, timeBasis, grouping, holdStaleMinutes, fundingStream, Object.hashAll(AnalyticsDimension.values.map((d) => domainFilters[d])));
+  int get hashCode => Object.hash(startDate, endDateExclusive, live, cashierId, shiftId, diningType, paymentMethod, timeBasis, grouping, comparisonMode, holdStaleMinutes, fundingStream, Object.hashAll(AnalyticsDimension.values.map((d) => domainFilters[d])));
 }
 
 class AnalyticsSnapshot {
