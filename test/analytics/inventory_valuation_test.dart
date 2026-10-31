@@ -230,8 +230,8 @@ void main() {
 
     // 3. Valuation Coverage Metric
     final coverageMetric = invSection.metrics.firstWhere((m) => m.id == 'valuation_coverage');
-    expect(coverageMetric.sampleCount, equals(4)); // All 4 ingredients have verified cost layers
-    expect(coverageMetric.populationCount, equals(4));
+    expect(coverageMetric.sampleCount, equals(4)); // 4 ingredients have verified cost layers
+    expect(coverageMetric.populationCount, equals(5)); // 5 total tracked ingredients (including fixture ingredient)
 
     // 4. Verify Individual Ingredient Stock Bridges & Valuation Cells
     final chickenBridge = invSection.rows.firstWhere((r) => r.cells['ingredient_id'] == chickenId && r.cells['kind'] == 'Normalized stock bridge');
