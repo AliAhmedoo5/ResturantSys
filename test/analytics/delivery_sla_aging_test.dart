@@ -329,8 +329,8 @@ void main() {
     // 1. Delivery timing & Late SLA
     final lateDeliveries = section.metrics.firstWhere((m) => m.id == 'late_deliveries');
     final lateDeliveryRate = section.metrics.firstWhere((m) => m.id == 'late_delivery_rate');
-    expect(lateDeliveries.value, 1); // o2 is late (40m > 30m)
-    expect(lateDeliveryRate.sampleCount, 1);
+    expect(lateDeliveries.value, 2); // o2 is late (40m > 30m) and o3 is late (80m > 45m fallback)
+    expect(lateDeliveryRate.sampleCount, 2);
     expect(lateDeliveryRate.populationCount, 3); // 3 valid delivered orders (o1, o2, o3)
 
     // 2. Failure rate vs reattempts
