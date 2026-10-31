@@ -15,6 +15,10 @@ Future<void> createHistoricalCostSchema(DatabaseExecutor db) async {
       BEGIN INSERT INTO ingredient_cost_history(ingredient_id,unit_cost_rupees,recorded_at)
       VALUES(NEW.id,NEW.cost_per_recipe_unit,strftime('%Y-%m-%d %H:%M:%f','now','localtime')); END''');
   }
+  final ingredientColumns = await db.rawQuery('PRAGMA table_info(raw_ingredients)');
+  if (ingredientColumns.isNotEmpty && !ingredientColumns.any((c) => c['name'] == 'category')) {
+    await db.execute('ALTER TABLE raw_ingredients ADD COLUMN category TEXT');
+  }
   await db.execute('''CREATE TABLE IF NOT EXISTS order_cost_coverage (
     order_id INTEGER PRIMARY KEY REFERENCES orders(id), policy TEXT NOT NULL,
     recorded_at TEXT NOT NULL)''');
@@ -24,7 +28,12 @@ Future<void> createHistoricalCostSchema(DatabaseExecutor db) async {
     kind TEXT NOT NULL CHECK(kind IN ('CONSUME','RETURN','COOKED_WASTE')),
     quantity REAL NOT NULL CHECK(quantity > 0), unit_cost_rupees REAL,
     cost_paisa INTEGER, source_event_id INTEGER REFERENCES order_cost_events(id),
-    recorded_at TEXT NOT NULL)''');
+    recorded_at TEXT NOT NULL,
+    classification TEXT CHECK(classification IS NULL OR classification IN ('FOOD','PACKAGING','UNCLASSIFIED')))''');
+  final costColumns = await db.rawQuery('PRAGMA table_info(order_cost_events)');
+  if (costColumns.isNotEmpty && !costColumns.any((c) => c['name'] == 'classification')) {
+    await db.execute('ALTER TABLE order_cost_events ADD COLUMN classification TEXT');
+  }
   await db.execute('CREATE INDEX IF NOT EXISTS order_cost_events_order ON order_cost_events(order_id,ingredient_id)');
   await db.execute('''CREATE TABLE IF NOT EXISTS order_discounts (
     order_id INTEGER NOT NULL REFERENCES orders(id), discount_id INTEGER NOT NULL,

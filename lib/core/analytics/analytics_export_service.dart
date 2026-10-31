@@ -141,6 +141,10 @@ class AnalyticsExportService {
     ['business_day_ids', s.businessDayIds.join(';')], ['live', s.query.live.toString()],
     ['cashier_id', s.query.cashierId], ['shift_id', s.query.shiftId],
     ['dining_type', s.query.diningType], ['payment_method', s.query.paymentMethod],
+    ['funding_stream', s.query.fundingStream],
+    for (final entry in s.query.domainFilters.entries)
+      ['domain_filter_${entry.key.name}', entry.value,
+        s.filterOptions.where((o) => o.dimension == entry.key && o.id == entry.value).firstOrNull?.label ?? 'Unknown / archived ID'],
     ['time_basis', s.query.timeBasis.name],
     ['grouping', s.query.grouping.name],
     ['hold_stale_threshold_minutes', s.query.holdStaleMinutes],

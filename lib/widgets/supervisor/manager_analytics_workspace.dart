@@ -1,3 +1,6 @@
+import 'analytics_domain_filters.dart';
+import 'historical_corrections_workspace.dart';
+import '../../core/analytics/historical_corrections.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:intl/intl.dart';
@@ -24,7 +27,7 @@ const _familyLabels = <AnalyticsFamily, String>{
   AnalyticsFamily.procurement: 'Procurement',
   AnalyticsFamily.suppliers: 'Supplier Khata',
   AnalyticsFamily.cash: 'Cash & shifts',
-  AnalyticsFamily.expenses: 'Expenses',
+  AnalyticsFamily.expenses: 'Finance & flows',
   AnalyticsFamily.staff: 'Staff & payroll',
   AnalyticsFamily.profitability: 'Profitability',
   AnalyticsFamily.audit: 'Control & audit',
@@ -315,6 +318,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
           ConstrainedBox(constraints: const BoxConstraints(maxWidth: 240),
             child: widget.exportActionsBuilder!(context, snapshot, _family)),
       ]),
+      Align(alignment: Alignment.centerLeft, child: TextButton.icon(icon: const Icon(Icons.history), label: const Text('Historical corrections'), onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => Scaffold(appBar: AppBar(title: const Text('Historical corrections')), body: HistoricalCorrectionsWorkspace(service: HistoricalCorrections(database: widget.service.database, auth: widget.service.authService))))))),
       const SizedBox(height: 18),
       Container(padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(color: StreetFoodMafiaColors.darkNavy,
@@ -446,12 +450,14 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
         )),
         FilledButton(key: const ValueKey('analytics_apply_filters'), onPressed: _applyFilters, child: const Text('Apply')),
         TextButton(onPressed: () {
+          _changeQuery(_query.copyWith(domainFilters: {}, fundingStream: null));
           _cashier.clear(); _shift.clear();
           setState(() { _dining = null; _payment = null; });
           _applyFilters();
         }, child: const Text('Clear')),
       ]),
       const SizedBox(height: 12),
+      AnalyticsDomainFilters(query: _query, options: _snapshot?.filterOptions ?? const [], onChanged: _changeQuery),
     ]))],
   );
 
@@ -547,6 +553,8 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
       'average_ticket' => Icons.bar_chart_rounded,
       'negative_stock' => Icons.inventory_2_outlined,
       'expected_drawer' => Icons.point_of_sale_rounded,
+      'food_cogs' => Icons.restaurant_outlined,
+      'packaging_cogs' => Icons.inventory_2_outlined,
       _ => switch (metric.unit) {
       AnalyticsUnit.paisa => Icons.account_balance_wallet_outlined,
       AnalyticsUnit.percent => Icons.percent_rounded,

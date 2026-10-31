@@ -27,6 +27,17 @@ deterministic reconstructed allocations, not evidence of historical allocation
 choices. Unallocatable excess legacy payments remain in the original ledger.
 Unknown due dates remain unknown. New supplier overpayments are blocked.
 
+### Delivery commitments and receipt punctuality
+
+Schema version 24 adds `supplier_receipt_evidence` as an immutable append-only
+audit ledger capturing promised delivery deadlines, actual receipt timestamps,
+and recording Manager identities. Delivery promise amendments are recorded append-only
+pointing to the earlier commitment without silently overwriting historical evidence.
+Receipt punctuality compares actual receipt times to recorded commitments;
+unknown promises or receipts are disclosed honestly rather than classified as failed deliveries.
+Stable cross-references between Mandi wholesale procurements and Vendor Khata credit purchases
+unify acquisition spend and purchase counts without double-counting.
+
 ## Payroll
 
 Manager Portal → **Payroll** includes staff without POS login and retains inactive

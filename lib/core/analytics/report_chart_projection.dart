@@ -41,7 +41,7 @@ class _Charts {
         'Filtered committed orders · current stored status, including cancellations'),
       count('dining_mix', 'Orders by Dining Type', source('orders'), 'dining_type',
         'Filtered committed orders · revisions are not counted again'),
-      ...workload(),
+      ...workload(), ...weekdayPeaks(), ...recurringPeaks(),
     ],
     AnalyticsFamily.delivery => [
       count('attempt_outcomes', 'Delivery attempt outcomes', source('rider_trip_orders'), 'status',
@@ -67,6 +67,16 @@ class _Charts {
         section.rows.where((r) => r.cells['kind'] == 'Item/deal aggregate').toList(),
         'line_value_paisa', 'name', AnalyticsUnit.paisa,
         'Before order discount, tax and fee allocation · this is not item net revenue'),
+      if (section.rows.any((r) => r.cells['allocated_discount_paisa'] != null && (r.cells['allocated_discount_paisa'] as num) > 0))
+        ranked('menu_net_sales', 'Allocated net sales by item or deal',
+          section.rows.where((r) => r.cells['kind'] == 'Item/deal aggregate').toList(),
+          'net_sales_paisa', 'name', AnalyticsUnit.paisa,
+          'Net sales after proportional order-level discount allocation adhering to ADR-0021'),
+      if (section.rows.any((r) => r.cells['margin_paisa'] != null))
+        ranked('menu_margins', 'Item contribution margin',
+          section.rows.where((r) => r.cells['kind'] == 'Item/deal aggregate' && r.cells['margin_paisa'] != null).toList(),
+          'margin_paisa', 'name', AnalyticsUnit.paisa,
+          'Contribution margin based on event-time recipe BOM ingredient costing'),
     ],
     AnalyticsFamily.inventory => inventory(),
     AnalyticsFamily.procurement => [
@@ -75,6 +85,10 @@ class _Charts {
       summed('purchase_ingredients', 'Purchase spend by ingredient', source('mandi_procurements'),
         'ingredient_id', 'spend_paisa', AnalyticsUnit.paisa,
         'Selected interval Mandi records · purchase spend is not sales COGS', labelPrefix: 'Ingredient #'),
+      if (section.rows.any((r) => r.cells['kind'] == 'Supplier credit delivery'))
+        dated('supplier_acquisition_dates', 'Supplier acquisition spend by date',
+          section.rows.where((r) => r.cells['kind'] == 'Supplier credit delivery').toList(),
+          'spend_paisa', 'created_at', 'Recorded supplier acquisition dates · Asia/Karachi'),
     ],
     AnalyticsFamily.suppliers => [
       ranked('supplier_payable', 'Current payable by supplier', source('vendor_khata'),
@@ -85,6 +99,7 @@ class _Charts {
     ],
     AnalyticsFamily.cash => cash(),
     AnalyticsFamily.expenses => [
+      ...moneyFlow(),
       summed('expense_categories', 'Operating expenses by category', source('expense_entries'),
         'category', 'amount_paisa', AnalyticsUnit.paisa,
         'Selected Business Day postings · reversals reduce their original category'),
@@ -109,6 +124,46 @@ class _Charts {
       metrics('profit_components', 'Revenue, cost and operating result',
         ['recognized_revenue', 'cogs', 'gross_profit', 'net_profit'], AnalyticsUnit.paisa,
         'Selected Business Days · overlapping measures, never add these bars together'),
+      if (source('order_cost_events').any((r) => r.cells['classification'] != null)) ...[
+        ReportChartData(
+          id: 'cogs_classification',
+          title: 'COGS by classification',
+          scope: 'Selected order cohort · realized COGS separated into food and packaging',
+          unit: AnalyticsUnit.paisa,
+          points: [
+            point('Food COGS',
+              source('order_cost_events').where((r) => r.cells['classification'] == 'FOOD' && orderCostSign(r.cells['kind']) != 0).toList(),
+              'cost_paisa', signedReturns: true),
+            point('Packaging COGS',
+              source('order_cost_events').where((r) => r.cells['classification'] == 'PACKAGING' && orderCostSign(r.cells['kind']) != 0).toList(),
+              'cost_paisa', signedReturns: true),
+            if (source('order_cost_events').any((r) => r.cells['classification'] == 'UNCLASSIFIED'))
+              point('Legacy Unclassified COGS',
+                source('order_cost_events').where((r) => r.cells['classification'] == 'UNCLASSIFIED' && orderCostSign(r.cells['kind']) != 0).toList(),
+                'cost_paisa', signedReturns: true),
+          ].where((p) => p.rows.isNotEmpty).toList(),
+        ),
+        ReportChartData(
+          id: 'cogs_dining_type',
+          title: 'COGS by Dining Type',
+          scope: 'Selected order cohort · food and packaging COGS by dining channel',
+          unit: AnalyticsUnit.paisa,
+          points: [
+            for (final dt in ['DINE_IN', 'TAKEAWAY', 'DELIVERY']) ...[
+              point('${_diningLabel(dt)} · Food',
+                source('order_cost_events').where((r) => r.cells['dining_type'] == dt && r.cells['classification'] == 'FOOD' && orderCostSign(r.cells['kind']) != 0).toList(),
+                'cost_paisa', signedReturns: true),
+              point('${_diningLabel(dt)} · Packaging',
+                source('order_cost_events').where((r) => r.cells['dining_type'] == dt && r.cells['classification'] == 'PACKAGING' && orderCostSign(r.cells['kind']) != 0).toList(),
+                'cost_paisa', signedReturns: true),
+              if (source('order_cost_events').any((r) => r.cells['dining_type'] == dt && r.cells['classification'] == 'UNCLASSIFIED'))
+                point('${_diningLabel(dt)} · Unclassified',
+                  source('order_cost_events').where((r) => r.cells['dining_type'] == dt && r.cells['classification'] == 'UNCLASSIFIED' && orderCostSign(r.cells['kind']) != 0).toList(),
+                  'cost_paisa', signedReturns: true),
+            ],
+          ].where((p) => p.rows.isNotEmpty).toList(),
+        ),
+      ],
       dated('cost_dates', 'Recorded COGS postings by date',
         source('order_cost_events').where((r) => orderCostSign(r.cells['kind']) != 0).toList(),
         'cost_paisa', 'created_at',
@@ -122,6 +177,30 @@ class _Charts {
         'Whole selected Business Days · recorded outbox status, not proof of recipient receipt'),
     ],
   };
+
+  List<ReportChartData> moneyFlow() {
+    final buckets = source('money_flow_bucket');
+    final details = source('money_flow_event');
+    return [for (final stream in buckets.map((r) => '${r.cells['funding_stream']}').toSet())
+      for (final kind in ['Period money flow', 'Hourly money flow'])
+        for (final measure in ['inflow', 'outflow', 'greatest_net', 'least_net']) (() {
+          final rows = buckets.where((r) => r.cells['funding_stream'] == stream && r.cells['kind'] == kind).toList();
+          rows.sort((a, b) {
+            final rank = (a.cells['${measure}_rank'] as int).compareTo(b.cells['${measure}_rank'] as int);
+            return rank != 0 ? rank : '${a.cells['period']}'.compareTo('${b.cells['period']}');
+          });
+          final value = measure.endsWith('net') ? 'net' : measure;
+          return ReportChartData(id: 'money_${stream}_${measure}_${kind == 'Hourly money flow' ? 'hours' : 'periods'}',
+            title: '$stream · ${measure.replaceAll('_', ' ')} · ${kind == 'Hourly money flow' ? 'hours' : 'periods'}',
+            scope: 'Actual-time money evidence · ${rows.firstOrNull?.cells['time_basis']} · Asia/Karachi',
+            note: 'Observed buckets only; every tied peak retained chronologically. Open activity is labeled partial. Drawer handovers are internal custody transfers, excluded from consolidated business effects. Missing actual times are disclosed in coverage.',
+            unit: AnalyticsUnit.paisa, points: [for (final row in rows)
+              ReportChartPoint('${row.cells['period']}', number(row.cells['${value}_paisa']),
+                quality: '${row.cells['coverage']}'.contains('gaps') || '${row.cells['period_status']}'.contains('open') ? AnalyticsQuality.estimated : AnalyticsQuality.complete,
+                explanation: 'Rank ${row.cells['${measure}_rank']}; ${row.cells['period_status']}; ${row.cells['coverage']}',
+                rows: details.where((r) => '${row.cells['event_ids']}'.split(',').contains(r.sourceId)).toList())]);
+        })()];
+  }
 
   List<ReportChartData> workload() {
     final details = source('orders');
@@ -150,6 +229,37 @@ class _Charts {
             rows: details.where((r) => '${bucket.cells[value ? 'eligible_order_ids' : 'order_ids']}'.split(',').contains(r.sourceId)).toList(),
           )]));
       }
+    }
+    return result;
+  }
+  List<ReportChartData> weekdayPeaks() {
+    final buckets = section.rows.where((r) => r.cells['kind'] == 'Weekday comparison').toList();
+    if (buckets.isEmpty) return [];
+    final sorted = [...buckets]..sort((a, b) {
+      final rank = ((b.cells['orders_per_completed_day'] as num?) ?? -1).compareTo((a.cells['orders_per_completed_day'] as num?) ?? -1);
+      return rank != 0 ? rank : (a.cells['weekday'] as int).compareTo(b.cells['weekday'] as int);
+    });
+    return [ReportChartData(id: 'weekday_average', title: 'Orders per completed Business Day by operational weekday',
+      scope: 'Operational weekday · Asia/Karachi · open days separate', unit: AnalyticsUnit.decimal,
+      note: 'Completed confirmed Orders / completed Business Days, including opened zero-order days. No denominator means unavailable. Order-only filters restrict numerator, not opened-day denominator. Equal averages retain Monday-to-Sunday ties.',
+      points: [for (final row in sorted) ReportChartPoint('${row.cells['period']}', number(row.cells['orders_per_completed_day']),
+        quality: row.cells['orders_per_completed_day'] == null ? AnalyticsQuality.missing : AnalyticsQuality.complete,
+        explanation: '${row.cells['completed_confirmed_orders']} / ${row.cells['completed_business_days']} completed days; aggregate ${row.cells['confirmed_orders']}; open ${row.cells['open_confirmed_orders']} Orders / ${row.cells['open_business_days']} days', rows: [row])])];
+  }
+  List<ReportChartData> recurringPeaks() {
+    final result = <ReportChartData>[];
+    for (final kind in ['Weekly workload', 'Monthly workload', 'Calendar weekday total']) {
+      final rows = section.rows.where((r) => r.cells['kind'] == kind).toList();
+      if (rows.isEmpty) continue;
+      result.add(ReportChartData(id: kind == 'Weekly workload' ? 'workload_weeks' : kind == 'Monthly workload' ? 'workload_months' : 'calendar_weekdays',
+        title: kind == 'Calendar weekday total' ? 'Actual Calendar weekday totals' : '$kind trend',
+        scope: '${rows.first.cells['weekday_basis']} · Asia/Karachi · Monday-start weeks / local calendar months',
+        unit: AnalyticsUnit.count,
+        note: 'Selected observed evidence only. Incomplete/clipped periods are labeled; unopened Business Days are not fabricated. Exact bucket boundaries, source IDs and coverage are retained in source details and exports.',
+        points: [for (final row in rows) ReportChartPoint('${row.cells['period']}${row.cells['period_complete'] == false ? ' · Incomplete' : ''}', number(row.cells['confirmed_orders']),
+          explanation: '${row.cells['coverage']}; ${row.cells['period_start'] ?? row.cells['period']} to ${row.cells['period_end_exclusive'] ?? 'selected range'} exclusive',
+          quality: row.cells['confirmed_orders'] == null ? AnalyticsQuality.missing : row.cells['period_complete'] == false ? AnalyticsQuality.estimated : AnalyticsQuality.complete,
+          rows: [row])]));
     }
     return result;
   }
@@ -265,6 +375,12 @@ class _Charts {
   }
 
   static num? number(Object? value) => value is num && value.isFinite ? value : null;
+  static String _diningLabel(String dt) => switch (dt) {
+    'DINE_IN' => 'Dine-In',
+    'TAKEAWAY' => 'Takeaway',
+    'DELIVERY' => 'Delivery',
+    _ => dt,
+  };
   static List<ReportChartPoint> _rank(List<ReportChartPoint> points) => points..sort((a, b) {
     final order = (b.value?.abs() ?? -1).compareTo(a.value?.abs() ?? -1);
     return order != 0 ? order : a.label.compareTo(b.label);
