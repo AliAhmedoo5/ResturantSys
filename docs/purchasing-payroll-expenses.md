@@ -51,9 +51,9 @@ Darjan = 12pcs, Peti/crate item-specific):
 - **Moving Weighted Average Cost (Moving WAC)**: Each posted purchase invoice
   updates the ingredient's Moving WAC in signed 64-bit integer paisa via:
   $$\bar{C}_{\text{new}} = \frac{(Q_{\text{current}} \times \bar{C}_{\text{old}}) + (Q_{\text{purchase}} \times C_{\text{purchase}})}{Q_{\text{current}} + Q_{\text{purchase}}}$$
-- **Negative Stock Deficit Reconciliation**: When physical deliveries arrive and are
+- **Perpetual Negative Stock Reconciliation**: When physical deliveries arrive and are
   consumed during rush hours before invoice entry, on-hand stock may drop below zero.
-  Posting the delayed invoice covers the negative stock deficit at the new invoice
+  Posting the delayed invoice covers the negative stock balance at the new invoice
   rate, establishes the remaining positive stock at the invoice rate, and clears the
   temporary negative balance badge without double-deduction or checkout block.
 

@@ -57,6 +57,11 @@ Under [Specification #60](https://github.com/AliAhmedoo5/ResturantSys/issues/60)
     1. The physical deficit of $5\text{ kg}$ is covered at the new invoice rate.
     2. The remaining $+15\text{ kg}$ establishes the positive on-hand asset balance at Rs. 650.00/kg ($15 \times 65,000 = 975,000\text{ paisa} = \text{PKR } 9,750.00$).
     3. No retroactive catch-up consumption or double-deduction is queued. The ledger reflects clean, non-blocking operational continuity.
+- **Partial Negative Balance Coverage**:
+  - If purchase quantity $Q_{\text{purchase}}$ is less than the negative deficit $|Q_{\text{current}}|$ (e.g. stock is $-3\text{ kg}$ and purchase receipt is $+2\text{ kg}$, leaving $-1\text{ kg}$):
+    1. The $+2\text{ kg}$ covers $2\text{ kg}$ of deficit at the new invoice cost $C_{\text{purchase}}$.
+    2. The remaining negative balance ($-1\text{ kg}$) updates its pegged last known unit cost to $C_{\text{purchase}}$.
+    3. The balance-sheet asset value remains **PKR 0.00** (with the temporary negative balance badge retained) until fully reconciled by subsequent receipts.
 
 ### 3. Strict Separation: Acquisition-Rate Sales COGS vs. Inventory Valuation
 - **Sales COGS Preserved**: Historical sales already snapshotted recipe BOM acquisition costs at the time of sale (`order_items.bom_json` and `event_time`). Past sales COGS is immutable and must **NEVER** be recalculated or overwritten when inventory unit costs change.
@@ -64,7 +69,7 @@ Under [Specification #60](https://github.com/AliAhmedoo5/ResturantSys/issues/60)
   Historical inventory at cutoff $T_{\text{cutoff}}$ evaluates the quantity bridge:
   $$\text{Ending Qty} = \text{Opening Qty} + \text{Purchases} - \text{Sales BOM} - \text{Packaging} - \text{Wastage} \pm \text{Adjustments}$$
   $$\text{Valuation at } T_{\text{cutoff}} = \sum_{i} \left(\text{Ending Qty}_i \times \bar{C}_{i, T_{\text{cutoff}}}\right)$$
-  - Operational inventory variance (shrinkage, unrecorded spillage, portion overages discovered during physical stock counts) is posted via signed physical count adjustments and distinct kitchen waste ledgers, completely decoupled from sales COGS.
+  - Operational inventory variance (Kitchen Wastage / physical count adjustment, unrecorded spillage, portion overages discovered during physical stock counts) is posted via signed physical count adjustments and distinct kitchen waste ledgers, completely decoupled from sales COGS.
 
 ### 4. Mandi Unit Conversion Snapshots
 - Pakistani wholesale purchasing units must be converted to standard stock units (grams, milliliters, pieces) upon purchase invoice entry:
@@ -82,6 +87,18 @@ Under [Specification #60](https://github.com/AliAhmedoo5/ResturantSys/issues/60)
 - Inventory valuation reports display an explicit coverage indicator:
   $$\text{Valuation Coverage} = \frac{\text{Active Lines with Verified Cost Evidence}}{\text{Total Active Lines in Scope}} \times 100\%$$
   Example display: `Valuation Coverage: 96% of active inventory lines`. Lines with unknown costs are highlighted for manager audit.
+
+### 6. Vendor Returns and Physical Count Inventory Adjustments
+- **Return-to-Vendor (RTV)**:
+  - When inventory items are rejected or returned to a supplier, the return reduces on-hand inventory quantity and asset value at the **original purchase invoice unit rate** (or at the **current Moving WAC** if the original specific purchase invoice line is untracked).
+  - Return-to-vendor transactions never retroactively recalculate or alter past sales COGS.
+- **Physical Stock Variance Adjustments**:
+  Physical count reconciliations (periodic cycle counts or end-of-month stocktakes) adjust recorded ledger quantities to matched physical quantities:
+  - **Favorable Adjustment (Surplus Found)**:
+    When the physical count exceeds the recorded ledger quantity ($Q_{\text{actual}} > Q_{\text{ledger}}$), the surplus quantity is brought onto the balance sheet at the **current Moving WAC**. The moving average unit cost remains unchanged.
+  - **Unfavorable Adjustment (Physical Count Shortage / Unrecorded Loss)**:
+    When the physical count is less than the recorded ledger quantity ($Q_{\text{actual}} < Q_{\text{ledger}}$), the shortage quantity is written off at the **current Moving WAC** directly to the operational inventory variance ledger (`kitchen_wastage` / Inventory Shortage). The moving average unit cost of remaining stock remains unchanged.
+  - Physical count adjustments are recognized in the period they are discovered and are **never** back-allocated or retroactively charged to historical customer sales transactions or past sales COGS.
 
 ---
 
@@ -119,6 +136,11 @@ Under [Specification #60](https://github.com/AliAhmedoo5/ResturantSys/issues/60)
   - The deficit ($3\text{ kg}$) is absorbed at the incoming rate; the remaining positive on-hand quantity ($12\text{ kg}$) is valued at the new rate:
     $$\text{Asset Valuation} = 12 \times 85,000 = 1,020,000\text{ paisa} = \text{PKR } 10,200.00$$
   - No retroactive catch-up consumption is queued; no double-deduction occurs.
+- **Sub-case: Partial Negative Balance Coverage**:
+  - If the manager initially enters an interim purchase receipt of only $+2\text{ kg}$ at Rs. 850.00/kg ($85,000\text{ paisa/kg}$) while stock is $-3\text{ kg}$:
+    - The $+2\text{ kg}$ covers $2\text{ kg}$ of the deficit at Rs. 850.00/kg, leaving a remaining negative balance of $-1\text{ kg}$ ($-3\text{ kg} + 2\text{ kg} = -1\text{ kg}$).
+    - The pegged last known unit cost for the item updates to Rs. 850.00/kg.
+    - Reported asset value remains **PKR 0.00** with the `Estimated valuation: item in temporary negative balance` badge active until subsequent receipts restore quantity to a positive balance.
 
 ### Example 3: Sales COGS Immutability vs Inventory Valuation
 - **Sale Time**:
@@ -143,6 +165,24 @@ Under [Specification #60](https://github.com/AliAhmedoo5/ResturantSys/issues/60)
   - Stock ledger logs $+80,000\text{ g}$ at $12\text{ paisa/g}$.
 - **Subsequent Configuration Change**:
   - If a manager later updates supplier packaging definitions (e.g., redefining a custom Mann or Peti), the historical invoice row retains its original $40\text{ kg/Mann}$ multiplier snapshot. Historical ledger integrity is preserved.
+
+### Example 5: Vendor Return and Physical Count Inventory Adjustment
+- **Initial Inventory State**:
+  - $20\text{ kg}$ fresh chicken on hand with Moving WAC of Rs. 640.00/kg ($64,000\text{ paisa/kg}$).
+  - Total Asset Value: $20 \times 64,000 = 1,280,000\text{ paisa} = \text{PKR } 12,800.00$.
+- **Event A: Return-to-Vendor (RTV)**:
+  - $5\text{ kg}$ from a recent morning delivery invoice (purchased at Rs. 660.00/kg = $66,000\text{ paisa/kg}$) is rejected for quality and returned to the vendor with a vendor credit note.
+  - On-hand quantity reduces: $20\text{ kg} - 5\text{ kg} = 15\text{ kg}$.
+  - Asset value reduces by return cost: $5 \times 66,000 = 330,000\text{ paisa} = \text{PKR } 3,300.00$.
+  - Remaining asset value: $1,280,000 - 330,000 = 950,000\text{ paisa} = \text{PKR } 9,500.00$.
+  - Resulting Moving WAC:
+    $$\bar{C}_{\text{new}} = \frac{950,000}{15} \approx 63,333\text{ paisa/kg} \quad (\text{Rs. } 633.33\text{/kg})$$
+  - Past sales COGS for orders fulfilled earlier that day remains completely untouched.
+- **Event B: Physical Count Shortage**:
+  - An evening physical count reveals $14\text{ kg}$ of chicken actually present in the walk-in chiller (a shortage of $1\text{ kg}$ due to prep trimming loss or unrecorded spill).
+  - Unfavorable adjustment: $1\text{ kg}$ shortage written off at the current Moving WAC ($63,333\text{ paisa} = \text{PKR } 633.33$) directly to `kitchen_wastage` (Inventory Shortage).
+  - Remaining on-hand stock: $14\text{ kg}$ valued at $63,333\text{ paisa/kg} = 886,662\text{ paisa} = \text{PKR } 8,866.62$.
+  - Past sales COGS is never retroactively adjusted to absorb the $1\text{ kg}$ variance.
 
 ---
 

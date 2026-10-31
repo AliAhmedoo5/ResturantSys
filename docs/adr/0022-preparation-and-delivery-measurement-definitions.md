@@ -13,7 +13,7 @@ In fast-food counter and delivery operations, accurate measurement of food prepa
 1. **Manual Milestone Recording Without KDS/KOT**: The kitchen is immediately adjacent to the counter. There is no dedicated Kitchen Display System (KDS) or physical Kitchen Order Ticket (KOT) hardware queue. Status transitions (`CONFIRMED` -> `PREPARING` -> `READY`) are recorded manually by Cashiers on the POS terminal. During peak rushes, Cashiers may occasionally miss milestone taps or mark them out-of-order.
 2. **Repeated Kitchen Status Moves (Rework Cycles)**: An order marked `READY` may be returned to `PREPARING` if a customer modifies an item, an order is held under a heat lamp, or an item is remade due to a burn or spill. Naive systems either overwrite the initial completion time (artificially inflating prep time) or drop subsequent rework evidence entirely.
 3. **Outlier Skew in Arithmetic Averages**: Simple arithmetic mean preparation and delivery times are heavily distorted by extreme outliers (e.g., an order held for a scheduled pickup, a customer unreachable for an hour, or an forgotten counter tap).
-4. **Zone-Specific Delivery SLAs vs. Global Defaults**: Travel times vary drastically across neighborhoods. A flat 30-minute target is unachievable for distant delivery zones, while masking delays in adjacent zones.
+4. **Delivery Area Target SLAs vs. Global Defaults**: Travel times vary drastically across neighborhoods. A flat 30-minute target is unachievable for distant delivery areas, while masking delays in adjacent delivery areas.
 5. **Multi-Order (Batch) Trips**: Riders frequently depart with multiple delivery orders on a single trip. Naive metrics attributing trip duration uniformly across orders misstate individual transit times.
 6. **Conflating Delivery Attempts with Order Failures**: A rider returning with undelivered food because a customer didn't answer their phone does not constitute an order failure. The customer often calls back within 20 minutes for a successful redelivery. Treating every returned run as a canceled/failed order artificially spikes delivery failure rates.
 7. **COD Cash Aging Clock Origin**: When Cash on Delivery (COD) orders are dispatched, cash is in transit. When a rider returns, physical currency must be handed over to the Cashier. Naive systems start aging COD balances from order creation rather than rider return, masking the true duration that cash sits unverified at the counter.
@@ -49,6 +49,12 @@ $$\text{Prep Duration} = T_{\text{ready}} - T_{\text{confirmed}}$$
 - Reports must disclose explicit sample coverage alongside percentiles:
   $$\text{Prep Time: 14m (p50, N=42/50, 84\% coverage)}$$
 
+#### Out-of-Order Kitchen Milestone Sequence
+- If a kitchen completion milestone timestamp occurs prior to order confirmation ($T_{\text{ready}} < T_{\text{confirmed}}$), the event is flagged as `Quality.invalidSequence` (or `Quality.outOfOrderMilestone`).
+- Orders with invalid timestamp sequences are strictly **excluded** from preparation duration percentiles (p50 and p90) and duration calculations.
+- The system must **never** calculate or display negative preparation durations.
+- Invalid sequence events are logged to the data quality audit report for supervisor review.
+
 ---
 
 ### 2. Delivery Travel Time & Late SLA Thresholds
@@ -60,12 +66,22 @@ $$\text{Rider Travel Time} = T_{\text{delivered}} - T_{\text{dispatched}}$$
 - $T_{\text{delivered}}$: Delivery completion timestamp, recorded either at the door (if mobile dropoff is logged) or upon rider return to the counter.
 
 #### Delivery SLA Contract
-- **Total Elapsed Customer Time**: Measured from order confirmation to final customer delivery:
-  $$\text{Total Elapsed Delivery Time} = T_{\text{delivered}} - T_{\text{confirmed}}$$
-- **Zone Target ETA**: Evaluated against the Manager-configured `target_eta_minutes` on the selected `Delivery Area`.
+- **Delivery Area Target ETA**: Evaluated against the Manager-configured `target_eta_minutes` on the selected `Delivery Area` (also referred to as `Area Target ETA`).
 - **Fallback SLA**: If no specific target ETA is configured for the delivery area, the system enforces a default fallback SLA of **45 minutes** from $T_{\text{confirmed}}$.
-- **Late Classification**: An order is classified as **Late** if:
-  $$(T_{\text{delivered}} - T_{\text{confirmed}}) > \text{Target ETA}$$
+- **Completed Order Late SLA Evaluation**:
+  $$\text{Total Elapsed Delivery Time} = T_{\text{delivered}} - T_{\text{confirmed}}$$
+  A completed order is classified as **Late** if:
+  $$(T_{\text{delivered}} - T_{\text{confirmed}}) > \text{Delivery Area Target ETA}$$
+- **In-Flight Late SLA Evaluation (Active Orders)**:
+  For active orders currently preparing or in transit ($T_{\text{delivered}}$ is not yet reached), the elapsed duration is measured against the current time $T_{\text{now}}$:
+  $$\text{Current Elapsed Duration} = T_{\text{now}} - T_{\text{confirmed}}$$
+  If $(T_{\text{now}} - T_{\text{confirmed}}) > \text{Delivery Area Target ETA}$, the active order is flagged and badged as **`In-Flight Late`** on live manager dispatch screens and active order boards, alerting dispatchers before final delivery completes.
+
+#### Out-of-Order Delivery Timestamps
+- If a delivery completion timestamp occurs prior to trip dispatch ($T_{\text{delivered}} < T_{\text{dispatched}}$) or prior to order confirmation ($T_{\text{delivered}} < T_{\text{confirmed}}$), the event is flagged as `Quality.invalidSequence` (or `Quality.outOfOrderMilestone`).
+- Invalid delivery sequences are strictly **excluded** from rider travel time calculations, travel duration percentiles, and delivery SLA statistics.
+- The system must never calculate negative transit durations.
+- Invalid delivery sequences are logged in the data quality audit report.
 
 #### Batch Trips
 - When a rider departs on a multi-order trip, orders are grouped under a shared trip ID.
@@ -115,7 +131,7 @@ Unsettled COD exposure is bucketed into four distinct operational aging bands:
 ## Worked Acceptance Examples
 
 ### Example 1: Normal Kitchen & Delivery Flow
-- **Scenario**: Single delivery order in Gulshan zone.
+- **Scenario**: Single delivery order in Gulshan Delivery Area.
 - **Timeline**:
   - `19:00`: Cashier confirms Order #1049 ($T_{\text{confirmed}}$).
   - `19:15`: Kitchen finishes cooking; Cashier marks order `READY` ($T_{\text{ready}}$).
@@ -125,8 +141,8 @@ Unsettled COD exposure is bucketed into four distinct operational aging bands:
   - $\text{Prep Duration} = 19:15 - 19:00 = 15\text{ minutes}$.
   - $\text{Rider Travel Time} = 19:42 - 19:20 = 22\text{ minutes}$.
   - $\text{Total Elapsed Time} = 19:42 - 19:00 = 42\text{ minutes}$.
-  - Gulshan Area Target ETA is 45 minutes.
-  - $\text{Total Elapsed (42m)} \le \text{Target ETA (45m)}$ $\rightarrow$ **On-Time (Met SLA)**.
+  - Gulshan Delivery Area Target ETA is 45 minutes.
+  - $\text{Total Elapsed (42m)} \le \text{Delivery Area Target ETA (45m)}$ $\rightarrow$ **On-Time (Met SLA)**.
 
 ### Example 2: Reattempted Delivery vs Final Failure
 - **Scenario**: Customer phone unreachable on first dispatch, delivered on second dispatch.
@@ -163,6 +179,18 @@ Unsettled COD exposure is bucketed into four distinct operational aging bands:
   - $T_{\text{ready}}$ is missing (`Quality.missingEvidence`).
   - Order #1052 is **excluded** from preparation time p50/p90 percentiles. Zero minutes is NOT assumed.
   - Summary report outputs: `Prep Time (p50): 12m (N=19/20, 95% coverage)`.
+
+### Example 5: Out-of-Order Timestamp Sequence Handling
+- **Scenario**: System clock mismatch or cashier terminal tap sequence error.
+- **Timeline**:
+  - `19:30`: Cashier confirms Order #1053 ($T_{\text{confirmed}}$).
+  - Due to a terminal clock synchronization discrepancy or accidental pre-tap, $T_{\text{ready}}$ is logged with a timestamp of `19:25` ($T_{\text{ready}} < T_{\text{confirmed}}$).
+- **Resolution**:
+  - Flagged as `Quality.invalidSequence` (`Quality.outOfOrderMilestone`).
+  - Negative duration ($19:25 - 19:30 = -5\text{ minutes}$) is strictly prohibited and rejected.
+  - Order #1053 is **excluded** from preparation duration percentiles (p50 and p90).
+  - Event is recorded in the data quality audit report: `Order #1053: invalid milestone sequence (T_ready < T_confirmed)`.
+  - Delivery transit measurements apply the identical exclusion if $T_{\text{delivered}} < T_{\text{dispatched}}$ or $T_{\text{delivered}} < T_{\text{confirmed}}$.
 
 ---
 

@@ -253,12 +253,12 @@ _Avoid_: Milestone completeness, timer uptime, tap score
 The transit duration measured from courier trip departure ($T_{\text{dispatched}}$) to delivery completion ($T_{\text{delivered}}$) recorded at the doorstep or upon counter return.
 _Avoid_: Trip length, ride duration, delivery transit
 
-**Zone Target ETA**:
-The manager-configured expected fulfillment duration in minutes assigned to a specific delivery area, used as the benchmark for evaluating on-time delivery performance.
-_Avoid_: Area deadline, zone SLA, standard delay
+**Delivery Area Target ETA**:
+The manager-configured expected fulfillment duration in minutes assigned to a specific delivery area (also referred to as Area Target ETA), used as the benchmark for evaluating on-time delivery performance.
+_Avoid_: Zone Target ETA, area deadline, zone SLA, standard delay
 
 **Delivery SLA**:
-The service level threshold evaluated against the zone target ETA (or a 45-minute fallback from confirmation) to classify orders as on-time or late.
+The service level threshold evaluated against the Delivery Area Target ETA (or a 45-minute fallback from confirmation) to classify orders as on-time or late.
 _Avoid_: Delivery commitment, dropoff guarantee, speed quota
 
 **Reattempted Delivery**:

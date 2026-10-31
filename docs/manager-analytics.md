@@ -57,7 +57,7 @@ Trend tables and detail tables provide the values behind the visual display. Sou
 - **Collected tender** is recorded tender minus change, with explicit refund rows applied. Legacy payments are grouped by their order's Business Day; their tables do not support a complete actual-receipt-time cash-flow statement.
 - **Expected drawer** follows the cashier ledger. Cash refunds recorded as PAY_OUT reduce the drawer once, rather than being subtracted again through negative tender rows. A missing blind count leaves variance unknown.
 - **Collection Due** remains separate from physical delivery. An unsettled trip's expected amount is cash exposure; it is not proof that the rider collected it.
-- **Preparation and delivery measurement definitions**: Milestone conventions ($T_{\text{ready}} - T_{\text{confirmed}}$), repeated transition rework cycles, p50/p90 percentiles, sample coverage disclosures, Zone Target ETAs (with 45-minute fallback SLA), reattempt tracking vs. final delivery failures, and unsettled COD aging clocks (originating at rider return $T_{\text{trip\_return}}$ across Shift, Overdue, Aged, and Critical bands) follow [ADR-0022: Preparation and Delivery Measurement Definitions](adr/0022-preparation-and-delivery-measurement-definitions.md).
+- **Preparation and delivery measurement definitions**: Milestone conventions ($T_{\text{ready}} - T_{\text{confirmed}}$), repeated transition rework cycles, p50/p90 percentiles, sample coverage disclosures, Delivery Area Target ETAs (with 45-minute fallback SLA), reattempt tracking vs. final delivery failures, and unsettled COD aging clocks (originating at rider return $T_{\text{trip\_return}}$ across Shift, Overdue, Aged, and Critical bands) follow [ADR-0022: Preparation and Delivery Measurement Definitions](adr/0022-preparation-and-delivery-measurement-definitions.md).
 - **Purchases**, **supplier credit**, **supplier payments** and **operating expenses** are different measures. Adding them together would double-count activity. Likewise, current purchase prices cannot establish historical sales COGS.
 - **Period comparisons** disclose the baseline and the absolute difference in the metric's unit. A zero baseline retains that absolute difference and has no percentage growth. Comparisons are withheld for live/open coverage without an equivalent elapsed baseline.
 
@@ -96,7 +96,6 @@ Schema 23 captures names atomically at source insertion in an append-only identi
 Audit Timestamp means immutable recording evidence; Event Time means actual occurrence. New money events retain explicit UTC recording time and preserve actual event time independently. Reports convert either known instant for Asia/Karachi display while exporting the source string. Existing naive local fields are preserved, never rewritten as supposedly known UTC history.
 
 COD receiving attribution and evidence limits: see [COD settlement evidence](cod-settlement-evidence.md).
-Preparation, delivery logistics, and COD aging measurement definitions: see [ADR-0022](adr/0022-preparation-and-delivery-measurement-definitions.md).
 
 ## Busiest Order days and hours
 
