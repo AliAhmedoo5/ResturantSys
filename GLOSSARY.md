@@ -202,3 +202,46 @@ _Avoid_: Item discount, line reduction
 **Unallocated Legacy Order**:
 A closed historical order created before line-level allocation ledgers were introduced, presented in reports with honest missing-allocation disclosure rather than fabricated line splits.
 _Avoid_: Incomplete order, corrupted order
+
+## Kitchen & Delivery Fulfillment
+
+**Preparation Duration (Prep Time)**:
+The elapsed duration from order confirmation ($T_{\text{confirmed}}$) to the initial kitchen milestone marked READY ($T_{\text{ready}}$), summarized via median (p50) and 90th percentile (p90) rather than simple arithmetic means.
+_Avoid_: Cooking speed, kitchen latency, average prep time
+
+**Rework Cycle**:
+An append-only kitchen transition moving an order back from READY to PREPARING (and back to READY) for remakes, heat-lamp warming, or customer changes without overwriting the primary READY milestone timestamp.
+_Avoid_: Prep reset, kitchen retry, remake overwrite
+
+**Milestone Sample Coverage**:
+The ratio of eligible orders possessing observed, non-null milestone timestamps divided by total orders in the period, ensuring missing taps are disclosed with sample counts rather than synthesized as zero minutes.
+_Avoid_: Milestone completeness, timer uptime, tap score
+
+**Rider Travel Time**:
+The transit duration measured from courier trip departure ($T_{\text{dispatched}}$) to delivery completion ($T_{\text{delivered}}$) recorded at the doorstep or upon counter return.
+_Avoid_: Trip length, ride duration, delivery transit
+
+**Zone Target ETA**:
+The manager-configured expected fulfillment duration in minutes assigned to a specific delivery area, used as the benchmark for evaluating on-time delivery performance.
+_Avoid_: Area deadline, zone SLA, standard delay
+
+**Delivery SLA**:
+The service level threshold evaluated against the zone target ETA (or a 45-minute fallback from confirmation) to classify orders as on-time or late.
+_Avoid_: Delivery commitment, dropoff guarantee, speed quota
+
+**Reattempted Delivery**:
+A subsequent courier delivery dispatch following a returned, incomplete trip attempt (e.g. unreachable customer or gated address), tracked distinctly without counting as an order failure.
+_Avoid_: Delivery failure (for temporary return), second trip, retry penalty
+
+**Final Delivery Failure**:
+A terminal fulfillment failure reached when an order is explicitly canceled before delivery (`CANCELLED_UNDELIVERED`) or returned with food written off to kitchen wastage (`RETURNED_WASTED`).
+_Avoid_: Returned run, failed attempt, courier bounce
+
+**Unsettled COD Aging Clock**:
+The operational duration counter tracking uncollected Cash on Delivery funds beginning at courier trip return ($T_{\text{trip\_return}}$) at the counter, rather than from order creation.
+_Avoid_: COD age, cash delay, driver debt timer
+
+**Aging Bands**:
+The operational classification of unsettled COD exposure categorizing pending collections into Current Shift, Overdue / Unsettled (0–24h), Aged (1–3 days), and Critical (>3 days).
+_Avoid_: Overdue buckets, debt stages, aging brackets
+

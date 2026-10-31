@@ -1,5 +1,8 @@
 # Business Day reports and delivery
 
+> [!NOTE]
+> This document specifies the automated export, local archiving, and network transmission of Business Day reports (PDF/Excel via Gmail SMTP or HTTPS relay). For restaurant food delivery logistics, courier travel times, delivery SLA thresholds, reattempt accounting, and unsettled COD aging definitions, refer to [ADR-0022: Preparation and Delivery Measurement Definitions](adr/0022-preparation-and-delivery-measurement-definitions.md).
+
 The Manager portal's **Z-Reports & Backups → Report delivery & archive** contains delivery settings, local PDF/Excel artifacts, and delivery history. The close command atomically seals shifts and Business Day records and stores a revision-1 report snapshot. An uncounted shift stays uncounted and is flagged for review. Daily pickup tokens belong to a Business Day; the next day starts at #01 without changing old token identities.
 
 PDF and XLSX files are saved under `reports` beside the SQLite database. A report filename includes the Business Day ID/date, revision, and snapshot hash. Reports contain sales, all recorded tender methods, Collection Due separately, inventory changes, wastage, shift reconciliations, and Vendor Khata movements. Tender collection is net of explicit refunds. Drawer reconciliation uses positive physical cash receipts and subtracts refund PAY_OUT movements once, so refunded cash is never deducted twice. Monetary values in workbook columns are integer paisa; inventory quantities use the ingredient's storage unit. Customer contact details, PINs, and credentials are excluded.
