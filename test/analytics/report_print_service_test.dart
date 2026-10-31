@@ -172,5 +172,45 @@ void main() {
       expect(result.isSuccess, isFalse);
       expect(result.message, contains('Printer device offline'));
     });
+
+    test('WindowsReportPrintAdapter native print dialog handles success, cancel, and error distinction', () async {
+      // 1. Success
+      final successAdapter = WindowsReportPrintAdapter(
+        processRunner: (exe, args) async {
+          expect(exe, 'powershell');
+          expect(args, contains('-STA'));
+          return ProcessResult(1234, 0, 'SUCCESS\n', '');
+        },
+      );
+      final successResult = await ReportPrintService(adapter: successAdapter).printReport(
+        _fixture(),
+        AnalyticsFamily.sales,
+      );
+      expect(successResult.status, ReportPrintStatus.printed);
+      expect(successResult.isSuccess, isTrue);
+
+      // 2. User cancellation
+      final cancelAdapter = WindowsReportPrintAdapter(
+        processRunner: (exe, args) async => ProcessResult(1235, 1, 'CANCELLED\n', ''),
+      );
+      final cancelResult = await ReportPrintService(adapter: cancelAdapter).printReport(
+        _fixture(),
+        AnalyticsFamily.sales,
+      );
+      expect(cancelResult.status, ReportPrintStatus.cancelled);
+      expect(cancelResult.isSuccess, isFalse);
+
+      // 3. Process execution failure (distinguished from cancel)
+      final errorAdapter = WindowsReportPrintAdapter(
+        processRunner: (exe, args) async => ProcessResult(1236, 127, '', 'Fatal powershell crash'),
+      );
+      final errorResult = await ReportPrintService(adapter: errorAdapter).printReport(
+        _fixture(),
+        AnalyticsFamily.sales,
+      );
+      expect(errorResult.status, ReportPrintStatus.failed);
+      expect(errorResult.isSuccess, isFalse);
+      expect(errorResult.message, contains('Print dialog invocation failed'));
+    });
   });
 }

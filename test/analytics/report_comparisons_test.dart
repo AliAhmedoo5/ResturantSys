@@ -60,6 +60,17 @@ void main() {
       expect(query.priorQuery, isNull);
     });
 
+    test('default comparison mode is none with null prior windows', () {
+      final query = AnalyticsQuery(
+        startDate: DateTime.utc(2026, 10, 25),
+        endDateExclusive: DateTime.utc(2026, 10, 26),
+      );
+      expect(query.comparisonMode, AnalyticsComparisonMode.none);
+      expect(query.priorStartDate, isNull);
+      expect(query.priorEndDateExclusive, isNull);
+      expect(query.priorQuery, isNull);
+    });
+
     test('priorQuery preserves domain filters and cashier/shift filters', () {
       final query = AnalyticsQuery(
         startDate: DateTime.utc(2026, 10, 25),

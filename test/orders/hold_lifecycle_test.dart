@@ -138,13 +138,13 @@ void main() {
 
       events = await db.query('hold_lifecycle_events', orderBy: 'id ASC');
       expect(events, hasLength(4));
-      // First is REPLACED for hold1
-      expect(events[2]['event_type'], 'REPLACED');
-      expect(events[2]['hold_id'], hold1);
-      expect(events[2]['previous_hold_id'], hold1);
-      // Second is CREATED for hold2
-      expect(events[3]['event_type'], 'CREATED');
-      expect(events[3]['hold_id'], hold2);
+      // CREATED for hold2 links to previousHoldId
+      final createdHold2 = events.firstWhere((e) => e['hold_id'] == hold2 && e['event_type'] == 'CREATED');
+      expect(createdHold2['previous_hold_id'], hold1);
+      // REPLACED for hold1 links to successor hold2 (not self-referential)
+      final replacedHold1 = events.firstWhere((e) => e['hold_id'] == hold1 && e['event_type'] == 'REPLACED');
+      expect(replacedHold1['previous_hold_id'], hold2);
+      expect(replacedHold1['previous_hold_id'], isNot(hold1));
 
       // Old hold is removed from active held_carts
       final activeHolds = await orders.getHolds(2);
@@ -280,7 +280,7 @@ void main() {
       expect(convertedRow.cells['cashier_id'], 2);
 
       final replacedRow = lifecycleRows.firstWhere((r) => r.cells['event_type'] == 'REPLACED');
-      expect(replacedRow.cells['previous_hold_id'], holdA);
+      expect(replacedRow.cells['previous_hold_id'], holdB);
 
       // Ensure no draft label or private customer data is leaked in rows or CSV
       final csv = AnalyticsExportService().csv(snapshot, AnalyticsFamily.orders);

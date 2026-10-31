@@ -76,8 +76,9 @@ void main() {
     final dropdownFinder = find.byKey(const ValueKey('analytics_comparison_mode'));
     expect(dropdownFinder, findsOneWidget);
 
-    // Initial query has comparison mode dropdown
-    expect(find.text('Preceding period'), findsWidgets);
+    // Initial query defaults to none
+    expect(lastQuery?.comparisonMode, AnalyticsComparisonMode.none);
+    expect(find.text('No comparison'), findsWidgets);
 
     // Switch comparison mode to 'Comparable weekday'
     await tester.tap(dropdownFinder);
@@ -96,5 +97,77 @@ void main() {
 
     // Balance metric shows not applicable
     expect(find.text('Comparison: Not applicable (snapshot balance)'), findsOneWidget);
+
+    // Sales family does not show unsupported comparison banner
+    expect(find.byKey(const ValueKey('unsupported_comparison_banner')), findsNothing);
+
+    // Switch to Inventory family (snapshot balance family)
+    tester.widget<DropdownButtonFormField<AnalyticsFamily>>(
+      find.byKey(const ValueKey('analytics_family'))).onChanged!(AnalyticsFamily.inventory);
+    await tester.pumpAndSettle();
+
+    // Banner must appear for snapshot balance families
+    expect(find.byKey(const ValueKey('unsupported_comparison_banner')), findsOneWidget);
+    expect(
+      find.text('Historical comparison is unsupported for snapshot balance families: Inventory. Current balances are not historical snapshots.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('Scoped phone masking masks only phone column keys and leaves general text unmasked', (tester) async {
+    tester.view.physicalSize = const Size(1280, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    final fakeService = _FakeAnalyticsService(
+      snapshotBuilder: (query) => AnalyticsSnapshot(
+        query: query,
+        generatedAt: DateTime(2026, 10, 26, 12),
+        businessDayIds: [1],
+        sections: [
+          AnalyticsSection(
+            family: AnalyticsFamily.delivery,
+            title: 'Delivery',
+            metrics: const [],
+            columns: const [
+              AnalyticsColumn(key: 'customer_phone', label: 'Customer Phone'),
+              AnalyticsColumn(key: 'notes', label: 'Notes'),
+            ],
+            rows: [
+              AnalyticsRow(
+                id: 'del-1',
+                sourceType: 'orders',
+                sourceId: '10',
+                cells: {
+                  'customer_phone': '03001234567',
+                  'notes': 'Please call 03001234567 before arriving at gate',
+                },
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: ManagerAnalyticsWorkspace(
+          service: fakeService,
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    tester.widget<DropdownButtonFormField<AnalyticsFamily>>(
+      find.byKey(const ValueKey('analytics_family'))).onChanged!(AnalyticsFamily.delivery);
+    await tester.pumpAndSettle();
+
+    // customer_phone column is masked
+    expect(find.text('[phone masked]'), findsOneWidget);
+    // notes column is NOT masked
+    expect(find.text('Please call 03001234567 before arriving at gate'), findsOneWidget);
   });
 }

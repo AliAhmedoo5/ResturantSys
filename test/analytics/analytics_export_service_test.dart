@@ -108,7 +108,7 @@ void main() {
         AnalyticsFamily.sales,
         AnalyticsExportFormat.csv,
         directory.path,
-        isCancelled: () => true,
+        cancellationToken: ExportCancellationToken(() => true),
       ),
       throwsA(isA<ExportCancelledException>()),
     );

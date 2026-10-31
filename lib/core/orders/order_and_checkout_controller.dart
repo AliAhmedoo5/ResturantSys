@@ -251,23 +251,15 @@ class OrderAndCheckoutController {
       await _requireActiveCashier(txn, cashierId);
       if (items.isEmpty || label.trim().isEmpty) throw ArgumentError('Enter a hold label and add items.');
       final nowUtc = DateTime.now().toUtc().toIso8601String();
+
+      Map<String, Object?>? oldHold;
       if (previousHoldId != null) {
         final existing = await txn.query('held_carts', where: 'id = ? AND cashier_id = ?', whereArgs: [previousHoldId, cashierId]);
         if (existing.isNotEmpty) {
-          final old = existing.single;
-          await txn.insert('hold_lifecycle_events', {
-            'hold_id': previousHoldId,
-            'cashier_id': cashierId,
-            'event_type': 'REPLACED',
-            'order_id': null,
-            'previous_hold_id': previousHoldId,
-            'label': old['label'] as String,
-            'payload': old['payload'] as String,
-            'recorded_at': nowUtc,
-          });
-          await txn.delete('held_carts', where: 'id = ? AND cashier_id = ?', whereArgs: [previousHoldId, cashierId]);
+          oldHold = existing.single;
         }
       }
+
       final payload = jsonEncode({
         'items': items.map(encodeDraftLine).toList(), 'dining_type': diningType.code,
         'customer_id': customerId, 'discount_id': discountId, 'discount_ids': discountIds,
@@ -276,16 +268,32 @@ class OrderAndCheckoutController {
           'landmark': delivery.landmark, 'notes': delivery.notes}});
       final newHoldId = await txn.insert('held_carts', {'cashier_id': cashierId, 'label': label.trim(),
         'created_at': nowUtc, 'payload': payload});
+
       await txn.insert('hold_lifecycle_events', {
         'hold_id': newHoldId,
         'cashier_id': cashierId,
         'event_type': 'CREATED',
         'order_id': null,
-        'previous_hold_id': null,
+        'previous_hold_id': previousHoldId,
         'label': label.trim(),
         'payload': payload,
         'recorded_at': nowUtc,
       });
+
+      if (previousHoldId != null && oldHold != null) {
+        await txn.insert('hold_lifecycle_events', {
+          'hold_id': previousHoldId,
+          'cashier_id': cashierId,
+          'event_type': 'REPLACED',
+          'order_id': null,
+          'previous_hold_id': newHoldId,
+          'label': oldHold['label'] as String,
+          'payload': oldHold['payload'] as String,
+          'recorded_at': nowUtc,
+        });
+        await txn.delete('held_carts', where: 'id = ? AND cashier_id = ?', whereArgs: [previousHoldId, cashierId]);
+      }
+
       return newHoldId;
     });
   }
