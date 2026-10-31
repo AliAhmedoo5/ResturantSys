@@ -6,7 +6,6 @@ import 'package:resturant_sys/core/analytics/analytics_export_service.dart';
 import 'package:resturant_sys/core/auth/auth_service.dart';
 import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/catalog/catalog_and_recipe_controller.dart';
-import 'package:resturant_sys/core/catalog/menu_item.dart';
 import 'package:resturant_sys/core/database/pos_database.dart';
 import 'package:resturant_sys/core/database/pos_database_constants.dart';
 import 'package:resturant_sys/core/orders/cart_item.dart';
@@ -32,7 +31,11 @@ void main() {
       orders = OrderAndCheckoutController(database: db);
       shifts = ShiftAndCashController(database: db);
       catalog = CatalogAndRecipeController(database: db);
-      final category = await catalog.createCategory(name: 'Main');
+      final category = await catalog.createCategory(
+        name: 'Main',
+        displayOrder: 1,
+        colorHex: '#FF0000',
+      );
       final menuItem = await catalog.createMenuItem(categoryId: category.id, name: 'Burger', basePrice: 500);
       testItem = CartItem(menuItem: menuItem);
     });
