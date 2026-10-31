@@ -414,7 +414,7 @@ void main() {
     // Verify stock valuation metric under approved Moving WAC policy (ADR-0023 / Ticket #91)
     final valMetric = invSection.metrics.firstWhere((m) => m.id == 'stock_valuation');
     expect(valMetric.value, equals(107100)); // 1260g * 85 paisa/g = 107,100 paisa (PKR 1,071.00)
-    expect(valMetric.quality, equals(AnalyticsQuality.good));
+    expect(valMetric.quality, equals(AnalyticsQuality.complete));
 
     // Reconciled ingredients metric
     final recMetric = invSection.metrics.firstWhere((m) => m.id == 'reconciled_ingredients');

@@ -1110,7 +1110,7 @@ class _ReportBuilder {
       }
     }
     final valuationQuality = coveredIngredientsCount == ingredients.length && negativeBalanceCount == 0
-        ? AnalyticsQuality.good
+        ? AnalyticsQuality.complete
         : coveredIngredientsCount > 0
             ? AnalyticsQuality.estimated
             : AnalyticsQuality.missing;

@@ -259,10 +259,10 @@ void main() {
     expect(flourBridge.cells['valuation_paisa'], equals(960000));
 
     // 5. Verify Past Sales COGS Remains Immutable at 32,000 paisa
-    final costEvents = snapshot.section(AnalyticsFamily.items);
-    final saleCostRow = costEvents.rows.firstWhere((r) => r.cells['order_id'] == saleOrder.id && r.cells['ingredient_id'] == beefId, orElse: () => AnalyticsRow(id: '', sourceType: '', cells: {}));
+    final profitability = snapshot.section(AnalyticsFamily.profitability);
+    final saleCostRow = profitability.rows.firstWhere((r) => r.cells['order_id'] == saleOrder.id && r.cells['ingredient_id'] == beefId, orElse: () => AnalyticsRow(id: '', sourceType: '', cells: {}));
     if (saleCostRow.cells.isNotEmpty) {
-      expect(saleCostRow.cells['food_cogs_paisa'] ?? saleCostRow.cells['cost_paisa'], equals(32000));
+      expect(saleCostRow.cells['cost_paisa'], equals(32000));
     }
 
     // 6. Section Notes Contain Method & Cutoff Disclosures
