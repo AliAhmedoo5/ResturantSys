@@ -146,6 +146,9 @@ void main() {
     ))));
     await tester.pumpAndSettle();
     expect(find.text('PKR 1,234.50'), findsOneWidget);
+    tester.widget<DropdownButtonFormField<AnalyticsComparisonMode>>(
+      find.byKey(const ValueKey('analytics_comparison_mode'))).onChanged!(AnalyticsComparisonMode.precedingPeriod);
+    await tester.pumpAndSettle();
     expect(find.text('Change: +PKR 1,234.50 vs preceding comparable period'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('analytics_family')));
     await tester.pumpAndSettle();

@@ -518,7 +518,7 @@ abstract final class KpiContributors {
       'staff_count' => staffRows.length,
       'active_staff' => staffRows.where((r) => r.cells['is_active'] == 1 || r.cells['is_active'] == true).length,
       'login_enabled' => staffRows.where((r) => r.cells['login_enabled'] == 1 || r.cells['login_enabled'] == true).length,
-      _ => metric.value ?? staffRows.length,
+      _ => staffRows.length,
     };
 
     return KpiContributorResult(

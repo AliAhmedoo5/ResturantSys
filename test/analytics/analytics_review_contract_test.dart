@@ -39,7 +39,11 @@ void main() {
       'quantity': 1, 'converted_quantity': 1000, 'total_cost': 450, 'cost_per_recipe_unit': 0.45,
       'created_at': '2026-10-26 00:30:00'});
     final service = AnalyticsService(database: db, authService: auth);
-    final query = AnalyticsQuery(startDate: DateTime(2026, 10, 25), endDateExclusive: DateTime(2026, 10, 26));
+    final query = AnalyticsQuery(
+      startDate: DateTime(2026, 10, 25),
+      endDateExclusive: DateTime(2026, 10, 26),
+      comparisonMode: AnalyticsComparisonMode.precedingPeriod,
+    );
     final incomplete = await service.load(query);
     expect(incomplete.section(AnalyticsFamily.procurement).metrics.firstWhere((m) => m.id == 'purchase_spend').changeAbsolute, isNull);
     await db.update('business_days', {'status': 'CLOSED'}, where: 'id=?', whereArgs: [day]);
@@ -92,7 +96,11 @@ void main() {
     }
     await db.update('business_days', {'status': 'CLOSED'}, where: 'id=?', whereArgs: [day]);
     final service = AnalyticsService(database: db, authService: auth);
-    final query = AnalyticsQuery(startDate: DateTime(2026, 10, 25), endDateExclusive: DateTime(2026, 10, 26));
+    final query = AnalyticsQuery(
+      startDate: DateTime(2026, 10, 25),
+      endDateExclusive: DateTime(2026, 10, 26),
+      comparisonMode: AnalyticsComparisonMode.precedingPeriod,
+    );
     final snapshot = await service.load(query);
     final section = snapshot.section(AnalyticsFamily.customers);
     final average = section.metrics.firstWhere((m) => m.id == 'known_customer_average_ticket');

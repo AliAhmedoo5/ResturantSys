@@ -280,7 +280,7 @@ void main() {
       expect(convertedRow.cells['cashier_id'], 2);
 
       final replacedRow = lifecycleRows.firstWhere((r) => r.cells['event_type'] == 'REPLACED');
-      expect(replacedRow.cells['previous_hold_id'], holdA);
+      expect(replacedRow.cells['previous_hold_id'], holdB);
 
       // Ensure no draft label or private customer data is leaked in rows or CSV
       final csv = AnalyticsExportService().csv(snapshot, AnalyticsFamily.orders);

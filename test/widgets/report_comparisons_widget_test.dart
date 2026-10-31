@@ -115,6 +115,13 @@ void main() {
   });
 
   testWidgets('Scoped phone masking masks only phone column keys and leaves general text unmasked', (tester) async {
+    tester.view.physicalSize = const Size(1280, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
     final fakeService = _FakeAnalyticsService(
       snapshotBuilder: (query) => AnalyticsSnapshot(
         query: query,
