@@ -3,8 +3,20 @@ name: CI
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.agents/**'
+      - '.claude/**'
+      - '.gitignore'
   pull_request:
     branches: [ main ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.agents/**'
+      - '.claude/**'
+      - '.gitignore'
   workflow_dispatch:
     inputs:
       test_paths:
@@ -13,9 +25,35 @@ on:
         type: string
         default: ''
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  analyze:
+    name: Fast Gatekeeper (Typecheck & Lint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          flutter-version: '3.47.8'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze code (Fail-Fast Gatekeeper)
+        run: flutter analyze --no-fatal-infos
+
   backup-windows:
     name: Backup recovery on Windows
+    needs: [analyze]
     runs-on: windows-latest
     timeout-minutes: 15
     steps:
@@ -48,13 +86,19 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Release PIN benchmark failed.' }
 
   test:
+    name: Tests (Shard ${{ matrix.shard }}/4)
+    needs: [analyze]
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 15
+    strategy:
+      fail-fast: true
+      matrix:
+        shard: [0, 1, 2, 3]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install SQLite native library
+      - name: Install SQLite native library & PDF utilities
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev poppler-utils
 
       - name: Set up Flutter
@@ -68,14 +112,12 @@ jobs:
         run: flutter pub get
 
       - name: Preserve resolved dependency lock
+        if: matrix.shard == 0
         uses: actions/upload-artifact@v4
         with:
           name: dependency-lock
           path: pubspec.lock
           if-no-files-found: error
-
-      - name: Analyze code
-        run: flutter analyze --no-fatal-infos
 
       - name: Create disposable local SMTP TLS fixture
         shell: bash
@@ -84,7 +126,7 @@ jobs:
           openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=localhost' -keyout "$RUNNER_TEMP/smtp-fixture/key.pem" -out "$RUNNER_TEMP/smtp-fixture/cert.pem" >/dev/null 2>&1
 
       - name: Run tests
-        timeout-minutes: 30
+        timeout-minutes: 12
         shell: bash
         env:
           TEST_PATHS: ${{ inputs.test_paths }}
@@ -92,14 +134,22 @@ jobs:
           SMTP_FIXTURE_DIRECTORY: ${{ runner.temp }}/smtp-fixture
           CAPTURE_DESKTOP: 'true'
         run: |
-          read -r -a test_paths <<< "$TEST_PATHS"
-          flutter test --timeout 2m "${test_paths[@]}"
+          if [ -n "$TEST_PATHS" ]; then
+            if [ "${{ matrix.shard }}" -ne 0 ]; then
+              echo "Targeted test path provided; non-primary shard skipping."
+              exit 0
+            fi
+            read -r -a test_paths <<< "$TEST_PATHS"
+            flutter test --timeout 2m "${test_paths[@]}"
+          else
+            flutter test --timeout 2m --total-shards 4 --shard-index ${{ matrix.shard }} --shard-by-suite
+          fi
 
       - name: Upload desktop layout previews
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: desktop-layout-previews
+          name: desktop-layout-previews-shard-${{ matrix.shard }}
           path: build/desktop-previews/*.png
           if-no-files-found: ignore
 
@@ -118,14 +168,10 @@ jobs:
             pdftoppm -scale-to 1600 -png "$FIXTURE_DIR/synthetic-z-close.pdf" "$FIXTURE_DIR/synthetic-z-close"
           fi
 
-      # This directory is populated ONLY by the fresh temporary SQLite fixture
-      # named 'recovers synthetic report snapshot ...', using literal fake data.
-      # Never collect the runtime application's reports or default database path.
       - name: Upload synthetic fixture example
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: synthetic-z-close-example
+          name: synthetic-z-close-example-shard-${{ matrix.shard }}
           path: ${{ runner.temp }}/synthetic-z-close-fixture/
           if-no-files-found: ignore
-
