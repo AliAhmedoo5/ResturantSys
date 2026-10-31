@@ -26,6 +26,9 @@ class _MoneyFlowPeaks {
       time.isBefore(analyticsWallClock(e.query.endDateExclusive));
   }
 
+  bool receivingKnown(_Record row) =>
+    row['business_day_id'] != null && (row['payment_source'] != 'DRAWER' || row['shift_id'] != null);
+
   String period(DateTime time) {
     final date = _date(time);
     return _sqlDate(switch (e.query.grouping) {
@@ -38,9 +41,13 @@ class _MoneyFlowPeaks {
   List<AnalyticsRow> build() {
     final all = e.get('payment_events').where((p) => kinds.contains(p['kind'])).toList();
     final selectedEvents = all.where(selected).toList();
-    final known = selectedEvents.where((r) => _karachi(r['actual_at']) != null).toList();
+    final known = selectedEvents.where((r) => _karachi(r['actual_at']) != null && receivingKnown(r)).toList();
     final unknown = all.where((r) => context(r) && _karachi(r['actual_at']) == null &&
       (e.query.timeBasis == AnalyticsTimeBasis.calendarTime || selected(r))).toList();
+    final unknownReceiving = all.where((r) => context(r) && !receivingKnown(r) &&
+      (e.query.timeBasis == AnalyticsTimeBasis.calendarTime
+        ? (_karachi(r['actual_at']) != null && !(_karachi(r['actual_at'])!.isBefore(analyticsWallClock(e.query.startDate))) && _karachi(r['actual_at'])!.isBefore(analyticsWallClock(e.query.endDateExclusive)))
+        : selected(r))).toList();
     final knownMovementIds = all.map((p) => p['movement_id']).whereType<int>().toSet();
     final legacyMovements = e.get('movements').where((m) => !knownMovementIds.contains(m['id']) &&
       (e.query.shiftId == null || m['shift_id'] == e.query.shiftId) &&
@@ -48,7 +55,7 @@ class _MoneyFlowPeaks {
     final linkedTenders = all.map((p) => p['tender_id']).whereType<int>().toSet();
     final legacyTenders = e.get('payments').where((p) => !linkedTenders.contains(p['id'])).toList();
     final financeGaps = _FinanceTimeline(e).uncovered;
-    final incomplete = unknown.isNotEmpty || legacyMovements.isNotEmpty || legacyTenders.isNotEmpty ||
+    final incomplete = unknown.isNotEmpty || unknownReceiving.isNotEmpty || legacyMovements.isNotEmpty || legacyTenders.isNotEmpty ||
       financeGaps.isNotEmpty || e.absent.contains('payment_events');
     final days = {for (final d in [...e.get('days'), ...e.get('event_days')]) d['id']: d};
     final rows = <AnalyticsRow>[];
@@ -123,6 +130,8 @@ class _MoneyFlowPeaks {
     rows.add(AnalyticsRow(id: 'money-flow-coverage', sourceType: 'money_flow_coverage',
       sourceId: known.isNotEmpty ? known.map((p) => p['id']).join(',') : 'none', cells: {
       'kind': 'Money flow coverage', 'included_events': known.length,
+      'unknown_receiving_events': unknownReceiving.length,
+      'unknown_receiving_paisa': unknownReceiving.fold<int>(0, (sum, p) => sum + amount(p).abs()),
       'unknown_time_events': unknown.length, 'unknown_time_paisa': unknown.fold<int>(0, (sum, p) => sum + amount(p).abs()),
       'legacy_movement_count': legacyMovements.length, 'legacy_tender_count': legacyTenders.length,
       'legacy_finance_posting_count': financeGaps.length,
