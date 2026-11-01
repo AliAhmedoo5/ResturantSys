@@ -330,7 +330,8 @@ void main() {
     final service = AnalyticsService(database: db, authService: auth);
 
     // Query 1: October Report (2026-10-01 to 2026-11-01)
-    // Must include the October earned accrual (5,000,000 paisa) even though posted in November!
+    // Direct labor reflects the October earned period (5,000,000 paisa),
+    // while calendar labor_cost is 0 because the entry was posted on Nov 2nd.
     final octSnapshot = await service.load(AnalyticsQuery(
       startDate: DateTime(2026, 10, 1),
       endDateExclusive: DateTime(2026, 11, 1),
@@ -338,11 +339,12 @@ void main() {
     final octStaff = octSnapshot.section(AnalyticsFamily.staff);
     final octLaborCost = octStaff.metrics.firstWhere((m) => m.id == 'labor_cost').value;
     final octDirectCost = octStaff.metrics.firstWhere((m) => m.id == 'direct_labor_cost').value;
-    expect(octLaborCost, 5000000);
+    expect(octLaborCost, 0);
     expect(octDirectCost, 5000000);
 
     // Query 2: November Report (2026-11-01 to 2026-12-01)
-    // Must ONLY include November earned accrual (5,000,000 paisa); October accrual must NOT leak into November!
+    // Direct labor must ONLY include November earned accrual (5,000,000 paisa) without October leakage.
+    // Calendar labor_cost reflects both accruals posted in November (10,000,000 paisa).
     final novSnapshot = await service.load(AnalyticsQuery(
       startDate: DateTime(2026, 11, 1),
       endDateExclusive: DateTime(2026, 12, 1),
@@ -350,7 +352,7 @@ void main() {
     final novStaff = novSnapshot.section(AnalyticsFamily.staff);
     final novLaborCost = novStaff.metrics.firstWhere((m) => m.id == 'labor_cost').value;
     final novDirectCost = novStaff.metrics.firstWhere((m) => m.id == 'direct_labor_cost').value;
-    expect(novLaborCost, 5000000);
+    expect(novLaborCost, 10000000);
     expect(novDirectCost, 5000000);
   });
 }
