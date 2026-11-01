@@ -81,7 +81,7 @@ void main() {
       );
     });
 
-    test('database upgrading from v28 to v29 creates hold_lifecycle_events table and triggers', () async {
+    test('database upgrading from v28 to v29+ creates hold_lifecycle_events table and triggers', () async {
       await db.execute('DROP TABLE IF EXISTS hold_lifecycle_events');
       await db.execute('DROP TRIGGER IF EXISTS hold_lifecycle_events_no_update');
       await db.execute('DROP TRIGGER IF EXISTS hold_lifecycle_events_no_delete');
@@ -91,7 +91,7 @@ void main() {
       store = PosDatabase(factory: databaseFactoryFfi, customPath: inMemoryDatabasePath);
       db = await store.initialize();
 
-      expect(await db.getVersion(), 29);
+      expect(await db.getVersion(), PosDatabaseConstants.schemaVersion);
       final tableInfo = await db.rawQuery("PRAGMA table_info('hold_lifecycle_events')");
       expect(tableInfo, isNotEmpty);
     });
