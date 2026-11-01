@@ -20,9 +20,12 @@ Future<void> createOperationsSchema(DatabaseExecutor db) async {
     ingredient_id INTEGER NOT NULL REFERENCES raw_ingredients(id),
     sku TEXT NOT NULL DEFAULT '', active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
     PRIMARY KEY(vendor_id, ingredient_id))''');
-  await db.execute('''INSERT OR IGNORE INTO supplier_items(vendor_id,ingredient_id)
-    SELECT DISTINCT vendor_id,raw_ingredient_id FROM vendor_transactions
-    WHERE raw_ingredient_id IS NOT NULL''');
+  final existingSupplierItems = await db.rawQuery('SELECT 1 FROM supplier_items LIMIT 1');
+  if (existingSupplierItems.isEmpty) {
+    await db.execute('''INSERT OR IGNORE INTO supplier_items(vendor_id,ingredient_id)
+      SELECT DISTINCT vendor_id,raw_ingredient_id FROM vendor_transactions
+      WHERE raw_ingredient_id IS NOT NULL''');
+  }
   await db.execute('''CREATE TABLE IF NOT EXISTS supplier_payment_allocations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     payment_id INTEGER NOT NULL REFERENCES vendor_transactions(id),

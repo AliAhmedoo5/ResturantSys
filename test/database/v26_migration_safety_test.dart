@@ -38,6 +38,7 @@ void main() {
     )''');
 
     // Simulate raw_ingredients table without category
+    await db.execute('PRAGMA legacy_alter_table = ON');
     await db.execute('ALTER TABLE raw_ingredients RENAME TO raw_ingredients_backup');
     await db.execute('''CREATE TABLE raw_ingredients (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,6 +52,7 @@ void main() {
     await db.execute('''INSERT INTO raw_ingredients(id, name, storage_unit, current_stock, low_stock_threshold, cost_per_recipe_unit, created_at)
       SELECT id, name, storage_unit, current_stock, low_stock_threshold, cost_per_recipe_unit, created_at FROM raw_ingredients_backup''');
     await db.execute('DROP TABLE raw_ingredients_backup');
+    await db.execute('PRAGMA legacy_alter_table = OFF');
 
     // Drop backup_attempts to simulate pre-v26 schema
     await db.execute('DROP TABLE IF EXISTS backup_attempts');

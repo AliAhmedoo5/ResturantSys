@@ -21,6 +21,7 @@ void main() {
     final removal = await catalog.createModifier(menuItemId: item.id, name: 'No Mayo', rawIngredientId: mayo.id, ingredientQtyDelta: 0);
     final global = await catalog.createModifier(name: 'No Mayo everywhere', rawIngredientId: mayo.id, ingredientQtyDelta: 0);
     // Restore the old schema shape to exercise the actual versioned upgrade.
+    await db.execute('DROP TRIGGER IF EXISTS closed_order_items_UPDATE');
     await db.execute('ALTER TABLE modifiers DROP COLUMN group_id');
     await db.execute('ALTER TABLE order_items DROP COLUMN bom_json');
     await db.execute('DROP TABLE modifier_groups');
