@@ -51,7 +51,7 @@ void main() {
       'payment_status': 'SETTLED',
       'created_at': '2026-11-01 10:15:00',
     });
-    final paymentId = await db.insert('order_payments', {
+    await db.insert('order_payments', {
       'order_id': orderId,
       'payment_method': 'CASH',
       'amount_tendered': 1000.0,
