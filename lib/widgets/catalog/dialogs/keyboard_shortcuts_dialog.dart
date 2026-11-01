@@ -40,7 +40,7 @@ class _KeyboardShortcutsDialogState extends State<KeyboardShortcutsDialog> {
         if (_message != null) Text(_message!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
         for (final action in _bindings!.keys) ListTile(
           title: Text(KeyboardShortcutController.actionLabels[action] ?? action),
-          trailing: DropdownButton<String>(value: _bindings![action],
+          trailing: DropdownButton<String>(mouseCursor: WidgetStateMouseCursor.clickable, value: _bindings![action],
             items: KeyboardShortcutController.allowedKeys.map((key) => DropdownMenuItem(value: key, child: Text(key.isEmpty ? 'Unassigned' : key))).toList(),
             onChanged: _busy ? null : (value) => setState(() => _bindings![action] = value!))),
       ])),

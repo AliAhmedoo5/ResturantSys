@@ -167,6 +167,7 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
                       children: [
                         Expanded(
                           child: InkWell(
+                            mouseCursor: WidgetStateMouseCursor.clickable,
                             key: const ValueKey('movement_type_payin'),
                             onTap: () => setState(() => _selectedType = CashMovementType.payIn),
                             borderRadius: WarmCounterSpacing.controlBorderRadius,
@@ -200,6 +201,7 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
                         const SizedBox(width: WarmCounterSpacing.space12),
                         Expanded(
                           child: InkWell(
+                            mouseCursor: WidgetStateMouseCursor.clickable,
                             key: const ValueKey('movement_type_payout'),
                             onTap: () => setState(() => _selectedType = CashMovementType.payOut),
                             borderRadius: WarmCounterSpacing.controlBorderRadius,
@@ -241,6 +243,7 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
                     ),
                     const SizedBox(height: WarmCounterSpacing.space8),
                     DropdownButtonFormField<String>(
+                      mouseCursor: WidgetStateMouseCursor.clickable,
                       key: const ValueKey('cash_movement_category_dropdown'),
                       initialValue: _selectedCategory,
                       isExpanded: true,

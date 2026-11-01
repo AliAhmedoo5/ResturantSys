@@ -209,6 +209,7 @@ class _CatalogPhotoFieldState extends State<CatalogPhotoField> {
             color: WarmCounterColors.lightSurfaceMuted,
             borderRadius: WarmCounterSpacing.controlBorderRadius,
             child: InkWell(
+              mouseCursor: WidgetStateMouseCursor.clickable,
               key: const ValueKey('catalog_photo_browse'),
               borderRadius: WarmCounterSpacing.controlBorderRadius,
               onTap: _enabled ? _browse : null,

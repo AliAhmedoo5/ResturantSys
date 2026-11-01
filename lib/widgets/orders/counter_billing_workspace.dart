@@ -717,6 +717,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
           children: DiningType.values.map((type) {
             final isSelected = _selectedDiningType == type;
             return ChoiceChip(
+              mouseCursor: WidgetStateMouseCursor.clickable,
               key: ValueKey('dining_type_${type.code}'),
               label: Text(type.displayName),
               selected: isSelected,
@@ -1037,6 +1038,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
     return Padding(
       padding: const EdgeInsets.only(right: WarmCounterSpacing.space8),
       child: FilterChip(
+        mouseCursor: WidgetStateMouseCursor.clickable,
         key: ValueKey('category_tab_${id ?? 'deals'}'),
         label: Text(label, style: TextStyle(color: isSelected
             ? StreetFoodMafiaColors.textOnPrimary : StreetFoodMafiaColors.offWhite)),
@@ -1157,6 +1159,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
     final imageFile = _resolveImageFile(_menuItemImages[item.id]);
 
     return InkWell(
+      mouseCursor: WidgetStateMouseCursor.clickable,
       key: ValueKey('menu_item_tile_${item.id}'),
       onTap: () => _addMenuItemToCart(item),
       borderRadius: WarmCounterSpacing.panelBorderRadius,
@@ -1212,6 +1215,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
     final imageFile = _resolveImageFile(_dealImages[deal.id]);
 
     return InkWell(
+      mouseCursor: WidgetStateMouseCursor.clickable,
       key: ValueKey('deal_tile_${deal.id}'),
       onTap: () => _openDealSelection(deal),
       borderRadius: WarmCounterSpacing.panelBorderRadius,
@@ -1397,6 +1401,7 @@ class _CounterBillingWorkspaceState extends State<CounterBillingWorkspace> {
                       return Padding(
                         padding: const EdgeInsets.only(right: 6),
                         child: ChoiceChip(
+                          mouseCursor: WidgetStateMouseCursor.clickable,
                           key: ValueKey('discount_chip_${d.id}'),
                           label: Text(d.name, style: TextStyle(fontSize: 11, color: isSelected
                               ? StreetFoodMafiaColors.textOnPrimary : StreetFoodMafiaColors.offWhite)),

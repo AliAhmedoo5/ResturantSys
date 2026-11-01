@@ -198,6 +198,7 @@ class _OpenShiftDialogState extends State<OpenShiftDialog> {
 
   Widget _buildPresetChip(double amount) {
     return ActionChip(
+      mouseCursor: WidgetStateMouseCursor.clickable,
       label: Text('Rs ${amount.toStringAsFixed(0)}'),
       onPressed: () => _setPreset(amount),
       backgroundColor: WarmCounterColors.lightSurfaceMuted,

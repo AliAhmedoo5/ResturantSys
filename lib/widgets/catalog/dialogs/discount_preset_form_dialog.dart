@@ -169,6 +169,7 @@ class _DiscountPresetFormDialogState extends State<DiscountPresetFormDialog> {
               ),
               const SizedBox(height: WarmCounterSpacing.space16),
               DropdownButtonFormField<DiscountType>(
+                mouseCursor: WidgetStateMouseCursor.clickable,
                 key: const ValueKey('discount_type_dropdown'),
                 initialValue: _selectedType,
                 isExpanded: true,
@@ -211,17 +212,17 @@ class _DiscountPresetFormDialogState extends State<DiscountPresetFormDialog> {
                     : entry.key.startsWith('Daily') ? 'HH:MM (optional)' : 'Optional'),
               )),
               const Text('Allowed dining modes (empty = all)'),
-              Wrap(spacing: 6, children: DiningType.values.map((mode) => FilterChip(label: Text(mode.displayName),
+              Wrap(spacing: 6, children: DiningType.values.map((mode) => FilterChip(mouseCursor: WidgetStateMouseCursor.clickable, label: Text(mode.displayName),
                 selected: _modes.contains(mode.code), onSelected: (selected) => setState(() { selected ? _modes.add(mode.code) : _modes.remove(mode.code); }))).toList()),
               const Text('Eligible categories and deals (empty = all lines)'),
               Wrap(spacing: 6, children: [
-                for (final category in widget.categories) FilterChip(label: Text(category.name), selected: _categories.contains(category.id),
+                for (final category in widget.categories) FilterChip(mouseCursor: WidgetStateMouseCursor.clickable, label: Text(category.name), selected: _categories.contains(category.id),
                   onSelected: (selected) => setState(() { selected ? _categories.add(category.id) : _categories.remove(category.id); })),
-                for (final deal in widget.deals) FilterChip(label: Text('Deal: ${deal.name}'), selected: _deals.contains(deal.id),
+                for (final deal in widget.deals) FilterChip(mouseCursor: WidgetStateMouseCursor.clickable, label: Text('Deal: ${deal.name}'), selected: _deals.contains(deal.id),
                   onSelected: (selected) => setState(() { selected ? _deals.add(deal.id) : _deals.remove(deal.id); })),
               ]),
               const Text('Eligible cashiers (empty = all cashiers)'),
-              Wrap(spacing: 6, children: [for (final cashier in widget.cashiers) FilterChip(label: Text(cashier['name'] as String),
+              Wrap(spacing: 6, children: [for (final cashier in widget.cashiers) FilterChip(mouseCursor: WidgetStateMouseCursor.clickable, label: Text(cashier['name'] as String),
                 selected: _cashiers.contains(cashier['id']), onSelected: (selected) => setState(() {
                   selected ? _cashiers.add(cashier['id'] as int) : _cashiers.remove(cashier['id']);
                 }))]),

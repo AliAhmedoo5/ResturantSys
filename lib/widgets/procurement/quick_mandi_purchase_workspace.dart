@@ -330,6 +330,7 @@ class _QuickMandiPurchaseWorkspaceState extends State<QuickMandiPurchaseWorkspac
                 ),
                 const SizedBox(height: WarmCounterSpacing.space8),
                 DropdownButtonFormField<int>(
+                  mouseCursor: WidgetStateMouseCursor.clickable,
                   key: const ValueKey('mandi_ingredient_dropdown'),
                   value: _selectedIngredient?.id,
                   isExpanded: true,
@@ -373,6 +374,7 @@ class _QuickMandiPurchaseWorkspaceState extends State<QuickMandiPurchaseWorkspac
                           ),
                           const SizedBox(height: WarmCounterSpacing.space8),
                           DropdownButtonFormField<DesiUnit>(
+                            mouseCursor: WidgetStateMouseCursor.clickable,
                             key: const ValueKey('mandi_unit_dropdown'),
                             value: _selectedUnit,
                             isExpanded: true,

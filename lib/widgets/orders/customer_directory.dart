@@ -80,7 +80,7 @@ class _CustomerDirectoryState extends State<CustomerDirectory> {
       title: Text('Merge ${source.name} into…'),
       content: SizedBox(width: 440, child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
         const Text('The selected target remains in the directory. Both order histories and phone associations are retained. This action is audited.'),
-        DropdownButtonFormField<int>(decoration: const InputDecoration(labelText: 'Keep customer'),
+        DropdownButtonFormField<int>(mouseCursor: WidgetStateMouseCursor.clickable, decoration: const InputDecoration(labelText: 'Keep customer'),
           items: _customers.where((c) => c.id != source.id).map((c) => DropdownMenuItem(value: c.id, child: Text('${c.name} · ${c.phone}'))).toList(),
           onChanged: (id) => update(() => target = _customers.singleWhere((c) => c.id == id))),
         TextField(controller: reason, decoration: const InputDecoration(labelText: 'Reason'), onChanged: (_) => update(() {})),

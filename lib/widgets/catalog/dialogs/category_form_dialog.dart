@@ -139,6 +139,7 @@ class _CategoryFormDialogState extends State<CategoryFormDialog> {
                   final color = WarmCounterColors.parseHex(hex);
                   final isSelected = _selectedColorHex.toUpperCase() == hex.toUpperCase();
                   return InkWell(
+                    mouseCursor: WidgetStateMouseCursor.clickable,
                     onTap: () => setState(() => _selectedColorHex = hex),
                     borderRadius: BorderRadius.circular(24),
                     child: Container(

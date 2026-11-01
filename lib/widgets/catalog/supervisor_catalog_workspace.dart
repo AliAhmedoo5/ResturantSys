@@ -1024,6 +1024,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                     border: Border.all(color: WarmCounterColors.lightBorder),
                   ),
                   child: InkWell(
+                    mouseCursor: WidgetStateMouseCursor.clickable,
                     key: ValueKey('open_category_${cat.id}'),
                     onTap: () {
                       _filterMenuItems(cat.id);
@@ -1119,6 +1120,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
             child: Row(
               children: [
                 FilterChip(
+                  mouseCursor: WidgetStateMouseCursor.clickable,
                   label: const Text('All Categories'),
                   selected: _menuItemCategoryFilter == null,
                   onSelected: (_) {
@@ -1130,6 +1132,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
                   return Padding(
                     padding: const EdgeInsets.only(right: 8),
                     child: FilterChip(
+                      mouseCursor: WidgetStateMouseCursor.clickable,
                       label: Text(c.name),
                       selected: _menuItemCategoryFilter == c.id,
                       onSelected: (selected) {
@@ -1354,6 +1357,7 @@ class _SupervisorCatalogWorkspaceState extends State<SupervisorCatalogWorkspace>
             }),
           // Low-stock toggle chip
           FilterChip(
+            mouseCursor: WidgetStateMouseCursor.clickable,
             key: const ValueKey('low_stock_filter_chip'),
             label: const Text('Show Low Stock Alert Only'),
             selected: _lowStockFilterOnly,
