@@ -46,35 +46,38 @@ Future<void> createOperationsSchema(DatabaseExecutor db) async {
   await db.execute('CREATE INDEX IF NOT EXISTS supplier_allocations_invoice ON supplier_payment_allocations(invoice_id)');
   // Reconstruct historical allocations deterministically: opening payable first,
   // then invoices in posting order. Excess legacy payments stay unallocated.
-  for (final vendor in await db.query('vendor_khata')) {
-    var opening = ((vendor['opening_balance'] as num) * 100).round();
-    final invoices = <int, int>{};
-    final events = await db.query('vendor_transactions', where: 'vendor_id = ?',
-        whereArgs: [vendor['id']], orderBy: 'created_at, id');
-    for (final event in events.where((e) => e['type'] == 'PURCHASE_CREDIT')) {
-      invoices[event['id'] as int] = event['amount_paisa'] as int;
-    }
-    for (final event in events) {
-      final id = event['id'] as int;
-      final amount = event['amount_paisa'] as int;
-      if (event['type'] == 'PURCHASE_CREDIT') {
-        continue;
-      } else {
-        var remaining = amount;
-        if (opening > 0) {
-          final allocated = remaining < opening ? remaining : opening;
-          if (allocated > 0) await db.insert('supplier_payment_allocations',
-              {'payment_id': id, 'amount_paisa': allocated});
-          opening -= allocated;
-          remaining -= allocated;
-        }
-        for (final invoice in invoices.keys.toList()) {
-          final due = invoices[invoice]!;
-          final allocated = remaining < due ? remaining : due;
-          if (allocated > 0) await db.insert('supplier_payment_allocations',
-              {'payment_id': id, 'invoice_id': invoice, 'amount_paisa': allocated});
-          invoices[invoice] = due - allocated;
-          remaining -= allocated;
+  final existingAllocations = await db.query('supplier_payment_allocations', limit: 1);
+  if (existingAllocations.isEmpty) {
+    for (final vendor in await db.query('vendor_khata')) {
+      var opening = ((vendor['opening_balance'] as num) * 100).round();
+      final invoices = <int, int>{};
+      final events = await db.query('vendor_transactions', where: 'vendor_id = ?',
+          whereArgs: [vendor['id']], orderBy: 'created_at, id');
+      for (final event in events.where((e) => e['type'] == 'PURCHASE_CREDIT')) {
+        invoices[event['id'] as int] = event['amount_paisa'] as int;
+      }
+      for (final event in events) {
+        final id = event['id'] as int;
+        final amount = event['amount_paisa'] as int;
+        if (event['type'] == 'PURCHASE_CREDIT') {
+          continue;
+        } else {
+          var remaining = amount;
+          if (opening > 0) {
+            final allocated = remaining < opening ? remaining : opening;
+            if (allocated > 0) await db.insert('supplier_payment_allocations',
+                {'payment_id': id, 'amount_paisa': allocated});
+            opening -= allocated;
+            remaining -= allocated;
+          }
+          for (final invoice in invoices.keys.toList()) {
+            final due = invoices[invoice]!;
+            final allocated = remaining < due ? remaining : due;
+            if (allocated > 0) await db.insert('supplier_payment_allocations',
+                {'payment_id': id, 'invoice_id': invoice, 'amount_paisa': allocated});
+            invoices[invoice] = due - allocated;
+            remaining -= allocated;
+          }
         }
       }
     }

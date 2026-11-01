@@ -46,10 +46,10 @@ void main() {
 
     tearDown(() => store.close());
 
-    test('hold_lifecycle_events table is created at schema v29 and is immutable', () async {
-      expect(PosDatabaseConstants.schemaVersion, 29);
+    test('hold_lifecycle_events table is created at schema v29+ and is immutable', () async {
+      expect(PosDatabaseConstants.schemaVersion, greaterThanOrEqualTo(29));
       final userVersion = (await db.rawQuery('PRAGMA user_version')).single.values.first;
-      expect(userVersion, 29);
+      expect(userVersion, PosDatabaseConstants.schemaVersion);
 
       final tableInfo = await db.rawQuery("PRAGMA table_info('hold_lifecycle_events')");
       expect(tableInfo, isNotEmpty);

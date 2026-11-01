@@ -83,6 +83,7 @@ class PosDatabase {
       ),
     );
 
+    await _ensureSchemaIntegrity(_database!);
     await _seedDefaults(_database!);
     return _database!;
   }
@@ -138,18 +139,7 @@ class PosDatabase {
     await _upgradeToVersion16(db);
     await _upgradeToVersion17(db);
     await _upgradeToVersion18(db);
-    await createOperationsSchema(db);
-    await createFeatureGapsSchema(db);
-    await createHistoricalCostSchema(db);
-    await createPaymentEventsSchema(db);
-
-    await createReportingIdentitySchema(db);
-    await createMenuAllocationsSchema(db);
-    await createSupplierReceiptEvidenceSchema(db);
-    await createBackupAttemptsSchema(db);
-    await createHistoricalCorrectionsSchema(db);
-    await createManagerPresetsSchema(db);
-    await createHoldLifecycleSchema(db);
+    await _ensureSchemaIntegrity(db);
   }
 
   Future<void> _createOperationalAccountingTables(DatabaseExecutor executor) async {
@@ -488,6 +478,25 @@ class PosDatabase {
     if (oldVersion < 27) await createHistoricalCorrectionsSchema(db);
     if (oldVersion < 28) await createManagerPresetsSchema(db);
     if (oldVersion < 29) await createHoldLifecycleSchema(db);
+    if (oldVersion < 30) await _ensureSchemaIntegrity(db);
+  }
+
+  /// Verifies and idempotently repairs all core relational and analytical schemas.
+  ///
+  /// Guarantees that databases upgraded across divergent branches or restored from
+  /// legacy backups retain full schema completeness and immutability trigger integrity.
+  Future<void> _ensureSchemaIntegrity(DatabaseExecutor db) async {
+    await createOperationsSchema(db);
+    await createFeatureGapsSchema(db);
+    await createHistoricalCostSchema(db);
+    await createPaymentEventsSchema(db);
+    await createReportingIdentitySchema(db);
+    await createMenuAllocationsSchema(db);
+    await createSupplierReceiptEvidenceSchema(db);
+    await createBackupAttemptsSchema(db);
+    await createHistoricalCorrectionsSchema(db);
+    await createManagerPresetsSchema(db);
+    await createHoldLifecycleSchema(db);
   }
 
   Future<void> _upgradeToVersion18(DatabaseExecutor db) async {
