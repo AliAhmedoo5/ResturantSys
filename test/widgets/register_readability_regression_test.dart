@@ -15,6 +15,7 @@ import 'package:resturant_sys/core/database/pos_database.dart';
 import 'package:resturant_sys/core/orders/order_and_checkout_controller.dart';
 import 'package:resturant_sys/core/shifts/shift_and_cash_controller.dart';
 import 'package:resturant_sys/core/theme/theme.dart';
+import 'package:resturant_sys/widgets/app_header.dart';
 import 'package:resturant_sys/widgets/app_sidebar.dart';
 import 'package:resturant_sys/widgets/orders/counter_billing_workspace.dart';
 import 'package:resturant_sys/widgets/orders/tender_checkout_dialog.dart';
