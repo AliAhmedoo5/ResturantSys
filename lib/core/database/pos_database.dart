@@ -460,7 +460,10 @@ class PosDatabase {
     if (oldVersion < 19) await createOperationsSchema(db);
     if (oldVersion < 20) await createFeatureGapsSchema(db);
     if (oldVersion < 21) await createHistoricalCostSchema(db);
-    if (oldVersion < 22) await createPaymentEventsSchema(db);
+    if (oldVersion < 22) {
+      await createPaymentEventsSchema(db);
+      await createCatalogDeletionGuard(db);
+    }
 
     if (oldVersion < 23) await createReportingIdentitySchema(db);
     if (oldVersion < 24) await createMenuAllocationsSchema(db);
