@@ -277,3 +277,31 @@ _Avoid_: COD age, cash delay, driver debt timer
 The operational classification of unsettled COD exposure categorizing pending collections into Current Shift, Overdue / Unsettled (0–24h), Aged (1–3 days), and Critical (>3 days).
 _Avoid_: Overdue buckets, debt stages, aging brackets
 
+**Earned Period**:
+The calendar month (YYYY-MM) in which employee labor was actually performed and its expense recognized in financial reports, independent of posting or cash disbursement timing.
+_Avoid_: Pay cycle, payout date, posting month
+
+**Posting Period**:
+The specific operational Business Day and immutable timestamp at which a payroll accrual, payment, or advance entry is recorded in the ledger by an authenticated Manager.
+_Avoid_: Earned month, transaction date
+
+**Payment Period**:
+The actual calendar date and time when physical drawer cash, bank transfer, or owner funds are disbursed to an employee, reducing accrued salary payable without creating a duplicate expense.
+_Avoid_: Expense recognition date, payroll run
+
+**Worked-Hours Attendance**:
+The verified physical presence and elapsed working time logged for staff across assigned shifts and departments, distinct from register custody duration.
+_Avoid_: Shift duration, drawer time, clock interval
+
+**Cashier Shift Duration**:
+The operational window between a Cashier's register opening and closing, measuring drawer custody and register availability rather than worker attendance.
+_Avoid_: Worked hours, paid attendance, labor time
+
+**Direct Labor Productivity**:
+The ratio of eligible confirmed customer orders to direct operational labor hours (Kitchen, Service, Cashier, Delivery), excluding administrative overhead from the denominator.
+_Avoid_: Staff efficiency, register throughput
+
+**Department Labor Allocation**:
+The proportional distribution of monthly earned salary across restaurant departments based on logged worked hours or primary role snapshots, avoiding duplicate cost recognition.
+_Avoid_: Department wage split, payroll slice
+
