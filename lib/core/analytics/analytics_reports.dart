@@ -1893,6 +1893,193 @@ class _ReportBuilder {
   AnalyticsSection _staff() {
     final staff = e.get('staff');
     final payroll = _EarnedPayroll(e);
+    final workedHours = e.get('worked_hours');
+    final hasAttendance = workedHours.isNotEmpty && !e.absent.contains('worked_hours');
+
+    bool isDirect(String? dept) =>
+        OperationsController.isDirectOperationalLabor(dept);
+
+    final activeStaff = staff.where((s) => s['is_active'] == 1).toList();
+    final staffWithHours = workedHours.map((w) => w['employee_id']).toSet();
+    final activeStaffWithHours = activeStaff.where((s) => staffWithHours.contains(s['id'])).length;
+
+    final totalMinutes = workedHours.fold<int>(0, (sum, w) => sum + ((w['worked_minutes'] as num?)?.toInt() ?? 0));
+    final directMinutes = workedHours.where((w) => isDirect(w['department_name'] as String? ?? w['department'] as String?))
+        .fold<int>(0, (sum, w) => sum + ((w['worked_minutes'] as num?)?.toInt() ?? 0));
+    final overheadMinutes = totalMinutes - directMinutes;
+
+    final totalHours = double.parse((totalMinutes / 60.0).toStringAsFixed(1));
+    final directHours = double.parse((directMinutes / 60.0).toStringAsFixed(1));
+    final overheadHours = double.parse((overheadMinutes / 60.0).toStringAsFixed(1));
+
+    final AnalyticsMetric coverageMetric;
+    if (hasAttendance) {
+      coverageMetric = _coverage('worked_hours_coverage', 'Attendance capture coverage', activeStaffWithHours, activeStaff.length,
+          'Active staff members with verified attendance logged in selected period.');
+    } else {
+      coverageMetric = AnalyticsMetric(
+        id: 'worked_hours_coverage',
+        label: 'Attendance capture coverage',
+        value: 0.0,
+        unit: AnalyticsUnit.percent,
+        quality: AnalyticsQuality.missing,
+        explanation: 'No staff attendance logged for selected period. Cashier shift duration is not paid attendance.',
+        sampleCount: 0,
+        populationCount: activeStaff.length,
+      );
+    }
+
+    final totalHoursMetric = hasAttendance
+        ? _metric('worked_hours_total', 'Total recorded worked hours', totalHours, unit: AnalyticsUnit.decimal,
+            explanation: 'Total verified worked hours recorded across all departments in selected period.')
+        : _missing('worked_hours_total', 'Total recorded worked hours',
+            'No attendance logged for selected period. Cashier shift duration is not paid attendance.',
+            unit: AnalyticsUnit.decimal);
+
+    final directHoursMetric = hasAttendance
+        ? _metric('worked_hours_direct', 'Direct operational worked hours', directHours, unit: AnalyticsUnit.decimal,
+            explanation: 'Worked hours for direct guest-facing and production departments (Kitchen, Front Counter, Delivery).')
+        : _missing('worked_hours_direct', 'Direct operational worked hours',
+            'No attendance logged for selected period.',
+            unit: AnalyticsUnit.decimal);
+
+    final overheadHoursMetric = hasAttendance
+        ? _metric('worked_hours_overhead', 'Management & overhead hours', overheadHours, unit: AnalyticsUnit.decimal,
+            explanation: 'Management and administrative overhead hours; recorded for labor cost but excluded from order throughput denominator.')
+        : _missing('worked_hours_overhead', 'Management & overhead hours',
+            'No attendance logged for selected period.',
+            unit: AnalyticsUnit.decimal);
+
+    final AnalyticsMetric productivityMetric;
+    if (!hasAttendance) {
+      productivityMetric = _missing('labor_productivity', 'Orders per labor hour',
+          'Cashier shift duration is not paid attendance or worked labor-hour evidence.',
+          unit: AnalyticsUnit.decimal);
+    } else if (directMinutes == 0) {
+      productivityMetric = _missing('labor_productivity', 'Orders per labor hour', '0.0 direct operational hours logged in period; direct labor productivity is unavailable.', unit: AnalyticsUnit.decimal);
+    } else if (e.query.hasOrderFilters) {
+      productivityMetric = _missing('labor_productivity', 'Orders per labor hour',
+          'Direct labor productivity requires unfiltered store orders; direct operational hours cannot be apportioned to order subsets.',
+          unit: AnalyticsUnit.decimal);
+    } else {
+      final ratio = double.parse((valid.length / (directMinutes / 60.0)).toStringAsFixed(2));
+      productivityMetric = _metric('labor_productivity', 'Orders per labor hour', ratio,
+          unit: AnalyticsUnit.decimal,
+          explanation: 'Eligible confirmed orders (${valid.length}) divided by direct operational worked hours ($directHours hrs). Excludes management overhead.');
+    }
+
+    // Match earned period(s) of report interval to avoid leaking accruals across months
+    final reportPeriods = <String>{};
+    for (final d in e.get('days')) {
+      final openedAt = _karachi(d['opened_at']);
+      if (openedAt != null) {
+        reportPeriods.add('${openedAt.year.toString().padLeft(4, '0')}-${openedAt.month.toString().padLeft(2, '0')}');
+      }
+    }
+    if (reportPeriods.isEmpty) {
+      var cur = DateTime.utc(e.query.startDate.year, e.query.startDate.month);
+      final end = DateTime.utc(e.query.endDateExclusive.year, e.query.endDateExclusive.month);
+      while (!cur.isAfter(end)) {
+        reportPeriods.add('${cur.year.toString().padLeft(4, '0')}-${cur.month.toString().padLeft(2, '0')}');
+        cur = DateTime.utc(cur.year, cur.month + 1);
+      }
+    }
+
+    final earnedPayroll = e.get('payroll_entries').where((p) {
+      final period = p['period'] as String?;
+      return period != null && reportPeriods.contains(period);
+    }).toList();
+
+    final totalLaborCost = earnedPayroll.fold<int>(0, (sum, p) => sum + (p['kind']=='ACCRUAL' || (p['kind']=='REVERSAL' && p['source']=='NONE' && p['advance_delta_paisa']==0) ? p['payable_delta_paisa'] as int : 0));
+
+    var directLaborPaisa = 0;
+    var overheadLaborPaisa = 0;
+    final staffAllocations = <int, int>{};
+    final staffAllocationBasis = <int, String>{};
+
+    final empAccruals = <int, int>{};
+    for (final p in earnedPayroll) {
+      if (p['kind'] == 'ACCRUAL' || (p['kind'] == 'REVERSAL' && p['source'] == 'NONE' && p['advance_delta_paisa'] == 0)) {
+        final empId = p['employee_id'] as int;
+        final delta = p['payable_delta_paisa'] as int;
+        empAccruals[empId] = (empAccruals[empId] ?? 0) + delta;
+      }
+    }
+
+    final empHours = <int, List<_Record>>{};
+    for (final w in workedHours) {
+      final empId = w['employee_id'] as int;
+      empHours.putIfAbsent(empId, () => []).add(w);
+    }
+
+    for (final s in staff) {
+      final empId = s['id'] as int;
+      final accrual = empAccruals[empId] ?? 0;
+      staffAllocations[empId] = accrual;
+
+      if (accrual <= 0) {
+        staffAllocationBasis[empId] = '-';
+        continue;
+      }
+
+      final hours = empHours[empId];
+      if (hours != null && hours.isNotEmpty) {
+        staffAllocationBasis[empId] = 'Verified hours';
+        final minsList = hours.map((h) => (h['worked_minutes'] as num?)?.toInt() ?? 0).toList();
+        final empTotalMins = minsList.fold<int>(0, (sum, m) => sum + m);
+        if (empTotalMins > 0) {
+          final shares = allocatePaisaProportionally(accrual, minsList);
+          for (var i = 0; i < hours.length; i++) {
+            final h = hours[i];
+            final amount = shares[i];
+            final deptName = h['department_name'] as String? ?? h['department'] as String? ?? '';
+            if (isDirect(deptName)) {
+              directLaborPaisa += amount;
+            } else {
+              overheadLaborPaisa += amount;
+            }
+          }
+        } else {
+          staffAllocationBasis[empId] = 'Primary department default';
+          if (isDirect(s['department'] as String?)) {
+            directLaborPaisa += accrual;
+          } else {
+            overheadLaborPaisa += accrual;
+          }
+        }
+      } else {
+        staffAllocationBasis[empId] = 'Primary department default';
+        if (isDirect(s['department'] as String?)) {
+          directLaborPaisa += accrual;
+        } else {
+          overheadLaborPaisa += accrual;
+        }
+      }
+    }
+
+    final staffRows = staff.map((s) {
+      final empId = s['id'] as int;
+      final empHoursList = empHours[empId];
+      final empMins = empHoursList?.fold<int>(0, (sum, h) => sum + ((h['worked_minutes'] as num?)?.toInt() ?? 0)) ?? 0;
+      final workedHrsStr = empHoursList != null && empHoursList.isNotEmpty
+          ? (empMins / 60.0).toStringAsFixed(1)
+          : null;
+      return _row('staff', s, {
+        'staff_id': s['id'],
+        'name': _safeText(s['name']),
+        'department': s['department'],
+        'job_role': s['job_role'],
+        'role': s['role'],
+        'active': s['is_active'] == 1 ? 'Active' : 'Inactive',
+        'login': s['login_enabled'] == 1 ? 'Enabled' : 'Disabled',
+        'selected_orders': orders.where((o) => o['cashier_id'] == s['id']).length,
+        'selected_shifts': e.get('shifts').where((sh) => sh['staff_id'] == s['id']).length,
+        'worked_hours': workedHrsStr,
+        'allocated_labor_cost_paisa': staffAllocations[empId] ?? 0,
+        'labor_allocation_basis': staffAllocationBasis[empId] ?? '-',
+      });
+    }).toList();
+
     return _section(AnalyticsFamily.staff, 'Staff and payroll', [
       _metric('staff_count', 'Current staff', staff.length, unit: AnalyticsUnit.count, explanation: _currentBasis, isBalance: true),
       _metric('active_staff', 'Current active staff', staff.where((s) => s['is_active'] == 1).length, unit: AnalyticsUnit.count, explanation: _currentBasis, isBalance: true),
@@ -1900,10 +2087,27 @@ class _ReportBuilder {
       _metric('departments', 'Assigned departments', staff.map((s) => s['department_id']).toSet().length, unit: AnalyticsUnit.count, explanation: 'Distinct current assigned department IDs, not labor-cost allocations.', isBalance: true),
       _metric('job_roles', 'Assigned job roles', staff.where((s) => s['job_role_id'] != null).map((s) => s['job_role_id']).toSet().length, unit: AnalyticsUnit.count, explanation: 'Distinct current assigned job-role IDs.', isBalance: true),
       e.get('payroll_balances').isEmpty ? _missing('salary_due', 'Current recorded salary due', 'No payroll has been posted; legacy staff salary liabilities are unknown.') : _metric('salary_due', 'Current recorded salary due', _integers(e.get('payroll_balances'), 'payable_paisa') - _integers(e.get('payroll_balances'), 'advance_paisa'), explanation: 'Current accrued payable less outstanding advances. No unposted salary is inferred.', isBalance: true),
-      _metric('labor_cost', 'Posted salary accruals', e.get('payroll_entries').fold<int>(0, (sum, p) => sum + (p['kind']=='ACCRUAL' || (p['kind']=='REVERSAL' && p['source']=='NONE' && p['advance_delta_paisa']==0) ? p['payable_delta_paisa'] as int : 0)), explanation: 'Salary accruals and their reversals posted in selected day intervals. Payments and advances never count as another expense; earned-period profit allocation remains separate.'),
+      _metric('labor_cost', 'Posted salary accruals', totalLaborCost, explanation: 'Salary accruals and their reversals posted in selected day intervals. Payments and advances never count as another expense; earned-period profit allocation remains separate.'),
       ...payroll.metrics,
-      _missing('labor_productivity', 'Orders per labor hour', 'Cashier shift duration is not paid attendance or worked labor-hour evidence.', unit: AnalyticsUnit.decimal),
-    ], [...payroll.rows, ...staff.map((s) => _row('staff', s, {'staff_id': s['id'], 'name': _safeText(s['name']), 'department': s['department'], 'job_role': s['job_role'], 'role': s['role'], 'active': s['is_active'] == 1 ? 'Active' : 'Inactive', 'login': s['login_enabled'] == 1 ? 'Enabled' : 'Disabled', 'selected_orders': orders.where((o) => o['cashier_id'] == s['id']).length, 'selected_shifts': e.get('shifts').where((sh) => sh['staff_id'] == s['id']).length}))], ['staff_id', 'name', 'department', 'job_role', 'role', 'active', 'login', 'selected_orders', 'selected_shifts'], [...payroll.notes, _currentBasis, 'Order activity uses selected order filters; shift activity is whole selected Business Days. Current role/department names are not historical snapshots. PIN hashes and credentials are never projected.']);
+      coverageMetric,
+      totalHoursMetric,
+      directHoursMetric,
+      overheadHoursMetric,
+      productivityMetric,
+      _metric('direct_labor_cost', 'Direct operational labor cost', directLaborPaisa, explanation: 'Allocated salary accruals for direct operational departments (Kitchen, Front Counter, Delivery) by verified hours or primary department.'),
+      _metric('overhead_labor_cost', 'Overhead labor cost', overheadLaborPaisa, explanation: 'Allocated salary accruals for management and administrative overhead.'),
+    ], [...payroll.rows, ...staffRows], [
+      'staff_id', 'name', 'department', 'job_role', 'role', 'active', 'login',
+      'selected_orders', 'selected_shifts', 'worked_hours', 'allocated_labor_cost_paisa',
+      'labor_allocation_basis'
+    ], [
+      ...payroll.notes,
+      _currentBasis,
+      hasAttendance
+          ? 'Coverage before productivity: Cashier shift duration is register drawer custody, not staff attendance. Direct labor productivity measures eligible confirmed orders per direct operational worked hour. Department labor cost allocates earned salary by verified worked-hours proportions, defaulting to primary assigned departments when unlogged.'
+          : 'Attendance evidence is absent for this period; cashier shift duration is register drawer custody, not staff attendance. Department labor costs default to current assigned departments.',
+      'Order activity uses selected order filters; shift activity is whole selected Business Days. Current role/department names are not historical snapshots. PIN hashes and credentials are never projected.',
+    ]);
   }
 
   AnalyticsSection _profitability() {

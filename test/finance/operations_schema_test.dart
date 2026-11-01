@@ -14,7 +14,7 @@ void main() {
         .map((r) => r['name']).toSet();
     expect(tables, containsAll([
       'supplier_items', 'supplier_payment_allocations', 'salary_rates',
-      'payroll_entries', 'expense_categories', 'expense_entries',
+      'payroll_entries', 'expense_categories', 'expense_entries', 'worked_hours',
     ]));
     final columns = (await db.rawQuery('PRAGMA table_info(vendor_transactions)'))
         .map((r) => r['name']);

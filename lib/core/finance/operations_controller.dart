@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../orders/customer_controller.dart';
+import '../orders/paisa_engine.dart';
 import '../payments/payment_event.dart';
 
 enum FundingSource {
@@ -27,6 +28,68 @@ class OperationsController {
       throw ArgumentError('Enter a positive amount within the supported range.');
     }
   }
+
+  static void _requestKey(String requestKey) {
+    if (requestKey.trim().isEmpty) throw ArgumentError('Request key is required.');
+  }
+
+  /// Determines whether a department represents direct operational/production labor (ADR-0020 §6).
+  ///
+  /// Direct labor includes guest-facing and food production roles:
+  /// - Kitchen / Back of House / Cooks / Dishwashers
+  /// - Front Counter / Register Cashiers / POS
+  /// - Service / Dining / Front of House / Waitstaff
+  /// - Delivery Riders / Drivers / Dispatch
+  ///
+  /// Excludes:
+  /// - Management, Executive, Administration, Office, Accounting, HR, Supervisor, Overhead, and Unassigned/Unknown.
+  static bool isDirectOperationalLabor(String? departmentName) {
+    if (departmentName == null) return false;
+    final d = departmentName.trim().toLowerCase();
+    if (d.isEmpty) return false;
+
+    if (d.contains('manage') ||
+        d.contains('admin') ||
+        d.contains('exec') ||
+        d.contains('account') ||
+        d.contains('office') ||
+        d.contains('supervis') ||
+        d.contains('overhead') ||
+        d.contains('hr') ||
+        d.contains('human resource')) {
+      return false;
+    }
+
+    const directKeywords = [
+      'kitchen',
+      'cook',
+      'prep',
+      'dishwash',
+      'boh',
+      'back of house',
+      'front counter',
+      'counter',
+      'cashier',
+      'register',
+      'service',
+      'dining',
+      'foh',
+      'front of house',
+      'floor',
+      'waiter',
+      'waitstaff',
+      'delivery',
+      'rider',
+      'driver',
+      'dispatch',
+    ];
+
+    return directKeywords.any((kw) => d.contains(kw));
+  }
+
+  /// Allocates an integer amount of paisa proportionally across weights with remainder distributed to the largest bucket.
+  static List<int> allocatePaisaProportionally(int totalPaisa, List<int> parts) =>
+      PaisaEngine.allocateProportionally(totalPaisa: totalPaisa, parts: parts);
 
   static void _reason(String reason) {
     if (reason.trim().isEmpty) throw ArgumentError('A reason is required.');
@@ -138,7 +201,7 @@ class OperationsController {
   /// if its payload matches. The transaction and unique key prevent double cash.
   Future<int?> _replay(DatabaseExecutor db, String table, String requestKey,
       Map<String, Object?> payload) async {
-    _reason(requestKey);
+    _requestKey(requestKey);
     final rows = await db.query(table, where: 'request_key=?', whereArgs: [requestKey.trim()]);
     if (rows.isEmpty) return null;
     final old = rows.single;
@@ -354,4 +417,263 @@ class OperationsController {
     await CustomerController.requireRole(txn, managerId, manager: true);
     return txn.query('expense_entries', orderBy: 'id DESC');
   });
+
+  Future<int> recordWorkedHours({
+    required int managerId,
+    required int employeeId,
+    int? departmentId,
+    required String workDate,
+    required DateTime clockIn,
+    required DateTime clockOut,
+    int breakMinutes = 0,
+    int? businessDayId,
+    required String reason,
+    required String requestKey,
+  }) async {
+    _requestKey(requestKey);
+    _reason(reason);
+    final trimmedDate = workDate.trim();
+    if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(trimmedDate)) {
+      throw ArgumentError('Work date must be YYYY-MM-DD.');
+    }
+    if (!clockOut.isAfter(clockIn)) {
+      throw ArgumentError('Clock-out must be after clock-in.');
+    }
+    if (breakMinutes < 0) {
+      throw ArgumentError('Break minutes cannot be negative.');
+    }
+    final elapsedMinutes = clockOut.difference(clockIn).inMinutes;
+    final netMinutes = elapsedMinutes - breakMinutes;
+    if (netMinutes <= 0) {
+      throw ArgumentError('Worked minutes must be positive.');
+    }
+
+    return database.transaction((txn) async {
+      await CustomerController.requireRole(txn, managerId, manager: true);
+      await _employee(txn, employeeId);
+
+      int effectiveDeptId;
+      if (departmentId != null) {
+        final deptRows = await txn.query('departments', where: 'id=?', whereArgs: [departmentId]);
+        if (deptRows.isEmpty) throw StateError('Selected department does not exist.');
+        effectiveDeptId = departmentId;
+      } else {
+        final empRow = (await txn.query('staff', columns: ['department_id'], where: 'id=?', whereArgs: [employeeId])).single;
+        effectiveDeptId = empRow['department_id'] as int;
+      }
+
+      int? effectiveDayId = businessDayId;
+      if (effectiveDayId == null) {
+        final openDays = await txn.query('business_days', columns: ['id'], where: "status='OPEN'", orderBy: 'id DESC', limit: 1);
+        if (openDays.isNotEmpty) {
+          effectiveDayId = openDays.first['id'] as int;
+        }
+      }
+
+      final payload = <String, Object?>{
+        'employee_id': employeeId,
+        'department_id': effectiveDeptId,
+        'work_date': trimmedDate,
+        'clock_in': clockIn.toUtc().toIso8601String(),
+        'clock_out': clockOut.toUtc().toIso8601String(),
+        'break_minutes': breakMinutes,
+        'worked_minutes': netMinutes,
+        'business_day_id': effectiveDayId,
+        'manager_id': managerId,
+        'reason': reason.trim(),
+      };
+
+      final replay = await _replay(txn, 'worked_hours', requestKey, payload);
+      if (replay != null) return replay;
+
+      final id = await txn.insert('worked_hours', {
+        ...payload,
+        'request_key': requestKey.trim(),
+        'created_at': _now,
+      });
+
+      await audit(txn, managerId, 'worked_hours', id, 'RECORD', payload);
+      return id;
+    });
+  }
+
+  Future<List<Map<String, Object?>>> workedHoursHistory({
+    required int managerId,
+    int? employeeId,
+    String? workDate,
+  }) => database.transaction((txn) async {
+    await CustomerController.requireRole(txn, managerId, manager: true);
+    final whereClauses = <String>[];
+    final whereArgs = <Object?>[];
+    if (employeeId != null) {
+      whereClauses.add('w.employee_id = ?');
+      whereArgs.add(employeeId);
+    }
+    if (workDate != null) {
+      whereClauses.add('w.work_date = ?');
+      whereArgs.add(workDate);
+    }
+    final where = whereClauses.isEmpty ? '' : 'WHERE ${whereClauses.join(' AND ')}';
+    return txn.rawQuery('''
+      SELECT w.*, d.name AS department_name, s.name AS employee_name, m.name AS manager_name
+      FROM worked_hours w
+      JOIN departments d ON d.id = w.department_id
+      JOIN staff s ON s.id = w.employee_id
+      JOIN staff m ON m.id = w.manager_id
+      $where
+      ORDER BY w.work_date DESC, w.id DESC
+    ''', whereArgs);
+  });
+
+  Future<Map<String, dynamic>> departmentLaborAllocation({
+    required int managerId,
+    required String period,
+  }) => database.transaction((txn) async {
+    await CustomerController.requireRole(txn, managerId, manager: true);
+    _period(period);
+
+    final payrollEntries = await txn.rawQuery('''
+      SELECT employee_id,
+        SUM(CASE WHEN kind='ACCRUAL' THEN payable_delta_paisa
+                 WHEN kind='REVERSAL' AND source='NONE' AND advance_delta_paisa=0 THEN payable_delta_paisa
+                 ELSE 0 END) AS net_accrual_paisa
+      FROM payroll_entries
+      WHERE period = ?
+      GROUP BY employee_id
+      HAVING net_accrual_paisa > 0
+    ''', [period]);
+
+    final staffRows = await txn.rawQuery('''
+      SELECT s.id, s.name, s.department_id, d.name AS department_name
+      FROM staff s
+      JOIN departments d ON d.id = s.department_id
+    ''');
+    final staffMap = {for (final s in staffRows) s['id'] as int: s};
+
+    final workedRows = await txn.rawQuery('''
+      SELECT w.employee_id, w.department_id, d.name AS department_name,
+             SUM(w.worked_minutes) AS total_minutes
+      FROM worked_hours w
+      JOIN departments d ON d.id = w.department_id
+      WHERE w.work_date LIKE ?
+      GROUP BY w.employee_id, w.department_id
+    ''', ['$period%']);
+
+    final empWorked = <int, List<Map<String, Object?>>>{};
+    for (final r in workedRows) {
+      empWorked.putIfAbsent(r['employee_id'] as int, () => []).add(r);
+    }
+
+    final deptAllocations = <int, int>{};
+    final deptNames = <int, String>{};
+    for (final s in staffRows) {
+      deptNames[s['department_id'] as int] = s['department_name'] as String;
+    }
+    for (final r in workedRows) {
+      deptNames[r['department_id'] as int] = r['department_name'] as String;
+    }
+
+    final employeeAllocations = <Map<String, dynamic>>[];
+
+    for (final p in payrollEntries) {
+      final empId = p['employee_id'] as int;
+      final accrualPaisa = p['net_accrual_paisa'] as int;
+      final staffInfo = staffMap[empId];
+      final primaryDeptId = staffInfo?['department_id'] as int?;
+      final primaryDeptName = staffInfo?['department_name'] as String? ?? 'Unknown';
+
+      final hoursList = empWorked[empId];
+      if (hoursList == null || hoursList.isEmpty) {
+        if (primaryDeptId != null) {
+          deptAllocations[primaryDeptId] = (deptAllocations[primaryDeptId] ?? 0) + accrualPaisa;
+        }
+        employeeAllocations.add({
+          'employee_id': empId,
+          'employee_name': staffInfo?['name'] ?? 'Staff #$empId',
+          'accrual_paisa': accrualPaisa,
+          'method': 'PRIMARY_DEPARTMENT_DEFAULT',
+          'allocations': [
+            {
+              'department_id': primaryDeptId,
+              'department_name': primaryDeptName,
+              'allocated_paisa': accrualPaisa,
+              'worked_minutes': 0,
+              'share_percent': 100.0,
+            }
+          ],
+        });
+      } else {
+        final totalMinutes = hoursList.fold<int>(0, (sum, h) => sum + (h['total_minutes'] as int));
+        if (totalMinutes <= 0) {
+          if (primaryDeptId != null) {
+            deptAllocations[primaryDeptId] = (deptAllocations[primaryDeptId] ?? 0) + accrualPaisa;
+          }
+          employeeAllocations.add({
+            'employee_id': empId,
+            'employee_name': staffInfo?['name'] ?? 'Staff #$empId',
+            'accrual_paisa': accrualPaisa,
+            'method': 'PRIMARY_DEPARTMENT_DEFAULT',
+            'allocations': [
+              {
+                'department_id': primaryDeptId,
+                'department_name': primaryDeptName,
+                'allocated_paisa': accrualPaisa,
+                'worked_minutes': 0,
+                'share_percent': 100.0,
+              }
+            ],
+          });
+        } else {
+          final minutesList = hoursList.map((h) => h['total_minutes'] as int).toList();
+          final allocatedShares = allocatePaisaProportionally(accrualPaisa, minutesList);
+          final empDepts = <Map<String, dynamic>>[];
+
+          for (var i = 0; i < hoursList.length; i++) {
+            final h = hoursList[i];
+            final deptId = h['department_id'] as int;
+            final deptName = h['department_name'] as String;
+            final mins = h['total_minutes'] as int;
+            final sharePaisa = allocatedShares[i];
+            deptAllocations[deptId] = (deptAllocations[deptId] ?? 0) + sharePaisa;
+            empDepts.add({
+              'department_id': deptId,
+              'department_name': deptName,
+              'allocated_paisa': sharePaisa,
+              'worked_minutes': mins,
+              'share_percent': double.parse((mins / totalMinutes * 100).toStringAsFixed(2)),
+            });
+          }
+
+          employeeAllocations.add({
+            'employee_id': empId,
+            'employee_name': staffInfo?['name'] ?? 'Staff #$empId',
+            'accrual_paisa': accrualPaisa,
+            'method': 'VERIFIED_HOURS_PROPORTION',
+            'allocations': empDepts,
+          });
+        }
+      }
+    }
+
+    final departmentSummary = deptAllocations.entries.map((e) => {
+      'department_id': e.key,
+      'department_name': deptNames[e.key] ?? 'Dept #${e.key}',
+      'allocated_paisa': e.value,
+      'is_direct_labor': isDirectOperationalLabor(deptNames[e.key]),
+    }).toList();
+
+    return {
+      'period': period,
+      'total_labor_cost_paisa': payrollEntries.fold<int>(0, (sum, p) => sum + (p['net_accrual_paisa'] as int)),
+      'direct_labor_paisa': departmentSummary.where((d) => d['is_direct_labor'] == true).fold<int>(0, (s, d) => s + (d['allocated_paisa'] as int)),
+      'overhead_labor_paisa': departmentSummary.where((d) => d['is_direct_labor'] != true).fold<int>(0, (s, d) => s + (d['allocated_paisa'] as int)),
+      'departments': departmentSummary,
+      'employees': employeeAllocations,
+    };
+  });
 }
+
+/// Standalone predicate for direct operational labor categorization (ADR-0020 §6).
+bool isDirectOperationalLabor(String? departmentName) =>
+    OperationsController.isDirectOperationalLabor(departmentName);
+

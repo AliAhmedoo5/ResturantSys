@@ -125,7 +125,24 @@ Future<void> createOperationsSchema(DatabaseExecutor db) async {
     id INTEGER PRIMARY KEY AUTOINCREMENT, manager_id INTEGER NOT NULL REFERENCES staff(id),
     entity TEXT NOT NULL, entity_id INTEGER NOT NULL, action TEXT NOT NULL,
     detail TEXT NOT NULL, created_at TEXT NOT NULL)''');
-  for (final table in ['salary_rates','payroll_entries','expense_entries','operations_audit','supplier_payment_allocations','supplier_opening_adjustments']) {
+  await db.execute('''CREATE TABLE IF NOT EXISTS worked_hours (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_id INTEGER NOT NULL REFERENCES staff(id),
+    department_id INTEGER NOT NULL REFERENCES departments(id),
+    work_date TEXT NOT NULL,
+    clock_in TEXT NOT NULL,
+    clock_out TEXT NOT NULL,
+    break_minutes INTEGER NOT NULL DEFAULT 0 CHECK(break_minutes >= 0),
+    worked_minutes INTEGER NOT NULL CHECK(worked_minutes > 0),
+    business_day_id INTEGER REFERENCES business_days(id),
+    manager_id INTEGER NOT NULL REFERENCES staff(id),
+    reason TEXT NOT NULL DEFAULT '',
+    request_key TEXT UNIQUE,
+    created_at TEXT NOT NULL)''');
+  await db.execute('CREATE INDEX IF NOT EXISTS worked_hours_employee_date ON worked_hours(employee_id,work_date)');
+  await db.execute('CREATE INDEX IF NOT EXISTS worked_hours_date ON worked_hours(work_date)');
+  await db.execute('CREATE INDEX IF NOT EXISTS worked_hours_business_day ON worked_hours(business_day_id)');
+  for (final table in ['salary_rates','payroll_entries','expense_entries','operations_audit','supplier_payment_allocations','supplier_opening_adjustments','worked_hours']) {
     for (final operation in ['UPDATE','DELETE']) {
       await db.execute("CREATE TRIGGER IF NOT EXISTS ${table}_no_$operation BEFORE $operation ON $table BEGIN SELECT RAISE(ABORT,'Financial history is immutable'); END");
     }
