@@ -1990,7 +1990,6 @@ class _ReportBuilder {
       return period != null && reportPeriods.contains(period);
     }).toList();
 
-    final totalLaborCost = earnedPayroll.fold<int>(0, (sum, p) => sum + (p['kind']=='ACCRUAL' || (p['kind']=='REVERSAL' && p['source']=='NONE' && p['advance_delta_paisa']==0) ? p['payable_delta_paisa'] as int : 0));
     final postedLaborCost = e.get('payroll_entries').fold<int>(0, (sum, p) => sum + (p['kind']=='ACCRUAL' || (p['kind']=='REVERSAL' && p['source']=='NONE' && p['advance_delta_paisa']==0) ? p['payable_delta_paisa'] as int : 0));
 
     var directLaborPaisa = 0;
