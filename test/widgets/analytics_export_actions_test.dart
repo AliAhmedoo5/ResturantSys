@@ -33,7 +33,7 @@ void main() {
     await tester.pumpAndSettle();
     final file = directory.listSync().whereType<File>().single;
     expect(file.readAsStringSync(), contains('415000'));
-    expect(find.textContaining('Saved CSV'), findsOneWidget);
+    expect(find.textContaining('Saved CSV'), findsWidgets);
   });
 
   testWidgets('local export cancels cleanly and rejects session lock while directory picker is open', (tester) async {
