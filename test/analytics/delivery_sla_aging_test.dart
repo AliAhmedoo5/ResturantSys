@@ -27,7 +27,7 @@ void main() {
     addTearDown(auth.session.dispose);
 
     final shifts = ShiftAndCashController(database: db);
-    final bDay = await shifts.openBusinessDay(openedByStaffId: 1);
+    final bDay = await shifts.openBusinessDay(openedByStaffId: 1, openedAt: DateTime.utc(2026, 10, 31, 6, 0));
     final shift = await shifts.openShift(staffId: 2, openingFloat: 0);
 
     final catalog = CatalogAndRecipeController(database: db);
