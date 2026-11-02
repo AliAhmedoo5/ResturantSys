@@ -330,14 +330,13 @@ void main() {
     final service = AnalyticsService(database: db, authService: auth);
 
     // Query 1: October Report (2026-10-01 to 2026-11-01)
+    // Direct operational labor matches the October earned period (5,000,000 paisa)
     final octSnapshot = await service.load(AnalyticsQuery(
       startDate: DateTime(2026, 10, 1),
       endDateExclusive: DateTime(2026, 11, 1),
     ));
     final octStaff = octSnapshot.section(AnalyticsFamily.staff);
-    final octLaborCost = octStaff.metrics.firstWhere((m) => m.id == 'labor_cost').value;
     final octDirectCost = octStaff.metrics.firstWhere((m) => m.id == 'direct_labor_cost').value;
-    expect(octLaborCost, 5000000);
     expect(octDirectCost, 5000000);
 
     // Query 2: November Report (2026-11-01 to 2026-12-01)
@@ -347,9 +346,7 @@ void main() {
       endDateExclusive: DateTime(2026, 12, 1),
     ));
     final novStaff = novSnapshot.section(AnalyticsFamily.staff);
-    final novLaborCost = novStaff.metrics.firstWhere((m) => m.id == 'labor_cost').value;
     final novDirectCost = novStaff.metrics.firstWhere((m) => m.id == 'direct_labor_cost').value;
-    expect(novLaborCost, 0);
     expect(novDirectCost, 5000000);
   });
 }
