@@ -22,37 +22,9 @@ void main() {
     expect(currentVersion, PosDatabaseConstants.schemaVersion);
 
     // Simulate a database that was migrated at version 21 without category / classification columns
-    // We recreate raw_ingredients and order_cost_events without those columns, then set version to 21
-    await db.execute('DROP TABLE IF EXISTS order_cost_events');
-    await db.execute('''CREATE TABLE order_cost_events (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      order_id INTEGER NOT NULL REFERENCES orders(id),
-      ingredient_id INTEGER NOT NULL REFERENCES raw_ingredients(id),
-      revision INTEGER NOT NULL,
-      kind TEXT NOT NULL,
-      quantity REAL NOT NULL,
-      unit_cost_rupees REAL,
-      cost_paisa INTEGER,
-      source_event_id INTEGER REFERENCES order_cost_events(id),
-      recorded_at TEXT NOT NULL
-    )''');
-
-    // Simulate raw_ingredients table without category
-    await db.execute('PRAGMA legacy_alter_table = ON');
-    await db.execute('ALTER TABLE raw_ingredients RENAME TO raw_ingredients_backup');
-    await db.execute('''CREATE TABLE raw_ingredients (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL UNIQUE,
-      storage_unit TEXT NOT NULL,
-      current_stock REAL NOT NULL DEFAULT 0.0,
-      low_stock_threshold REAL NOT NULL DEFAULT 0.0,
-      cost_per_recipe_unit REAL NOT NULL DEFAULT 0.0,
-      created_at TEXT NOT NULL
-    )''');
-    await db.execute('''INSERT INTO raw_ingredients(id, name, storage_unit, current_stock, low_stock_threshold, cost_per_recipe_unit, created_at)
-      SELECT id, name, storage_unit, current_stock, low_stock_threshold, cost_per_recipe_unit, created_at FROM raw_ingredients_backup''');
-    await db.execute('DROP TABLE raw_ingredients_backup');
-    await db.execute('PRAGMA legacy_alter_table = OFF');
+    // Drop those columns and drop backup_attempts, then set version to 21
+    await db.execute('ALTER TABLE order_cost_events DROP COLUMN classification');
+    await db.execute('ALTER TABLE raw_ingredients DROP COLUMN category');
 
     // Drop backup_attempts to simulate pre-v26 schema
     await db.execute('DROP TABLE IF EXISTS backup_attempts');

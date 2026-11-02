@@ -168,7 +168,7 @@ class AnalyticsService {
       e.absent.add('supplier_receipt_evidence');
     }
     await read('expense_entries', 'expense_entries', 'SELECT x.* FROM expense_entries x JOIN business_days b ON b.id=x.business_day_id WHERE $dayScope', dayArgs);
-    await read('payroll_entries', 'payroll_entries', 'SELECT x.* FROM payroll_entries x');
+    await read('payroll_entries', 'payroll_entries', 'SELECT x.* FROM payroll_entries x WHERE $interval', intervalArgs);
     // Earned months survive late posting and later settlement. Never constrain
     // this evidence to the posting window or substitute current salary rates.
     await read('all_payroll_entries', 'payroll_entries', 'SELECT * FROM payroll_entries ORDER BY id');
