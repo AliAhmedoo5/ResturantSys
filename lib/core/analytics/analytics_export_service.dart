@@ -64,7 +64,7 @@ class AnalyticsExportService {
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
                 pw.Text(
-                  'Restaurant Analytics — Executive Report',
+                  'Restaurant Analytics - Executive Report',
                   style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#1E293B')),
                 ),
                 pw.SizedBox(height: 2),
@@ -175,16 +175,11 @@ class AnalyticsExportService {
         // 4. Audit & Metadata Appendix
         pw.Text('Audit & Metadata Appendix', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#1E293B'))),
         pw.SizedBox(height: 4),
-        pw.TableHelper.fromTextArray(
-          headers: ['Property', 'Value'],
-          data: _metadata(snapshot, family.name).map((r) => ['${r[0]}', '${r[1] ?? "Unknown"}']).toList(),
-          headerDecoration: pw.BoxDecoration(color: PdfColor.fromHex('#334155')),
-          headerStyle: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
-          cellStyle: const pw.TextStyle(fontSize: 7),
-          oddRowDecoration: pw.BoxDecoration(color: PdfColor.fromHex('#F8FAFC')),
-          border: pw.TableBorder.all(color: PdfColors.grey200, width: 0.5),
-          cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-        ),
+        for (final r in _metadata(snapshot, family.name))
+          pw.Padding(
+            padding: const pw.EdgeInsets.only(bottom: 2),
+            child: pw.Text('${r[0]}: ${r[1] ?? "Unknown"}', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey700)),
+          ),
       ],
     ));
 
