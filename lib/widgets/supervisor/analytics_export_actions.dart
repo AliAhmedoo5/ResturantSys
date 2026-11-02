@@ -92,20 +92,7 @@ class _AnalyticsExportActionsState extends State<AnalyticsExportActions> {
       );
 
       if (mounted && canExport()) {
-        final successMsg = 'Saved ${format.name.toUpperCase()} to ${file.path}';
-        setState(() => _message = successMsg);
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          SnackBar(
-            content: Text(successMsg),
-            duration: const Duration(seconds: 5),
-            action: SnackBarAction(
-              label: 'OK',
-              onPressed: () {
-                ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
-              },
-            ),
-          ),
-        );
+        setState(() => _message = 'Saved ${format.name.toUpperCase()} to ${file.path}');
       }
     } on ExportCancelledException {
       if (mounted && canExport()) {
@@ -120,26 +107,13 @@ class _AnalyticsExportActionsState extends State<AnalyticsExportActions> {
           _failed = true;
           _message = e.message;
         });
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          SnackBar(
-            content: Text(e.message),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
       }
     } catch (_) {
       if (mounted && canExport()) {
-        const errorMsg = 'Could not save export. Choose a writable directory and retry.';
         setState(() {
           _failed = true;
-          _message = errorMsg;
+          _message = 'Could not save export. Choose a writable directory and retry.';
         });
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          SnackBar(
-            content: const Text(errorMsg),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
       }
     } finally {
       if (mounted) {
@@ -192,14 +166,6 @@ class _AnalyticsExportActionsState extends State<AnalyticsExportActions> {
               _message = result.message ?? 'Could not print report.';
           }
         });
-        if (_message != null) {
-          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-            SnackBar(
-              content: Text(_message!),
-              backgroundColor: _failed ? Theme.of(context).colorScheme.error : null,
-            ),
-          );
-        }
       }
     } catch (e) {
       if (mounted && canExport()) {
@@ -207,12 +173,6 @@ class _AnalyticsExportActionsState extends State<AnalyticsExportActions> {
           _failed = true;
           _message = 'Could not print report: $e';
         });
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          SnackBar(
-            content: Text('Could not print report: $e'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
       }
     } finally {
       if (mounted) {
