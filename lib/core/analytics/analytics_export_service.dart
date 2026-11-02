@@ -118,11 +118,9 @@ class AnalyticsExportService {
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Text(metric.label, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
-                      pw.SizedBox(height: 3),
                       pw.Text(
-                        _pdfValue(metric.value, metric.unit),
-                        style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#1E293B')),
+                        '${metric.label}: ${_pdfValue(metric.value, metric.unit)}',
+                        style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#1E293B')),
                       ),
                       pw.SizedBox(height: 3),
                       pw.Text(
@@ -169,6 +167,13 @@ class AnalyticsExportService {
             border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
             cellPadding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 4),
           ),
+          pw.SizedBox(height: 6),
+          for (final row in section.rows)
+            for (final col in section.columns)
+              pw.Padding(
+                padding: const pw.EdgeInsets.only(bottom: 1),
+                child: pw.Text('${row.sourceType} / ${row.sourceId ?? row.id} (row ${row.id}) | ${col.label}: ${_pdfValue(row.cells[col.key], col.unit)}', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
+              ),
           pw.SizedBox(height: 12),
         ],
 
