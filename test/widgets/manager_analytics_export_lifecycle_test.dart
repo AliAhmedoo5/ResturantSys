@@ -179,14 +179,14 @@ void main() {
       for (var attempt = 0; attempt < 100; attempt++) {
         await Future<void>.delayed(const Duration(milliseconds: 20));
         await tester.pump();
-        if (exportDir.listSync().whereType<File>().isNotEmpty) break;
+        if (exportDir.listSync().whereType<File>().any((f) => f.path.endsWith('.csv'))) break;
       }
     });
 
     await tester.pump(const Duration(milliseconds: 200));
 
     // CRITICAL ASSERTION: The file was exported to the chosen directory
-    final exportedFiles = exportDir.listSync().whereType<File>().toList();
+    final exportedFiles = exportDir.listSync().whereType<File>().where((f) => f.path.endsWith('.csv')).toList();
     expect(
       exportedFiles,
       isNotEmpty,
