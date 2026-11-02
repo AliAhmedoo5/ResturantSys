@@ -119,14 +119,22 @@ class ReportExportService {
             build:(context)=>[pw.SizedBox(height:12),pw.TableHelper.fromTextArray(
               headers:headers.map((header)=>header.replaceAll('(paisa)','(PKR)').replaceAll('Value (money in integer paisa)','Value')).toList(),
               data:rows,
-              headerDecoration:const pw.BoxDecoration(color:PdfColors.grey200),
-              cellStyle:const pw.TextStyle(fontSize:8),headerStyle:pw.TextStyle(fontSize:9,fontWeight:pw.FontWeight.bold),
+              headerDecoration:const pw.BoxDecoration(color:PdfColor.fromHex('#1E293B')),
+              headerStyle:pw.TextStyle(fontSize:9,fontWeight:pw.FontWeight.bold,color:PdfColors.white),
+              cellStyle:const pw.TextStyle(fontSize:8),
+              oddRowDecoration:const pw.BoxDecoration(color:PdfColor.fromHex('#F8FAFC')),
+              border:pw.TableBorder.all(color:PdfColors.grey300,width:0.5),
             ),
               if(section['detail_rows']!=null) ...[
-                pw.SizedBox(height:16),pw.Text('Recorded inventory movements'),
+                pw.SizedBox(height:16),pw.Text('Recorded inventory movements',style:pw.TextStyle(fontSize:10,fontWeight:pw.FontWeight.bold)),
+                pw.SizedBox(height:6),
                 pw.TableHelper.fromTextArray(headers:List<String>.from(section['detail_headers'] as List),
                   data:(section['detail_rows'] as List).map((row)=>(row as List).map((cell)=>'$cell').toList()).toList(),
-                  cellStyle:const pw.TextStyle(fontSize:8),headerStyle:pw.TextStyle(fontSize:9,fontWeight:pw.FontWeight.bold)),
+                  headerDecoration:const pw.BoxDecoration(color:PdfColor.fromHex('#334155')),
+                  headerStyle:pw.TextStyle(fontSize:8,fontWeight:pw.FontWeight.bold,color:PdfColors.white),
+                  cellStyle:const pw.TextStyle(fontSize:8),
+                  oddRowDecoration:const pw.BoxDecoration(color:PdfColor.fromHex('#F8FAFC')),
+                  border:pw.TableBorder.all(color:PdfColors.grey300,width:0.5)),
               ],
             ]));
         }

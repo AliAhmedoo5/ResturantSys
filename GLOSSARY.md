@@ -210,6 +210,23 @@ _Avoid_: Entry time, posting time (when referring to actual occurrence)
 The back-office administrative section of the application protected by a Manager PIN for catalog CRUD, recipes, Khata, staff PINs, settings, and reporting.
 _Avoid_: Admin panel, backend, supervisor portal
 
+## Reporting & Business Intelligence
+
+**Executive Summary**:
+The primary business-facing presentation layer of a report featuring key performance indicators (KPIs), sales totals, order counts, and cash variances without technical provenance.
+_Avoid_: Raw report dump, debug sheet, technical summary
+
+**Audit Metadata**:
+Immutable technical provenance, UTC timestamps, schema versions, and query parameters preserved in a dedicated trailing section or separate sheet rather than the primary report body.
+_Avoid_: Header logs, debug dump, preamble
+
+**Executive KPI Scorecard**:
+A prominent standardized grid of six headline performance metrics (Net Sales, Order Count/AOV, Cash vs Digital, Gross Profit/Margin, Food Cost %, and Discrepancy/Wastage) anchoring the first page or sheet of an operational report.
+_Avoid_: Header tiles, metric cluster, KPI dump
+
+**Clean CSV Standard**:
+A tabular data export structure starting strictly on Row 1 with human-readable column headers, omitting multi-row metadata preambles to ensure instant spreadsheet usability.
+_Avoid_: Raw CSV dump, metadata-prefixed CSV
 
 **Line-Level Sales Allocation**:
 The proportional distribution of order-level discounts and carve-out taxes to individual order items in integer paisa, ensuring exact reconciliation to order receipts without altering sealed historical records.

@@ -345,6 +345,16 @@ class ExcelReportingEngine {
     b.addRow(['Closed At', z.closedAt != null ? _formatTimestamp(z.closedAt!) : 'Active (Pre-Lock)', 'Closed By', z.closedByStaffName ?? 'N/A']);
     b.addEmptyRow();
 
+    b.addSectionHeader('EXECUTIVE KPI SCORECARD');
+    b.addTableHeaders(['Key Performance Indicator', 'Metric Value', 'Target / Status']);
+    b.addRow(['Net Sales', z.netSales, 'Total revenue after discounts']);
+    b.addRow(['Total Orders', z.totalOrdersCount, 'Average Order: PKR ${(z.totalOrdersCount > 0 ? (z.netSales / z.totalOrdersCount).toStringAsFixed(2) : "0.00")}']);
+    b.addRow(['Physical Cash Collected', z.cashSales, 'In Drawer']);
+    b.addRow(['Digital Tender Collections', (z.cardSales + z.raastSales), 'Bank & Wallets (Raast/Card)']);
+    b.addRow(['Net Cash Variance', z.netCashVariance, z.netCashVariance == 0 ? 'CLEAN (Reconciled)' : 'DISCREPANCY ALERT']);
+    b.addRow(['Kitchen Wastage Loss', z.totalWastageCost, '${z.totalWastageCount} incidents recorded']);
+    b.addEmptyRow();
+
     b.addSectionHeader('REVENUE & SALES METRICS');
     b.addRow(['Gross Sales', z.grossSales]);
     b.addRow(['Total Discounts Applied', z.totalDiscounts]);
@@ -417,19 +427,36 @@ class ExcelReportingEngine {
 
     b.addTableHeaders(['Category', 'Item Name', 'Units Sold', 'Gross Sales (PKR)']);
 
+    final itemsByCategory = <String, List<Map<String, dynamic>>>{};
+    for (final item in items) {
+      final cat = item['category_name'] as String? ?? 'General';
+      itemsByCategory.putIfAbsent(cat, () => []).add(item);
+    }
+
     num totalUnits = 0;
     num totalGross = 0;
 
-    for (final item in items) {
-      final cat = item['category_name'] as String? ?? 'General';
-      final name = item['item_name'] as String? ?? '';
-      final units = item['units_sold'] as num? ?? 0;
-      final sales = item['gross_sales'] as num? ?? 0;
+    for (final entry in itemsByCategory.entries) {
+      final catName = entry.key;
+      num catUnits = 0;
+      num catGross = 0;
 
-      totalUnits += units;
-      totalGross += sales;
+      for (final item in entry.value) {
+        final name = item['item_name'] as String? ?? '';
+        final units = item['units_sold'] as num? ?? 0;
+        final sales = item['gross_sales'] as num? ?? 0;
 
-      b.addRow([cat, name, units, sales]);
+        catUnits += units;
+        catGross += sales;
+        totalUnits += units;
+        totalGross += sales;
+
+        b.addRow([catName, name, units, sales]);
+      }
+
+      if (entry.value.length > 1) {
+        b.addBoldRow(['Subtotal ($catName)', '', catUnits, catGross]);
+      }
     }
 
     b.addEmptyRow();
@@ -690,13 +717,16 @@ class ExcelReportingEngine {
     // 5. xl/styles.xml
     const stylesXml = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <fonts count="2">
+  <fonts count="3">
     <font><sz val="11"/><name val="Calibri"/></font>
     <font><b/><sz val="11"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>
   </fonts>
-  <fills count="2">
+  <fills count="4">
     <fill><patternFill patternType="none"/></fill>
     <fill><patternFill patternType="gray125"/></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FF1E293B"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFF8FAFC"/></patternFill></fill>
   </fills>
   <borders count="1">
     <border><left/><right/><top/><bottom/><diagonal/></border>
@@ -704,9 +734,11 @@ class ExcelReportingEngine {
   <cellStyleXfs count="1">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
   </cellStyleXfs>
-  <cellXfs count="2">
+  <cellXfs count="4">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+    <xf numFmtId="0" fontId="2" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>
+    <xf numFmtId="0" fontId="0" fillId="3" borderId="0" xfId="0" applyFill="1"/>
   </cellXfs>
 </styleSheet>''';
     archive.addFile(ArchiveFile.string('xl/styles.xml', stylesXml));
@@ -770,7 +802,14 @@ class _SheetXmlBuilder {
   }
 
   void addTableHeaders(List<String> headers) {
-    addHeaderRow(headers);
+    _currentRow++;
+    _buffer.writeln('<row r="$_currentRow">');
+    for (var i = 0; i < headers.length; i++) {
+      final ref = '${_colName(i + 1)}$_currentRow';
+      final val = headers[i];
+      _buffer.writeln('<c r="$ref" t="inlineStr" s="2"><is><t>${_escapeXml(val)}</t></is></c>');
+    }
+    _buffer.writeln('</row>');
   }
 
   void addBoldRow(List<dynamic> values) {
