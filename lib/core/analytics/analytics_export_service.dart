@@ -54,7 +54,7 @@ class AnalyticsExportService {
       header: (context) => pw.Container(
         padding: const pw.EdgeInsets.only(bottom: 8),
         margin: const pw.EdgeInsets.only(bottom: 12),
-        decoration: const pw.BoxDecoration(
+        decoration: pw.BoxDecoration(
           border: pw.Border(bottom: pw.BorderSide(color: PdfColor.fromHex('#1E293B'), width: 1.5)),
         ),
         child: pw.Row(
@@ -162,10 +162,10 @@ class AnalyticsExportService {
               for (final row in section.rows)
                 ['${row.sourceType} / ${row.sourceId ?? row.id}', ...section.columns.map((col) => _pdfValue(row.cells[col.key], col.unit))],
             ],
-            headerDecoration: const pw.BoxDecoration(color: PdfColor.fromHex('#1E293B')),
+            headerDecoration: pw.BoxDecoration(color: PdfColor.fromHex('#1E293B')),
             headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
             cellStyle: const pw.TextStyle(fontSize: 8),
-            oddRowDecoration: const pw.BoxDecoration(color: PdfColor.fromHex('#F8FAFC')),
+            oddRowDecoration: pw.BoxDecoration(color: PdfColor.fromHex('#F8FAFC')),
             border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
             cellPadding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 4),
           ),
@@ -178,10 +178,10 @@ class AnalyticsExportService {
         pw.TableHelper.fromTextArray(
           headers: ['Property', 'Value'],
           data: _metadata(snapshot, family.name).map((r) => ['${r[0]}', '${r[1] ?? "Unknown"}']).toList(),
-          headerDecoration: const pw.BoxDecoration(color: PdfColor.fromHex('#334155')),
+          headerDecoration: pw.BoxDecoration(color: PdfColor.fromHex('#334155')),
           headerStyle: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
           cellStyle: const pw.TextStyle(fontSize: 7),
-          oddRowDecoration: const pw.BoxDecoration(color: PdfColor.fromHex('#F8FAFC')),
+          oddRowDecoration: pw.BoxDecoration(color: PdfColor.fromHex('#F8FAFC')),
           border: pw.TableBorder.all(color: PdfColors.grey200, width: 0.5),
           cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 2),
         ),
@@ -352,7 +352,7 @@ class AnalyticsExportService {
     final meta = _metadata(snapshot, family.name);
     final section = snapshot.section(family);
     final rows = _sectionRows(section);
-    final allRows = [...rows, [], ['# --- AUDIT METADATA & SYSTEM PROVENANCE ---'], ...meta];
+    final allRows = <List<Object?>>[...rows, <Object?>[], <Object?>['# --- AUDIT METADATA & SYSTEM PROVENANCE ---'], ...meta];
     final total = allRows.length;
     final buffer = StringBuffer();
     for (var i = 0; i < total; i++) {
