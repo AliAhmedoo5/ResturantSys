@@ -56,6 +56,31 @@ void main() {
     expect(xml('xl/worksheets/sheet3.xml'), contains('missing'));
     expect(xml('xl/worksheets/sheet1.xml'), contains('generated_by_staff_id'));
   });
+
+  test('workbook zip entry uncompressed sizes match actual utf8 byte counts even with non-ascii characters and includes styles', () {
+    final snapWithUnicode = AnalyticsSnapshot(
+      query: AnalyticsQuery(startDate: DateTime(2026, 10, 1), endDateExclusive: DateTime(2026, 10, 2)),
+      generatedAt: DateTime.utc(2026, 10, 1),
+      businessDayIds: [1],
+      notes: ['Customer phone (7–15 digits); guest = no phone'],
+      sections: [
+        AnalyticsSection(
+          family: AnalyticsFamily.sales,
+          title: 'Sales',
+          metrics: [const AnalyticsMetric(id: 'val', label: 'Sale – Total', value: 1000, unit: AnalyticsUnit.paisa, explanation: 'Test – Unicode')],
+          columns: [const AnalyticsColumn(key: 'col', label: 'Item – Name')],
+          rows: [AnalyticsRow(id: 'r1', sourceType: 'orders', cells: {'col': 'Chicken Karahi – Special'})],
+        ),
+      ],
+    );
+    final bytes = AnalyticsExportService().workbook(snapWithUnicode);
+    final archive = ZipDecoder().decodeBytes(bytes);
+    for (final file in archive.files) {
+      final contentBytes = file.content as List<int>;
+      expect(file.size, equals(contentBytes.length), reason: 'Uncompressed size header for ${file.name} must equal encoded byte length');
+    }
+    expect(archive.findFile('xl/styles.xml'), isNotNull, reason: 'Workbook must include xl/styles.xml for valid styling');
+  });
   test('CSV preserves selected displayed values, provenance, missing quality and filters safely', () {
     final csv = AnalyticsExportService().csv(fixture(), AnalyticsFamily.sales);
     expect(csv, contains('12345'));
