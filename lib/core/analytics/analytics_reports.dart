@@ -1985,7 +1985,8 @@ class _ReportBuilder {
       }
     }
 
-    final earnedPayroll = e.get('payroll_entries').where((p) {
+    final allPayroll = e.get('all_payroll_entries').isNotEmpty ? e.get('all_payroll_entries') : e.get('payroll_entries');
+    final earnedPayroll = allPayroll.where((p) {
       final period = p['period'] as String?;
       return period != null && reportPeriods.contains(period);
     }).toList();
