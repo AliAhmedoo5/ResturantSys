@@ -292,29 +292,77 @@ class AnalyticsExportService {
       for (final section in snapshot.sections) section.family.name: _sectionRows(section),
     };
     final zip = Archive();
-    void add(String path, String xml) => zip.addFile(
-          ArchiveFile.string(path, '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>$xml'),
-        );
-    add('[Content_Types].xml', '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${List.generate(sheets.length, (i) => '<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>').join()}</Types>');
+    void add(String path, String xml) {
+      final bytes = utf8.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>$xml');
+      zip.addFile(ArchiveFile(path, bytes.length, bytes));
+    }
+
+    const stylesXml = '''<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="3">
+    <font><sz val="11"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>
+  </fonts>
+  <fills count="4">
+    <fill><patternFill patternType="none"/></fill>
+    <fill><patternFill patternType="gray125"/></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FF1E293B"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFF8FAFC"/></patternFill></fill>
+  </fills>
+  <borders count="2">
+    <border><left/><right/><top/><bottom/><diagonal/></border>
+    <border>
+      <left style="thin"><color rgb="FFCBD5E1"/></left>
+      <right style="thin"><color rgb="FFCBD5E1"/></right>
+      <top style="thin"><color rgb="FFCBD5E1"/></top>
+      <bottom style="thin"><color rgb="FFCBD5E1"/></bottom>
+      <diagonal/>
+    </border>
+  </borders>
+  <cellStyleXfs count="1">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
+  </cellStyleXfs>
+  <cellXfs count="4">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+    <xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/>
+    <xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFill="1" applyBorder="1"/>
+  </cellXfs>
+</styleSheet>''';
+
+    add('[Content_Types].xml', '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${List.generate(sheets.length, (i) => '<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>').join()}</Types>');
     add('_rels/.rels', '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
     add('xl/workbook.xml', '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${List.generate(sheets.length, (i) => '<sheet name="${_xml(sheets.keys.elementAt(i))}" sheetId="${i + 1}" r:id="rId${i + 1}"/>').join()}</sheets></workbook>');
-    add('xl/_rels/workbook.xml.rels', '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${List.generate(sheets.length, (i) => '<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>').join()}</Relationships>');
+    add('xl/_rels/workbook.xml.rels', '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${List.generate(sheets.length, (i) => '<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>').join()}<Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>');
+    add('xl/styles.xml', stylesXml);
+
     final totalSheets = sheets.length;
     for (var sheet = 0; sheet < sheets.length; sheet++) {
       if (isCancelled?.call() == true) throw const ExportCancelledException();
       final sheetName = sheets.keys.elementAt(sheet);
       final rows = sheets.values.elementAt(sheet);
       onProgress?.call('Serializing sheet $sheetName', sheet + 1, totalSheets);
-      final xml = StringBuffer('<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>');
+      final xml = StringBuffer('<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">');
+      xml.write('<cols>');
+      xml.write('<col min="1" max="1" width="30" customWidth="1"/>');
+      xml.write('<col min="2" max="2" width="28" customWidth="1"/>');
+      xml.write('<col min="3" max="3" width="22" customWidth="1"/>');
+      xml.write('<col min="4" max="25" width="20" customWidth="1"/>');
+      xml.write('</cols>');
+      xml.write('<sheetData>');
       for (var r = 0; r < rows.length; r++) {
         if (r % 100 == 0 && (isCancelled?.call() == true)) throw const ExportCancelledException();
+        final rowData = rows[r];
+        final isTableHead = rowData.isNotEmpty && (rowData.first == 'Metric ID' || rowData.first == 'Row ID');
+        final isSectionRow = rowData.isNotEmpty && rowData.first == 'section';
         xml.write('<row r="${r + 1}">');
-        for (var c = 0; c < rows[r].length; c++) {
-          final value = rows[r][c];
+        for (var c = 0; c < rowData.length; c++) {
+          final value = rowData[c];
           final ref = '${_column(c)}${r + 1}';
+          final sAttr = isTableHead ? ' s="2"' : (isSectionRow || c == 0 ? ' s="1"' : '');
           xml.write(value is num && value.isFinite
-              ? '<c r="$ref"><v>$value</v></c>'
-              : '<c r="$ref" t="inlineStr"><is><t xml:space="preserve">${_xml(_safeText(value))}</t></is></c>');
+              ? '<c r="$ref"$sAttr><v>$value</v></c>'
+              : '<c r="$ref" t="inlineStr"$sAttr><is><t xml:space="preserve">${_xml(_safeText(value))}</t></is></c>');
         }
         xml.write('</row>');
       }
@@ -352,7 +400,21 @@ class AnalyticsExportService {
     final meta = _metadata(snapshot, family.name);
     final section = snapshot.section(family);
     final rows = _sectionRows(section);
-    final allRows = <List<Object?>>[...rows, <Object?>[], <Object?>['# --- AUDIT METADATA & SYSTEM PROVENANCE ---'], ...meta];
+    final allRows = <List<Object?>>[
+      <Object?>['# =============================================================================='],
+      <Object?>['# RESTAURANT ANALYTICS - EXECUTIVE CSV REPORT'],
+      <Object?>['# Section: ${section.title} | Family: ${family.name.toUpperCase()} | Time Basis: ${snapshot.query.timeBasis.name}'],
+      <Object?>['# Period: ${_date(snapshot.query.startDate)} to ${_date(snapshot.query.endDateExclusive)} | Staff ID: ${snapshot.generatedByStaffId ?? "unknown"}'],
+      <Object?>['# Timezone: Asia/Karachi (UTC+05:00) | Generated: ${snapshot.generatedAt.toUtc().toIso8601String()}'],
+      <Object?>['# =============================================================================='],
+      <Object?>[],
+      <Object?>['# --- 1. SECTION DATA & KPI METRICS ---'],
+      ...rows,
+      <Object?>[],
+      <Object?>['# --- 2. AUDIT METADATA & SYSTEM PROVENANCE ---'],
+      <Object?>['# --- AUDIT METADATA & SYSTEM PROVENANCE ---'],
+      ...meta,
+    ];
     final total = allRows.length;
     final buffer = StringBuffer();
     for (var i = 0; i < total; i++) {
