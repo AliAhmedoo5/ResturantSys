@@ -43,12 +43,12 @@ class _TestAnalyticsService implements AnalyticsService {
             columns: const [
               AnalyticsColumn(key: 'name', label: 'Name'),
             ],
-            rows: const [
+            rows: [
               AnalyticsRow(
                 id: '1',
                 sourceType: 'test',
                 sourceId: '1',
-                cells: {'name': 'Row 1'},
+                cells: const {'name': 'Row 1'},
               ),
             ],
           ),
@@ -67,12 +67,12 @@ class _TestAnalyticsService implements AnalyticsService {
             columns: const [
               AnalyticsColumn(key: 'fee', label: 'Delivery fee', unit: AnalyticsUnit.paisa),
             ],
-            rows: const [
+            rows: [
               AnalyticsRow(
                 id: '101',
                 sourceType: 'orders',
                 sourceId: '30',
-                cells: {'fee': 5000},
+                cells: const {'fee': 5000},
               ),
             ],
           ),
@@ -93,14 +93,17 @@ void main() {
     final exportDir = Directory.systemTemp.createTempSync('export-lifecycle-test-');
     addTearDown(() => exportDir.deleteSync(recursive: true));
 
-    final session = SessionState();
-    session.setStaff(Staff(
-      id: 1,
-      name: 'Supervisor',
-      role: StaffRole.manager,
-      isActive: true,
-      loginEnabled: true,
-    ));
+    final session = SessionState()
+      ..login(const Staff(
+        id: 1,
+        name: 'Supervisor',
+        departmentId: 1,
+        pinHash: 'unused',
+        role: StaffRole.manager,
+        isActive: true,
+        loginEnabled: true,
+      ));
+    addTearDown(session.dispose);
 
     final pickerCompleter = Completer<String?>();
     final refreshGate = Completer<void>();
