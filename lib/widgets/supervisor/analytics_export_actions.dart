@@ -40,6 +40,15 @@ class _AnalyticsExportActionsState extends State<AnalyticsExportActions> {
   bool _cancelling = false;
   ExportCancellationToken? _cancellationToken;
 
+  @override
+  void didUpdateWidget(covariant AnalyticsExportActions oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.family != widget.family) {
+      _message = null;
+      _failed = false;
+    }
+  }
+
   Future<void> _export(AnalyticsExportFormat format) async {
     if (_busy || !widget.canExport()) return;
     final canExport = widget.canExport;
@@ -83,7 +92,20 @@ class _AnalyticsExportActionsState extends State<AnalyticsExportActions> {
       );
 
       if (mounted && canExport()) {
-        setState(() => _message = 'Saved ${format.name.toUpperCase()} to ${file.path}');
+        final successMsg = 'Saved ${format.name.toUpperCase()} to ${file.path}';
+        setState(() => _message = successMsg);
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(
+            content: Text(successMsg),
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: 'OK',
+              onPressed: () {
+                ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
+              },
+            ),
+          ),
+        );
       }
     } on ExportCancelledException {
       if (mounted && canExport()) {
@@ -98,13 +120,26 @@ class _AnalyticsExportActionsState extends State<AnalyticsExportActions> {
           _failed = true;
           _message = e.message;
         });
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(
+            content: Text(e.message),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
       }
     } catch (_) {
       if (mounted && canExport()) {
+        const errorMsg = 'Could not save export. Choose a writable directory and retry.';
         setState(() {
           _failed = true;
-          _message = 'Could not save export. Choose a writable directory and retry.';
+          _message = errorMsg;
         });
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(
+            content: const Text(errorMsg),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
       }
     } finally {
       if (mounted) {
@@ -157,6 +192,14 @@ class _AnalyticsExportActionsState extends State<AnalyticsExportActions> {
               _message = result.message ?? 'Could not print report.';
           }
         });
+        if (_message != null) {
+          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+            SnackBar(
+              content: Text(_message!),
+              backgroundColor: _failed ? Theme.of(context).colorScheme.error : null,
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted && canExport()) {
@@ -164,6 +207,12 @@ class _AnalyticsExportActionsState extends State<AnalyticsExportActions> {
           _failed = true;
           _message = 'Could not print report: $e';
         });
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(
+            content: Text('Could not print report: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
       }
     } finally {
       if (mounted) {

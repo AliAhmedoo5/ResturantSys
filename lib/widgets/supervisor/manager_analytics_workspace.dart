@@ -745,8 +745,8 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
           Text('${_query.live ? 'Live' : 'Historical'}${snapshot == null ? '' : ' · updated ${DateFormat('HH:mm').format(snapshot.generatedAt.isUtc ? snapshot.generatedAt.add(const Duration(hours: 5)) : snapshot.generatedAt)}'}',
             style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
         ]),
-        if (snapshot != null && _error == null && !_busy && widget.exportActionsBuilder != null)
-          ConstrainedBox(constraints: const BoxConstraints(maxWidth: 240),
+        if (snapshot != null && _error == null && widget.exportActionsBuilder != null)
+          ConstrainedBox(constraints: const BoxConstraints(maxWidth: 320),
             child: widget.exportActionsBuilder!(context, snapshot, _family)),
       ]),
       Align(alignment: Alignment.centerLeft, child: TextButton.icon(icon: const Icon(Icons.history), label: const Text('Historical corrections'), onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => Scaffold(appBar: AppBar(title: const Text('Historical corrections')), body: HistoricalCorrectionsWorkspace(service: HistoricalCorrections(database: widget.service.database, auth: widget.service.authService))))))),

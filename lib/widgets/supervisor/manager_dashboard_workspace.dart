@@ -45,8 +45,10 @@ class _ManagerDashboardWorkspaceState extends State<ManagerDashboardWorkspace> {
         compact: true,
         canExport: () {
           final actor = auth.session.currentStaff;
-          return actor != null && actor.isActive && actor.canAccessSupervisorPortal &&
-            actor.id == snapshot.generatedByStaffId;
+          return actor != null &&
+              actor.isActive &&
+              actor.canAccessSupervisorPortal &&
+              (snapshot.generatedByStaffId == null || actor.id == snapshot.generatedByStaffId);
         },
       ),
     );
