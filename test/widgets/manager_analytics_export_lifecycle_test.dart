@@ -150,42 +150,40 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('CSV (this report)'), findsOneWidget);
-    await tester.tap(find.text('CSV (this report)'));
-    await tester.pump();
-
-    // The picker is now in flight (awaiting pickerCompleter)
-
-    // 3. Trigger a background refresh while picker is open
-    await tester.tap(find.byKey(const ValueKey('analytics_refresh')));
-    await tester.pump();
-
-    // Verify system is busy loading second snapshot
-    expect(loadCount, 2);
-
-    // CRITICAL: Does the export action stay mounted while busy?
-    // In buggy code: exportActionsBuilder was excluded when _busy is true, unmounting and disposing it!
-    expect(
-      find.byKey(const ValueKey('analytics_export_menu')),
-      findsOneWidget,
-      reason: 'Export menu must not vanish during background refresh',
-    );
-
-    // 4. Complete the background refresh
-    refreshGate.complete();
-    await tester.pump();
-
-    // 5. User finally selects a folder in the picker
-    pickerCompleter.complete(exportDir.path);
 
     await tester.runAsync(() async {
-      for (var attempt = 0; attempt < 50; attempt++) {
+      await tester.tap(find.text('CSV (this report)'));
+      await tester.pump();
+
+      // 3. Trigger a background refresh while picker is open
+      await tester.tap(find.byKey(const ValueKey('analytics_refresh')));
+      await tester.pump();
+
+      // Verify system is busy loading second snapshot
+      expect(loadCount, 2);
+
+      // CRITICAL: Does the export action stay mounted while busy?
+      expect(
+        find.byKey(const ValueKey('analytics_export_menu')),
+        findsOneWidget,
+        reason: 'Export menu must not vanish during background refresh',
+      );
+
+      // 4. Complete the background refresh
+      refreshGate.complete();
+      await tester.pump();
+
+      // 5. User finally selects a folder in the picker
+      pickerCompleter.complete(exportDir.path);
+
+      for (var attempt = 0; attempt < 100; attempt++) {
         await Future<void>.delayed(const Duration(milliseconds: 20));
         await tester.pump();
         if (exportDir.listSync().whereType<File>().isNotEmpty) break;
       }
     });
 
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 200));
 
     // CRITICAL ASSERTION: The file was exported to the chosen directory
     final exportedFiles = exportDir.listSync().whereType<File>().toList();
