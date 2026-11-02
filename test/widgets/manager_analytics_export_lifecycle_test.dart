@@ -156,8 +156,7 @@ void main() {
     // The picker is now in flight (awaiting pickerCompleter)
 
     // 3. Trigger a background refresh while picker is open
-    // Find the refresh button or trigger refresh via controller/filters
-    await tester.tap(find.text('Refresh'));
+    await tester.tap(find.byKey(const ValueKey('analytics_refresh')));
     await tester.pump();
 
     // Verify system is busy loading second snapshot
