@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/catalog/raw_ingredient.dart';
 import 'package:resturant_sys/core/procurement/kitchen_wastage.dart';
 import 'package:resturant_sys/core/procurement/procurement_and_wastage_controller.dart';
@@ -17,12 +18,14 @@ class KitchenWastageWorkspace extends StatefulWidget {
     this.initialIngredients,
     this.initialWastageLogs,
     this.onWastageLogged,
+    this.currentStaff,
   });
 
   final ProcurementAndWastageController? controller;
   final List<RawIngredient>? initialIngredients;
   final List<KitchenWastage>? initialWastageLogs;
   final ValueChanged<KitchenWastage>? onWastageLogged;
+  final Staff? currentStaff;
 
   @override
   State<KitchenWastageWorkspace> createState() => _KitchenWastageWorkspaceState();
@@ -125,7 +128,8 @@ class _KitchenWastageWorkspaceState extends State<KitchenWastageWorkspace> {
     if (widget.controller != null) {
       try {
         final wastage = await widget.controller!.recordKitchenWastage(
-          staffPin: pin,
+          staffPin: pin.isNotEmpty ? pin : null,
+          authenticatedStaffId: pin.isEmpty ? widget.currentStaff?.id : null,
           rawIngredientId: _selectedIngredient!.id,
           quantity: qty,
           reason: _selectedReason,
@@ -421,9 +425,11 @@ class _KitchenWastageWorkspaceState extends State<KitchenWastageWorkspace> {
                 ),
                 const SizedBox(height: WarmCounterSpacing.space16),
 
-                // Staff PIN (Masked)
+                // Staff PIN (Masked / Optional when session exists)
                 Text(
-                  'Staff PIN (Mandatory Audit Verification) *',
+                  widget.currentStaff != null
+                      ? 'Staff PIN (Optional — defaults to ${widget.currentStaff!.name})'
+                      : 'Staff PIN (Mandatory Audit Verification) *',
                   style: WarmCounterTypography.bodyMedium.copyWith(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: WarmCounterSpacing.space8),
@@ -433,13 +439,21 @@ class _KitchenWastageWorkspaceState extends State<KitchenWastageWorkspace> {
                   obscureText: true,
                   maxLength: 4,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.lock_outline_rounded),
-                    hintText: 'Enter 4-digit Staff PIN',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.lock_outline_rounded),
+                    hintText: widget.currentStaff != null
+                        ? 'Leave empty to log as ${widget.currentStaff!.name}, or enter staff PIN'
+                        : 'Enter 4-digit Staff PIN',
+                    border: const OutlineInputBorder(),
                     counterText: '',
                   ),
                   validator: (val) {
+                    if (widget.currentStaff != null) {
+                      if (val != null && val.trim().isNotEmpty && val.trim().length != 4) {
+                        return '4-digit Staff PIN required if entering another staff member';
+                      }
+                      return null;
+                    }
                     if (val == null || val.trim().length != 4) {
                       return '4-digit Staff PIN required';
                     }

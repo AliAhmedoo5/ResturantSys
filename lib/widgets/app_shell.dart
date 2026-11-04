@@ -255,6 +255,7 @@ class _AppShellState extends State<AppShell> {
     if (_selectedWorkspace == AppWorkspaceTab.wastage) {
       return KitchenWastageWorkspace(
         controller: widget.procurementController,
+        currentStaff: staff,
       );
     }
 

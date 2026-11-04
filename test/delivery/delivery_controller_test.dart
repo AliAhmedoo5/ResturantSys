@@ -33,6 +33,10 @@ void main() {
     await delivery.archiveArea(staffId: 1, id: area.id);
     expect(await delivery.getAreas(), isEmpty);
     expect((await delivery.getAreas(includeArchived: true)).single.isArchived, isTrue);
+
+    final areaWithEta = await delivery.saveArea(staffId: 1, name: 'North Nazimabad', code: 'NN', deliveryFeePaisa: 20000, targetEtaMinutes: 35);
+    expect(areaWithEta.targetEtaMinutes, 35);
+    expect((await delivery.getAreas()).firstWhere((a) => a.id == areaWithEta.id).targetEtaMinutes, 35);
   });
   test('Delivery commit retains cart on stale area, protects fee and remembers customer address', () async {
     final db = store.database!;

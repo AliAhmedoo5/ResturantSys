@@ -233,6 +233,26 @@ void main() {
       expect(totalLoss, equals(400.0));
     });
 
+    test('recordKitchenWastage works with authenticatedStaffId when PIN is omitted', () async {
+      final beefId = await insertTestIngredient(
+        name: 'Beef Patty Extra',
+        unit: StorageUnit.g,
+        initialStock: 5000.0,
+        costPerRecipeUnit: 1.0,
+      );
+
+      final wastage = await controller.recordKitchenWastage(
+        authenticatedStaffId: 1,
+        rawIngredientId: beefId,
+        quantity: 200.0,
+        reason: WastageReason.expired,
+        notes: 'Session-based manager wastage record',
+      );
+
+      expect(wastage.staffName, equals(PosDatabaseConstants.defaultSupervisorName));
+      expect(wastage.costLoss, equals(200.0));
+    });
+
     test('recordKitchenWastage rejects invalid staff PIN', () async {
       final ingId = await insertTestIngredient(
         name: 'Cheese Slices',

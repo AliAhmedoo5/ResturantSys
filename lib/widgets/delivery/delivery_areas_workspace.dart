@@ -45,7 +45,7 @@ class _DeliveryAreasWorkspaceState extends State<DeliveryAreasWorkspace> {
     Expanded(child: _loading ? const Center(child: CircularProgressIndicator()) : _areas.isEmpty ? const Center(child: Text('Add an area to enable delivery checkout.')) : ListView.builder(
       itemCount: _areas.length, itemBuilder: (context, index) { final area = _areas[index]; return ListTile(
         title: Text('${area.name} (${area.code}) • ${area.isActive ? "Active" : "Inactive"}'),
-        subtitle: Text(area.coverageDescription),
+        subtitle: Text('${area.coverageDescription.isNotEmpty ? "${area.coverageDescription} • " : ""}Target ETA: ${area.targetEtaMinutes ?? 45} min'),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -77,7 +77,7 @@ class _AreaDialog extends StatefulWidget {
 }
 class _AreaDialogState extends State<_AreaDialog> {
   final _form = GlobalKey<FormState>();
-  late final TextEditingController _name, _code, _coverage, _fee, _minimum;
+  late final TextEditingController _name, _code, _coverage, _fee, _minimum, _targetEta;
   late bool _active;
   bool _saving = false;
   String? _error;
@@ -87,16 +87,19 @@ class _AreaDialogState extends State<_AreaDialog> {
     _name = TextEditingController(text: area?.name); _code = TextEditingController(text: area?.code);
     _coverage = TextEditingController(text: area?.coverageDescription);
     _fee = TextEditingController(text: '${area?.deliveryFeePaisa ?? 0}');
-    _minimum = TextEditingController(text: '${area?.minOrderPaisa ?? 0}'); _active = area?.isActive ?? true;
+    _minimum = TextEditingController(text: '${area?.minOrderPaisa ?? 0}');
+    _targetEta = TextEditingController(text: '${area?.targetEtaMinutes ?? 30}');
+    _active = area?.isActive ?? true;
   }
   @override
-  void dispose() { for (final c in [_name, _code, _coverage, _fee, _minimum]) { c.dispose(); } super.dispose(); }
+  void dispose() { for (final c in [_name, _code, _coverage, _fee, _minimum, _targetEta]) { c.dispose(); } super.dispose(); }
   Future<void> _save() async {
     if (!_form.currentState!.validate()) return;
     setState(() { _saving = true; _error = null; });
     try {
       await widget.controller.saveArea(staffId: widget.staffId, id: widget.area?.id, name: _name.text, code: _code.text,
-        coverageDescription: _coverage.text, deliveryFeePaisa: int.parse(_fee.text), minOrderPaisa: int.parse(_minimum.text), isActive: _active);
+        coverageDescription: _coverage.text, deliveryFeePaisa: int.parse(_fee.text), minOrderPaisa: int.parse(_minimum.text),
+        targetEtaMinutes: int.tryParse(_targetEta.text.trim()), isActive: _active);
       if (mounted) Navigator.pop(context, true);
     } catch (e) { if (mounted) setState(() { _saving = false; _error = '$e'; }); }
   }
@@ -109,6 +112,9 @@ class _AreaDialogState extends State<_AreaDialog> {
       for (final field in [(_fee, 'Delivery fee (paisa)'), (_minimum, 'Minimum food order (paisa)')])
         TextFormField(controller: field.$1, style: WarmCounterTypography.tabularNumbers, textAlign: TextAlign.right, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: field.$2, helperText: '100 paisa = Rs 1.00'),
           validator: (v) => int.tryParse(v ?? '') == null || int.parse(v!) < 0 ? 'Enter non-negative whole paisa' : null),
+      TextFormField(controller: _targetEta, style: WarmCounterTypography.tabularNumbers, textAlign: TextAlign.right, keyboardType: TextInputType.number,
+        decoration: const InputDecoration(labelText: 'Target delivery ETA (minutes)', helperText: 'Expected customer delivery time (default 30 min)'),
+        validator: (v) => v != null && v.trim().isNotEmpty && (int.tryParse(v.trim()) == null || int.parse(v.trim()) <= 0) ? 'Enter positive minutes' : null),
       SwitchListTile(title: const Text('Active for delivery checkout'), value: _active, onChanged: _saving ? null : (v) => setState(() => _active = v)),
       if (_error != null) Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
     ])))), actions: [TextButton(onPressed: _saving ? null : () => Navigator.pop(context), child: const Text('Cancel')),

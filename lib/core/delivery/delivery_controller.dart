@@ -9,9 +9,11 @@ class DeliveryArea {
         coverageDescription = row['coverage_description'] as String? ?? '',
         deliveryFeePaisa = row['delivery_fee_paisa'] as int,
         minOrderPaisa = row['min_order_paisa'] as int,
+        targetEtaMinutes = row['target_eta_minutes'] as int?,
         isActive = row['is_active'] == 1,
         isArchived = row['archived_at'] != null;
   final int id, deliveryFeePaisa, minOrderPaisa;
+  final int? targetEtaMinutes;
   final String name, code, coverageDescription;
   final bool isActive, isArchived;
 }
@@ -82,16 +84,16 @@ class DeliveryController {
   }
 
   Future<DeliveryArea> saveArea({required int staffId, int? id, required String name, required String code,
-    String coverageDescription = '', required int deliveryFeePaisa, int minOrderPaisa = 0, bool isActive = true}) async {
+    String coverageDescription = '', required int deliveryFeePaisa, int minOrderPaisa = 0, int? targetEtaMinutes, bool isActive = true}) async {
     return database.transaction((txn) async {
       await _requireManager(txn, staffId);
-      if (name.trim().isEmpty || code.trim().isEmpty || deliveryFeePaisa < 0 || minOrderPaisa < 0) {
-        throw ArgumentError('Enter a name, code and non-negative integer paisa amounts.');
+      if (name.trim().isEmpty || code.trim().isEmpty || deliveryFeePaisa < 0 || minOrderPaisa < 0 || (targetEtaMinutes != null && targetEtaMinutes <= 0)) {
+        throw ArgumentError('Enter a name, code, non-negative integer paisa amounts, and positive target ETA if specified.');
       }
       final now = DateTime.now().toIso8601String();
       final values = <String, Object?>{'name': name.trim(), 'code': code.trim().toUpperCase(),
         'coverage_description': coverageDescription.trim(), 'delivery_fee_paisa': deliveryFeePaisa,
-        'min_order_paisa': minOrderPaisa, 'is_active': isActive ? 1 : 0, 'updated_at': now};
+        'min_order_paisa': minOrderPaisa, 'target_eta_minutes': targetEtaMinutes, 'is_active': isActive ? 1 : 0, 'updated_at': now};
       final int savedId;
       if (id == null) {
         savedId = await txn.insert('delivery_areas', {...values, 'created_at': now});

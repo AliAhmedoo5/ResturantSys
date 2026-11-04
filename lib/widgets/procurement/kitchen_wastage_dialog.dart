@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/catalog/raw_ingredient.dart';
 import 'package:resturant_sys/core/procurement/kitchen_wastage.dart';
 import 'package:resturant_sys/core/procurement/procurement_and_wastage_controller.dart';
@@ -13,12 +14,14 @@ class KitchenWastageDialog extends StatelessWidget {
     this.initialIngredients,
     this.initialWastageLogs,
     this.onWastageLogged,
+    this.currentStaff,
   });
 
   final ProcurementAndWastageController? controller;
   final List<RawIngredient>? initialIngredients;
   final List<KitchenWastage>? initialWastageLogs;
   final ValueChanged<KitchenWastage>? onWastageLogged;
+  final Staff? currentStaff;
 
   @override
   Widget build(BuildContext context) {
@@ -48,6 +51,7 @@ class KitchenWastageDialog extends StatelessWidget {
               initialIngredients: initialIngredients,
               initialWastageLogs: initialWastageLogs,
               onWastageLogged: onWastageLogged,
+              currentStaff: currentStaff,
             ),
           ),
         ),

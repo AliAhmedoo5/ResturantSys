@@ -1,5 +1,6 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:resturant_sys/core/auth/auth_service.dart';
+import 'package:resturant_sys/core/auth/staff.dart';
 import 'package:resturant_sys/core/catalog/raw_ingredient.dart';
 import 'package:resturant_sys/core/database/pos_database_constants.dart';
 import 'desi_unit.dart';
@@ -186,7 +187,8 @@ class ProcurementAndWastageController {
   /// Records spoiled, damaged, or burned kitchen stock, verifying the staff PIN,
   /// immediately deducting stock, and logging the financial cost loss.
   Future<KitchenWastage> recordKitchenWastage({
-    required String staffPin,
+    String? staffPin,
+    int? authenticatedStaffId,
     required int rawIngredientId,
     required double quantity,
     required WastageReason reason,
@@ -196,14 +198,27 @@ class ProcurementAndWastageController {
       throw ArgumentError('Wasted quantity must be greater than zero.');
     }
 
-    // 1. Authenticate Staff PIN
-    final staff = await (authService ?? AuthService(database: database))
-        .authenticateWithPin(staffPin);
-
-    if (staff == null) {
-      throw ArgumentError('Invalid or unauthorized staff PIN.');
+    final Staff verifiedStaff;
+    if (staffPin != null && staffPin.trim().isNotEmpty) {
+      final staff = await (authService ?? AuthService(database: database))
+          .authenticateWithPin(staffPin.trim());
+      if (staff == null) {
+        throw ArgumentError('Invalid or unauthorized staff PIN.');
+      }
+      verifiedStaff = staff;
+    } else if (authenticatedStaffId != null) {
+      final rows = await database.query(
+        PosDatabaseConstants.tableStaff,
+        where: 'id = ? AND is_active = 1',
+        whereArgs: [authenticatedStaffId],
+      );
+      if (rows.isEmpty) {
+        throw ArgumentError('Active staff session not found.');
+      }
+      verifiedStaff = Staff.fromMap(rows.single);
+    } else {
+      throw ArgumentError('Staff PIN or authenticated staff session required.');
     }
-    final verifiedStaff = staff;
 
     final now = DateTime.now();
     final formattedNow = _formatTimestamp(now);
