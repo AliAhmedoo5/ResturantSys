@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:archive/archive.dart';
+import 'openxml_workbook_builder.dart';
 
 import 'analytics_models.dart';
 
@@ -291,52 +291,10 @@ class AnalyticsExportService {
       'Metadata': _metadata(snapshot, 'all snapshot families'),
       for (final section in snapshot.sections) section.family.name: _sectionRows(section),
     };
-    final zip = Archive();
-    void add(String path, String xml) {
-      final bytes = utf8.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>$xml');
-      zip.addFile(ArchiveFile(path, bytes.length, bytes));
-    }
-
-    const stylesXml = '''<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <fonts count="3">
-    <font><sz val="11"/><name val="Calibri"/></font>
-    <font><b/><sz val="11"/><name val="Calibri"/></font>
-    <font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>
-  </fonts>
-  <fills count="4">
-    <fill><patternFill patternType="none"/></fill>
-    <fill><patternFill patternType="gray125"/></fill>
-    <fill><patternFill patternType="solid"><fgColor rgb="FF1E293B"/></patternFill></fill>
-    <fill><patternFill patternType="solid"><fgColor rgb="FFF8FAFC"/></patternFill></fill>
-  </fills>
-  <borders count="2">
-    <border><left/><right/><top/><bottom/><diagonal/></border>
-    <border>
-      <left style="thin"><color rgb="FFCBD5E1"/></left>
-      <right style="thin"><color rgb="FFCBD5E1"/></right>
-      <top style="thin"><color rgb="FFCBD5E1"/></top>
-      <bottom style="thin"><color rgb="FFCBD5E1"/></bottom>
-      <diagonal/>
-    </border>
-  </borders>
-  <cellStyleXfs count="1">
-    <xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
-  </cellStyleXfs>
-  <cellXfs count="4">
-    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
-    <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>
-    <xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/>
-    <xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFill="1" applyBorder="1"/>
-  </cellXfs>
-</styleSheet>''';
-
-    add('[Content_Types].xml', '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${List.generate(sheets.length, (i) => '<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>').join()}</Types>');
-    add('_rels/.rels', '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
-    add('xl/workbook.xml', '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${List.generate(sheets.length, (i) => '<sheet name="${_xml(sheets.keys.elementAt(i))}" sheetId="${i + 1}" r:id="rId${i + 1}"/>').join()}</sheets></workbook>');
-    add('xl/_rels/workbook.xml.rels', '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${List.generate(sheets.length, (i) => '<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>').join()}<Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>');
-    add('xl/styles.xml', stylesXml);
 
     final totalSheets = sheets.length;
+    final renderedSheets = <({String name, String xml})>[];
+
     for (var sheet = 0; sheet < sheets.length; sheet++) {
       if (isCancelled?.call() == true) throw const ExportCancelledException();
       final sheetName = sheets.keys.elementAt(sheet);
@@ -367,28 +325,16 @@ class AnalyticsExportService {
         xml.write('</row>');
       }
       xml.write('</sheetData></worksheet>');
-      add('xl/worksheets/sheet${sheet + 1}.xml', xml.toString());
+      renderedSheets.add((name: sheetName, xml: xml.toString()));
     }
     if (isCancelled?.call() == true) throw const ExportCancelledException();
     onProgress?.call('Compressing workbook', totalSheets, totalSheets);
-    return ZipEncoder().encode(zip)!;
+    return OpenXmlWorkbookBuilder.package(sheets: renderedSheets);
   }
 
-  String _xml(String value) => value
-      .replaceAll(RegExp(r'[\x00-\x08\x0B\x0C\x0E-\x1F]'), '')
-      .replaceAll('&', '&amp;')
-      .replaceAll('<', '&lt;')
-      .replaceAll('>', '&gt;')
-      .replaceAll('"', '&quot;')
-      .replaceAll("'", '&apos;');
+  String _xml(String value) => OpenXmlWorkbookBuilder.escapeXml(value);
 
-  String _column(int index) {
-    var result = '';
-    for (var n = index + 1; n > 0; n = (n - 1) ~/ 26) {
-      result = String.fromCharCode(65 + (n - 1) % 26) + result;
-    }
-    return result;
-  }
+  String _column(int index) => OpenXmlWorkbookBuilder.columnIndexToLetter(index);
 
   String csv(
     AnalyticsSnapshot snapshot,

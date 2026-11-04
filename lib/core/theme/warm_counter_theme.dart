@@ -303,8 +303,3 @@ abstract final class WarmCounterTheme {
   /// Default theme builder aliased to darkTheme for authoritative Chapter 34 aesthetic.
   static ThemeData get lightTheme => darkTheme;
 }
-
-/// Official Chapter 34 theme alias.
-abstract final class StreetFoodMafiaTheme {
-  static ThemeData get theme => WarmCounterTheme.darkTheme;
-}
