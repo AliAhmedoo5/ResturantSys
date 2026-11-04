@@ -691,7 +691,6 @@ class _SheetXmlBuilder {
   static String _escapeXml(String text) => OpenXmlWorkbookBuilder.escapeXml(text);
 
   static String _colName(int colIndex) => OpenXmlWorkbookBuilder.columnIndexToLetter(colIndex - 1);
-  }
 
   void addEmptyRow() {
     _currentRow++;
