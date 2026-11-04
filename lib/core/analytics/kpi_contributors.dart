@@ -94,6 +94,8 @@ abstract final class KpiContributors {
         return _resolveExpenses(section, metric);
       case AnalyticsFamily.staff:
         return _resolveStaff(section, metric);
+      case AnalyticsFamily.audit:
+        return _resolveAudit(section, metric);
       default:
         return _resolveDefault(section, metric);
     }
@@ -316,8 +318,8 @@ abstract final class KpiContributors {
         columns: const [
           AnalyticsColumn(key: 'name', label: 'Ingredient'),
           AnalyticsColumn(key: 'current_stock', label: 'Current Stock', unit: AnalyticsUnit.decimal),
-          AnalyticsColumn(key: 'low_stock_threshold', label: 'Low Threshold', unit: AnalyticsUnit.decimal),
-          AnalyticsColumn(key: 'storage_unit', label: 'Unit'),
+          AnalyticsColumn(key: 'threshold', label: 'Low Threshold', unit: AnalyticsUnit.decimal),
+          AnalyticsColumn(key: 'unit', label: 'Unit'),
         ],
       );
     }
@@ -325,7 +327,7 @@ abstract final class KpiContributors {
     if (metric.id == 'low_stock') {
       final lowRows = section.rows.where((r) {
         final stock = r.cells['current_stock'] as num? ?? 0;
-        final threshold = r.cells['low_stock_threshold'] as num? ?? 0;
+        final threshold = (r.cells['threshold'] ?? r.cells['low_stock_threshold']) as num? ?? 0;
         return stock <= threshold;
       }).toList();
 
@@ -339,7 +341,8 @@ abstract final class KpiContributors {
         columns: const [
           AnalyticsColumn(key: 'name', label: 'Ingredient'),
           AnalyticsColumn(key: 'current_stock', label: 'Current Stock', unit: AnalyticsUnit.decimal),
-          AnalyticsColumn(key: 'low_stock_threshold', label: 'Low Threshold', unit: AnalyticsUnit.decimal),
+          AnalyticsColumn(key: 'threshold', label: 'Low Threshold', unit: AnalyticsUnit.decimal),
+          AnalyticsColumn(key: 'unit', label: 'Unit'),
         ],
       );
     }
@@ -537,12 +540,161 @@ abstract final class KpiContributors {
     );
   }
 
+  static KpiContributorResult _resolveAudit(AnalyticsSection section, AnalyticsMetric metric) {
+    if (metric.id == 'revision_events') {
+      final revRows = section.rows.where((r) => r.sourceType == 'order_revisions' || r.cells['kind'] == 'Order revision').toList();
+      return KpiContributorResult(
+        metric: metric,
+        family: section.family,
+        formula: 'Revision Audit Events = ${revRows.length} order revision events',
+        formulaTotal: revRows.length,
+        isReconciled: revRows.length == (metric.value ?? 0),
+        contributingRows: revRows,
+        columns: const [
+          AnalyticsColumn(key: 'order_id', label: 'Order #'),
+          AnalyticsColumn(key: 'revision', label: 'Revision #'),
+          AnalyticsColumn(key: 'action', label: 'Action'),
+          AnalyticsColumn(key: 'delta_paisa', label: 'Delta', unit: AnalyticsUnit.paisa),
+          AnalyticsColumn(key: 'reason', label: 'Reason'),
+          AnalyticsColumn(key: 'created_at', label: 'Recorded at'),
+        ],
+      );
+    }
+
+    if (metric.id == 'token_events') {
+      final tokenRows = section.rows.where((r) => r.sourceType == 'checkout_token_audit' || r.cells['kind'] == 'Immutable token audit').toList();
+      return KpiContributorResult(
+        metric: metric,
+        family: section.family,
+        formula: 'Token Audit Events = ${tokenRows.length} immutable token audit events',
+        formulaTotal: tokenRows.length,
+        isReconciled: tokenRows.length == (metric.value ?? 0),
+        contributingRows: tokenRows,
+        columns: const [
+          AnalyticsColumn(key: 'order_id', label: 'Order #'),
+          AnalyticsColumn(key: 'token', label: 'Token #'),
+          AnalyticsColumn(key: 'revision', label: 'Revision #'),
+          AnalyticsColumn(key: 'action', label: 'Action'),
+          AnalyticsColumn(key: 'status', label: 'Status'),
+          AnalyticsColumn(key: 'created_at', label: 'Recorded at'),
+        ],
+      );
+    }
+
+    if (metric.id == 'rounding') {
+      final roundingRows = section.rows.where((r) => r.cells['kind'] == 'Rounding ledger' || r.cells['cash_rounding_paisa'] != null).toList();
+      final totalRounding = roundingRows.fold<num>(0, (sum, r) => sum + ((r.cells['cash_rounding_paisa'] ?? r.cells['delta_paisa']) as num? ?? 0));
+      return KpiContributorResult(
+        metric: metric,
+        family: section.family,
+        formula: 'Rounding Variance Ledger = Sum of ${roundingRows.length} entries = ${_formatPaisa(totalRounding)}',
+        formulaTotal: totalRounding,
+        isReconciled: totalRounding == (metric.value ?? 0),
+        contributingRows: roundingRows,
+        columns: const [
+          AnalyticsColumn(key: 'order_id', label: 'Order #'),
+          AnalyticsColumn(key: 'action', label: 'Action'),
+          AnalyticsColumn(key: 'cash_rounding_paisa', label: 'Rounding Amount', unit: AnalyticsUnit.paisa),
+          AnalyticsColumn(key: 'created_at', label: 'Recorded at'),
+        ],
+      );
+    }
+
+    if (metric.id == 'report_runs' || metric.id == 'failed_exports') {
+      final reportRows = metric.id == 'failed_exports'
+          ? section.rows.where((r) => (r.sourceType == 'report_runs' || r.cells['kind'] == 'Report snapshot') && r.cells['status'] != 'READY').toList()
+          : section.rows.where((r) => r.sourceType == 'report_runs' || r.cells['kind'] == 'Report snapshot').toList();
+      return KpiContributorResult(
+        metric: metric,
+        family: section.family,
+        formula: '${metric.label} = ${reportRows.length} report run records',
+        formulaTotal: reportRows.length,
+        isReconciled: reportRows.length == (metric.value ?? 0),
+        contributingRows: reportRows,
+        columns: const [
+          AnalyticsColumn(key: 'business_day_id', label: 'Business Day #'),
+          AnalyticsColumn(key: 'status', label: 'Status'),
+          AnalyticsColumn(key: 'hash', label: 'Content Hash'),
+          AnalyticsColumn(key: 'created_at', label: 'Generated at'),
+        ],
+      );
+    }
+
+    if (metric.id == 'delivery_attention') {
+      final outboxRows = section.rows.where((r) => (r.sourceType == 'report_outbox' || r.cells['kind'] == 'Report outbox') && ['FAILED', 'AMBIGUOUS'].contains(r.cells['status'])).toList();
+      return KpiContributorResult(
+        metric: metric,
+        family: section.family,
+        formula: 'Report Delivery Attention = ${outboxRows.length} delivery records',
+        formulaTotal: outboxRows.length,
+        isReconciled: outboxRows.length == (metric.value ?? 0),
+        contributingRows: outboxRows,
+        columns: const [
+          AnalyticsColumn(key: 'channel', label: 'Channel'),
+          AnalyticsColumn(key: 'status', label: 'Status'),
+          AnalyticsColumn(key: 'attempts', label: 'Attempts'),
+          AnalyticsColumn(key: 'created_at', label: 'Attempted at'),
+        ],
+      );
+    }
+
+    if (metric.id == 'configuration_audit_events' || metric.id == 'operations_audit_events') {
+      final kind = metric.id == 'configuration_audit_events' ? 'Configuration audit' : 'Operations audit';
+      final src = metric.id == 'configuration_audit_events' ? 'configuration_audit' : 'operations_audit';
+      final eventRows = section.rows.where((r) => r.cells['kind'] == kind || r.sourceType == src).toList();
+      return KpiContributorResult(
+        metric: metric,
+        family: section.family,
+        formula: '${metric.label} = ${eventRows.length} recorded events',
+        formulaTotal: eventRows.length,
+        isReconciled: eventRows.length == (metric.value ?? 0),
+        contributingRows: eventRows,
+        columns: const [
+          AnalyticsColumn(key: 'action', label: 'Action'),
+          AnalyticsColumn(key: 'reason', label: 'Summary'),
+          AnalyticsColumn(key: 'staff_id', label: 'Staff #'),
+          AnalyticsColumn(key: 'created_at', label: 'Recorded at'),
+        ],
+      );
+    }
+
+    if (metric.id == 'backup_history' || metric.id == 'failed_backups' || metric.id == 'backup_secondary_warnings') {
+      final backupRows = section.rows.where((r) {
+        if (r.sourceType != 'database_backups' && r.cells['kind'] != 'Database backup') return false;
+        if (metric.id == 'backup_history') return r.cells['status'] == 'VERIFIED';
+        if (metric.id == 'failed_backups') return r.cells['status'] == 'FAILED';
+        if (metric.id == 'backup_secondary_warnings') return r.cells['secondary_status'] == 'WARNING';
+        return true;
+      }).toList();
+      return KpiContributorResult(
+        metric: metric,
+        family: section.family,
+        formula: '${metric.label} = ${backupRows.length} backup attempts',
+        formulaTotal: backupRows.length,
+        isReconciled: backupRows.length == (metric.value ?? 0),
+        contributingRows: backupRows,
+        columns: const [
+          AnalyticsColumn(key: 'status', label: 'Status'),
+          AnalyticsColumn(key: 'secondary_status', label: 'Secondary'),
+          AnalyticsColumn(key: 'failure_category', label: 'Failure Reason'),
+          AnalyticsColumn(key: 'created_at', label: 'Attempted at'),
+        ],
+      );
+    }
+
+    return _resolveDefault(section, metric);
+  }
+
   static KpiContributorResult _resolveDefault(
     AnalyticsSection section,
     AnalyticsMetric metric, {
     List<AnalyticsRow>? rows,
   }) {
     final targetRows = rows ?? section.rows;
+    final activeColumns = section.columns.where(
+      (col) => targetRows.any((r) => r.cells.containsKey(col.key) && r.cells[col.key] != null),
+    ).toList();
+    final columns = activeColumns.isNotEmpty ? activeColumns : section.columns;
     return KpiContributorResult(
       metric: metric,
       family: section.family,
@@ -550,7 +702,7 @@ abstract final class KpiContributors {
       formulaTotal: metric.value,
       isReconciled: true,
       contributingRows: targetRows,
-      columns: section.columns,
+      columns: columns,
       emptyOrMissingNote: targetRows.isEmpty
           ? 'No contributing snapshot rows found for this metric in current selection.'
           : null,

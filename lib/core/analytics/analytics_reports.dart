@@ -1099,6 +1099,7 @@ class _ReportBuilder {
       ...e.get('inventory').map((m) => _row('inventory_movements', m, {'kind': 'Movement', 'ingredient_id': m['ingredient_id'], 'quantity_delta': m['quantity_delta'], 'balance_after': m['balance_after'], 'recorded_at': m['recorded_at']})),
       ...e.get('waste').map((w) => _row('kitchen_wastage', w, {'kind': 'Recorded wastage', 'ingredient_id': w['raw_ingredient_id'], 'quantity': w['quantity'], 'loss_paisa': _money(w, 'cost_loss'), 'recorded_at': w['created_at']})),
     ];
+    final ingById = <String, _Record>{for (final ing in ingredients) '${ing['id']}': ing};
     var bomCovered = 0;
     for (final item in soldItems) {
       final bom = _jsonMap(item['bom_json']);
@@ -1106,7 +1107,20 @@ class _ReportBuilder {
       bomCovered++;
       for (final entry in bom.entries) {
         if (entry.value is! num) continue;
-        rows.add(AnalyticsRow(id: 'order_items-${item['id']}-bom-${entry.key}', sourceType: 'order_items', sourceId: '${item['id']}', cells: {'kind': 'BOM quantity snapshot', 'order_id': item['order_id'], 'ingredient_id': entry.key, 'quantity': entry.value}));
+        final ing = ingById['${entry.key}'];
+        rows.add(AnalyticsRow(
+          id: 'order_items-${item['id']}-bom-${entry.key}',
+          sourceType: 'order_items',
+          sourceId: '${item['id']}',
+          cells: {
+            'kind': 'BOM quantity snapshot',
+            'order_id': item['order_id'],
+            'ingredient_id': entry.key,
+            'name': ing != null ? _safeText(ing['name']) : 'Ingredient #${entry.key}',
+            'unit': ing?['storage_unit'] as String? ?? 'g',
+            'quantity': entry.value,
+          },
+        ));
       }
     }
     final valuationQuality = coveredIngredientsCount == ingredients.length && negativeBalanceCount == 0

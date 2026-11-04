@@ -1265,8 +1265,12 @@ class _SourceTableState extends State<_SourceTable> {
   Widget build(BuildContext context) {
     final section = widget.section;
     final rows = List<AnalyticsRow>.of(section.rows);
-    if (_sortColumn != null) {
-      final key = section.columns[_sortColumn!].key;
+    final activeColumns = section.columns.where((col) {
+      return rows.any((r) => r.cells.containsKey(col.key) && r.cells[col.key] != null);
+    }).toList();
+    final columns = activeColumns.isNotEmpty ? activeColumns : section.columns;
+    if (_sortColumn != null && _sortColumn! < columns.length) {
+      final key = columns[_sortColumn!].key;
       rows.sort((a, b) {
         final left = a.cells[key];
         final right = b.cells[key];
@@ -1288,13 +1292,13 @@ class _SourceTableState extends State<_SourceTable> {
       LayoutBuilder(builder: (context, constraints) =>
       SingleChildScrollView(scrollDirection: Axis.horizontal,
         child: ConstrainedBox(constraints: BoxConstraints(minWidth: constraints.maxWidth), child: DataTable(
-        sortColumnIndex: _sortColumn, sortAscending: _ascending,
-        columns: [for (var i = 0; i < section.columns.length; i++) DataColumn(
-          label: Text(section.columns[i].label), numeric: section.columns[i].unit != null,
+        sortColumnIndex: _sortColumn != null && _sortColumn! < columns.length ? _sortColumn : null, sortAscending: _ascending,
+        columns: [for (var i = 0; i < columns.length; i++) DataColumn(
+          label: Text(columns[i].label), numeric: columns[i].unit != null,
           onSort: (index, ascending) => setState(() { _sortColumn = index; _ascending = ascending; _page = 0; }),
         ), const DataColumn(label: Text('Source'))],
         rows: [for (final row in rows.sublist(start, end)) DataRow(cells: [
-          for (final column in section.columns) DataCell(_cell(row, column)),
+          for (final column in columns) DataCell(_cell(row, column)),
           DataCell(TextButton(
             key: ValueKey('kpi_inspect_source_${row.id}'),
             onPressed: () => widget.onShowSource(row),
@@ -1313,6 +1317,9 @@ class _SourceTableState extends State<_SourceTable> {
 
   Widget _cell(AnalyticsRow row, AnalyticsColumn column) {
     final value = row.cells[column.key];
+    if (value == null) {
+      return const Text('—', style: TextStyle(color: StreetFoodMafiaColors.secondaryText));
+    }
     if (row.sourceType == 'business_days' && column.key == 'status') {
       final open = value == 'OPEN';
       final color = open ? StreetFoodMafiaColors.statusReady : StreetFoodMafiaColors.secondaryText;
