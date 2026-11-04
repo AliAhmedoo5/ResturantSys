@@ -705,8 +705,41 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
     final snapshot = _snapshot;
     if (snapshot == null || !_authorized || rows.isEmpty) return;
     _dismissSource();
+
+    final ingredientNames = <String, String>{};
+    final ingredientUnits = <String, String>{};
+    for (final r in section.rows) {
+      final id = r.cells['ingredient_id']?.toString();
+      if (id != null) {
+        final name = r.cells['name']?.toString();
+        final unit = r.cells['unit']?.toString();
+        if (name != null && name.isNotEmpty && name != 'Unavailable') ingredientNames[id] = name;
+        if (unit != null && unit.isNotEmpty && unit != 'Unavailable') ingredientUnits[id] = unit;
+      }
+    }
+
+    final enrichedRows = rows.map((r) {
+      final id = r.cells['ingredient_id']?.toString();
+      if (id != null && (r.cells['name'] == null || r.cells['unit'] == null)) {
+        final newCells = Map<String, Object?>.from(r.cells);
+        if (newCells['name'] == null && ingredientNames.containsKey(id)) {
+          newCells['name'] = ingredientNames[id];
+        }
+        if (newCells['unit'] == null && ingredientUnits.containsKey(id)) {
+          newCells['unit'] = ingredientUnits[id];
+        }
+        return AnalyticsRow(
+          id: r.id,
+          sourceType: r.sourceType,
+          sourceId: r.sourceId,
+          cells: newCells,
+        );
+      }
+      return r;
+    }).toList();
+
     final projection = AnalyticsSection(family: section.family, title: title,
-      columns: section.columns, rows: rows);
+      columns: section.columns, rows: enrichedRows);
     final route = DialogRoute<void>(context: context, builder: (context) {
       if (!mounted || !_authorized || !identical(_snapshot, snapshot)) return const SizedBox.shrink();
       return AlertDialog(title: Text(title),
