@@ -45,16 +45,16 @@ void main() {
     final archive = ZipDecoder().decodeBytes(bytes);
     String xml(String path) => utf8.decode(archive.findFile(path)!.content as List<int>);
     expect(xml('xl/workbook.xml'), contains('profitability'));
-    final sales = xml('xl/worksheets/sheet2.xml');
+    final sales = xml('xl/worksheets/sheet1.xml');
     expect(sales, contains('<v>12345</v>'));
     expect(sales, contains('<v>-125</v>'));
     expect(sales, contains('paisa'));
     expect(sales, contains('orders'));
     expect(sales, contains('&apos;=HYPERLINK'));
     expect(sales, isNot(contains('<f>')));
-    expect(xml('xl/worksheets/sheet3.xml'), contains('No event-time costing'));
-    expect(xml('xl/worksheets/sheet3.xml'), contains('missing'));
-    expect(xml('xl/worksheets/sheet1.xml'), contains('generated_by_staff_id'));
+    expect(xml('xl/worksheets/sheet2.xml'), contains('No event-time costing'));
+    expect(xml('xl/worksheets/sheet2.xml'), contains('missing'));
+    expect(xml('xl/worksheets/sheet3.xml'), contains('generated_by_staff_id'));
   });
 
   test('workbook zip entry uncompressed sizes match actual utf8 byte counts even with non-ascii characters and includes styles', () {

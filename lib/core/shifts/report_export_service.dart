@@ -133,15 +133,6 @@ class ReportExportService {
 
     final sections = [
       section('Z-Report / Executive Summary', ['Measure','Value (money in integer paisa)'], [
-        ['Restaurant', restaurantName],
-        ['Business Day', dayId],
-        ['Business date', opened.substring(0, 10)],
-        ['Opened', opened],
-        ['Closed / snapshot cutoff', closed],
-        ['Generated', generated.toIso8601String()],
-        ['Timezone', generated.timeZoneName],
-        ['UTC offset minutes', generated.timeZoneOffset.inMinutes],
-        ['Report revision', 1],
         ['Orders', totals['orders']],
         ['Gross sales', totals['gross']],
         ['Discounts', totals['discount']],
@@ -156,6 +147,15 @@ class ReportExportService {
         ['Total operating expenses', totalExpensePaisa],
         ['Total wastage loss', totalWastageLossPaisa],
         ['Total worked labor hours', (totalWorkedMinutes / 60.0).toStringAsFixed(1)],
+        ['Restaurant', restaurantName],
+        ['Business Day', dayId],
+        ['Business date', opened.substring(0, 10)],
+        ['Opened', opened],
+        ['Closed / snapshot cutoff', closed],
+        ['Generated', generated.toIso8601String()],
+        ['Timezone', generated.timeZoneName],
+        ['UTC offset minutes', generated.timeZoneOffset.inMinutes],
+        ['Report revision', 1],
       ]),
       section('Sales by Item / Order Status', ['Token','Item','Quantity','Amount (paisa)','Payment status'], sales.map((r) => [r['token_number'], r['name'], r['quantity'], r['paisa'], r['payment_status']]).toList()),
       section('Inventory Movement', ['Ingredient','Unit','Opening stock','Net movement','Closing stock'], inventory.map((r) => [r['name'], r['storage_unit'], (r['current_stock'] as num) - (r['delta'] as num), r['delta'], r['current_stock']]).toList()),
@@ -307,7 +307,7 @@ class ReportExportService {
                       ],
                     ),
                     pw.SizedBox(height: 2),
-                    pw.Text('EXECUTIVE Z-REPORTClose | ${sectionTitle.toUpperCase()}',
+                    pw.Text('EXECUTIVE Z-REPORT | ${sectionTitle.toUpperCase()}',
                       style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: accentAmber)),
                   ],
                 ),
@@ -324,23 +324,39 @@ class ReportExportService {
           );
         }
 
-        pw.Widget buildCard(String title, String mainValue, String subText, {PdfColor? badgeColor}) {
+        pw.Widget buildCard(String title, String mainValue, String subText, {PdfColor? badgeColor, PdfColor? accentColor}) {
           return pw.Container(
-            width: 145,
             padding: const pw.EdgeInsets.all(8),
             decoration: pw.BoxDecoration(
               color: cardBg,
               border: pw.Border.all(color: borderGrey),
               borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
             ),
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
+            child: pw.Row(
               children: [
-                pw.Text(title, style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey700)),
-                pw.SizedBox(height: 3),
-                pw.Text(mainValue, style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: primaryDark)),
-                pw.SizedBox(height: 2),
-                pw.Text(subText, style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold, color: badgeColor ?? PdfColors.grey600)),
+                if (accentColor != null) ...[
+                  pw.Container(
+                    width: 3.5,
+                    height: 28,
+                    decoration: pw.BoxDecoration(
+                      color: accentColor,
+                      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(2)),
+                    ),
+                  ),
+                  pw.SizedBox(width: 6),
+                ],
+                pw.Expanded(
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(title, style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey700)),
+                      pw.SizedBox(height: 2),
+                      pw.Text(mainValue, style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: primaryDark)),
+                      pw.SizedBox(height: 2),
+                      pw.Text(subText, style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold, color: badgeColor ?? PdfColors.grey600)),
+                    ],
+                  ),
+                ),
               ],
             ),
           );
@@ -379,6 +395,12 @@ class ReportExportService {
           'Total operating expenses', 'Total wastage loss',
         };
 
+        const technicalMetadataLabels = {
+          'Restaurant', 'Business Day', 'Business date', 'Opened',
+          'Closed / snapshot cutoff', 'Generated', 'Timezone',
+          'UTC offset minutes', 'Report revision',
+        };
+
         document.addPage(pw.MultiPage(
           pageFormat: PdfPageFormat.a4.landscape,
           maxPages: 1000,
@@ -386,17 +408,24 @@ class ReportExportService {
           header: (context) => buildBrandHeader(context, 'Executive Dashboard & Item Sales'),
           footer: (context) => pw.Text('Snapshot: $contentHash | Immutable Z-Close Document', style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.grey600)),
           build: (context) => [
-            // KPI Scorecard Grid
-            pw.Wrap(
-              spacing: 8,
-              runSpacing: 8,
+            // KPI Scorecard Grid - 2 balanced rows of 3 full-width cards
+            pw.Row(
               children: [
-                buildCard('GROSS / NET SALES', money(netPaisa), '$ordersCount Orders | Gross: ${money(grossPaisa)}'),
-                buildCard('CASH IN TILL HANDOVER', money(countedPaisa), 'Physical Count in Drawers'),
-                buildCard('CASH DISCREPANCY', money(discPaisa), discPaisa == 0 ? 'STATUS: CLEAN (0.00 Variance)' : 'STATUS: REVIEW NEEDED', badgeColor: discPaisa == 0 ? PdfColor.fromHex('#15803D') : PdfColor.fromHex('#B91C1C')),
-                buildCard('OPERATIONAL OVERHEADS', money(expensePaisa), 'Total Day In-Drawer & Owner Expenses'),
-                buildCard('KITCHEN WASTAGE LOSS', money(wastagePaisa), 'Recorded Cooking / Spoilage Loss'),
-                buildCard('LOGGED LABOR HOURS', '${laborHours.toStringAsFixed(1)} hrs', 'Verified Staff On-Shift Attendance'),
+                pw.Expanded(child: buildCard('GROSS / NET SALES', money(netPaisa), '$ordersCount Orders | Gross: ${money(grossPaisa)}', accentColor: PdfColor.fromHex('#2563EB'))),
+                pw.SizedBox(width: 8),
+                pw.Expanded(child: buildCard('CASH IN TILL HANDOVER', money(countedPaisa), 'Physical Count in Drawers', accentColor: PdfColor.fromHex('#059669'))),
+                pw.SizedBox(width: 8),
+                pw.Expanded(child: buildCard('CASH DISCREPANCY', money(discPaisa), discPaisa == 0 ? 'STATUS: CLEAN (0.00 Variance)' : 'STATUS: REVIEW NEEDED', badgeColor: discPaisa == 0 ? PdfColor.fromHex('#15803D') : PdfColor.fromHex('#B91C1C'), accentColor: discPaisa == 0 ? PdfColor.fromHex('#15803D') : PdfColor.fromHex('#B91C1C'))),
+              ],
+            ),
+            pw.SizedBox(height: 8),
+            pw.Row(
+              children: [
+                pw.Expanded(child: buildCard('OPERATIONAL OVERHEADS', money(expensePaisa), 'Total Day In-Drawer & Owner Expenses', accentColor: PdfColor.fromHex('#D97706'))),
+                pw.SizedBox(width: 8),
+                pw.Expanded(child: buildCard('KITCHEN WASTAGE LOSS', money(wastagePaisa), 'Recorded Cooking / Spoilage Loss', accentColor: PdfColor.fromHex('#DC2626'))),
+                pw.SizedBox(width: 8),
+                pw.Expanded(child: buildCard('LOGGED LABOR HOURS', '${laborHours.toStringAsFixed(1)} hrs', 'Sales: $salesPerHour/hr ($ordersPerHour ord/hr)', accentColor: PdfColor.fromHex('#7C3AED'))),
               ],
             ),
             pw.SizedBox(height: 12),
@@ -412,13 +441,24 @@ class ReportExportService {
             pw.SizedBox(height: 4),
             pw.TableHelper.fromTextArray(
               headers: ['Financial Measure', 'Recorded Value'],
-              data: (sections[0]['rows'] as List).map((row) {
+              data: (sections[0]['rows'] as List).where((row) {
+                final label = (row as List)[0].toString();
+                return !technicalMetadataLabels.contains(label);
+              }).map((row) {
                 final r = List<dynamic>.from(row as List);
                 final label = r[0].toString();
                 final val = r[1];
                 final isMoney = val is num && (monetarySummaryLabels.contains(label) || label.startsWith('Tender '));
                 return [label, isMoney ? money(val) : val.toString()];
               }).toList(),
+              cellAlignments: {
+                0: pw.Alignment.centerLeft,
+                1: pw.Alignment.centerRight,
+              },
+              headerAlignments: {
+                0: pw.Alignment.centerLeft,
+                1: pw.Alignment.centerRight,
+              },
               headerDecoration: pw.BoxDecoration(color: primaryDark),
               headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
               cellStyle: const pw.TextStyle(fontSize: 7.5),
@@ -443,6 +483,20 @@ class ReportExportService {
                 final r = List<dynamic>.from(row as List);
                 return [r[0].toString(), r[1].toString(), r[2].toString(), money(r[3] as num?), r[4].toString()];
               }).toList(),
+              cellAlignments: {
+                0: pw.Alignment.center,
+                1: pw.Alignment.centerLeft,
+                2: pw.Alignment.centerRight,
+                3: pw.Alignment.centerRight,
+                4: pw.Alignment.center,
+              },
+              headerAlignments: {
+                0: pw.Alignment.center,
+                1: pw.Alignment.centerLeft,
+                2: pw.Alignment.centerRight,
+                3: pw.Alignment.centerRight,
+                4: pw.Alignment.center,
+              },
               headerDecoration: pw.BoxDecoration(color: primaryDark),
               headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
               cellStyle: const pw.TextStyle(fontSize: 7.5),
@@ -468,6 +522,20 @@ class ReportExportService {
                   final r = List<dynamic>.from(row as List);
                   return [r[0].toString(), r[1].toString(), money(r[2] as num?), money(r[3] as num?), money(r[4] as num?)];
                 }).toList(),
+                cellAlignments: {
+                  0: pw.Alignment.centerLeft,
+                  1: pw.Alignment.centerRight,
+                  2: pw.Alignment.centerRight,
+                  3: pw.Alignment.centerRight,
+                  4: pw.Alignment.centerRight,
+                },
+                headerAlignments: {
+                  0: pw.Alignment.centerLeft,
+                  1: pw.Alignment.centerRight,
+                  2: pw.Alignment.centerRight,
+                  3: pw.Alignment.centerRight,
+                  4: pw.Alignment.centerRight,
+                },
                 headerDecoration: pw.BoxDecoration(color: primaryDark),
                 headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
                 cellStyle: const pw.TextStyle(fontSize: 7.5),
@@ -510,6 +578,24 @@ class ReportExportService {
                   r[6].toString(),
                 ];
               }).toList(),
+              cellAlignments: {
+                0: pw.Alignment.center,
+                1: pw.Alignment.centerLeft,
+                2: pw.Alignment.centerRight,
+                3: pw.Alignment.centerRight,
+                4: pw.Alignment.centerRight,
+                5: pw.Alignment.centerRight,
+                6: pw.Alignment.center,
+              },
+              headerAlignments: {
+                0: pw.Alignment.center,
+                1: pw.Alignment.centerLeft,
+                2: pw.Alignment.centerRight,
+                3: pw.Alignment.centerRight,
+                4: pw.Alignment.centerRight,
+                5: pw.Alignment.centerRight,
+                6: pw.Alignment.center,
+              },
               headerDecoration: pw.BoxDecoration(color: primaryDark),
               headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
               cellStyle: const pw.TextStyle(fontSize: 7.5),
@@ -527,6 +613,22 @@ class ReportExportService {
                   final r = List<dynamic>.from(row as List);
                   return [r[0].toString(), r[1].toString(), r[2].toString(), r[3].toString(), money(r[4] as num?), r[5].toString()];
                 }).toList(),
+                cellAlignments: {
+                  0: pw.Alignment.center,
+                  1: pw.Alignment.center,
+                  2: pw.Alignment.center,
+                  3: pw.Alignment.centerLeft,
+                  4: pw.Alignment.centerRight,
+                  5: pw.Alignment.centerLeft,
+                },
+                headerAlignments: {
+                  0: pw.Alignment.center,
+                  1: pw.Alignment.center,
+                  2: pw.Alignment.center,
+                  3: pw.Alignment.centerLeft,
+                  4: pw.Alignment.centerRight,
+                  5: pw.Alignment.centerLeft,
+                },
                 headerDecoration: pw.BoxDecoration(color: PdfColor.fromHex('#334155')),
                 headerStyle: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
                 cellStyle: const pw.TextStyle(fontSize: 7),
@@ -563,6 +665,26 @@ class ReportExportService {
                     money(r[7] as num?),
                   ];
                 }).toList(),
+                cellAlignments: {
+                  0: pw.Alignment.center,
+                  1: pw.Alignment.centerLeft,
+                  2: pw.Alignment.center,
+                  3: pw.Alignment.center,
+                  4: pw.Alignment.center,
+                  5: pw.Alignment.centerRight,
+                  6: pw.Alignment.centerRight,
+                  7: pw.Alignment.centerRight,
+                },
+                headerAlignments: {
+                  0: pw.Alignment.center,
+                  1: pw.Alignment.centerLeft,
+                  2: pw.Alignment.center,
+                  3: pw.Alignment.center,
+                  4: pw.Alignment.center,
+                  5: pw.Alignment.centerRight,
+                  6: pw.Alignment.centerRight,
+                  7: pw.Alignment.centerRight,
+                },
                 headerDecoration: pw.BoxDecoration(color: primaryDark),
                 headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
                 cellStyle: const pw.TextStyle(fontSize: 7.5),
@@ -600,6 +722,26 @@ class ReportExportService {
                     '${(minutes / 60.0).toStringAsFixed(1)} hrs',
                   ];
                 }).toList(),
+                cellAlignments: {
+                  0: pw.Alignment.centerLeft,
+                  1: pw.Alignment.centerLeft,
+                  2: pw.Alignment.center,
+                  3: pw.Alignment.center,
+                  4: pw.Alignment.center,
+                  5: pw.Alignment.centerRight,
+                  6: pw.Alignment.centerRight,
+                  7: pw.Alignment.centerRight,
+                },
+                headerAlignments: {
+                  0: pw.Alignment.centerLeft,
+                  1: pw.Alignment.centerLeft,
+                  2: pw.Alignment.center,
+                  3: pw.Alignment.center,
+                  4: pw.Alignment.center,
+                  5: pw.Alignment.centerRight,
+                  6: pw.Alignment.centerRight,
+                  7: pw.Alignment.centerRight,
+                },
                 headerDecoration: pw.BoxDecoration(color: primaryDark),
                 headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
                 cellStyle: const pw.TextStyle(fontSize: 7.5),
@@ -654,6 +796,20 @@ class ReportExportService {
                   final r = List<dynamic>.from(row as List);
                   return [r[0].toString(), r[1].toString(), r[2].toString(), r[3].toString(), money(r[4] as num?)];
                 }).toList(),
+                cellAlignments: {
+                  0: pw.Alignment.center,
+                  1: pw.Alignment.centerLeft,
+                  2: pw.Alignment.centerRight,
+                  3: pw.Alignment.centerLeft,
+                  4: pw.Alignment.centerRight,
+                },
+                headerAlignments: {
+                  0: pw.Alignment.center,
+                  1: pw.Alignment.centerLeft,
+                  2: pw.Alignment.centerRight,
+                  3: pw.Alignment.centerLeft,
+                  4: pw.Alignment.centerRight,
+                },
                 headerDecoration: pw.BoxDecoration(color: primaryDark),
                 headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
                 cellStyle: const pw.TextStyle(fontSize: 7.5),
@@ -678,6 +834,20 @@ class ReportExportService {
                 final r = List<dynamic>.from(row as List);
                 return [r[0].toString(), r[1].toString(), r[2].toString(), r[3].toString(), r[4].toString()];
               }).toList(),
+              cellAlignments: {
+                0: pw.Alignment.centerLeft,
+                1: pw.Alignment.center,
+                2: pw.Alignment.centerRight,
+                3: pw.Alignment.centerRight,
+                4: pw.Alignment.centerRight,
+              },
+              headerAlignments: {
+                0: pw.Alignment.centerLeft,
+                1: pw.Alignment.center,
+                2: pw.Alignment.centerRight,
+                3: pw.Alignment.centerRight,
+                4: pw.Alignment.centerRight,
+              },
               headerDecoration: pw.BoxDecoration(color: primaryDark),
               headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
               cellStyle: const pw.TextStyle(fontSize: 7.5),
@@ -695,6 +865,20 @@ class ReportExportService {
                   final r = List<dynamic>.from(row as List);
                   return [r[0].toString(), r[1].toString(), r[2].toString(), r[3].toString(), r[4].toString()];
                 }).toList(),
+                cellAlignments: {
+                  0: pw.Alignment.center,
+                  1: pw.Alignment.center,
+                  2: pw.Alignment.centerLeft,
+                  3: pw.Alignment.centerRight,
+                  4: pw.Alignment.centerRight,
+                },
+                headerAlignments: {
+                  0: pw.Alignment.center,
+                  1: pw.Alignment.center,
+                  2: pw.Alignment.centerLeft,
+                  3: pw.Alignment.centerRight,
+                  4: pw.Alignment.centerRight,
+                },
                 headerDecoration: pw.BoxDecoration(color: PdfColor.fromHex('#334155')),
                 headerStyle: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
                 cellStyle: const pw.TextStyle(fontSize: 7),
@@ -732,6 +916,22 @@ class ReportExportService {
                   final r = List<dynamic>.from(row as List);
                   return [r[0].toString(), r[1].toString(), r[2].toString(), r[3].toString(), money(r[4] as num?), r[5].toString()];
                 }).toList(),
+                cellAlignments: {
+                  0: pw.Alignment.centerLeft,
+                  1: pw.Alignment.centerLeft,
+                  2: pw.Alignment.centerLeft,
+                  3: pw.Alignment.center,
+                  4: pw.Alignment.centerRight,
+                  5: pw.Alignment.center,
+                },
+                headerAlignments: {
+                  0: pw.Alignment.centerLeft,
+                  1: pw.Alignment.centerLeft,
+                  2: pw.Alignment.centerLeft,
+                  3: pw.Alignment.center,
+                  4: pw.Alignment.centerRight,
+                  5: pw.Alignment.center,
+                },
                 headerDecoration: pw.BoxDecoration(color: primaryDark),
                 headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
                 cellStyle: const pw.TextStyle(fontSize: 7.5),
@@ -751,6 +951,22 @@ class ReportExportService {
                   final r = List<dynamic>.from(row as List);
                   return [r[0].toString(), r[1].toString(), r[2].toString(), r[3].toString(), money(r[4] as num?), r[5].toString()];
                 }).toList(),
+                cellAlignments: {
+                  0: pw.Alignment.centerLeft,
+                  1: pw.Alignment.center,
+                  2: pw.Alignment.center,
+                  3: pw.Alignment.center,
+                  4: pw.Alignment.centerRight,
+                  5: pw.Alignment.center,
+                },
+                headerAlignments: {
+                  0: pw.Alignment.centerLeft,
+                  1: pw.Alignment.center,
+                  2: pw.Alignment.center,
+                  3: pw.Alignment.center,
+                  4: pw.Alignment.centerRight,
+                  5: pw.Alignment.center,
+                },
                 headerDecoration: pw.BoxDecoration(color: PdfColor.fromHex('#334155')),
                 headerStyle: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
                 cellStyle: const pw.TextStyle(fontSize: 7),
@@ -779,6 +995,18 @@ class ReportExportService {
                   final r = List<dynamic>.from(row as List);
                   return [r[0].toString(), r[1].toString(), money(r[2] as num?), r[3].toString()];
                 }).toList(),
+                cellAlignments: {
+                  0: pw.Alignment.centerLeft,
+                  1: pw.Alignment.center,
+                  2: pw.Alignment.centerRight,
+                  3: pw.Alignment.center,
+                },
+                headerAlignments: {
+                  0: pw.Alignment.centerLeft,
+                  1: pw.Alignment.center,
+                  2: pw.Alignment.centerRight,
+                  3: pw.Alignment.center,
+                },
                 headerDecoration: pw.BoxDecoration(color: primaryDark),
                 headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
                 cellStyle: const pw.TextStyle(fontSize: 7.5),
@@ -813,6 +1041,34 @@ class ReportExportService {
                     height: 35,
                     decoration: pw.BoxDecoration(border: pw.Border.all(color: borderGrey)),
                     child: pw.Center(child: pw.Text('Manager Signature / Seal', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600))),
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 10),
+
+            // Trailing Audit & Metadata Appendix
+            pw.Container(
+              padding: const pw.EdgeInsets.all(8),
+              decoration: pw.BoxDecoration(
+                color: cardBg,
+                border: pw.Border.all(color: borderGrey),
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+              ),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text('AUDIT METADATA & SYSTEM PROVENANCE', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: primaryDark)),
+                  pw.SizedBox(height: 4),
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text('Snapshot Hash: ${contentHash.length >= 16 ? contentHash.substring(0, 16) : contentHash}', style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.grey700)),
+                      pw.Text('Generated: ${generated.toIso8601String()}', style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.grey700)),
+                      pw.Text('Timezone: ${generated.timeZoneName} (UTC+${(generated.timeZoneOffset.inMinutes / 60).toStringAsFixed(0)})', style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.grey700)),
+                      pw.Text('Cutoff: $closed', style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.grey700)),
+                      pw.Text('Status: IMMUTABLE SEALED Z-CLOSE', style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold, color: accentAmber)),
+                    ],
                   ),
                 ],
               ),
