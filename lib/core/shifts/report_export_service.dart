@@ -1064,9 +1064,9 @@ class ReportExportService {
                     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                     children: [
                       pw.Text('Snapshot Hash: ${contentHash.length >= 16 ? contentHash.substring(0, 16) : contentHash}', style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.grey700)),
-                      pw.Text('Generated: ${generated.toIso8601String()}', style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.grey700)),
-                      pw.Text('Timezone: ${generated.timeZoneName} (UTC+${(generated.timeZoneOffset.inMinutes / 60).toStringAsFixed(0)})', style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.grey700)),
-                      pw.Text('Cutoff: $closed', style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.grey700)),
+                      pw.Text('Generated: ${run['created_at'] ?? ""}', style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.grey700)),
+                      pw.Text('Timezone: Asia/Karachi (UTC+05:00)', style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.grey700)),
+                      pw.Text('Cutoff: ${snapshot['cutoff'] ?? ""}', style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.grey700)),
                       pw.Text('Status: IMMUTABLE SEALED Z-CLOSE', style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold, color: accentAmber)),
                     ],
                   ),
