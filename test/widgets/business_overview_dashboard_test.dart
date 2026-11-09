@@ -123,6 +123,8 @@ void main() {
         return overviewFixture(query);
       }), clock: () => DateTime(2026, 10, 26)))));
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('analytics_filters_toggle')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('analytics_cashier_picker')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Ayesha').last);

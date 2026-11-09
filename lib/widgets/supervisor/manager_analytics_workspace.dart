@@ -36,6 +36,13 @@ const _familyLabels = <AnalyticsFamily, String>{
   AnalyticsFamily.audit: 'Control & audit',
 };
 
+const _coreFamilies = <AnalyticsFamily>[
+  AnalyticsFamily.overview,
+  AnalyticsFamily.sales,
+  AnalyticsFamily.cash,
+  AnalyticsFamily.orders,
+];
+
 const _snapshotBalanceFamilies = <AnalyticsFamily>{
   AnalyticsFamily.inventory,
   AnalyticsFamily.suppliers,
@@ -779,6 +786,23 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
     return count;
   }
 
+  void _resetAllFilters() {
+    _cashier.clear();
+    _shift.clear();
+    setState(() {
+      _dining = null;
+      _payment = null;
+    });
+    _changeQuery(_query.copyWith(
+      cashierId: null,
+      shiftId: null,
+      diningType: null,
+      paymentMethod: null,
+      fundingStream: null,
+      domainFilters: {},
+    ));
+  }
+
   Widget _activeFilterChips() {
     final chips = <Widget>[];
     if (_query.cashierId != null) {
@@ -846,23 +870,605 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
           const Text('Active filters:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: StreetFoodMafiaColors.secondaryText)),
           ...chips,
           TextButton(
-            onPressed: () {
-              _changeQuery(_query.copyWith(
-                domainFilters: {},
-                cashierId: null,
-                shiftId: null,
-                diningType: null,
-                paymentMethod: null,
-                fundingStream: null,
-              ));
-              _cashier.clear();
-              _shift.clear();
-              setState(() {
-                _dining = null;
-                _payment = null;
-              });
-            },
+            key: const ValueKey('analytics_chips_reset_all'),
+            onPressed: _resetAllFilters,
             child: const Text('Reset all', style: TextStyle(fontSize: 12)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _presetChip(String key, String label, IconData icon, String valueKey) {
+    final isSelected = _preset == key;
+    return ChoiceChip(
+      key: ValueKey(valueKey),
+      label: Text(label),
+      avatar: Icon(icon, size: 14, color: isSelected ? StreetFoodMafiaColors.darkNavy : StreetFoodMafiaColors.secondaryText),
+      selected: isSelected,
+      selectedColor: StreetFoodMafiaColors.cartelYellow,
+      backgroundColor: StreetFoodMafiaColors.cardSurface,
+      labelStyle: TextStyle(
+        fontSize: 12,
+        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+        color: isSelected ? StreetFoodMafiaColors.darkNavy : StreetFoodMafiaColors.offWhite,
+      ),
+      visualDensity: VisualDensity.compact,
+      onSelected: (_) => _selectPreset(key),
+    );
+  }
+
+  Future<void> _showAuditProvenanceModal(AnalyticsSnapshot? snapshot) async {
+    final cutoffStr = snapshot != null
+        ? (formatAnalyticsTimestamp(snapshot.generatedAt)?.fullLabel ??
+            DateFormat('dd MMM yyyy HH:mm:ss').format(
+              snapshot.generatedAt.isUtc ? snapshot.generatedAt.add(const Duration(hours: 5)) : snapshot.generatedAt,
+            ))
+        : 'Snapshot timestamp unavailable';
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        key: const ValueKey('analytics_audit_modal'),
+        title: const Row(
+          children: [
+            Icon(Icons.verified_outlined, color: StreetFoodMafiaColors.cartelYellow),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Audit Provenance & Methodology',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 520,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: StreetFoodMafiaColors.cardSurface,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: StreetFoodMafiaColors.border),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.access_time_rounded, size: 16, color: StreetFoodMafiaColors.cartelYellow),
+                          SizedBox(width: 6),
+                          Text('Karachi Timezone Cutoff',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: StreetFoodMafiaColors.cartelYellow)),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      SelectableText(
+                        cutoffStr,
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: StreetFoodMafiaColors.offWhite),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Icon(Icons.schema_outlined, size: 16, color: StreetFoodMafiaColors.cartelYellow),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Schema v${snapshot?.sourceSchemaVersion ?? 28} • ${snapshot?.reportVersion ?? "current"}',
+                            style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.calendar_today_outlined, size: 16, color: StreetFoodMafiaColors.cartelYellow),
+                          const SizedBox(width: 6),
+                          Text(
+                            '${snapshot?.businessDayIds.length ?? 0} Business Days (IDs: ${snapshot?.businessDayIds.join(", ") ?? "none"})',
+                            style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text('Reporting Methodology & Scope',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: StreetFoodMafiaColors.offWhite)),
+                const SizedBox(height: 8),
+                Text(
+                  '• Time basis: ${_query.timeBasis == AnalyticsTimeBasis.businessDay ? "Assigned Business Day weekday" : "Actual calendar weekday"}\n'
+                  '• Grouping: ${_query.grouping.name}\n'
+                  '• Weeks start Monday • Local calendar months\n'
+                  '• Snapshot cutoff: Asia/Karachi operational time (UTC+05:00)\n'
+                  '• Integer paisa precision maintained for all financial figures',
+                  style: const TextStyle(fontSize: 12, height: 1.5, color: StreetFoodMafiaColors.secondaryText),
+                ),
+                if (snapshot != null && snapshot.notes.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  const Text('Snapshot Notes',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: StreetFoodMafiaColors.offWhite)),
+                  const SizedBox(height: 6),
+                  for (final note in snapshot.notes)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text('• $note',
+                          style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
+                    ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTwoTierCommandBar(BuildContext context, BoxConstraints constraints, AnalyticsSnapshot? snapshot) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: StreetFoodMafiaColors.darkNavy,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: StreetFoodMafiaColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Tier 1: View Navigation
+          Row(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      SegmentedButton<AnalyticsFamily>(
+                        key: const ValueKey('analytics_core_view_pills'),
+                        segments: const [
+                          ButtonSegment(
+                            value: AnalyticsFamily.overview,
+                            label: Text('Overview'),
+                            icon: Icon(Icons.dashboard_outlined, size: 16),
+                          ),
+                          ButtonSegment(
+                            value: AnalyticsFamily.sales,
+                            label: Text('Sales'),
+                            icon: Icon(Icons.point_of_sale_outlined, size: 16),
+                          ),
+                          ButtonSegment(
+                            value: AnalyticsFamily.cash,
+                            label: Text('Cash & shifts'),
+                            icon: Icon(Icons.account_balance_wallet_outlined, size: 16),
+                          ),
+                          ButtonSegment(
+                            value: AnalyticsFamily.orders,
+                            label: Text('Order operations'),
+                            icon: Icon(Icons.receipt_long_outlined, size: 16),
+                          ),
+                        ],
+                        selected: _coreFamilies.contains(_family) ? {_family} : <AnalyticsFamily>{},
+                        emptySelectionAllowed: true,
+                        showSelectedIcon: false,
+                        style: ButtonStyle(
+                          visualDensity: VisualDensity.compact,
+                          padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
+                          backgroundColor: WidgetStateProperty.resolveWith((states) {
+                            if (states.contains(WidgetState.selected)) {
+                              return StreetFoodMafiaColors.cartelYellow;
+                            }
+                            return StreetFoodMafiaColors.cardSurface;
+                          }),
+                          foregroundColor: WidgetStateProperty.resolveWith((states) {
+                            if (states.contains(WidgetState.selected)) {
+                              return StreetFoodMafiaColors.darkNavy;
+                            }
+                            return StreetFoodMafiaColors.offWhite;
+                          }),
+                        ),
+                        onSelectionChanged: (selected) {
+                          if (selected.isNotEmpty) {
+                            _selectReport(selected.first);
+                          }
+                        },
+                      ),
+                      const SizedBox(width: 10),
+                      SizedBox(
+                        width: 180,
+                        child: DropdownButtonFormField<AnalyticsFamily>(
+                          mouseCursor: WidgetStateMouseCursor.clickable,
+                          key: const ValueKey('analytics_family'),
+                          value: _family,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Report',
+                            isDense: true,
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          ),
+                          items: _familyLabels.entries
+                              .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value, overflow: TextOverflow.ellipsis)))
+                              .toList(),
+                          onChanged: (family) {
+                            if (family != null) _selectReport(family);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton.outlined(
+                key: const ValueKey('analytics_refresh'),
+                tooltip: 'Refresh analytics',
+                onPressed: _busy ? null : _load,
+                icon: const Icon(Icons.refresh, size: 18),
+              ),
+              const SizedBox(width: 6),
+              TextButton.icon(
+                key: const ValueKey('analytics_presets_button'),
+                onPressed: _showPresetsDialog,
+                icon: const Icon(Icons.bookmark_border_rounded, size: 18),
+                label: const Text('Presets'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          const Divider(height: 1, color: StreetFoodMafiaColors.border),
+          const SizedBox(height: 10),
+          // Tier 2: Date presets, Compact Period, Order Time Basis, Grouping, Comparison, Audit Pill, Filter Drawer Toggle
+          Wrap(
+            spacing: 8,
+            runSpacing: 10,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  _presetChip('live', 'Live', Icons.bolt, 'preset_chip_live'),
+                  _presetChip('today', 'Today', Icons.today, 'preset_chip_today'),
+                  _presetChip('yesterday', 'Yesterday', Icons.history, 'preset_chip_yesterday'),
+                  _presetChip('week', 'Last 7 Days', Icons.date_range, 'preset_chip_week'),
+                  _presetChip('month_to_date', 'Month to date', Icons.calendar_month, 'preset_chip_month_to_date'),
+                  _presetChip('custom', 'Custom', Icons.edit_calendar, 'preset_chip_custom'),
+                ],
+              ),
+              SizedBox(
+                width: 155,
+                child: DropdownButtonFormField<String>(
+                  mouseCursor: WidgetStateMouseCursor.clickable,
+                  key: const ValueKey('analytics_period'),
+                  value: _preset,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: _query.timeBasis == AnalyticsTimeBasis.businessDay
+                        ? 'Business Day period'
+                        : 'Calendar Order period',
+                    isDense: true,
+                    border: const OutlineInputBorder(),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'live', child: Text('Active day')),
+                    DropdownMenuItem(value: 'today', child: Text('Today')),
+                    DropdownMenuItem(value: 'yesterday', child: Text('Previous day')),
+                    DropdownMenuItem(value: 'month_to_date', child: Text('Month to date')),
+                    DropdownMenuItem(value: 'week', child: Text('Last 7 dates')),
+                    DropdownMenuItem(value: 'month', child: Text('Last 30 dates')),
+                    DropdownMenuItem(value: 'custom', child: Text('Custom range…')),
+                  ],
+                  onChanged: _selectPreset,
+                ),
+              ),
+              SizedBox(
+                width: 150,
+                child: DropdownButtonFormField<AnalyticsTimeBasis>(
+                  key: const ValueKey('analytics_time_basis'),
+                  value: _query.timeBasis,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Order time basis',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: AnalyticsTimeBasis.businessDay, child: Text('Business Day')),
+                    DropdownMenuItem(value: AnalyticsTimeBasis.calendarTime, child: Text('Calendar time')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) _changeQuery(_query.copyWith(timeBasis: value));
+                  },
+                ),
+              ),
+              SizedBox(
+                width: 130,
+                child: DropdownButtonFormField<AnalyticsGrouping>(
+                  key: const ValueKey('analytics_grouping'),
+                  value: _query.grouping,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Order grouping',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: AnalyticsGrouping.day, child: Text('Day')),
+                    DropdownMenuItem(value: AnalyticsGrouping.week, child: Text('Week (Mon)')),
+                    DropdownMenuItem(value: AnalyticsGrouping.month, child: Text('Month')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) _changeQuery(_query.copyWith(grouping: value));
+                  },
+                ),
+              ),
+              Tooltip(
+                message: _snapshotBalanceFamilies.contains(_family)
+                    ? 'Historical comparison is disabled for snapshot balance families: ${_familyLabels[_family]}. Current balances are not historical snapshots.'
+                    : 'Historical period comparison',
+                child: SizedBox(
+                  width: 160,
+                  child: DropdownButtonFormField<AnalyticsComparisonMode>(
+                    key: const ValueKey('analytics_comparison_mode'),
+                    value: _query.comparisonMode,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: 'Comparison',
+                      isDense: true,
+                      border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      helperText: _snapshotBalanceFamilies.contains(_family) ? 'Disabled (balance)' : null,
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: AnalyticsComparisonMode.none, child: Text('No comparison')),
+                      DropdownMenuItem(value: AnalyticsComparisonMode.precedingPeriod, child: Text('Preceding period')),
+                      DropdownMenuItem(value: AnalyticsComparisonMode.comparableWeekday, child: Text('Comparable weekday')),
+                    ],
+                    onChanged: _snapshotBalanceFamilies.contains(_family)
+                        ? null
+                        : (mode) {
+                            if (mode != null) _changeQuery(_query.copyWith(comparisonMode: mode));
+                          },
+                  ),
+                ),
+              ),
+              OutlinedButton.icon(
+                key: const ValueKey('analytics_audit_provenance_pill'),
+                style: OutlinedButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  side: const BorderSide(color: StreetFoodMafiaColors.border),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                ),
+                onPressed: () => _showAuditProvenanceModal(snapshot),
+                icon: const Icon(Icons.verified_outlined, size: 16, color: StreetFoodMafiaColors.cartelYellow),
+                label: Text(
+                  'Karachi (UTC+05:00) • Schema v${snapshot?.sourceSchemaVersion ?? 28} • ${snapshot?.businessDayIds.length ?? 0} Business Days',
+                  style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.offWhite),
+                ),
+              ),
+              FilledButton.tonalIcon(
+                key: const ValueKey('analytics_filters_toggle'),
+                style: FilledButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  backgroundColor: _activeFilterCount > 0
+                      ? StreetFoodMafiaColors.cartelYellow.withOpacity(0.2)
+                      : StreetFoodMafiaColors.cardSurface,
+                  foregroundColor: _activeFilterCount > 0
+                      ? StreetFoodMafiaColors.cartelYellow
+                      : StreetFoodMafiaColors.offWhite,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+                onPressed: () => setState(() => _filtersExpanded = !_filtersExpanded),
+                icon: const Icon(Icons.bolt, size: 16, color: StreetFoodMafiaColors.cartelYellow),
+                label: Text(
+                  _activeFilterCount > 0 ? '⚡ Filters ($_activeFilterCount)' : '⚡ Filters',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _filterDrawer() {
+    return Container(
+      key: const ValueKey('analytics_filters'),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: StreetFoodMafiaColors.border)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.bolt, color: StreetFoodMafiaColors.cartelYellow, size: 20),
+                const SizedBox(width: 8),
+                const Text(
+                  'Filter Drawer',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: StreetFoodMafiaColors.offWhite),
+                ),
+                if (_activeFilterCount > 0) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: StreetFoodMafiaColors.cartelYellow,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '$_activeFilterCount',
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: StreetFoodMafiaColors.darkNavy),
+                    ),
+                  ),
+                ],
+                const Spacer(),
+                TextButton.icon(
+                  key: const ValueKey('analytics_drawer_reset_all'),
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    foregroundColor: StreetFoodMafiaColors.statusCanceled,
+                  ),
+                  onPressed: _resetAllFilters,
+                  icon: const Icon(Icons.restart_alt, size: 16),
+                  label: const Text('Reset All'),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 20),
+                  tooltip: 'Close filter drawer',
+                  onPressed: () => setState(() => _filtersExpanded = false),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Form(
+                key: _filtersKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _query.cashierId == null && _query.shiftId == null && _query.diningType == null && _query.paymentMethod == null
+                          ? 'All cashiers, shifts, Dining Types and payment methods'
+                          : 'Filters applied • inspect each report’s scope notes',
+                      style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Cashier and Shift select owning/receiving drawers. Dining Type and payment method narrow order/activity breakdowns only; whole-Shift cash accountability is unchanged.',
+                      style: TextStyle(color: StreetFoodMafiaColors.secondaryText, fontSize: 12),
+                    ),
+                    const SizedBox(height: 14),
+                    const Text('Quick Selection Pickers', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: StreetFoodMafiaColors.cartelYellow)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 10,
+                      children: _quickFilterFields(compact: false),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('Direct ID & Aging Criteria', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: StreetFoodMafiaColors.cartelYellow)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        _idInput(_cashier, 'Cashier ID', 'analytics_cashier'),
+                        _idInput(_shift, 'Shift ID', 'analytics_shift'),
+                        SizedBox(
+                          width: 210,
+                          child: DropdownButtonFormField<int>(
+                            key: const ValueKey('analytics_hold_stale_minutes'),
+                            value: _query.holdStaleMinutes,
+                            isExpanded: true,
+                            decoration: const InputDecoration(
+                              labelText: 'Hold stale after (minutes)',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            items: [
+                              for (final minutes in ({15, 30, 60, 120, 240, _query.holdStaleMinutes}.toList()..sort()))
+                                DropdownMenuItem(value: minutes, child: Text('$minutes minutes')),
+                            ],
+                            onChanged: (value) {
+                              if (value != null) _changeQuery(_query.copyWith(holdStaleMinutes: value));
+                            },
+                          ),
+                        ),
+                        SizedBox(
+                          width: 160,
+                          child: DropdownButtonFormField<String>(
+                            mouseCursor: WidgetStateMouseCursor.clickable,
+                            key: const ValueKey('analytics_dining'),
+                            value: _dining,
+                            isExpanded: true,
+                            decoration: const InputDecoration(
+                              labelText: 'Dining Type',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            items: [
+                              const DropdownMenuItem<String>(value: null, child: Text('All')),
+                              for (final type in DiningType.values)
+                                DropdownMenuItem(value: type.code, child: Text(type.displayName)),
+                            ],
+                            onChanged: (value) => setState(() => _dining = value),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 180,
+                          child: DropdownButtonFormField<String>(
+                            mouseCursor: WidgetStateMouseCursor.clickable,
+                            key: const ValueKey('analytics_payment'),
+                            value: _payment,
+                            isExpanded: true,
+                            decoration: const InputDecoration(
+                              labelText: 'Payment method',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            items: [
+                              const DropdownMenuItem<String>(value: null, child: Text('All')),
+                              for (final method in PaymentMethod.values.where((method) => method != PaymentMethod.split))
+                                DropdownMenuItem(value: method.code, child: Text(method.displayName)),
+                            ],
+                            onChanged: (value) => setState(() => _payment = value),
+                          ),
+                        ),
+                        FilledButton(
+                          key: const ValueKey('analytics_apply_filters'),
+                          onPressed: _applyFilters,
+                          child: const Text('Apply'),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            _changeQuery(_query.copyWith(domainFilters: {}, fundingStream: null));
+                            _cashier.clear();
+                            _shift.clear();
+                            setState(() {
+                              _dining = null;
+                              _payment = null;
+                            });
+                            _applyFilters();
+                          },
+                          child: const Text('Clear'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    const Divider(color: StreetFoodMafiaColors.border),
+                    const SizedBox(height: 8),
+                    const Text('Domain Filters', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: StreetFoodMafiaColors.cartelYellow)),
+                    const SizedBox(height: 8),
+                    AnalyticsDomainFilters(
+                      query: _query,
+                      options: _snapshot?.filterOptions ?? const [],
+                      onChanged: _changeQuery,
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -875,217 +1481,161 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
       return const Center(child: Text('Manager session required. Sign in to view analytics.'));
     }
     final snapshot = _snapshot;
-    return ListView(key: const ValueKey('analytics_body'),
-      padding: const EdgeInsets.all(20), children: [
-      Wrap(alignment: WrapAlignment.spaceBetween, runSpacing: 10,
-        crossAxisAlignment: WrapCrossAlignment.center, children: [
-        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(_family == AnalyticsFamily.overview ? 'Business overview' : _familyLabels[_family]!,
-            style: WarmCounterTypography.brandHeading.copyWith(fontSize: 28)),
-          const SizedBox(height: 4),
-          Text(_query.live ? 'Active Business Day${_activeDate(snapshot)}' : 'Business Day reporting · Historical exploration',
-            style: const TextStyle(color: StreetFoodMafiaColors.secondaryText, fontSize: 13)),
-        ]),
-        Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(_error != null ? Icons.error_outline : _query.live ? Icons.circle : Icons.history,
-            size: 10, color: _error != null ? StreetFoodMafiaColors.statusCanceled : StreetFoodMafiaColors.statusReady),
-          const SizedBox(width: 7),
-          Text('${_query.live ? 'Live' : 'Historical'}${snapshot == null ? '' : ' · updated ${DateFormat('HH:mm').format(snapshot.generatedAt.isUtc ? snapshot.generatedAt.add(const Duration(hours: 5)) : snapshot.generatedAt)}'}',
-            style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
-        ]),
-        if (snapshot != null && _error == null && widget.exportActionsBuilder != null)
-          ConstrainedBox(constraints: const BoxConstraints(maxWidth: 320),
-            child: widget.exportActionsBuilder!(context, snapshot, _family)),
-      ]),
-      Align(alignment: Alignment.centerLeft, child: TextButton.icon(icon: const Icon(Icons.history), label: const Text('Historical corrections'), onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => Scaffold(appBar: AppBar(title: const Text('Historical corrections')), body: HistoricalCorrectionsWorkspace(service: HistoricalCorrections(database: widget.service.database, auth: widget.service.authService))))))),
-      const SizedBox(height: 18),
-      Container(padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: StreetFoodMafiaColors.darkNavy,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: StreetFoodMafiaColors.border)),
-        child: LayoutBuilder(builder: (context, constraints) {
-          final compact = constraints.maxWidth >= 1100;
-          return Wrap(spacing: 8, runSpacing: 12, crossAxisAlignment: WrapCrossAlignment.center, children: [
-        SizedBox(width: compact ? 140 : 205, child: DropdownButtonFormField<AnalyticsFamily>(
-          mouseCursor: WidgetStateMouseCursor.clickable,
-          key: const ValueKey('analytics_family'), value: _family, isExpanded: true,
-          decoration: const InputDecoration(labelText: 'Report', isDense: true, border: OutlineInputBorder()),
-          items: _familyLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
-          onChanged: (family) { if (family != null) _selectReport(family); },
-        )),
-        SizedBox(width: compact ? 155 : 190, child: DropdownButtonFormField<String>(
-          mouseCursor: WidgetStateMouseCursor.clickable,
-          key: const ValueKey('analytics_period'), value: _preset, isExpanded: true,
-          decoration: InputDecoration(labelText: _query.timeBasis == AnalyticsTimeBasis.businessDay ? 'Business Day period' : 'Calendar Order period', isDense: true, border: const OutlineInputBorder()),
-          items: const [
-            DropdownMenuItem(value: 'live', child: Text('Active day')),
-            DropdownMenuItem(value: 'today', child: Text('Today')),
-            DropdownMenuItem(value: 'yesterday', child: Text('Previous day')),
-            DropdownMenuItem(value: 'month_to_date', child: Text('Month to date')),
-            DropdownMenuItem(value: 'week', child: Text('Last 7 dates')),
-            DropdownMenuItem(value: 'month', child: Text('Last 30 dates')),
-            DropdownMenuItem(value: 'custom', child: Text('Custom range…')),
-          ], onChanged: _selectPreset,
-        )),
-        SizedBox(width: 185, child: DropdownButtonFormField<AnalyticsTimeBasis>(
-          key: const ValueKey('analytics_time_basis'), value: _query.timeBasis,
-          isExpanded: true,
-          decoration: const InputDecoration(labelText: 'Order time basis', isDense: true, border: OutlineInputBorder()),
-          items: const [DropdownMenuItem(value: AnalyticsTimeBasis.businessDay, child: Text('Business Day')),
-            DropdownMenuItem(value: AnalyticsTimeBasis.calendarTime, child: Text('Calendar time'))],
-          onChanged: (value) { if (value != null) _changeQuery(_query.copyWith(timeBasis: value)); },
-        )),
-        SizedBox(width: 140, child: DropdownButtonFormField<AnalyticsGrouping>(
-          key: const ValueKey('analytics_grouping'), value: _query.grouping, isExpanded: true,
-          decoration: const InputDecoration(labelText: 'Order grouping', isDense: true, border: OutlineInputBorder()),
-          items: const [DropdownMenuItem(value: AnalyticsGrouping.day, child: Text('Day')),
-            DropdownMenuItem(value: AnalyticsGrouping.week, child: Text('Week (Mon)')),
-            DropdownMenuItem(value: AnalyticsGrouping.month, child: Text('Month'))],
-          onChanged: (value) { if (value != null) _changeQuery(_query.copyWith(grouping: value)); },
-        )),
-        SizedBox(width: compact ? 150 : 190, child: DropdownButtonFormField<AnalyticsComparisonMode>(
-          key: const ValueKey('analytics_comparison_mode'), value: _query.comparisonMode, isExpanded: true,
-          decoration: const InputDecoration(labelText: 'Comparison', isDense: true, border: OutlineInputBorder()),
-          items: const [
-            DropdownMenuItem(value: AnalyticsComparisonMode.none, child: Text('No comparison')),
-            DropdownMenuItem(value: AnalyticsComparisonMode.precedingPeriod, child: Text('Preceding period')),
-            DropdownMenuItem(value: AnalyticsComparisonMode.comparableWeekday, child: Text('Comparable weekday')),
-          ],
-          onChanged: (mode) { if (mode != null) _changeQuery(_query.copyWith(comparisonMode: mode)); },
-        )),
-        if (compact) ..._quickFilterFields(compact: true),
-        IconButton.outlined(key: const ValueKey('analytics_refresh'), tooltip: 'Refresh analytics',
-          onPressed: _busy ? null : _load, icon: const Icon(Icons.refresh)),
-        TextButton.icon(key: const ValueKey('analytics_presets_button'),
-          onPressed: _showPresetsDialog,
-          icon: const Icon(Icons.bookmark_border_rounded, size: 18), label: const Text('Presets')),
-        TextButton.icon(key: const ValueKey('analytics_filters_toggle'),
-          onPressed: () => setState(() => _filtersExpanded = !_filtersExpanded),
-          icon: const Icon(Icons.tune_rounded, size: 18),
-          label: Text(_activeFilterCount > 0 ? 'Filters ($_activeFilterCount)' : 'Filters')),
-        if (!compact && constraints.maxWidth >= 600)
-          SizedBox(width: constraints.maxWidth, child: Wrap(spacing: 10, runSpacing: 10, children: _quickFilterFields())),
-        if (constraints.maxWidth < 600) Material(color: Colors.transparent,
-          child: ExpansionTile(tilePadding: EdgeInsets.zero,
-          title: const Text('Quick filters', style: TextStyle(fontSize: 13)),
-          children: [Wrap(spacing: 10, runSpacing: 10, children: _quickFilterFields())])),
-      ]);
-      })),
-      _activeFilterChips(),
-      const SizedBox(height: 12),
-      Text('${_query.live ? 'LIVE • refreshes every ${widget.refreshInterval.inSeconds}s' : 'Historical exploration'}'
-        ' • Asia/Karachi • ${_query.live ? 'Active Business Day' : '${DateFormat('dd MMM yyyy').format(_query.startDate)} to ${DateFormat('dd MMM yyyy').format(_query.endDateExclusive)} (end exclusive)'}'
-        '${snapshot == null ? '' : ' • ${snapshot.businessDayIds.length} Business Days'}',
-        style: const TextStyle(color: StreetFoodMafiaColors.secondaryText, fontSize: 12)),
-      if (!_query.live && _query.comparisonMode != AnalyticsComparisonMode.none && _query.priorStartDate != null && _query.priorEndDateExclusive != null)
-        Text('Comparison: ${_query.comparisonMode == AnalyticsComparisonMode.comparableWeekday ? "Comparable weekday (last week)" : "Preceding period"}'
-          ' • ${DateFormat('dd MMM yyyy').format(_query.priorStartDate!)} to ${DateFormat('dd MMM yyyy').format(_query.priorEndDateExclusive!)} (end exclusive)',
-          style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
-      Text('Order activity: ${_query.timeBasis == AnalyticsTimeBasis.businessDay ? 'assigned Business Day weekday' : 'actual calendar weekday'} • ${_query.grouping.name} • weeks start Monday • local calendar months. Other ledgers retain Business Day scope.', style: const TextStyle(fontSize: 12)),
-      if (snapshot != null && _family != AnalyticsFamily.overview) Text(
-        'Updated ${formatAnalyticsTimestamp(snapshot.generatedAt)?.displayLine ?? DateFormat('dd MMM yyyy HH:mm:ss').format(snapshot.generatedAt.isUtc ? snapshot.generatedAt.add(const Duration(hours: 5)) : snapshot.generatedAt)}'
-        ' • ${snapshot.businessDayIds.length} Business Days in selection',
-        style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
-      if (snapshot != null) Text('Source schema ${snapshot.sourceSchemaVersion ?? "unavailable"} • ${snapshot.reportVersion} • cutoff ${formatAnalyticsTimestamp(snapshot.generatedAt)?.fullLabel ?? analyticsTimestamp(snapshot.generatedAt.toUtc().toIso8601String())}',
-        style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
-      const SizedBox(height: 8),
-      if (_busy) const LinearProgressIndicator(minHeight: 2),
-        if (_filtersExpanded) _filterPanel(),
-        if (_error != null) Card(child: Padding(padding: const EdgeInsets.all(12), child: Wrap(
-          spacing: 12, crossAxisAlignment: WrapCrossAlignment.center, children: [
-            Text(_error!, style: const TextStyle(color: StreetFoodMafiaColors.statusCanceled)),
-            TextButton(onPressed: _load, child: const Text('Retry')),
-          ]))),
-        if (snapshot == null && !_busy && _error == null) const Text('No analytics snapshot available.'),
-        if (snapshot != null) ...[
-          if (snapshot.businessDayIds.isEmpty) _note('No Business Days match this selection. Current-state datasets may still be available.'),
-          if (_query.comparisonMode != AnalyticsComparisonMode.none && _snapshotBalanceFamilies.contains(_family))
-            Container(
-              key: const ValueKey('unsupported_comparison_banner'),
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: StreetFoodMafiaColors.cardSurface,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: StreetFoodMafiaColors.border),
-              ),
-              child: Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = constraints.maxWidth >= 900;
+        final drawerWidth = constraints.maxWidth < 460 ? constraints.maxWidth : 420.0;
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: ListView(
+                key: const ValueKey('analytics_body'),
+                padding: EdgeInsets.only(
+                  left: 20,
+                  top: 20,
+                  bottom: 20,
+                  right: _filtersExpanded && isDesktop ? drawerWidth + 20 : 20,
+                ),
                 children: [
-                  const Icon(Icons.info_outline, size: 20, color: StreetFoodMafiaColors.cartelYellow),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Historical comparison is unsupported for snapshot balance families: ${_familyLabels[_family]}. Current balances are not historical snapshots.',
-                      style: const TextStyle(fontSize: 13, color: StreetFoodMafiaColors.cartelYellow),
+                  Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    runSpacing: 10,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(_family == AnalyticsFamily.overview ? 'Business overview' : _familyLabels[_family]!,
+                          style: WarmCounterTypography.brandHeading.copyWith(fontSize: 28)),
+                        const SizedBox(height: 4),
+                        Text(_query.live ? 'Active Business Day${_activeDate(snapshot)}' : 'Business Day reporting · Historical exploration',
+                          style: const TextStyle(color: StreetFoodMafiaColors.secondaryText, fontSize: 13)),
+                      ]),
+                      Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(_error != null ? Icons.error_outline : _query.live ? Icons.circle : Icons.history,
+                          size: 10, color: _error != null ? StreetFoodMafiaColors.statusCanceled : StreetFoodMafiaColors.statusReady),
+                        const SizedBox(width: 7),
+                        Text('${_query.live ? 'Live' : 'Historical'}${snapshot == null ? '' : ' · updated ${DateFormat('HH:mm').format(snapshot.generatedAt.isUtc ? snapshot.generatedAt.add(const Duration(hours: 5)) : snapshot.generatedAt)}'}',
+                          style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
+                      ]),
+                      if (snapshot != null && _error == null && widget.exportActionsBuilder != null)
+                        ConstrainedBox(constraints: const BoxConstraints(maxWidth: 320),
+                          child: widget.exportActionsBuilder!(context, snapshot, _family)),
+                    ],
+                  ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      icon: const Icon(Icons.history),
+                      label: const Text('Historical corrections'),
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => Scaffold(
+                            appBar: AppBar(title: const Text('Historical corrections')),
+                            body: HistoricalCorrectionsWorkspace(
+                              service: HistoricalCorrections(
+                                database: widget.service.database,
+                                auth: widget.service.authService,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
+                  const SizedBox(height: 18),
+                  _buildTwoTierCommandBar(context, constraints, snapshot),
+                  _activeFilterChips(),
+                  const SizedBox(height: 12),
+                  Text('${_query.live ? 'LIVE • refreshes every ${widget.refreshInterval.inSeconds}s' : 'Historical exploration'}'
+                    ' • Asia/Karachi • ${_query.live ? 'Active Business Day' : '${DateFormat('dd MMM yyyy').format(_query.startDate)} to ${DateFormat('dd MMM yyyy').format(_query.endDateExclusive)} (end exclusive)'}'
+                    '${snapshot == null ? '' : ' • ${snapshot.businessDayIds.length} Business Days'}',
+                    style: const TextStyle(color: StreetFoodMafiaColors.secondaryText, fontSize: 12)),
+                  if (!_query.live && _query.comparisonMode != AnalyticsComparisonMode.none && _query.priorStartDate != null && _query.priorEndDateExclusive != null)
+                    Text('Comparison: ${_query.comparisonMode == AnalyticsComparisonMode.comparableWeekday ? "Comparable weekday (last week)" : "Preceding period"}'
+                      ' • ${DateFormat('dd MMM yyyy').format(_query.priorStartDate!)} to ${DateFormat('dd MMM yyyy').format(_query.priorEndDateExclusive!)} (end exclusive)',
+                      style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
+                  Text('Order activity: ${_query.timeBasis == AnalyticsTimeBasis.businessDay ? 'assigned Business Day weekday' : 'actual calendar weekday'} • ${_query.grouping.name} • weeks start Monday • local calendar months. Other ledgers retain Business Day scope.', style: const TextStyle(fontSize: 12)),
+                  if (snapshot != null && _family != AnalyticsFamily.overview) Text(
+                    'Updated ${formatAnalyticsTimestamp(snapshot.generatedAt)?.displayLine ?? DateFormat('dd MMM yyyy HH:mm:ss').format(snapshot.generatedAt.isUtc ? snapshot.generatedAt.add(const Duration(hours: 5)) : snapshot.generatedAt)}'
+                    ' • ${snapshot.businessDayIds.length} Business Days in selection',
+                    style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
+                  if (snapshot != null) Text('Source schema ${snapshot.sourceSchemaVersion ?? "unavailable"} • ${snapshot.reportVersion} • cutoff ${formatAnalyticsTimestamp(snapshot.generatedAt)?.fullLabel ?? analyticsTimestamp(snapshot.generatedAt.toUtc().toIso8601String())}',
+                    style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
+                  const SizedBox(height: 8),
+                  if (_busy) const LinearProgressIndicator(minHeight: 2),
+                  if (_error != null) Card(child: Padding(padding: const EdgeInsets.all(12), child: Wrap(
+                    spacing: 12, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                      Text(_error!, style: const TextStyle(color: StreetFoodMafiaColors.statusCanceled)),
+                      TextButton(onPressed: _load, child: const Text('Retry')),
+                    ]))),
+                  if (snapshot == null && !_busy && _error == null) const Text('No analytics snapshot available.'),
+                  if (snapshot != null) ...[
+                    if (snapshot.businessDayIds.isEmpty) _note('No Business Days match this selection. Current-state datasets may still be available.'),
+                    if (_query.comparisonMode != AnalyticsComparisonMode.none && _snapshotBalanceFamilies.contains(_family))
+                      Container(
+                        key: const ValueKey('unsupported_comparison_banner'),
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: StreetFoodMafiaColors.cardSurface,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: StreetFoodMafiaColors.border),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.info_outline, size: 20, color: StreetFoodMafiaColors.cartelYellow),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'Historical comparison is unsupported for snapshot balance families: ${_familyLabels[_family]}. Current balances are not historical snapshots.',
+                                style: const TextStyle(fontSize: 13, color: StreetFoodMafiaColors.cartelYellow),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    if (_family == AnalyticsFamily.overview) _overview(snapshot) else ..._report(snapshot),
+                    ExpansionTile(tilePadding: EdgeInsets.zero,
+                      title: const Text('Reporting scope & methodology', style: TextStyle(fontSize: 13)),
+                      children: [
+                        _note('Business Day IDs: ${snapshot.businessDayIds.join(', ')}'),
+                        for (final note in snapshot.notes) _note(note),
+                      ]),
+                  ],
                 ],
               ),
             ),
-          if (_family == AnalyticsFamily.overview) _overview(snapshot) else ..._report(snapshot),
-          ExpansionTile(tilePadding: EdgeInsets.zero,
-            title: const Text('Reporting scope & methodology', style: TextStyle(fontSize: 13)),
-            children: [
-              _note('Business Day IDs: ${snapshot.businessDayIds.join(', ')}'),
-              for (final note in snapshot.notes) _note(note),
-            ]),
-        ],
-    ]);
+            if (_filtersExpanded)
+              Positioned(
+                top: 0,
+                bottom: 0,
+                right: 0,
+                width: drawerWidth,
+                child: Material(
+                  elevation: 16,
+                  color: StreetFoodMafiaColors.darkNavy,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: StreetFoodMafiaColors.darkNavy,
+                      border: const Border(
+                        left: BorderSide(color: StreetFoodMafiaColors.border, width: 1.5),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.4),
+                          blurRadius: 16,
+                          offset: const Offset(-4, 0),
+                        ),
+                      ],
+                    ),
+                    child: _filterDrawer(),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
   }
-
-  Widget _filterPanel() => ExpansionTile(
-    initiallyExpanded: true,
-    key: const ValueKey('analytics_filters'), tilePadding: EdgeInsets.zero,
-    dense: true,
-    leading: const Icon(Icons.tune_rounded, size: 18),
-    title: const Text('Report filters & Hold aging', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-    subtitle: Text(_query.cashierId == null && _query.shiftId == null && _query.diningType == null && _query.paymentMethod == null
-      ? 'All cashiers, shifts, Dining Types and payment methods' : 'Filters applied • inspect each report’s scope notes',
-      style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
-    children: [Form(key: _filtersKey, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Text('Cashier and Shift select owning/receiving drawers. Dining Type and payment method narrow order/activity breakdowns only; whole-Shift cash accountability is unchanged. Other reports retain their stated scope.',
-        style: TextStyle(color: StreetFoodMafiaColors.secondaryText, fontSize: 12)),
-      const SizedBox(height: 8),
-      Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-        _idInput(_cashier, 'Cashier ID', 'analytics_cashier'),
-        _idInput(_shift, 'Shift ID', 'analytics_shift'),
-        SizedBox(width: 210, child: DropdownButtonFormField<int>(
-          key: const ValueKey('analytics_hold_stale_minutes'), value: _query.holdStaleMinutes, isExpanded: true,
-          decoration: const InputDecoration(labelText: 'Hold stale after (minutes)', border: OutlineInputBorder(), isDense: true),
-          items: [for (final minutes in ({15, 30, 60, 120, 240, _query.holdStaleMinutes}.toList()..sort()))
-            DropdownMenuItem(value: minutes, child: Text('$minutes minutes'))],
-          onChanged: (value) { if (value != null) _changeQuery(_query.copyWith(holdStaleMinutes: value)); },
-        )),
-        SizedBox(width: 160, child: DropdownButtonFormField<String>(
-          mouseCursor: WidgetStateMouseCursor.clickable,
-          key: const ValueKey('analytics_dining'), value: _dining, isExpanded: true,
-          decoration: const InputDecoration(labelText: 'Dining Type', border: OutlineInputBorder(), isDense: true),
-          items: [const DropdownMenuItem<String>(value: null, child: Text('All')),
-            for (final type in DiningType.values)
-              DropdownMenuItem(value: type.code, child: Text(type.displayName))],
-          onChanged: (value) => setState(() => _dining = value),
-        )),
-        SizedBox(width: 180, child: DropdownButtonFormField<String>(
-          mouseCursor: WidgetStateMouseCursor.clickable,
-          key: const ValueKey('analytics_payment'), value: _payment, isExpanded: true,
-          decoration: const InputDecoration(labelText: 'Payment method', border: OutlineInputBorder(), isDense: true),
-          items: [const DropdownMenuItem<String>(value: null, child: Text('All')),
-            for (final method in PaymentMethod.values.where((method) => method != PaymentMethod.split))
-              DropdownMenuItem(value: method.code, child: Text(method.displayName))],
-          onChanged: (value) => setState(() => _payment = value),
-        )),
-        FilledButton(key: const ValueKey('analytics_apply_filters'), onPressed: _applyFilters, child: const Text('Apply')),
-        TextButton(onPressed: () {
-          _changeQuery(_query.copyWith(domainFilters: {}, fundingStream: null));
-          _cashier.clear(); _shift.clear();
-          setState(() { _dining = null; _payment = null; });
-          _applyFilters();
-        }, child: const Text('Clear')),
-      ]),
-      const SizedBox(height: 12),
-      AnalyticsDomainFilters(query: _query, options: _snapshot?.filterOptions ?? const [], onChanged: _changeQuery),
-    ]))],
-  );
 
   Widget _overview(AnalyticsSnapshot snapshot) {
     final sections = snapshot.sections.where((s) => s.family == AnalyticsFamily.overview).toList();
@@ -1165,6 +1715,93 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
     ]);
   });
 
+  Color _domainColorForMetric(AnalyticsMetric metric) {
+    final id = metric.id.toLowerCase();
+    // 1. Risk / Discrepancies / Waste / Negative stock (#EF4444)
+    if (id.contains('negative') ||
+        id.contains('variance') ||
+        id.contains('discrepancy') ||
+        id.contains('stale') ||
+        id.contains('risk') ||
+        id.contains('waste') ||
+        id.contains('void') ||
+        id.contains('leakage') ||
+        id.contains('loss')) {
+      return const Color(0xFFEF4444);
+    }
+    // 2. Orders / Health / Count (#10B981)
+    if (id == 'orders' ||
+        id.contains('order') ||
+        id.contains('health') ||
+        id.contains('complete') ||
+        (metric.unit == AnalyticsUnit.count && !id.contains('rider') && !id.contains('staff'))) {
+      return const Color(0xFF10B981);
+    }
+    // 3. Labor / Delivery / Speed / Fulfillment (#3B82F6)
+    if (metric.unit == AnalyticsUnit.minutes ||
+        id.contains('delivery') ||
+        id.contains('rider') ||
+        id.contains('labor') ||
+        id.contains('staff') ||
+        id.contains('speed') ||
+        id.contains('duration') ||
+        id.contains('transit') ||
+        id.contains('eta')) {
+      return const Color(0xFF3B82F6);
+    }
+    // 4. Revenue / Cash / Financials (#FFC400)
+    if (metric.unit == AnalyticsUnit.paisa ||
+        id.contains('sales') ||
+        id.contains('revenue') ||
+        id.contains('cash') ||
+        id.contains('drawer') ||
+        id.contains('ticket') ||
+        id.contains('due') ||
+        id.contains('cogs') ||
+        id.contains('profit') ||
+        id.contains('margin') ||
+        id.contains('recorded')) {
+      return const Color(0xFFFFC400);
+    }
+    return const Color(0xFFFFC400);
+  }
+
+  Widget _buildDeltaBadge(AnalyticsMetric metric) {
+    final comparisonTarget = _query.comparisonMode == AnalyticsComparisonMode.comparableWeekday
+        ? 'vs last week'
+        : 'vs last period';
+    final isPositive = (metric.changePercent ?? metric.changeAbsolute?.toDouble() ?? 0) >= 0;
+    final arrow = isPositive ? '▲' : '▼';
+    final sign = isPositive ? '+' : '';
+    final String text;
+    if (metric.changePercent != null) {
+      text = '$arrow $sign${metric.changePercent!.toStringAsFixed(1)}% $comparisonTarget';
+    } else if (metric.changeAbsolute != null) {
+      text = '$arrow $sign${_format(metric.changeAbsolute, metric.unit)} $comparisonTarget';
+    } else {
+      return const SizedBox.shrink();
+    }
+
+    final badgeColor = isPositive ? const Color(0xFF10B981) : const Color(0xFFEF4444);
+    return Container(
+      key: ValueKey('metric_delta_badge_${metric.id}'),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: badgeColor.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: badgeColor.withOpacity(0.4), width: 1),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: badgeColor,
+        ),
+      ),
+    );
+  }
+
   Widget _metricCard(AnalyticsMetric metric, {bool compact = false}) {
     final quality = switch (metric.quality) {
       AnalyticsQuality.complete => 'Complete',
@@ -1173,6 +1810,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
       AnalyticsQuality.notApplicable => 'Not applicable',
     };
     final available = metric.value != null;
+    final domainColor = _domainColorForMetric(metric);
     final icon = switch (metric.id) {
       'recorded_value' => Icons.monetization_on_outlined,
       'orders' => Icons.receipt_long_outlined,
@@ -1202,63 +1840,90 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
       key: ValueKey('metric_card_${metric.id}'),
       borderRadius: BorderRadius.circular(12),
       onTap: () => _openKpiContributors(metric),
-      child: Container(constraints: BoxConstraints(minHeight: compact ? 124 : 134),
-        decoration: BoxDecoration(color: StreetFoodMafiaColors.darkNavy,
+      child: Container(
+        constraints: BoxConstraints(minHeight: compact ? 124 : 134),
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: StreetFoodMafiaColors.darkNavy,
           border: Border.all(color: StreetFoodMafiaColors.border),
-          borderRadius: BorderRadius.circular(12)),
-        child: Padding(padding: const EdgeInsets.all(16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Icon(icon, size: 22, color: StreetFoodMafiaColors.cartelYellow),
-            const SizedBox(width: 10),
-            Expanded(child: Text(compact ? switch (metric.id) {
-              'collection_due' => 'Collection Due',
-              'all_collection_due' => 'Outstanding collections',
-              'negative_stock' => 'Negative stock items',
-              _ => metric.label,
-            } : metric.label, style: const TextStyle(fontSize: 12,
-              fontWeight: FontWeight.w600, color: StreetFoodMafiaColors.secondaryText))),
-            const SizedBox(width: 8),
-            Tooltip(message: metric.explanation, child: const Icon(Icons.info_outline,
-              size: 16, color: StreetFoodMafiaColors.secondaryText)),
-          ]),
-          const SizedBox(height: 12),
-          Text(_format(metric.value, metric.unit),
-            style: TextStyle(fontSize: available ? 25 : 22, height: 1.2,
-              letterSpacing: -0.6, fontWeight: FontWeight.w700, color: StreetFoodMafiaColors.offWhite)),
-          if (metric.quality != AnalyticsQuality.complete) ...[
-            const SizedBox(height: 8),
-            Text(quality, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
-              color: StreetFoodMafiaColors.burntGold)),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: 4,
+              child: Container(
+                key: ValueKey('metric_domain_accent_${metric.id}'),
+                color: domainColor,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Icon(icon, size: 22, color: domainColor),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text(compact ? switch (metric.id) {
+                      'collection_due' => 'Collection Due',
+                      'all_collection_due' => 'Outstanding collections',
+                      'negative_stock' => 'Negative stock items',
+                      _ => metric.label,
+                    } : metric.label, style: const TextStyle(fontSize: 12,
+                      fontWeight: FontWeight.w600, color: StreetFoodMafiaColors.secondaryText))),
+                    const SizedBox(width: 8),
+                    Tooltip(message: metric.explanation, child: const Icon(Icons.info_outline,
+                      size: 16, color: StreetFoodMafiaColors.secondaryText)),
+                  ]),
+                  const SizedBox(height: 12),
+                  Text(_format(metric.value, metric.unit),
+                    style: TextStyle(fontSize: available ? 25 : 22, height: 1.2,
+                      letterSpacing: -0.6, fontWeight: FontWeight.w700, color: StreetFoodMafiaColors.offWhite)),
+                  if (metric.quality != AnalyticsQuality.complete) ...[
+                    const SizedBox(height: 8),
+                    Text(quality, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
+                      color: StreetFoodMafiaColors.burntGold)),
+                  ],
+                  const SizedBox(height: 8),
+                  Tooltip(message: metric.explanation, child: Text(summary,
+                    maxLines: 2, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11, height: 1.5, color: StreetFoodMafiaColors.secondaryText))),
+                  if (metric.id == 'negative_stock' && metric.value == 0 && metric.quality == AnalyticsQuality.complete)
+                    const Padding(padding: EdgeInsets.only(top: 6), child: Row(children: [
+                      Icon(Icons.check_circle, size: 15, color: StreetFoodMafiaColors.statusReady),
+                      SizedBox(width: 6), Text('No negative stock', style: TextStyle(fontSize: 11,
+                        color: StreetFoodMafiaColors.statusReady)),
+                    ])),
+                  if (metric.sampleCount != null && !compact) Text('Coverage: ${metric.sampleCount}'
+                    '${metric.populationCount == null ? ' valid samples' : ' / ${metric.populationCount}'}', style: const TextStyle(fontSize: 12)),
+                  if (metric.isBalance && _query.comparisonMode != AnalyticsComparisonMode.none)
+                    const Text('Comparison: Not applicable (snapshot balance)',
+                      style: TextStyle(fontSize: 11, color: StreetFoodMafiaColors.secondaryText)),
+                  if (!metric.isBalance && _query.comparisonMode != AnalyticsComparisonMode.none) ...[
+                    const SizedBox(height: 6),
+                    _buildDeltaBadge(metric),
+                    const SizedBox(height: 4),
+                    if (metric.priorValue != null)
+                      Text('Prior: ${_format(metric.priorValue, metric.unit)}',
+                        style: const TextStyle(fontSize: 12)),
+                    if (metric.changeAbsolute != null) Text('Change: ${metric.changeAbsolute! >= 0 ? '+' : ''}'
+                      '${_format(metric.changeAbsolute, metric.unit)} vs ${_query.comparisonMode == AnalyticsComparisonMode.comparableWeekday ? "comparable weekday" : "preceding comparable period"}', style: const TextStyle(fontSize: 12)),
+                    if (metric.changePercent != null) Text('${metric.changePercent! >= 0 ? '+' : ''}'
+                      '${metric.changePercent!.toStringAsFixed(1)}% vs ${_query.comparisonMode == AnalyticsComparisonMode.comparableWeekday ? "comparable weekday" : "preceding comparable period"}', style: const TextStyle(fontSize: 12)),
+                    if (metric.changePercent == null && metric.priorValue == 0)
+                      const Text('Percent change: Unavailable (zero baseline)',
+                        style: TextStyle(fontSize: 11, color: StreetFoodMafiaColors.secondaryText)),
+                  ],
+                ],
+              ),
+            ),
           ],
-          const SizedBox(height: 8),
-          Tooltip(message: metric.explanation, child: Text(summary,
-            maxLines: 2, overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 11, height: 1.5, color: StreetFoodMafiaColors.secondaryText))),
-          if (metric.id == 'negative_stock' && metric.value == 0 && metric.quality == AnalyticsQuality.complete)
-            const Padding(padding: EdgeInsets.only(top: 6), child: Row(children: [
-              Icon(Icons.check_circle, size: 15, color: StreetFoodMafiaColors.statusReady),
-              SizedBox(width: 6), Text('No negative stock', style: TextStyle(fontSize: 11,
-                color: StreetFoodMafiaColors.statusReady)),
-            ])),
-          if (metric.sampleCount != null && !compact) Text('Coverage: ${metric.sampleCount}'
-            '${metric.populationCount == null ? ' valid samples' : ' / ${metric.populationCount}'}', style: const TextStyle(fontSize: 12)),
-          if (metric.isBalance && _query.comparisonMode != AnalyticsComparisonMode.none)
-            const Text('Comparison: Not applicable (snapshot balance)',
-              style: TextStyle(fontSize: 11, color: StreetFoodMafiaColors.secondaryText)),
-          if (!metric.isBalance && _query.comparisonMode != AnalyticsComparisonMode.none) ...[
-            if (metric.priorValue != null)
-              Text('Prior: ${_format(metric.priorValue, metric.unit)}',
-                style: const TextStyle(fontSize: 12)),
-            if (metric.changeAbsolute != null) Text('Change: ${metric.changeAbsolute! >= 0 ? '+' : ''}'
-              '${_format(metric.changeAbsolute, metric.unit)} vs ${_query.comparisonMode == AnalyticsComparisonMode.comparableWeekday ? "comparable weekday" : "preceding comparable period"}', style: const TextStyle(fontSize: 12)),
-            if (metric.changePercent != null) Text('${metric.changePercent! >= 0 ? '+' : ''}'
-              '${metric.changePercent!.toStringAsFixed(1)}% vs ${_query.comparisonMode == AnalyticsComparisonMode.comparableWeekday ? "comparable weekday" : "preceding comparable period"}', style: const TextStyle(fontSize: 12)),
-            if (metric.changePercent == null && metric.priorValue == 0)
-              const Text('Percent change: Unavailable (zero baseline)',
-                style: TextStyle(fontSize: 11, color: StreetFoodMafiaColors.secondaryText)),
-          ],
-        ]))),
+        ),
+      ),
     );
   }
 

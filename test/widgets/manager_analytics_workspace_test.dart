@@ -468,4 +468,264 @@ void main() {
     expect(find.textContaining('naive legacy timestamp'), findsNothing);
     expect(find.textContaining('[Asia/Karachi]'), findsNothing);
   });
+
+  testWidgets('Two-Tier Command Bar segmented pills switch core views and synchronize with full catalog dropdown', (tester) async {
+    tester.view.physicalSize = const Size(1366, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: ManagerAnalyticsWorkspace(
+          service: SnapshotService(),
+          clock: () => DateTime(2026, 10, 26, 12),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('analytics_core_view_pills')), findsOneWidget);
+    expect(find.text('Overview'), findsWidgets);
+    expect(find.text('Sales'), findsWidgets);
+    expect(find.text('Cash & shifts'), findsWidgets);
+    expect(find.text('Order operations'), findsWidgets);
+
+    await tester.tap(find.text('Sales').first);
+    await tester.pumpAndSettle();
+
+    final dropdown = tester.widget<DropdownButtonFormField<AnalyticsFamily>>(
+      find.byKey(const ValueKey('analytics_family')),
+    );
+    expect(dropdown.value, AnalyticsFamily.sales);
+
+    await tester.tap(find.text('Cash & shifts').first);
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<DropdownButtonFormField<AnalyticsFamily>>(
+        find.byKey(const ValueKey('analytics_family')),
+      ).value,
+      AnalyticsFamily.cash,
+    );
+
+    tester.widget<DropdownButtonFormField<AnalyticsFamily>>(
+      find.byKey(const ValueKey('analytics_family')),
+    ).onChanged!(AnalyticsFamily.inventory);
+    await tester.pumpAndSettle();
+
+    final pills = tester.widget<SegmentedButton<AnalyticsFamily>>(
+      find.byKey(const ValueKey('analytics_core_view_pills')),
+    );
+    expect(pills.selected.isEmpty, isTrue);
+
+    tester.widget<DropdownButtonFormField<AnalyticsFamily>>(
+      find.byKey(const ValueKey('analytics_family')),
+    ).onChanged!(AnalyticsFamily.overview);
+    await tester.pumpAndSettle();
+
+    final pillsAfter = tester.widget<SegmentedButton<AnalyticsFamily>>(
+      find.byKey(const ValueKey('analytics_core_view_pills')),
+    );
+    expect(pillsAfter.selected, {AnalyticsFamily.overview});
+  });
+
+  testWidgets('Quick date preset chips switch reporting periods and synchronize with period dropdown', (tester) async {
+    tester.view.physicalSize = const Size(1366, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    AnalyticsQuery? requested;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: ManagerAnalyticsWorkspace(
+          service: SnapshotService(onLoad: (query) async {
+            requested = query;
+            return SnapshotService.fixture(query);
+          }),
+          clock: () => DateTime(2026, 10, 26, 12),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('preset_chip_live')), findsOneWidget);
+    expect(find.byKey(const ValueKey('preset_chip_today')), findsOneWidget);
+    expect(find.byKey(const ValueKey('preset_chip_yesterday')), findsOneWidget);
+    expect(find.byKey(const ValueKey('preset_chip_week')), findsOneWidget);
+    expect(find.byKey(const ValueKey('preset_chip_month_to_date')), findsOneWidget);
+    expect(find.byKey(const ValueKey('preset_chip_custom')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('preset_chip_yesterday')));
+    await tester.pumpAndSettle();
+
+    expect(requested!.live, isFalse);
+    expect(requested!.startDate, DateTime(2026, 10, 25));
+    expect(requested!.endDateExclusive, DateTime(2026, 10, 26));
+    expect(
+      tester.widget<DropdownButtonFormField<String>>(
+        find.byKey(const ValueKey('analytics_period')),
+      ).value,
+      'yesterday',
+    );
+
+    await tester.tap(find.byKey(const ValueKey('preset_chip_week')));
+    await tester.pumpAndSettle();
+
+    expect(requested!.live, isFalse);
+    expect(requested!.endDateExclusive.difference(requested!.startDate).inDays, 7);
+    expect(
+      tester.widget<DropdownButtonFormField<String>>(
+        find.byKey(const ValueKey('analytics_period')),
+      ).value,
+      'week',
+    );
+
+    await tester.tap(find.byKey(const ValueKey('preset_chip_live')));
+    await tester.pumpAndSettle();
+    expect(requested!.live, isTrue);
+  });
+
+  testWidgets('Interactive audit provenance pill opens methodology modal with cutoff, schema, and day count', (tester) async {
+    tester.view.physicalSize = const Size(1366, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: ManagerAnalyticsWorkspace(
+          service: SnapshotService(),
+          clock: () => DateTime(2026, 10, 26, 12),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    final pillFinder = find.byKey(const ValueKey('analytics_audit_provenance_pill'));
+    expect(pillFinder, findsOneWidget);
+    expect(find.textContaining('Karachi (UTC+05:00)'), findsOneWidget);
+    expect(find.textContaining('Schema v28'), findsOneWidget);
+
+    await tester.tap(pillFinder);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('analytics_audit_modal')), findsOneWidget);
+    expect(find.text('Audit Provenance & Methodology'), findsOneWidget);
+    expect(find.text('Karachi Timezone Cutoff'), findsOneWidget);
+    expect(find.textContaining('Schema v28'), findsWidgets);
+    expect(find.textContaining('1 Business Days'), findsOneWidget);
+    expect(find.text('Close'), findsOneWidget);
+
+    await tester.tap(find.text('Close'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('analytics_audit_modal')), findsNothing);
+  });
+
+  testWidgets('Slide-over filter drawer displays active filter count badge and resets all filters in 1 tap', (tester) async {
+    tester.view.physicalSize = const Size(1366, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    AnalyticsQuery? requested;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: ManagerAnalyticsWorkspace(
+          service: SnapshotService(onLoad: (query) async {
+            requested = query;
+            return SnapshotService.fixture(query);
+          }),
+          clock: () => DateTime(2026, 10, 26, 12),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('⚡ Filters'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('analytics_filters_toggle')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const ValueKey('analytics_cashier')), '5');
+    await tester.enterText(find.byKey(const ValueKey('analytics_shift')), '2');
+    await tester.ensureVisible(find.byKey(const ValueKey('analytics_apply_filters')));
+    await tester.tap(find.byKey(const ValueKey('analytics_apply_filters')));
+    await tester.pumpAndSettle();
+
+    expect(requested!.cashierId, 5);
+    expect(requested!.shiftId, 2);
+
+    expect(find.text('⚡ Filters (2)'), findsOneWidget);
+    expect(find.text('Cashier #5'), findsOneWidget);
+    expect(find.text('Shift #2'), findsOneWidget);
+
+    await tester.ensureVisible(find.byKey(const ValueKey('analytics_drawer_reset_all')));
+    await tester.tap(find.byKey(const ValueKey('analytics_drawer_reset_all')));
+    await tester.pumpAndSettle();
+
+    expect(requested!.cashierId, isNull);
+    expect(requested!.shiftId, isNull);
+    expect(requested!.hasOrderFilters, isFalse);
+    expect(find.text('⚡ Filters'), findsOneWidget);
+  });
+
+  testWidgets('KPI cards render 4px domain left-accent borders and compact delta comparison badges', (tester) async {
+    tester.view.physicalSize = const Size(1366, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: ManagerAnalyticsWorkspace(
+          service: SnapshotService(),
+          clock: () => DateTime(2026, 10, 26, 12),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    tester.widget<DropdownButtonFormField<AnalyticsComparisonMode>>(
+      find.byKey(const ValueKey('analytics_comparison_mode')),
+    ).onChanged!(AnalyticsComparisonMode.precedingPeriod);
+    await tester.pumpAndSettle();
+
+    final revenueAccent = tester.widget<Container>(
+      find.byKey(const ValueKey('metric_domain_accent_recorded')),
+    );
+    expect(revenueAccent.color, const Color(0xFFFFC400));
+
+    expect(find.byKey(const ValueKey('metric_delta_badge_recorded')), findsOneWidget);
+    expect(find.textContaining('▲ +PKR 1,234.50 vs last period'), findsOneWidget);
+  });
+
+  testWidgets('Snapshot balance families proactively disable comparison mode with tooltip', (tester) async {
+    tester.view.physicalSize = const Size(1366, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: ManagerAnalyticsWorkspace(
+          service: SnapshotService(),
+          clock: () => DateTime(2026, 10, 26, 12),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    tester.widget<DropdownButtonFormField<AnalyticsFamily>>(
+      find.byKey(const ValueKey('analytics_family')),
+    ).onChanged!(AnalyticsFamily.inventory);
+    await tester.pumpAndSettle();
+
+    final comparisonDropdown = tester.widget<DropdownButtonFormField<AnalyticsComparisonMode>>(
+      find.byKey(const ValueKey('analytics_comparison_mode')),
+    );
+    expect(comparisonDropdown.onChanged, isNull);
+
+    expect(find.byTooltip('Historical comparison is disabled for snapshot balance families: Inventory. Current balances are not historical snapshots.'), findsOneWidget);
+  });
 }
