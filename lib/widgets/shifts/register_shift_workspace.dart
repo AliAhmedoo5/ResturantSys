@@ -266,15 +266,24 @@ class _RegisterShiftWorkspaceState extends State<RegisterShiftWorkspace> {
     );
   }
 
-  void _showBlindShiftCloseDialog() {
+  Future<void> _showBlindShiftCloseDialog() async {
     final shift = _activeShift;
     if (shift == null) return;
+
+    double? expected;
+    try {
+      final report = await widget.controller.generateXReport(shift.id);
+      expected = report.expectedDrawerCash;
+    } catch (_) {}
+
+    if (!mounted) return;
 
     showDialog<void>(
       context: context,
       builder: (ctx) => BlindShiftCloseDialog(
         shiftId: shift.id,
         cashierName: shift.staffName ?? widget.currentStaff.name,
+        expectedCash: expected,
         onSubmitBlindCount: (countedCash) async {
           final closedShift = await widget.controller.closeShift(
             shiftId: shift.id,

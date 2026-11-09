@@ -163,12 +163,41 @@ class _SettlementPaymentDialogState extends State<SettlementPaymentDialog> {
                   value: VendorPaymentSource.owner, groupValue: _paymentSource,
                   onChanged: (value) => setState(() => _paymentSource = value!),
                 ),
-                TextFormField(key: const Key('settlement_actual_time_field'), controller: _actualController,
-                  decoration: const InputDecoration(labelText: 'Actual Pakistan time (YYYY-MM-DD HH:MM, blank = now)'),
+                TextFormField(
+                  key: const Key('settlement_actual_time_field'),
+                  controller: _actualController,
+                  decoration: InputDecoration(
+                    labelText: 'Actual Pakistan time (YYYY-MM-DD HH:MM, blank = now)',
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.calendar_month_rounded),
+                      tooltip: 'Select date & time',
+                      onPressed: () async {
+                        final now = DateTime.now();
+                        final pickedDate = await showDatePicker(
+                          context: context,
+                          initialDate: now,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime(2040),
+                        );
+                        if (pickedDate != null && mounted) {
+                          final pickedTime = await showTimePicker(
+                            context: context,
+                            initialTime: TimeOfDay(hour: now.hour, minute: now.minute),
+                          );
+                          if (pickedTime != null) {
+                            final dStr = '${pickedDate.year.toString().padLeft(4, '0')}-${pickedDate.month.toString().padLeft(2, '0')}-${pickedDate.day.toString().padLeft(2, '0')}';
+                            final tStr = '${pickedTime.hour.toString().padLeft(2, '0')}:${pickedTime.minute.toString().padLeft(2, '0')}';
+                            _actualController.text = '$dStr $tStr';
+                          }
+                        }
+                      },
+                    ),
+                  ),
                   validator: (value) {
                     try { parseActualEventTime(value); return null; }
                     on FormatException { return 'Enter a valid Pakistan time: YYYY-MM-DD HH:MM'; }
-                  }),
+                  },
+                ),
                 const SizedBox(height: 12),
 
                 // Current Payable Balance Card

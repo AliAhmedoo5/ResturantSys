@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/delivery/delivery_controller.dart';
 import '../../core/orders/customer_controller.dart';
 
 class CustomerSelection {
@@ -60,6 +61,15 @@ class _CustomerDirectoryState extends State<CustomerDirectory> {
         if (error != null) Text(error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
       ]))), actions: [TextButton(onPressed: saving ? null : () => Navigator.pop(context), child: const Text('Cancel')),
         FilledButton(onPressed: saving ? null : () async {
+          final normalized = DeliveryController.normalizePhone(phone.text.trim());
+          if (name.text.trim().isEmpty) {
+            update(() => error = 'Please enter a name.');
+            return;
+          }
+          if (normalized.length != 11) {
+            update(() => error = 'Please enter a standard 11-digit mobile number (e.g. 03001234567).');
+            return;
+          }
           update(() => saving = true);
           try {
             savedCustomer = await widget.controller.save(staffId: widget.staffId, id: customer?.id,

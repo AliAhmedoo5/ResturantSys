@@ -72,7 +72,13 @@ class _DeliveryDetailsDialogState extends State<DeliveryDetailsDialog> {
     content: SizedBox(width: 520, child: _loading ? const Center(child: CircularProgressIndicator()) : SingleChildScrollView(child: Form(key: _form, child: Column(mainAxisSize: MainAxisSize.min, children: [
       TextFormField(key: const ValueKey('delivery_phone'), controller: _phone, autofocus: true, keyboardType: TextInputType.phone,
         decoration: const InputDecoration(labelText: 'Customer phone', helperText: 'Type to search saved addresses'), onChanged: _lookup,
-        validator: (v) => DeliveryController.normalizePhone(v ?? '').length < 7 ? 'Enter a phone number' : null),
+        validator: (v) {
+          final normalized = DeliveryController.normalizePhone(v ?? '');
+          if (normalized.length != 11) {
+            return 'Enter a standard 11-digit mobile number (e.g. 03001234567)';
+          }
+          return null;
+        }),
       if (_matches.isNotEmpty) SizedBox(height: 100, child: ListView(children: _matches.map((a) => ListTile(dense: true,
         title: Text('${a.customerName} • ${a.phone}'), subtitle: Text(a.fullAddress), onTap: () => setState(() => _fill(a)))).toList())),
       TextFormField(key: const ValueKey('delivery_name'), controller: _name, decoration: const InputDecoration(labelText: 'Customer name')),

@@ -12,11 +12,13 @@ class BlindShiftCloseDialog extends StatefulWidget {
     required this.shiftId,
     required this.cashierName,
     required this.onSubmitBlindCount,
+    this.expectedCash,
   });
 
   final int shiftId;
   final String cashierName;
   final Future<void> Function(double countedCash) onSubmitBlindCount;
+  final double? expectedCash;
 
   @override
   State<BlindShiftCloseDialog> createState() => _BlindShiftCloseDialogState();
@@ -173,6 +175,31 @@ class _BlindShiftCloseDialogState extends State<BlindShiftCloseDialog> {
               ],
             ),
             const Divider(height: WarmCounterSpacing.space24, color: WarmCounterColors.lightBorder),
+
+            if (widget.expectedCash != null) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: WarmCounterSpacing.space16, vertical: WarmCounterSpacing.space12),
+                decoration: BoxDecoration(
+                  color: WarmCounterColors.lightActiveNavHighlight,
+                  borderRadius: WarmCounterSpacing.controlBorderRadius,
+                  border: Border.all(color: WarmCounterColors.lightBorder),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Calculated Expected Cash:',
+                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                    ),
+                    Text(
+                      'PKR ${NumberFormat('#,##0.00').format(widget.expectedCash)}',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: WarmCounterColors.lightPrimaryAction),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: WarmCounterSpacing.space12),
+            ],
 
             // Mode Selector: Direct Total vs Denomination Note Counter
             Row(

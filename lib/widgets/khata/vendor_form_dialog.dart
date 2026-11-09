@@ -161,6 +161,10 @@ class _VendorFormDialogState extends State<VendorFormDialog> {
                     if (value == null || value.trim().isEmpty) {
                       return 'Please enter phone number';
                     }
+                    final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
+                    if (digits.length != 11) {
+                      return 'Please enter a standard 11-digit phone number (e.g. 03001234567)';
+                    }
                     return null;
                   },
                 ),

@@ -285,12 +285,38 @@ class _RiderTripSettlementDialogState extends State<RiderTripSettlementDialog> {
                 TextFormField(
                   key: const ValueKey('rider_settlement_actual_time'),
                   controller: _actualTime,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Actual handover / confirmation time (Pakistan)',
                     hintText: 'YYYY-MM-DD HH:MM; blank = now',
                     helperText: 'Must be within this open receiving Shift. Recording time stays unchanged.',
                     helperMaxLines: 2,
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.calendar_month_rounded),
+                      tooltip: 'Select date & time',
+                      onPressed: () async {
+                        final now = DateTime.now();
+                        final pickedDate = await showDatePicker(
+                          context: context,
+                          initialDate: now,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime(2040),
+                        );
+                        if (pickedDate != null && mounted) {
+                          final pickedTime = await showTimePicker(
+                            context: context,
+                            initialTime: TimeOfDay(hour: now.hour, minute: now.minute),
+                          );
+                          if (pickedTime != null) {
+                            final dStr =
+                                '${pickedDate.year.toString().padLeft(4, '0')}-${pickedDate.month.toString().padLeft(2, '0')}-${pickedDate.day.toString().padLeft(2, '0')}';
+                            final tStr =
+                                '${pickedTime.hour.toString().padLeft(2, '0')}:${pickedTime.minute.toString().padLeft(2, '0')}';
+                            _actualTime.text = '$dStr $tStr';
+                          }
+                        }
+                      },
+                    ),
                   ),
                   validator: (value) {
                     try { parseActualEventTime(value); return null; }

@@ -8,11 +8,13 @@ typedef _Row = Map<String,Object?>;
 /// Shared manager forms keep validation errors and entered values in the dialog.
 class OperationField {
   const OperationField(this.name, this.label, {this.initial = '', this.options,
-      this.required = true, this.onAdd});
+      this.required = true, this.onAdd, this.isDate = false, this.isTime = false,
+      this.isDateTime = false, this.isMonthYear = false});
   final String name, label, initial;
   final Map<String,String>? options;
   final bool required;
   final Future<MapEntry<String,String>?> Function()? onAdd;
+  final bool isDate, isTime, isDateTime, isMonthYear;
 }
 
 Future<void> showOperationForm(BuildContext context, {required String title,
@@ -57,6 +59,104 @@ class _OperationFormState extends State<_OperationForm> {
       if (mounted) setState(() { _error = e.toString(); _saving = false; });
     }
   }
+
+  Widget? _buildSuffixIcon(OperationField f) {
+    if (f.isDate || f.name == 'work_date') {
+      return IconButton(
+        icon: const Icon(Icons.calendar_today_rounded),
+        tooltip: 'Select date',
+        onPressed: _saving ? null : () async {
+          final current = DateTime.tryParse(_controllers[f.name]!.text.trim()) ?? DateTime.now();
+          final picked = await showDatePicker(
+            context: context,
+            initialDate: current,
+            firstDate: DateTime(2020),
+            lastDate: DateTime(2040),
+          );
+          if (picked != null) {
+            _controllers[f.name]!.text =
+                '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+          }
+        },
+      );
+    }
+    if (f.isTime || f.name == 'clock_in' || f.name == 'clock_out') {
+      return IconButton(
+        icon: const Icon(Icons.access_time_rounded),
+        tooltip: 'Select time',
+        onPressed: _saving ? null : () async {
+          TimeOfDay initial = const TimeOfDay(hour: 12, minute: 0);
+          final text = _controllers[f.name]!.text.trim();
+          if (text.isNotEmpty) {
+            final parts = text.contains(' ') ? text.split(' ').last.split(':') : text.split(':');
+            if (parts.length >= 2) {
+              final h = int.tryParse(parts[0]);
+              final m = int.tryParse(parts[1]);
+              if (h != null && m != null) initial = TimeOfDay(hour: h, minute: m);
+            }
+          }
+          final picked = await showTimePicker(
+            context: context,
+            initialTime: initial,
+          );
+          if (picked != null) {
+            _controllers[f.name]!.text =
+                '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+          }
+        },
+      );
+    }
+    if (f.isDateTime || f.name == 'actual') {
+      return IconButton(
+        icon: const Icon(Icons.calendar_month_rounded),
+        tooltip: 'Select date & time',
+        onPressed: _saving ? null : () async {
+          final now = DateTime.now();
+          final pickedDate = await showDatePicker(
+            context: context,
+            initialDate: now,
+            firstDate: DateTime(2020),
+            lastDate: DateTime(2040),
+          );
+          if (pickedDate != null && mounted) {
+            final pickedTime = await showTimePicker(
+              context: context,
+              initialTime: TimeOfDay(hour: now.hour, minute: now.minute),
+            );
+            if (pickedTime != null) {
+              final dStr =
+                  '${pickedDate.year.toString().padLeft(4, '0')}-${pickedDate.month.toString().padLeft(2, '0')}-${pickedDate.day.toString().padLeft(2, '0')}';
+              final tStr =
+                  '${pickedTime.hour.toString().padLeft(2, '0')}:${pickedTime.minute.toString().padLeft(2, '0')}';
+              _controllers[f.name]!.text = '$dStr $tStr';
+            }
+          }
+        },
+      );
+    }
+    if (f.isMonthYear || f.name == 'period') {
+      return IconButton(
+        icon: const Icon(Icons.date_range_rounded),
+        tooltip: 'Select year & month',
+        onPressed: _saving ? null : () async {
+          final now = DateTime.now();
+          final picked = await showDatePicker(
+            context: context,
+            initialDate: now,
+            firstDate: DateTime(2020),
+            lastDate: DateTime(2040),
+            initialDatePickerMode: DatePickerMode.year,
+          );
+          if (picked != null) {
+            _controllers[f.name]!.text =
+                '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}';
+          }
+        },
+      );
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) => AlertDialog(
     title: Text(widget.title),
@@ -65,7 +165,11 @@ class _OperationFormState extends State<_OperationForm> {
         if (widget.notice != null) Padding(padding: const EdgeInsets.only(bottom: 16), child: Text(widget.notice!)),
         for (final f in widget.fields) Padding(padding: const EdgeInsets.only(bottom: 16), child:
           f.options == null ? TextFormField(controller: _controllers[f.name], enabled: !_saving,
-            decoration: InputDecoration(labelText: f.label, border: const OutlineInputBorder()),
+            decoration: InputDecoration(
+              labelText: f.label,
+              border: const OutlineInputBorder(),
+              suffixIcon: _buildSuffixIcon(f),
+            ),
             validator: (v) => f.required && (v == null || v.trim().isEmpty) ? 'Required' : null) :
           Row(children: [Expanded(child: DropdownButtonFormField<String>(
             mouseCursor: WidgetStateMouseCursor.clickable,
@@ -262,7 +366,7 @@ class _OperationsWorkspaceState extends State<OperationsWorkspace> {
       OperationField('active','Status',initial:old?['active']==0 ? '0':'1', options:const {'1':'Active','0':'Archived'}),
       OperationField('source','Allowed payment source',initial:old?['allowed_source'] as String? ?? 'ANY', options:const {'ANY':'Any',..._sources}),
       OperationField('sort','Sort order',initial:'${old?['sort_order'] ?? 0}'),
-      OperationField('threshold','Manager approval threshold (PKR, optional)',required:false,
+      OperationField('threshold','Budget / approval threshold (PKR, optional)',required:false,
         initial:old?['approval_threshold_paisa'] == null ? '' : ((old!['approval_threshold_paisa'] as int)/100).toStringAsFixed(2)),
     ], notice:'All expense posting requires a Manager. Used categories archive when removed. Historical entries retain the original category name.', save:(v) async {
       final id=await _controller.saveCategory(managerId:_manager,id:old?['id'] as int?,

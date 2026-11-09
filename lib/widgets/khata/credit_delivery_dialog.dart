@@ -207,8 +207,34 @@ class _CreditDeliveryDialogState extends State<CreditDeliveryDialog> {
                 const SizedBox(height: WarmCounterSpacing.space16),
 
                 TextFormField(
-                  key: const Key('credit_due_date_field'), controller: _dueController,
-                  decoration: const InputDecoration(labelText: 'Invoice due date (YYYY-MM-DD, optional)', border: OutlineInputBorder()),
+                  key: const Key('credit_due_date_field'),
+                  controller: _dueController,
+                  decoration: InputDecoration(
+                    labelText: 'Invoice due date (YYYY-MM-DD, optional)',
+                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.calendar_today_rounded),
+                      tooltip: 'Select due date',
+                      onPressed: () async {
+                        final now = DateTime.now();
+                        DateTime initial = now;
+                        final current = DateTime.tryParse(_dueController.text.trim());
+                        if (current != null && !current.isBefore(DateTime(now.year, now.month, now.day))) {
+                          initial = current;
+                        }
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: initial,
+                          firstDate: DateTime(now.year, now.month, now.day),
+                          lastDate: now.add(const Duration(days: 365 * 5)),
+                        );
+                        if (picked != null) {
+                          _dueController.text =
+                              '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+                        }
+                      },
+                    ),
+                  ),
                   validator: (v) {
                     if (v == null || v.trim().isEmpty) return null;
                     final date = DateTime.tryParse(v.trim());

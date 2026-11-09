@@ -58,7 +58,39 @@ class _CashierOrdersPanelState extends State<CashierOrdersPanel> {
       content: SizedBox(width: 420, child: Column(mainAxisSize: MainAxisSize.min, children: [
         TextField(controller: amount, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Amount received (Rs)')),
         DropdownButtonFormField<PaymentMethod>(initialValue: method, decoration: const InputDecoration(labelText: 'Manual tender'), items: PaymentMethod.values.where((m) => m != PaymentMethod.cod && m != PaymentMethod.split).map((m) => DropdownMenuItem(value: m, child: Text(m.displayName))).toList(), onChanged: (value) => change(() => method = value!)),
-        TextField(controller: actual, decoration: const InputDecoration(labelText: 'Late actual time (optional)', helperText: 'Pakistan time: YYYY-MM-DD HH:MM. Blank uses entry time.')),
+        TextField(
+          controller: actual,
+          decoration: InputDecoration(
+            labelText: 'Late actual time (optional)',
+            helperText: 'Pakistan time: YYYY-MM-DD HH:MM. Blank uses entry time.',
+            suffixIcon: IconButton(
+              icon: const Icon(Icons.calendar_month_rounded),
+              tooltip: 'Select date & time',
+              onPressed: () async {
+                final now = DateTime.now();
+                final pickedDate = await showDatePicker(
+                  context: context,
+                  initialDate: now,
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime(2040),
+                );
+                if (pickedDate != null && context.mounted) {
+                  final pickedTime = await showTimePicker(
+                    context: context,
+                    initialTime: TimeOfDay(hour: now.hour, minute: now.minute),
+                  );
+                  if (pickedTime != null) {
+                    final dStr =
+                        '${pickedDate.year.toString().padLeft(4, '0')}-${pickedDate.month.toString().padLeft(2, '0')}-${pickedDate.day.toString().padLeft(2, '0')}';
+                    final tStr =
+                        '${pickedTime.hour.toString().padLeft(2, '0')}:${pickedTime.minute.toString().padLeft(2, '0')}';
+                    actual.text = '$dStr $tStr';
+                  }
+                }
+              },
+            ),
+          ),
+        ),
         const Text('Final cash rounds half-up to whole rupees. The receiving Shift must be open. This does not record a rider handover.'),
       ])), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Record receipt'))],
     )));
