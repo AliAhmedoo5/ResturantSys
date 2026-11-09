@@ -292,22 +292,16 @@ class AnalyticsExportService {
                   children: [
                     pw.Expanded(
                       child: pw.Text(
-                        metric.label,
-                        style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
-                        maxLines: 1,
-                        overflow: pw.TextOverflow.clip,
+                        '${metric.label}: ${_pdfValue(metric.value, metric.unit)}',
+                        style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: primaryDark),
                       ),
                     ),
+                    pw.SizedBox(width: 4),
                     pw.Text(
                       '[${metric.quality.name}]',
                       style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold, color: badgeColor),
                     ),
                   ],
-                ),
-                pw.SizedBox(height: 2),
-                pw.Text(
-                  _pdfValue(metric.value, metric.unit),
-                  style: pw.TextStyle(fontSize: 11.5, fontWeight: pw.FontWeight.bold, color: primaryDark),
                 ),
                 pw.SizedBox(height: 2),
                 if (metric.changeAbsolute != null)
@@ -498,6 +492,56 @@ class AnalyticsExportService {
             ),
           ),
         pw.SizedBox(height: 12),
+      ]);
+    }
+
+    // Key record provenance highlights (first 5 records, non-null values only)
+    final sampleRows = section.rows.take(5).toList();
+    final sampleWidgets = <pw.Widget>[];
+    for (final row in sampleRows) {
+      for (final col in section.columns) {
+        final val = row.cells[col.key];
+        if (val == null) continue;
+        final k = col.key;
+        if (k.endsWith('_source') || k.endsWith('_utc') || k.startsWith('contributing_') || k.endsWith('_evidence')) continue;
+        sampleWidgets.add(
+          pw.Padding(
+            padding: const pw.EdgeInsets.only(bottom: 1),
+            child: pw.Text(
+              '${row.sourceType} / ${row.sourceId ?? row.id} | ${col.label}: ${_pdfValue(val, col.unit)}',
+              style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.grey700),
+            ),
+          ),
+        );
+      }
+    }
+    if (sampleWidgets.isNotEmpty) {
+      widgets.addAll([
+        pw.Row(
+          children: [
+            pw.Container(width: 3.5, height: 10, color: primaryDark),
+            pw.SizedBox(width: 5),
+            pw.Text(
+              'Key Record Provenance Details',
+              style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: primaryDark),
+            ),
+          ],
+        ),
+        pw.SizedBox(height: 4),
+        pw.Container(
+          width: double.infinity,
+          padding: const pw.EdgeInsets.all(6),
+          decoration: pw.BoxDecoration(
+            color: cardBg,
+            border: pw.Border.all(color: borderGrey, width: 0.5),
+            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+          ),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: sampleWidgets,
+          ),
+        ),
+        pw.SizedBox(height: 10),
       ]);
     }
 
