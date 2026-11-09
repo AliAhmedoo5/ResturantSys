@@ -115,7 +115,11 @@ void main() {
       // Find the chart point for BOM quantities
       final pointFinder = find.byKey(const ValueKey('chart_point_bom_g_0'));
       expect(pointFinder, findsOneWidget);
-      await tester.ensureVisible(pointFinder);
+      await tester.scrollUntilVisible(
+        pointFinder,
+        200,
+        scrollable: find.descendant(of: find.byKey(const ValueKey('analytics_body')), matching: find.byType(Scrollable)).first,
+      );
       await tester.tap(pointFinder);
       await tester.pumpAndSettle();
 
