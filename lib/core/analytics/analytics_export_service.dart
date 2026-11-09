@@ -6,6 +6,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'openxml_workbook_builder.dart';
 
 import 'analytics_models.dart';
+import 'analytics_time.dart';
 
 enum AnalyticsExportFormat { csv, xlsx, pdf }
 
@@ -145,7 +146,7 @@ class AnalyticsExportService {
           for (final note in section.notes)
             pw.Padding(
               padding: const pw.EdgeInsets.only(bottom: 4),
-              child: pw.Text('Note: $note', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+              child: pw.Text('Section note: $note', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
             ),
           pw.SizedBox(height: 8),
         ],
@@ -160,20 +161,6 @@ class AnalyticsExportService {
               for (final row in section.rows)
                 ['${row.sourceType} / ${row.sourceId ?? row.id}', ...section.columns.map((col) => _pdfValue(row.cells[col.key], col.unit))],
             ],
-            cellAlignments: {
-              0: pw.Alignment.centerLeft,
-              for (var i = 0; i < section.columns.length; i++)
-                i + 1: (section.columns[i].unit != null || section.rows.any((r) => r.cells[section.columns[i].key] is num))
-                    ? pw.Alignment.centerRight
-                    : pw.Alignment.centerLeft,
-            },
-            headerAlignments: {
-              0: pw.Alignment.centerLeft,
-              for (var i = 0; i < section.columns.length; i++)
-                i + 1: (section.columns[i].unit != null || section.rows.any((r) => r.cells[section.columns[i].key] is num))
-                    ? pw.Alignment.centerRight
-                    : pw.Alignment.centerLeft,
-            },
             headerDecoration: pw.BoxDecoration(color: PdfColor.fromHex('#1E293B')),
             headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
             cellStyle: const pw.TextStyle(fontSize: 8),
@@ -191,27 +178,14 @@ class AnalyticsExportService {
           pw.SizedBox(height: 12),
         ],
 
-        // 4. Audit & Metadata Appendix (placed at the end of the format)
-        pw.Container(
-          padding: const pw.EdgeInsets.all(8),
-          decoration: pw.BoxDecoration(
-            color: PdfColor.fromHex('#F8FAFC'),
-            border: pw.Border.all(color: PdfColors.grey300),
-            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+        // 4. Audit & Metadata Appendix
+        pw.Text('Audit & Metadata Appendix', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#1E293B'))),
+        pw.SizedBox(height: 4),
+        for (final r in _metadata(snapshot, family.name))
+          pw.Padding(
+            padding: const pw.EdgeInsets.only(bottom: 2),
+            child: pw.Text('${r[0]}: ${r[1] ?? "Unknown"}', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey700)),
           ),
-          child: pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text('Audit & Metadata Appendix', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#1E293B'))),
-              pw.SizedBox(height: 4),
-              for (final r in _metadata(snapshot, family.name))
-                pw.Padding(
-                  padding: const pw.EdgeInsets.only(bottom: 1.5),
-                  child: pw.Text('${r[0]}: ${r[1] ?? "Unknown"}', style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.grey700)),
-                ),
-            ],
-          ),
-        ),
       ],
     ));
 
@@ -221,17 +195,7 @@ class AnalyticsExportService {
 
   String _pdfValue(Object? value, AnalyticsUnit? unit) {
     if (value == null) return 'Missing data';
-    if (unit == AnalyticsUnit.paisa && value is num) {
-      final isNeg = value < 0;
-      final absVal = value.abs();
-      final rupees = (absVal / 100).floor();
-      final paisa = (absVal % 100).round();
-      final formattedR = rupees.toString().replaceAllMapped(
-        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-        (m) => '${m[1]},',
-      );
-      return '${isNeg ? "-" : ""}PKR $formattedR.${paisa.toString().padLeft(2, "0")}';
-    }
+    if (unit == AnalyticsUnit.paisa && value is num) return 'PKR ${(value / 100).toStringAsFixed(2)}';
     final ts = formatAnalyticsTimestamp(value);
     if (ts != null) return ts.fullLabel;
     return '$value${unit == null ? "" : " ${unit.name}"}';
@@ -356,13 +320,8 @@ class AnalyticsExportService {
         for (var c = 0; c < rowData.length; c++) {
           final value = rowData[c];
           final ref = '${_column(c)}${r + 1}';
-          final isNumeric = value is num && value.isFinite;
-          final sAttr = isTableHead
-              ? (isNumeric ? ' s="8"' : ' s="2"')
-              : (isSectionRow
-                  ? ' s="7"'
-                  : (isNumeric ? ' s="4"' : (c == 0 ? ' s="1"' : '')));
-          xml.write(isNumeric
+          final sAttr = isTableHead ? ' s="2"' : (isSectionRow || c == 0 ? ' s="1"' : '');
+          xml.write(value is num && value.isFinite
               ? '<c r="$ref"$sAttr><v>$value</v></c>'
               : '<c r="$ref" t="inlineStr"$sAttr><is><t xml:space="preserve">${_xml(_safeText(value))}</t></is></c>');
         }

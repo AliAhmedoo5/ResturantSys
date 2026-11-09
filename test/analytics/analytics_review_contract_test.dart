@@ -62,7 +62,7 @@ void main() {
     final sheetIndex = snapshot.sections.indexWhere((s) => s.family == AnalyticsFamily.procurement) + 2;
     final xml = utf8.decode(workbook.findFile('xl/worksheets/sheet$sheetIndex.xml')!.content as List<int>);
     final row = RegExp(r'<row r="(\d+)">(?:(?!</row>).)*purchase_spend(?:(?!</row>).)*</row>', dotAll: true).firstMatch(xml)!;
-    expect(row.group(0), contains(RegExp('<c r="J${row.group(1)}"(?: s="\\d+")?><v>45000</v></c>')));
+    expect(row.group(0), contains('<c r="J${row.group(1)}"><v>45000</v></c>'));
     final directory = await Directory.systemTemp.createTemp('analytics-review-export-');
     addTearDown(() => directory.delete(recursive: true));
     final pdf = await exports.saveToDirectory(snapshot, AnalyticsFamily.procurement, AnalyticsExportFormat.pdf, directory.path);
@@ -128,10 +128,10 @@ void main() {
     final sheetIndex = snapshot.sections.indexWhere((s) => s.family == AnalyticsFamily.customers) + 2;
     final xml = utf8.decode(archive.findFile('xl/worksheets/sheet$sheetIndex.xml')!.content as List<int>);
     final metricRow = RegExp(r'<row r="(\d+)">(?:(?!</row>).)*known_customer_average_ticket(?:(?!</row>).)*</row>', dotAll: true).firstMatch(xml)!;
-    expect(metricRow.group(0), contains(RegExp('<c r="C${metricRow.group(1)}"(?: s="\\d+")?><v>30000\\.0</v></c>')));
-    expect(metricRow.group(0), contains(RegExp('<c r="G${metricRow.group(1)}"(?: s="\\d+")?><v>3</v></c>')));
+    expect(metricRow.group(0), contains('<c r="C${metricRow.group(1)}"><v>30000.0</v></c>'));
+    expect(metricRow.group(0), contains('<c r="G${metricRow.group(1)}"><v>3</v></c>'));
     final sourceRow = RegExp('<row r="(\\d+)">(?:(?!</row>).)*${RegExp.escape(first.id)}(?:(?!</row>).)*</row>', dotAll: true).firstMatch(xml)!;
-    expect(sourceRow.group(0), contains(RegExp('<c r="I${sourceRow.group(1)}"(?: s="\\d+")?><v>20000\\.0</v></c>')));
+    expect(sourceRow.group(0), contains('<c r="I${sourceRow.group(1)}"><v>20000.0</v></c>'));
     final directory = await Directory.systemTemp.createTemp('analytics-customer-average-');
     addTearDown(() => directory.delete(recursive: true));
     final pdf = await exports.saveToDirectory(snapshot, AnalyticsFamily.customers, AnalyticsExportFormat.pdf, directory.path);
