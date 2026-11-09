@@ -494,15 +494,15 @@ void main() {
     await tester.tap(find.text('Sales').first);
     await tester.pumpAndSettle();
 
-    final dropdown = tester.widget<DropdownButtonFormField<AnalyticsFamily>>(
+    final familyState = tester.state<FormFieldState<AnalyticsFamily>>(
       find.byKey(const ValueKey('analytics_family')),
     );
-    expect(dropdown.value, AnalyticsFamily.sales);
+    expect(familyState.value, AnalyticsFamily.sales);
 
     await tester.tap(find.text('Cash & shifts').first);
     await tester.pumpAndSettle();
     expect(
-      tester.widget<DropdownButtonFormField<AnalyticsFamily>>(
+      tester.state<FormFieldState<AnalyticsFamily>>(
         find.byKey(const ValueKey('analytics_family')),
       ).value,
       AnalyticsFamily.cash,
@@ -563,7 +563,7 @@ void main() {
     expect(requested!.startDate, DateTime(2026, 10, 25));
     expect(requested!.endDateExclusive, DateTime(2026, 10, 26));
     expect(
-      tester.widget<DropdownButtonFormField<String>>(
+      tester.state<FormFieldState<String>>(
         find.byKey(const ValueKey('analytics_period')),
       ).value,
       'yesterday',
@@ -575,7 +575,7 @@ void main() {
     expect(requested!.live, isFalse);
     expect(requested!.endDateExclusive.difference(requested!.startDate).inDays, 7);
     expect(
-      tester.widget<DropdownButtonFormField<String>>(
+      tester.state<FormFieldState<String>>(
         find.byKey(const ValueKey('analytics_period')),
       ).value,
       'week',
