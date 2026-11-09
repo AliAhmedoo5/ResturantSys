@@ -119,43 +119,19 @@ class AnalyticsExportService {
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
                       pw.Text(
-                        metric.label,
-                        style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
-                      ),
-                      pw.SizedBox(height: 2),
-                      pw.Text(
-                        _pdfValue(metric.value, metric.unit),
-                        style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#1E293B')),
+                        '${metric.label}: ${_pdfValue(metric.value, metric.unit)}',
+                        style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#1E293B')),
                       ),
                       pw.SizedBox(height: 3),
-                      pw.Row(
-                        children: [
-                          pw.Container(
-                            padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                            decoration: pw.BoxDecoration(
-                              color: metric.quality == AnalyticsQuality.complete ? PdfColor.fromHex('#DCFCE7') : PdfColor.fromHex('#FEF3C7'),
-                              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(2)),
-                            ),
-                            child: pw.Text(
-                              '[${metric.quality.name}]',
-                              style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold, color: metric.quality == AnalyticsQuality.complete ? PdfColors.green800 : PdfColor.fromHex('#B45309')),
-                            ),
-                          ),
-                          if (metric.changePercent != null) ...[
-                            pw.SizedBox(width: 4),
-                            pw.Text(
-                              '${metric.changePercent! >= 0 ? "+" : ""}${metric.changePercent!.toStringAsFixed(1)}% vs prior',
-                              style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold, color: metric.changePercent! >= 0 ? PdfColors.green800 : PdfColors.red800),
-                            ),
-                          ],
-                        ],
+                      pw.Text(
+                        '[${metric.quality.name}]${metric.changePercent != null ? " ${metric.changePercent! >= 0 ? "+" : ""}${metric.changePercent!.toStringAsFixed(1)}%" : ""}',
+                        style: pw.TextStyle(fontSize: 7, color: metric.quality == AnalyticsQuality.complete ? PdfColors.green800 : PdfColor.fromHex('#D97706')),
                       ),
-                      pw.SizedBox(height: 2),
-                      pw.Text(metric.explanation, style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
-                      if (metric.sampleCount != null && metric.populationCount != null)
-                        pw.Text('Coverage: ${metric.sampleCount} / ${metric.populationCount}', style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.grey500)),
+                      pw.Text('Formula / explanation: ${metric.explanation}', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
+                      pw.Text('Coverage: ${metric.sampleCount ?? "unknown"} / ${metric.populationCount ?? "unknown"}; change percent: ${metric.changePercent ?? "unavailable"}', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
+                      pw.Text('Absolute change: ${metric.changeAbsolute == null ? "unavailable" : _pdfValue(metric.changeAbsolute, metric.unit)}; prior value: ${metric.priorValue == null ? "unavailable" : _pdfValue(metric.priorValue, metric.unit)}', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
                       if (metric.isBalance)
-                        pw.Text('Snapshot balance (point-in-time)', style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.grey500)),
+                        pw.Text('Balance metric: snapshot balance (excluded from historical comparison)', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
                     ],
                   ),
                 ),
@@ -205,6 +181,13 @@ class AnalyticsExportService {
             border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
             cellPadding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 4),
           ),
+          pw.SizedBox(height: 6),
+          for (final row in section.rows)
+            for (final col in section.columns)
+              pw.Padding(
+                padding: const pw.EdgeInsets.only(bottom: 1),
+                child: pw.Text('${row.sourceType} / ${row.sourceId ?? row.id} (row ${row.id}) | ${col.label}: ${_pdfValue(row.cells[col.key], col.unit)}', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
+              ),
           pw.SizedBox(height: 12),
         ],
 
