@@ -205,4 +205,81 @@ void main() {
     final files = directory.listSync();
     expect(files.where((f) => f.path.endsWith('.partial')), isEmpty);
   });
+
+  test('Order operations PDF export renders without layout failure or page explosion', () async {
+    final orderSection = AnalyticsSection(
+      family: AnalyticsFamily.orders,
+      title: 'Order operations',
+      metrics: [
+        const AnalyticsMetric(id: 'committed_orders', label: 'Committed orders', value: 6, unit: AnalyticsUnit.count, quality: AnalyticsQuality.complete, explanation: 'All selected committed orders'),
+        const AnalyticsMetric(id: 'revised_orders', label: 'Orders revised', value: 1, unit: AnalyticsUnit.count, quality: AnalyticsQuality.complete, explanation: 'Distinct revised order count'),
+        const AnalyticsMetric(id: 'cancelled_orders', label: 'Cancelled/refunded orders', value: 1, unit: AnalyticsUnit.count, quality: AnalyticsQuality.complete, explanation: 'Cancelled orders'),
+        const AnalyticsMetric(id: 'prep_median', label: 'Median preparation time', value: 5.5, unit: AnalyticsUnit.minutes, quality: AnalyticsQuality.complete, explanation: 'Prep time median', sampleCount: 4, populationCount: 6),
+        const AnalyticsMetric(id: 'active_holds', label: 'Current active Holds', value: 2, unit: AnalyticsUnit.count, quality: AnalyticsQuality.complete, explanation: 'Active holds'),
+        const AnalyticsMetric(id: 'stale_holds', label: 'Current stale Holds', value: 1, unit: AnalyticsUnit.count, quality: AnalyticsQuality.complete, explanation: 'Stale holds'),
+      ],
+      columns: [
+        const AnalyticsColumn(key: 'order_id', label: 'Order ID'),
+        const AnalyticsColumn(key: 'token', label: 'Token'),
+        const AnalyticsColumn(key: 'business_day_id', label: 'Business day ID'),
+        const AnalyticsColumn(key: 'assigned_business_date', label: 'Assigned business date'),
+        const AnalyticsColumn(key: 'cashier_id', label: 'Cashier ID'),
+        const AnalyticsColumn(key: 'shift_id', label: 'Shift ID'),
+        const AnalyticsColumn(key: 'dining_type', label: 'Dining type'),
+        const AnalyticsColumn(key: 'payment_status', label: 'Payment status'),
+        const AnalyticsColumn(key: 'token_status', label: 'Token status'),
+        const AnalyticsColumn(key: 'recorded_value_paisa', label: 'Recorded value', unit: AnalyticsUnit.paisa),
+        const AnalyticsColumn(key: 'prep_duration_minutes', label: 'Prep duration', unit: AnalyticsUnit.minutes),
+        const AnalyticsColumn(key: 'prep_quality', label: 'Prep quality'),
+        const AnalyticsColumn(key: 'rework_cycles', label: 'Rework cycles'),
+        const AnalyticsColumn(key: 'created_at', label: 'Created at'),
+        const AnalyticsColumn(key: 'kind', label: 'Kind'),
+        const AnalyticsColumn(key: 'period', label: 'Period'),
+        const AnalyticsColumn(key: 'confirmed_orders', label: 'Confirmed orders'),
+        const AnalyticsColumn(key: 'eligible_orders', label: 'Eligible orders'),
+        const AnalyticsColumn(key: 'average_ticket_paisa', label: 'Average ticket', unit: AnalyticsUnit.paisa),
+        const AnalyticsColumn(key: 'count_rank', label: 'Count rank'),
+        const AnalyticsColumn(key: 'period_status', label: 'Period status'),
+        const AnalyticsColumn(key: 'weekday', label: 'Weekday'),
+        const AnalyticsColumn(key: 'weekday_basis', label: 'Weekday basis'),
+        const AnalyticsColumn(key: 'completed_confirmed_orders', label: 'Completed confirmed orders'),
+        const AnalyticsColumn(key: 'orders_per_completed_day', label: 'Orders per completed day'),
+        const AnalyticsColumn(key: 'hold_id', label: 'Hold ID'),
+        const AnalyticsColumn(key: 'age_minutes', label: 'Age minutes'),
+        const AnalyticsColumn(key: 'aging_status', label: 'Aging status'),
+        const AnalyticsColumn(key: 'cashier_name_current', label: 'Cashier name current'),
+        const AnalyticsColumn(key: 'revision', label: 'Revision'),
+        const AnalyticsColumn(key: 'action', label: 'Action'),
+        const AnalyticsColumn(key: 'reason', label: 'Reason'),
+        const AnalyticsColumn(key: 'delta_paisa', label: 'Delta', unit: AnalyticsUnit.paisa),
+      ],
+      rows: [
+        AnalyticsRow(id: 'workload-day-1', sourceType: 'order_workload', cells: {'kind': 'Daily workload', 'period': '2026-11-03 · Business Day #1', 'confirmed_orders': 2, 'recorded_value_paisa': 182000}),
+        for (var h = 0; h < 24; h++)
+          AnalyticsRow(id: 'workload-hour-$h', sourceType: 'order_workload', cells: {'kind': 'Hourly workload', 'period': '${h.toString().padLeft(2, "0")}:00', 'hour': h, 'confirmed_orders': h == 13 ? 2 : 0, 'recorded_value_paisa': h == 13 ? 182000 : 0}),
+        for (var w = 1; w <= 7; w++)
+          AnalyticsRow(id: 'weekday-$w', sourceType: 'weekday_order_peaks', cells: {'kind': 'Weekday comparison', 'period': ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][w - 1], 'weekday': w, 'confirmed_orders': w == 2 ? 2 : 0}),
+        AnalyticsRow(id: 'held_carts-1', sourceType: 'held_carts', sourceId: '1', cells: {'kind': 'Current active Hold', 'hold_id': 1, 'cashier_id': 2, 'age_minutes': 35.0, 'aging_status': 'Stale'}),
+        AnalyticsRow(id: 'orders-1', sourceType: 'orders', sourceId: '1', cells: {'order_id': 1, 'token': 'T-1', 'dining_type': 'DINE_IN', 'payment_status': 'SETTLED', 'recorded_value_paisa': 90000, 'prep_duration_minutes': 4.5, 'created_at': '2026-11-03 13:10:00'}),
+        AnalyticsRow(id: 'orders-2', sourceType: 'orders', sourceId: '2', cells: {'order_id': 2, 'token': 'T-2', 'dining_type': 'DELIVERY', 'payment_status': 'SETTLED', 'recorded_value_paisa': 92000, 'prep_duration_minutes': 6.0, 'created_at': '2026-11-03 13:40:00'}),
+        AnalyticsRow(id: 'order_revisions-1', sourceType: 'order_revisions', sourceId: '1', cells: {'order_id': 1, 'revision': 1, 'action': 'UPDATE_ITEMS', 'reason': 'Customer added drinks', 'delta_paisa': 15000}),
+      ],
+    );
+
+    final snapshot = AnalyticsSnapshot(
+      query: AnalyticsQuery(startDate: DateTime(2026, 10, 1), endDateExclusive: DateTime(2026, 10, 2)),
+      generatedAt: DateTime.utc(2026, 10, 1, 21),
+      businessDayIds: [1],
+      sections: [orderSection],
+    );
+
+    final directory = await Directory.systemTemp.createTemp('analytics-orders-export-');
+    addTearDown(() => directory.delete(recursive: true));
+    final service = AnalyticsExportService();
+
+    final file = await service.saveToDirectory(snapshot, AnalyticsFamily.orders, AnalyticsExportFormat.pdf, directory.path);
+    expect(await file.exists(), isTrue);
+    final bytes = await file.readAsBytes();
+    expect(bytes.take(4), [37, 80, 68, 70]); // %PDF
+  });
 }
