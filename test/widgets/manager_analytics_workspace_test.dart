@@ -412,4 +412,59 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets('Recorded times display 12-hour AM/PM format with real day, date, and Business Day badge without naive debug text', (tester) async {
+    tester.view.physicalSize = const Size(1366, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final snapshotWithTimes = AnalyticsSnapshot(
+      query: AnalyticsQuery(startDate: DateTime(2026, 11, 9), endDateExclusive: DateTime(2026, 11, 10), live: true),
+      generatedAt: DateTime(2026, 11, 9, 17, 10, 20),
+      businessDayIds: [1],
+      sections: [
+        AnalyticsSection(
+          family: AnalyticsFamily.sales,
+          title: 'Sales',
+          metrics: [],
+          columns: const [
+            AnalyticsColumn(key: 'recorded_at', label: 'Recorded at'),
+            AnalyticsColumn(key: 'token', label: 'Token'),
+          ],
+          rows: [
+            AnalyticsRow(
+              id: '1',
+              sourceType: 'orders',
+              sourceId: '1',
+              cells: {
+                'recorded_at': '2026-11-09 17:10:20 +05:00 [Asia/Karachi] (naive legacy timestamp; assumed Asia/Karachi)',
+                'business_day_id': 1,
+                'token': '#01',
+              },
+            ),
+          ],
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: ManagerAnalyticsWorkspace(
+          service: SnapshotService(onLoad: (_) async => snapshotWithTimes),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('analytics_family')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sales').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Mon, 09 Nov 2026 • 05:10 PM'), findsOneWidget);
+    expect(find.text('Business Day #1'), findsWidgets);
+    expect(find.textContaining('naive legacy timestamp'), findsNothing);
+    expect(find.textContaining('[Asia/Karachi]'), findsNothing);
+  });
 }

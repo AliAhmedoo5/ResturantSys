@@ -8,6 +8,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/analytics/analytics_models.dart';
+import '../../core/analytics/analytics_time.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/auth/session_state.dart';
 import '../../core/analytics/manager_report_controller.dart';
@@ -514,7 +515,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
             const Text('Safe reporting projection • source values from this snapshot',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
             const SizedBox(height: 4),
-            Text('Snapshot cutoff: ${DateFormat('dd MMM yyyy HH:mm:ss').format(snapshot.generatedAt.isUtc ? snapshot.generatedAt.add(const Duration(hours: 5)) : snapshot.generatedAt)} • Schema v${snapshot.sourceSchemaVersion ?? 28}',
+            Text('Snapshot cutoff: ${formatAnalyticsTimestamp(snapshot.generatedAt)?.displayLine ?? DateFormat('dd MMM yyyy HH:mm:ss').format(snapshot.generatedAt.isUtc ? snapshot.generatedAt.add(const Duration(hours: 5)) : snapshot.generatedAt)} • Schema v${snapshot.sourceSchemaVersion ?? 28}',
               style: const TextStyle(fontSize: 11, color: StreetFoodMafiaColors.secondaryText)),
             const Text('Original snapshot projection (subsequent live changes are not reflected)',
               style: TextStyle(fontSize: 11, color: StreetFoodMafiaColors.secondaryText, fontStyle: FontStyle.italic)),
@@ -522,7 +523,21 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
             SelectableText('Source IDs: ${row.sourceId ?? row.id}'),
             const SizedBox(height: 12),
             for (final column in section.columns) Padding(padding: const EdgeInsets.only(bottom: 8),
-              child: SelectableText('${column.label}: ${_phoneColumnKeys.contains(column.key) ? _formatPhoneMasked(row.cells[column.key]) : _format(row.cells[column.key], column.unit)}')),
+              child: Builder(builder: (context) {
+                final cellVal = row.cells[column.key];
+                if (cellVal == null) {
+                  return SelectableText('${column.label}: —');
+                }
+                if (_phoneColumnKeys.contains(column.key)) {
+                  return SelectableText('${column.label}: ${_formatPhoneMasked(cellVal)}');
+                }
+                final dayId = row.cells['business_day_id'] ?? row.cells['receiving_business_day_id'];
+                final ts = formatAnalyticsTimestamp(row.cells['${column.key}_source'] ?? cellVal, businessDayId: dayId);
+                if (ts != null) {
+                  return SelectableText('${column.label}: ${ts.fullLabel}');
+                }
+                return SelectableText('${column.label}: ${_format(cellVal, column.unit)}');
+              })),
           ]))),
         actions: [TextButton(onPressed: _dismissSource, child: const Text('Close'))],
       );
@@ -618,7 +633,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          'Snapshot cutoff: ${DateFormat('dd MMM yyyy HH:mm:ss').format(snapshot.generatedAt.isUtc ? snapshot.generatedAt.add(const Duration(hours: 5)) : snapshot.generatedAt)}'
+                          'Snapshot cutoff: ${formatAnalyticsTimestamp(snapshot.generatedAt)?.displayLine ?? DateFormat('dd MMM yyyy HH:mm:ss').format(snapshot.generatedAt.isUtc ? snapshot.generatedAt.add(const Duration(hours: 5)) : snapshot.generatedAt)}'
                           ' • Schema ${snapshot.sourceSchemaVersion ?? 28} • ${snapshot.reportVersion}',
                           style: const TextStyle(
                             fontSize: 11,
@@ -754,6 +769,106 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
     });
   }
 
+  int get _activeFilterCount {
+    var count = 0;
+    if (_query.cashierId != null) count++;
+    if (_query.shiftId != null) count++;
+    if (_query.diningType != null) count++;
+    if (_query.paymentMethod != null) count++;
+    if (_query.domainFilters.isNotEmpty) count += _query.domainFilters.length;
+    return count;
+  }
+
+  Widget _activeFilterChips() {
+    final chips = <Widget>[];
+    if (_query.cashierId != null) {
+      chips.add(InputChip(
+        avatar: const Icon(Icons.person_outline, size: 14),
+        label: Text('Cashier #${_query.cashierId}'),
+        onDeleted: () {
+          _cashier.clear();
+          _changeQuery(_query.copyWith(cashierId: null));
+        },
+      ));
+    }
+    if (_query.shiftId != null) {
+      chips.add(InputChip(
+        avatar: const Icon(Icons.schedule, size: 14),
+        label: Text('Shift #${_query.shiftId}'),
+        onDeleted: () {
+          _shift.clear();
+          _changeQuery(_query.copyWith(shiftId: null));
+        },
+      ));
+    }
+    if (_query.diningType != null) {
+      final label = DiningType.values.where((d) => d.code == _query.diningType).firstOrNull?.displayName ?? _query.diningType!;
+      chips.add(InputChip(
+        avatar: const Icon(Icons.restaurant_outlined, size: 14),
+        label: Text(label),
+        onDeleted: () {
+          setState(() => _dining = null);
+          _changeQuery(_query.copyWith(diningType: null));
+        },
+      ));
+    }
+    if (_query.paymentMethod != null) {
+      final label = PaymentMethod.values.where((p) => p.code == _query.paymentMethod).firstOrNull?.displayName ?? _query.paymentMethod!;
+      chips.add(InputChip(
+        avatar: const Icon(Icons.payment_outlined, size: 14),
+        label: Text(label),
+        onDeleted: () {
+          setState(() => _payment = null);
+          _changeQuery(_query.copyWith(paymentMethod: null));
+        },
+      ));
+    }
+    for (final entry in _query.domainFilters.entries) {
+      chips.add(InputChip(
+        avatar: const Icon(Icons.filter_alt_outlined, size: 14),
+        label: Text('${entry.key.label}: #${entry.value}'),
+        onDeleted: () {
+          final next = Map<DomainDimension, int>.from(_query.domainFilters)..remove(entry.key);
+          _changeQuery(_query.copyWith(domainFilters: next));
+        },
+      ));
+    }
+
+    if (chips.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          const Text('Active filters:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: StreetFoodMafiaColors.secondaryText)),
+          ...chips,
+          TextButton(
+            onPressed: () {
+              _changeQuery(_query.copyWith(
+                domainFilters: {},
+                cashierId: null,
+                shiftId: null,
+                diningType: null,
+                paymentMethod: null,
+                fundingStream: null,
+              ));
+              _cashier.clear();
+              _shift.clear();
+              setState(() {
+                _dining = null;
+                _payment = null;
+              });
+            },
+            child: const Text('Reset all', style: TextStyle(fontSize: 12)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!_authorized) {
@@ -846,7 +961,8 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
           icon: const Icon(Icons.bookmark_border_rounded, size: 18), label: const Text('Presets')),
         TextButton.icon(key: const ValueKey('analytics_filters_toggle'),
           onPressed: () => setState(() => _filtersExpanded = !_filtersExpanded),
-          icon: const Icon(Icons.tune_rounded, size: 18), label: const Text('Filters')),
+          icon: const Icon(Icons.tune_rounded, size: 18),
+          label: Text(_activeFilterCount > 0 ? 'Filters ($_activeFilterCount)' : 'Filters')),
         if (!compact && constraints.maxWidth >= 600)
           SizedBox(width: constraints.maxWidth, child: Wrap(spacing: 10, runSpacing: 10, children: _quickFilterFields())),
         if (constraints.maxWidth < 600) Material(color: Colors.transparent,
@@ -855,6 +971,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
           children: [Wrap(spacing: 10, runSpacing: 10, children: _quickFilterFields())])),
       ]);
       })),
+      _activeFilterChips(),
       const SizedBox(height: 12),
       Text('${_query.live ? 'LIVE • refreshes every ${widget.refreshInterval.inSeconds}s' : 'Historical exploration'}'
         ' • Asia/Karachi • ${_query.live ? 'Active Business Day' : '${DateFormat('dd MMM yyyy').format(_query.startDate)} to ${DateFormat('dd MMM yyyy').format(_query.endDateExclusive)} (end exclusive)'}'
@@ -866,10 +983,10 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
           style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
       Text('Order activity: ${_query.timeBasis == AnalyticsTimeBasis.businessDay ? 'assigned Business Day weekday' : 'actual calendar weekday'} • ${_query.grouping.name} • weeks start Monday • local calendar months. Other ledgers retain Business Day scope.', style: const TextStyle(fontSize: 12)),
       if (snapshot != null && _family != AnalyticsFamily.overview) Text(
-        'Updated ${DateFormat('dd MMM yyyy HH:mm:ss').format(snapshot.generatedAt.isUtc ? snapshot.generatedAt.add(const Duration(hours: 5)) : snapshot.generatedAt)}'
+        'Updated ${formatAnalyticsTimestamp(snapshot.generatedAt)?.displayLine ?? DateFormat('dd MMM yyyy HH:mm:ss').format(snapshot.generatedAt.isUtc ? snapshot.generatedAt.add(const Duration(hours: 5)) : snapshot.generatedAt)}'
         ' • ${snapshot.businessDayIds.length} Business Days in selection',
         style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
-      if (snapshot != null) Text('Source schema ${snapshot.sourceSchemaVersion ?? "unavailable"} • ${snapshot.reportVersion} • cutoff ${analyticsTimestamp(snapshot.generatedAt.toUtc().toIso8601String())}',
+      if (snapshot != null) Text('Source schema ${snapshot.sourceSchemaVersion ?? "unavailable"} • ${snapshot.reportVersion} • cutoff ${formatAnalyticsTimestamp(snapshot.generatedAt)?.fullLabel ?? analyticsTimestamp(snapshot.generatedAt.toUtc().toIso8601String())}',
         style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
       const SizedBox(height: 8),
       if (_busy) const LinearProgressIndicator(minHeight: 2),
@@ -1301,7 +1418,16 @@ class _SourceTableState extends State<_SourceTable> {
     final activeColumns = section.columns.where((col) {
       return rows.any((r) => r.cells.containsKey(col.key) && r.cells[col.key] != null);
     }).toList();
-    final columns = activeColumns.isNotEmpty ? activeColumns : section.columns;
+    final nonRedundantColumns = activeColumns.where((col) {
+      if (col.key.endsWith('_source')) {
+        final baseKey = col.key.substring(0, col.key.length - '_source'.length);
+        if (activeColumns.any((c) => c.key == baseKey)) {
+          return false;
+        }
+      }
+      return true;
+    }).toList();
+    final columns = nonRedundantColumns.isNotEmpty ? nonRedundantColumns : (activeColumns.isNotEmpty ? activeColumns : section.columns);
     if (_sortColumn != null && _sortColumn! < columns.length) {
       final key = columns[_sortColumn!].key;
       rows.sort((a, b) {
@@ -1363,15 +1489,79 @@ class _SourceTableState extends State<_SourceTable> {
           const SizedBox(width: 6), Text(open ? 'Open' : 'Closed', style: TextStyle(color: color, fontSize: 12)),
         ]));
     }
-    if (row.sourceType == 'business_days' && ['business_date', 'opened_at', 'closed_at'].contains(column.key)) {
-      final source = row.cells['${column.key}_source'] ?? value;
-      final local = analyticsKarachiTime(source);
-      return Text(local == null ? '—' : DateFormat(column.key == 'business_date'
-        ? 'dd MMM yyyy' : 'dd MMM, HH:mm').format(local));
-    }
     if (_phoneColumnKeys.contains(column.key)) {
       return Text(_formatPhoneMasked(value));
     }
+
+    final isTimestampKey = column.key.endsWith('_at') ||
+        column.key.endsWith('_at_source') ||
+        column.key.endsWith('_time') ||
+        column.key.endsWith('_utc') ||
+        column.key.endsWith('_start') ||
+        column.key.endsWith('_end') ||
+        column.key == 'created_at' ||
+        column.key == 'recorded_at' ||
+        column.key == 'business_date';
+
+    final rawSource = row.cells['${column.key}_source'] ?? value;
+    if (isTimestampKey || analyticsKarachiTime(rawSource) != null) {
+      final dayId = row.cells['business_day_id'] ??
+          row.cells['receiving_business_day_id'] ??
+          row.cells['assigned_business_day_id'] ??
+          (row.sourceType == 'business_days' ? (row.cells['id'] ?? row.sourceId) : null);
+
+      final ts = formatAnalyticsTimestamp(rawSource, businessDayId: dayId);
+      if (ts != null) {
+        return Tooltip(
+          message: 'Exact Recorded: $rawSource\nTimezone: Asia/Karachi (UTC+05:00)\nReal Day: ${ts.realDay}',
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(ts.isDateOnly ? Icons.calendar_today_rounded : Icons.access_time_rounded,
+                        size: 12, color: StreetFoodMafiaColors.cartelYellow),
+                    const SizedBox(width: 5),
+                    Text(
+                      ts.displayLine,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                        color: StreetFoodMafiaColors.offWhite,
+                      ),
+                    ),
+                  ],
+                ),
+                if (ts.businessDayLabel != null) ...[
+                  const SizedBox(height: 3),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                    decoration: BoxDecoration(
+                      color: StreetFoodMafiaColors.cardSurface,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: StreetFoodMafiaColors.border.withOpacity(0.5)),
+                    ),
+                    child: Text(
+                      ts.businessDayLabel!,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color: StreetFoodMafiaColors.cartelYellow,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      }
+    }
+
     return Text(_format(value, column.unit));
   }
 }

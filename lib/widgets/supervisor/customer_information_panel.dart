@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/analytics/analytics_service.dart';
+import '../../core/analytics/analytics_time.dart';
 import '../../core/theme/theme.dart';
 
 /// Operational contact details are transient and separate from analytics exports.
@@ -183,6 +184,8 @@ class _CustomerInformationPanelState extends State<CustomerInformationPanel> {
   String _date(String value) {
     final date = DateTime.tryParse(value);
     if (date == null) return 'Date not recorded';
-    return DateFormat('dd MMM yyyy, HH:mm').format(date.isUtc ? date.add(const Duration(hours: 5)) : date);
+    final ts = formatAnalyticsTimestamp(value);
+    if (ts != null) return ts.displayLine;
+    return DateFormat('EEE, dd MMM yyyy, hh:mm a').format(date.isUtc ? date.add(const Duration(hours: 5)) : date);
   }
 }

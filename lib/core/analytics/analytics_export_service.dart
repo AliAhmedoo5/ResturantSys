@@ -6,6 +6,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'openxml_workbook_builder.dart';
 
 import 'analytics_models.dart';
+import 'analytics_time.dart';
 
 enum AnalyticsExportFormat { csv, xlsx, pdf }
 
@@ -195,6 +196,8 @@ class AnalyticsExportService {
   String _pdfValue(Object? value, AnalyticsUnit? unit) {
     if (value == null) return 'Missing data';
     if (unit == AnalyticsUnit.paisa && value is num) return 'PKR ${(value / 100).toStringAsFixed(2)}';
+    final ts = formatAnalyticsTimestamp(value);
+    if (ts != null) return ts.fullLabel;
     return '$value${unit == null ? "" : " ${unit.name}"}';
   }
 
