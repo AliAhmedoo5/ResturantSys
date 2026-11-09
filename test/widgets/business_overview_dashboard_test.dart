@@ -145,6 +145,8 @@ void main() {
     await tester.tap(find.text('Cash').last);
     await tester.pumpAndSettle();
     expect(requested!.paymentMethod, 'CASH');
+    await tester.tap(find.byKey(const ValueKey('analytics_filters_toggle')));
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Review shifts'));
     await tester.tap(find.text('Review shifts'));
     await tester.pumpAndSettle();

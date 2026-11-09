@@ -101,6 +101,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
   final _filtersKey = GlobalKey<FormState>();
   final _cashier = TextEditingController();
   final _shift = TextEditingController();
+  final _scrollController = ScrollController();
   String? _dining;
   String? _payment;
 
@@ -392,6 +393,9 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
 
   void _selectReport(AnalyticsFamily family) {
     _dismissSource();
+    if (_scrollController.hasClients) {
+      _scrollController.jumpTo(0);
+    }
     setState(() => _family = family);
   }
 
@@ -468,6 +472,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
     WidgetsBinding.instance.removeObserver(this);
     _cashier.dispose();
     _shift.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -1477,6 +1482,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
             Positioned.fill(
               child: ListView(
                 key: const ValueKey('analytics_body'),
+                controller: _scrollController,
                 cacheExtent: 2000,
                 padding: EdgeInsets.only(
                   left: 20,
