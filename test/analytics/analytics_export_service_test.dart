@@ -281,5 +281,16 @@ void main() {
     expect(await file.exists(), isTrue);
     final bytes = await file.readAsBytes();
     expect(bytes.take(4), [37, 80, 68, 70]); // %PDF
+    if (Platform.isLinux) {
+      final result = await Process.run('pdftotext', [file.path, '-']);
+      expect(result.exitCode, 0);
+      final text = result.stdout as String;
+      expect(text, contains('CRUNCH CARTEL POS'));
+      expect(text, contains('Order Transactions'));
+      expect(text, contains('Order Workload Projections'));
+      expect(text, contains('Current Active Holds'));
+      expect(text, contains('Order Revisions & Line Audits'));
+      expect(text, contains('PKR 900.00'));
+    }
   });
 }

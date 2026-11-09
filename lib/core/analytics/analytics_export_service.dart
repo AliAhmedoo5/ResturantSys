@@ -44,47 +44,20 @@ class AnalyticsExportService {
       author: 'Staff ${snapshot.generatedByStaffId ?? "unknown"}',
     );
 
+    final primaryDark = PdfColor.fromHex('#1E293B');
+    final accentAmber = PdfColor.fromHex('#D97706');
+    final borderGrey = PdfColor.fromHex('#CBD5E1');
+    final cardBg = PdfColor.fromHex('#F8FAFC');
+
     onProgress?.call('Formatting document blocks', 50, 100);
     if (isCancelled?.call() == true) throw const ExportCancelledException();
     onProgress?.call('Rendering PDF pages', 100, 100);
 
     document.addPage(pw.MultiPage(
       pageFormat: PdfPageFormat.a4.landscape,
-      maxPages: 100000,
+      maxPages: 1000,
       margin: const pw.EdgeInsets.all(24),
-      header: (context) => pw.Container(
-        padding: const pw.EdgeInsets.only(bottom: 8),
-        margin: const pw.EdgeInsets.only(bottom: 12),
-        decoration: pw.BoxDecoration(
-          border: pw.Border(bottom: pw.BorderSide(color: PdfColor.fromHex('#1E293B'), width: 1.5)),
-        ),
-        child: pw.Row(
-          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-          children: [
-            pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Text(
-                  'Restaurant Analytics - Executive Report',
-                  style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#1E293B')),
-                ),
-                pw.SizedBox(height: 2),
-                pw.Text(
-                  section.title.toUpperCase(),
-                  style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#D97706')),
-                ),
-              ],
-            ),
-            pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.end,
-              children: [
-                pw.Text('Staff ID: ${snapshot.generatedByStaffId ?? "unknown"}', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
-                pw.Text('Period: ${_date(snapshot.query.startDate)} to ${_date(snapshot.query.endDateExclusive)}', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
-              ],
-            ),
-          ],
-        ),
-      ),
+      header: (context) => _buildBrandHeader(context, snapshot, section, family),
       footer: (context) => pw.Container(
         padding: const pw.EdgeInsets.only(top: 6),
         decoration: const pw.BoxDecoration(
@@ -101,41 +74,20 @@ class AnalyticsExportService {
       build: (context) => [
         // 1. Executive KPI Cards
         if (section.metrics.isNotEmpty) ...[
-          pw.Text('Executive KPI Summary', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#1E293B'))),
+          pw.Row(
+            children: [
+              pw.Container(width: 3.5, height: 11, color: accentAmber),
+              pw.SizedBox(width: 5),
+              pw.Text('Executive KPI Summary', style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: primaryDark)),
+            ],
+          ),
           pw.SizedBox(height: 6),
           pw.Wrap(
-            spacing: 10,
-            runSpacing: 10,
+            spacing: 8,
+            runSpacing: 8,
             children: [
-              for (final metric in section.metrics)
-                pw.Container(
-                  width: 230,
-                  padding: const pw.EdgeInsets.all(8),
-                  decoration: pw.BoxDecoration(
-                    color: PdfColor.fromHex('#F8FAFC'),
-                    border: pw.Border.all(color: PdfColors.grey300),
-                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
-                  ),
-                  child: pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text(
-                        '${metric.label}: ${_pdfValue(metric.value, metric.unit)}',
-                        style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#1E293B')),
-                      ),
-                      pw.SizedBox(height: 3),
-                      pw.Text(
-                        '[${metric.quality.name}]${metric.changePercent != null ? " ${metric.changePercent! >= 0 ? "+" : ""}${metric.changePercent!.toStringAsFixed(1)}%" : ""}',
-                        style: pw.TextStyle(fontSize: 7, color: metric.quality == AnalyticsQuality.complete ? PdfColors.green800 : PdfColor.fromHex('#D97706')),
-                      ),
-                      pw.Text('Formula / explanation: ${metric.explanation}', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
-                      pw.Text('Coverage: ${metric.sampleCount ?? "unknown"} / ${metric.populationCount ?? "unknown"}; change percent: ${metric.changePercent ?? "unavailable"}', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
-                      pw.Text('Absolute change: ${metric.changeAbsolute == null ? "unavailable" : _pdfValue(metric.changeAbsolute, metric.unit)}; prior value: ${metric.priorValue == null ? "unavailable" : _pdfValue(metric.priorValue, metric.unit)}', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
-                      if (metric.isBalance)
-                        pw.Text('Balance metric: snapshot balance (excluded from historical comparison)', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
-                    ],
-                  ),
-                ),
+              for (var i = 0; i < section.metrics.length; i++)
+                _buildKpiCard(section.metrics[i], i),
             ],
           ),
           pw.SizedBox(height: 12),
@@ -143,49 +95,87 @@ class AnalyticsExportService {
 
         // 2. Section Notes
         if (section.notes.isNotEmpty) ...[
-          for (final note in section.notes)
-            pw.Padding(
-              padding: const pw.EdgeInsets.only(bottom: 4),
-              child: pw.Text('Section note: $note', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+          pw.Row(
+            children: [
+              pw.Container(width: 3.5, height: 10, color: accentAmber),
+              pw.SizedBox(width: 5),
+              pw.Text('Report Notes & Scope', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: primaryDark)),
+            ],
+          ),
+          pw.SizedBox(height: 4),
+          pw.Container(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: pw.BoxDecoration(
+              color: cardBg,
+              border: pw.Border.all(color: borderGrey, width: 0.5),
+              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
             ),
-          pw.SizedBox(height: 8),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                for (final note in section.notes)
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.only(bottom: 2),
+                    child: pw.Row(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text('• ', style: pw.TextStyle(fontSize: 7.5, color: accentAmber, fontWeight: pw.FontWeight.bold)),
+                        pw.Expanded(
+                          child: pw.Text(note, style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey700)),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 10),
         ],
 
-        // 3. Source Details Table
-        if (section.rows.isNotEmpty) ...[
-          pw.Text('Source details (${section.rows.length} rows)', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#1E293B'))),
-          pw.SizedBox(height: 5),
-          pw.TableHelper.fromTextArray(
-            headers: ['Source / ID', ...section.columns.map((col) => col.unit == null ? col.label : '${col.label} (${col.unit!.name})')],
-            data: [
-              for (final row in section.rows)
-                ['${row.sourceType} / ${row.sourceId ?? row.id}', ...section.columns.map((col) => _pdfValue(row.cells[col.key], col.unit))],
-            ],
-            headerDecoration: pw.BoxDecoration(color: PdfColor.fromHex('#1E293B')),
-            headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
-            cellStyle: const pw.TextStyle(fontSize: 8),
-            oddRowDecoration: pw.BoxDecoration(color: PdfColor.fromHex('#F8FAFC')),
-            border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
-            cellPadding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 4),
-          ),
-          pw.SizedBox(height: 6),
-          for (final row in section.rows)
-            for (final col in section.columns)
-              pw.Padding(
-                padding: const pw.EdgeInsets.only(bottom: 1),
-                child: pw.Text('${row.sourceType} / ${row.sourceId ?? row.id} (row ${row.id}) | ${col.label}: ${_pdfValue(row.cells[col.key], col.unit)}', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
-              ),
-          pw.SizedBox(height: 12),
-        ],
+        // 3. Source Details Tables
+        ..._buildSectionTables(section),
 
         // 4. Audit & Metadata Appendix
-        pw.Text('Audit & Metadata Appendix', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#1E293B'))),
+        pw.Row(
+          children: [
+            pw.Container(width: 3.5, height: 11, color: primaryDark),
+            pw.SizedBox(width: 5),
+            pw.Text('Audit & Metadata Appendix', style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: primaryDark)),
+          ],
+        ),
         pw.SizedBox(height: 4),
-        for (final r in _metadata(snapshot, family.name))
-          pw.Padding(
-            padding: const pw.EdgeInsets.only(bottom: 2),
-            child: pw.Text('${r[0]}: ${r[1] ?? "Unknown"}', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey700)),
+        pw.Container(
+          padding: const pw.EdgeInsets.all(8),
+          decoration: pw.BoxDecoration(
+            color: cardBg,
+            border: pw.Border.all(color: borderGrey, width: 0.5),
+            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
           ),
+          child: pw.Wrap(
+            spacing: 12,
+            runSpacing: 4,
+            children: [
+              for (final r in _metadata(snapshot, family.name))
+                pw.SizedBox(
+                  width: 240,
+                  child: pw.RichText(
+                    text: pw.TextSpan(
+                      children: [
+                        pw.TextSpan(
+                          text: '${r[0]}: ',
+                          style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold, color: primaryDark),
+                        ),
+                        pw.TextSpan(
+                          text: '${r[1] ?? "Unknown"}',
+                          style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey700),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
       ],
     ));
 
@@ -193,11 +183,370 @@ class AnalyticsExportService {
     return document.save();
   }
 
-  String _pdfValue(Object? value, AnalyticsUnit? unit) {
-    if (value == null) return 'Missing data';
-    if (unit == AnalyticsUnit.paisa && value is num) return 'PKR ${(value / 100).toStringAsFixed(2)}';
+  pw.Widget _buildBrandHeader(
+    pw.Context context,
+    AnalyticsSnapshot snapshot,
+    AnalyticsSection section,
+    AnalyticsFamily family,
+  ) {
+    final primaryDark = PdfColor.fromHex('#1E293B');
+    final accentAmber = PdfColor.fromHex('#D97706');
+    return pw.Container(
+      padding: const pw.EdgeInsets.only(bottom: 8),
+      margin: const pw.EdgeInsets.only(bottom: 12),
+      decoration: pw.BoxDecoration(
+        border: pw.Border(bottom: pw.BorderSide(color: primaryDark, width: 1.5)),
+      ),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Row(
+                children: [
+                  pw.Text(
+                    'CRUNCH CARTEL POS',
+                    style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: primaryDark),
+                  ),
+                  pw.SizedBox(width: 8),
+                  pw.Container(
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    decoration: pw.BoxDecoration(
+                      color: accentAmber,
+                      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
+                    ),
+                    child: pw.Text(
+                      family.name.toUpperCase(),
+                      style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+                    ),
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 3),
+              pw.Text(
+                'EXECUTIVE ANALYTICS REPORT | ${section.title.toUpperCase()}',
+                style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: accentAmber),
+              ),
+            ],
+          ),
+          pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.end,
+            children: [
+              pw.Text('Period: ${_date(snapshot.query.startDate)} to ${_date(snapshot.query.endDateExclusive)}', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: primaryDark)),
+              pw.SizedBox(height: 2),
+              pw.Text('Staff ID: ${snapshot.generatedByStaffId ?? "unknown"} | Asia/Karachi UTC+05:00', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
+              pw.Text('Page ${context.pageNumber} of ${context.pagesCount}', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  pw.Widget _buildKpiCard(AnalyticsMetric metric, int index) {
+    final colors = [
+      PdfColor.fromHex('#2563EB'),
+      PdfColor.fromHex('#059669'),
+      PdfColor.fromHex('#D97706'),
+      PdfColor.fromHex('#7C3AED'),
+      PdfColor.fromHex('#0891B2'),
+      PdfColor.fromHex('#DC2626'),
+    ];
+    final primaryDark = PdfColor.fromHex('#1E293B');
+    final accentColor = metric.quality == AnalyticsQuality.missing
+        ? PdfColors.grey400
+        : (metric.changePercent != null && metric.changePercent! < 0
+            ? PdfColor.fromHex('#DC2626')
+            : colors[index % colors.length]);
+
+    final badgeColor = metric.quality == AnalyticsQuality.complete
+        ? PdfColor.fromHex('#059669')
+        : (metric.quality == AnalyticsQuality.missing ? PdfColors.grey600 : PdfColor.fromHex('#D97706'));
+
+    return pw.Container(
+      width: 255,
+      padding: const pw.EdgeInsets.all(7),
+      decoration: pw.BoxDecoration(
+        color: PdfColor.fromHex('#F8FAFC'),
+        border: pw.Border.all(color: PdfColor.fromHex('#CBD5E1'), width: 0.5),
+        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+      ),
+      child: pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Container(
+            width: 3.5,
+            height: 38,
+            decoration: pw.BoxDecoration(
+              color: accentColor,
+              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(2)),
+            ),
+          ),
+          pw.SizedBox(width: 6),
+          pw.Expanded(
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Expanded(
+                      child: pw.Text(
+                        metric.label,
+                        style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+                        maxLines: 1,
+                        overflow: pw.TextOverflow.clip,
+                      ),
+                    ),
+                    pw.Text(
+                      '[${metric.quality.name}]',
+                      style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold, color: badgeColor),
+                    ),
+                  ],
+                ),
+                pw.SizedBox(height: 2),
+                pw.Text(
+                  _pdfValue(metric.value, metric.unit),
+                  style: pw.TextStyle(fontSize: 11.5, fontWeight: pw.FontWeight.bold, color: primaryDark),
+                ),
+                pw.SizedBox(height: 2),
+                if (metric.changeAbsolute != null)
+                  pw.Text(
+                    'Absolute change: ${_pdfValue(metric.changeAbsolute, metric.unit)}${metric.changePercent != null ? " (${metric.changePercent! >= 0 ? "+" : ""}${metric.changePercent!.toStringAsFixed(1)}%)" : ""}',
+                    style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold, color: metric.changeAbsolute! >= 0 ? PdfColor.fromHex('#059669') : PdfColor.fromHex('#DC2626')),
+                  )
+                else if (metric.changePercent != null)
+                  pw.Text(
+                    '${metric.changePercent! >= 0 ? "+" : ""}${metric.changePercent!.toStringAsFixed(1)}% vs prior period',
+                    style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold, color: metric.changePercent! >= 0 ? PdfColor.fromHex('#059669') : PdfColor.fromHex('#DC2626')),
+                  )
+                else
+                  pw.Text(
+                    'Coverage: ${metric.sampleCount ?? "unknown"} / ${metric.populationCount ?? "unknown"}',
+                    style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.grey600),
+                  ),
+                if (metric.explanation.isNotEmpty) ...[
+                  pw.SizedBox(height: 1),
+                  pw.Text(
+                    metric.explanation,
+                    style: const pw.TextStyle(fontSize: 6, color: PdfColors.grey500),
+                    maxLines: 2,
+                    overflow: pw.TextOverflow.clip,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _tableTitle(String sourceType) {
+    return switch (sourceType) {
+      'orders' => 'Order Transactions',
+      'order_workload' => 'Order Workload Projections',
+      'weekday_order_peaks' => 'Weekday Order Distribution',
+      'held_carts' => 'Current Active Holds',
+      'hold_lifecycle_events' => 'Hold Lifecycle Events',
+      'order_revisions' => 'Order Revisions & Line Audits',
+      'shifts' => 'Shift Handover & Reconciliations',
+      'cash_movements' => 'Till & Safe Cash Movements',
+      'order_payments' => 'Tender Collections & Settlements',
+      'business_days' => 'Business Day Performance',
+      'mandi_procurements' => 'Procurement & Market Purchases',
+      'vendor_khata' => 'Supplier Khata Accounts',
+      'vendor_transactions' => 'Supplier Ledger Movements',
+      'expense_entries' => 'Operating Expense Entries',
+      'payroll_entries' => 'Staff Payroll Ledger',
+      'kitchen_wastage' => 'Kitchen Spoilage & Wastage',
+      'raw_ingredients' => 'Raw Ingredient Stock Levels',
+      'inventory_movements' => 'Inventory Movements',
+      'rider_trips' => 'Rider Delivery Trips',
+      'attempts' => 'Delivery Fulfillment Attempts',
+      'sold_items' => 'Menu Item Sales Breakdown',
+      'allocations' => 'Order Item Allocations',
+      _ => sourceType.replaceAll('_', ' ').toUpperCase(),
+    };
+  }
+
+  List<pw.Widget> _buildSectionTables(AnalyticsSection section) {
+    final primaryDark = PdfColor.fromHex('#1E293B');
+    final accentAmber = PdfColor.fromHex('#D97706');
+    final borderGrey = PdfColor.fromHex('#CBD5E1');
+    final cardBg = PdfColor.fromHex('#F8FAFC');
+
+    if (section.rows.isEmpty) {
+      return [
+        pw.Container(
+          width: double.infinity,
+          padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          margin: const pw.EdgeInsets.only(top: 4, bottom: 8),
+          decoration: pw.BoxDecoration(
+            color: cardBg,
+            border: pw.Border.all(color: borderGrey, width: 0.5),
+            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+          ),
+          child: pw.Text(
+            'No source rows recorded for this report section in the selected period.',
+            style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+          ),
+        ),
+      ];
+    }
+
+    final groups = <String, List<AnalyticsRow>>{};
+    for (final row in section.rows) {
+      groups.putIfAbsent(row.sourceType, () => []).add(row);
+    }
+
+    final widgets = <pw.Widget>[];
+
+    for (final entry in groups.entries) {
+      final sourceType = entry.key;
+      final groupRows = entry.value;
+      final groupKeys = groupRows.expand((r) => r.cells.keys).toSet();
+
+      // Filter to relevant, non-internal business columns
+      final availableCols = section.columns.where((c) {
+        if (!groupKeys.contains(c.key)) return false;
+        final k = c.key;
+        if (k.endsWith('_source') || k.endsWith('_utc_source')) return false;
+        if (k == 'contributing_business_day_ids' || k == 'business_day_status_evidence') return false;
+        if (k == 'business_day_start' || k == 'business_day_end' || k == 'shift_start' || k == 'shift_end') return false;
+        if (k == 'order_cashier_id' || (k == 'cashier_id' && groupKeys.contains('cashier_name_current'))) return false;
+        if (k == 'employee_id' && groupKeys.contains('employee_name_current')) return false;
+        if (k == 'vendor_id' && groupKeys.contains('supplier_name_current')) return false;
+        return true;
+      }).toList();
+
+      // Limit columns to max 6 to prevent layout overflow in landscape A4
+      final chosenCols = availableCols.length > 6 ? availableCols.take(6).toList() : availableCols;
+
+      final cellAlignments = <int, pw.Alignment>{0: pw.Alignment.centerLeft};
+      final headerAlignments = <int, pw.Alignment>{0: pw.Alignment.centerLeft};
+
+      for (var i = 0; i < chosenCols.length; i++) {
+        final col = chosenCols[i];
+        if (col.unit == AnalyticsUnit.paisa ||
+            col.unit == AnalyticsUnit.count ||
+            col.unit == AnalyticsUnit.percent ||
+            col.unit == AnalyticsUnit.minutes ||
+            col.unit == AnalyticsUnit.decimal) {
+          cellAlignments[i + 1] = pw.Alignment.centerRight;
+          headerAlignments[i + 1] = pw.Alignment.centerRight;
+        } else if (col.key == 'token' ||
+            col.key == 'status' ||
+            col.key == 'payment_status' ||
+            col.key == 'dining_type' ||
+            col.key == 'aging_status') {
+          cellAlignments[i + 1] = pw.Alignment.center;
+          headerAlignments[i + 1] = pw.Alignment.center;
+        } else {
+          cellAlignments[i + 1] = pw.Alignment.centerLeft;
+          headerAlignments[i + 1] = pw.Alignment.centerLeft;
+        }
+      }
+
+      // Safe limit of rows per table in PDF to prevent layout memory explosion
+      const maxRowsPerTable = 100;
+      final displayRows = groupRows.length > maxRowsPerTable ? groupRows.take(maxRowsPerTable).toList() : groupRows;
+
+      widgets.addAll([
+        pw.Row(
+          children: [
+            pw.Container(width: 3.5, height: 11, color: accentAmber),
+            pw.SizedBox(width: 5),
+            pw.Text(
+              '${_tableTitle(sourceType)} (${groupRows.length} ${groupRows.length == 1 ? "record" : "records"})',
+              style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: primaryDark),
+            ),
+          ],
+        ),
+        pw.SizedBox(height: 4),
+        pw.TableHelper.fromTextArray(
+          headers: [
+            'Source / ID',
+            ...chosenCols.map((c) => c.unit == AnalyticsUnit.paisa
+                ? '${c.label} (PKR)'
+                : (c.unit == AnalyticsUnit.percent
+                    ? '${c.label} (%)'
+                    : (c.unit == AnalyticsUnit.minutes ? '${c.label} (min)' : c.label))),
+          ],
+          data: [
+            for (final row in displayRows)
+              [
+                '${row.sourceType} / ${row.sourceId ?? row.id}',
+                ...chosenCols.map((col) => _pdfCell(row.cells[col.key], col)),
+              ],
+          ],
+          cellAlignments: cellAlignments,
+          headerAlignments: headerAlignments,
+          headerDecoration: pw.BoxDecoration(color: primaryDark),
+          headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+          cellStyle: const pw.TextStyle(fontSize: 7.5),
+          oddRowDecoration: pw.BoxDecoration(color: cardBg),
+          border: pw.TableBorder.all(color: borderGrey, width: 0.5),
+          cellPadding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 3.5),
+        ),
+        if (groupRows.length > maxRowsPerTable)
+          pw.Padding(
+            padding: const pw.EdgeInsets.only(top: 3),
+            child: pw.Text(
+              'Showing first $maxRowsPerTable of ${groupRows.length} records. Complete dataset available in Excel (.xlsx) and CSV exports.',
+              style: const pw.TextStyle(fontSize: 7, fontStyle: pw.FontStyle.italic, color: PdfColors.grey600),
+            ),
+          ),
+        pw.SizedBox(height: 12),
+      ]);
+    }
+
+    return widgets;
+  }
+
+  String _pdfCell(Object? value, AnalyticsColumn col) {
+    if (value == null) return '—';
+    if (col.unit == AnalyticsUnit.paisa && value is num) {
+      return _formatCurrency(value);
+    }
+    if (col.unit == AnalyticsUnit.percent && value is num) {
+      return '${value.toStringAsFixed(1)}%';
+    }
+    if (col.unit == AnalyticsUnit.minutes && value is num) {
+      return '${value.toStringAsFixed(1)} min';
+    }
     final ts = formatAnalyticsTimestamp(value);
     if (ts != null) return ts.fullLabel;
+    if (value is double) {
+      return value.toStringAsFixed(2);
+    }
+    return value.toString();
+  }
+
+  String _formatCurrency(num paisa) {
+    final p = paisa.toInt();
+    final isNeg = p < 0;
+    final abs = p.abs();
+    final r = abs ~/ 100;
+    final c = abs % 100;
+    final formattedR = r.toString().replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (m) => '${m[1]},',
+    );
+    return '${isNeg ? '-' : ''}PKR $formattedR.${c.toString().padLeft(2, '0')}';
+  }
+
+  String _pdfValue(Object? value, AnalyticsUnit? unit) {
+    if (value == null) return 'Missing data';
+    if (unit == AnalyticsUnit.paisa && value is num) {
+      return _formatCurrency(value);
+    }
+    final ts = formatAnalyticsTimestamp(value);
+    if (ts != null) return ts.fullLabel;
+    if (unit == AnalyticsUnit.percent && value is num) {
+      return '${value.toStringAsFixed(1)}%';
+    }
     return '$value${unit == null ? "" : " ${unit.name}"}';
   }
 
@@ -308,7 +657,7 @@ class AnalyticsExportService {
       xml.write('<col min="1" max="1" width="30" customWidth="1"/>');
       xml.write('<col min="2" max="2" width="28" customWidth="1"/>');
       xml.write('<col min="3" max="3" width="22" customWidth="1"/>');
-      xml.write('<col min="4" max="25" width="20" customWidth="1"/>');
+      xml.write('<col min="4" max="150" width="22" customWidth="1"/>');
       xml.write('</cols>');
       xml.write('<sheetData>');
       for (var r = 0; r < rows.length; r++) {
