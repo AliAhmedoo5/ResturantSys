@@ -1069,7 +1069,12 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
                   selectedForegroundColor: StreetFoodMafiaColors.darkNavy,
                   backgroundColor: StreetFoodMafiaColors.cardSurface,
                   foregroundColor: StreetFoodMafiaColors.offWhite,
-                  textStyle: const TextStyle(fontSize: 12),
+                  textStyle: const TextStyle(
+                    fontFamily: WarmCounterTypography.fontFamily,
+                    fontFamilyFallback: WarmCounterTypography.fontFallbacks,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 onSelectionChanged: (selected) {
                   if (selected.isNotEmpty) {
