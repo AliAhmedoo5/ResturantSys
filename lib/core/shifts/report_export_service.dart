@@ -162,7 +162,7 @@ class ReportExportService {
       section('Kitchen Wastage', ['Recorded','Ingredient','Quantity','Reason','Loss (paisa)'], wastage.map((r) => [r['created_at'], r['name'], r['quantity'], r['reason'], r['loss']]).toList()),
       section('Shift Handover Audit', ['Shift','Cashier','Float (paisa)','Expected (paisa)','Counted (paisa)','Variance (paisa)','Audit'], shifts.map((r) => [r['id'], r['name'], paisa(r['opening_float']), paisa(r['expected_cash']), r['counted_cash'] == null ? 'NOT COUNTED' : paisa(r['counted_cash']), r['discrepancy'] == null ? 'UNKNOWN' : paisa(r['discrepancy']), r['discrepancy_status']]).toList()),
       section('Vendor Khata Movements', ['Vendor','Type','Amount (paisa)','Recorded'], vendors.map((r) => [r['name'], r['type'], r['paisa'], r['created_at']]).toList()),
-      section('Delivery & Rider Fulfillment', ['Trip #', 'Rider', 'Status', 'Dispatched', 'Settled', 'Expected COD (paisa)', 'Collected COD (paisa)', 'Variance (paisa)'], riderTrips.map((r) => [r['trip_name'] ?? 'Trip #${r['id']}', r['rider_name'] ?? 'Rider', r['status'], r['dispatched_at'] ?? 'N/A', r['settled_at_utc'] ?? 'In-Flight', r['cash_expected_paisa'] ?? 0, r['cash_collected_paisa'] ?? 0, (r['cash_collected_paisa'] ?? 0) - (r['cash_expected_paisa'] ?? 0)]).toList()),
+      section('Delivery & Rider Fulfillment', ['Trip #', 'Rider', 'Status', 'Dispatched', 'Settled', 'Expected COD (paisa)', 'Collected COD (paisa)', 'Variance (paisa)'], riderTrips.map((r) => [r['trip_name'] ?? 'Trip #${r['id']}', r['rider_name'] ?? 'Rider', r['status'], r['dispatched_at'] ?? 'N/A', r['settled_at_utc'] ?? 'In-Flight', r['cash_expected_paisa'] ?? 0, r['cash_collected_paisa'] ?? 0, ((r['cash_collected_paisa'] as num?) ?? 0) - ((r['cash_expected_paisa'] as num?) ?? 0)]).toList()),
       section('Labor & Attendance Productivity', ['Employee', 'Department', 'Work Date', 'Clock In', 'Clock Out', 'Break (min)', 'Worked (min)'], workedHours.map((w) => [w['employee_name'], w['department_name'] ?? 'Front Counter', w['work_date'], w['clock_in'], w['clock_out'], w['break_minutes'], w['worked_minutes']]).toList()),
       section('Operating Expenses & Payroll', ['Category', 'Description', 'Payee', 'Source', 'Amount (paisa)', 'Recorded'], expenses.map((e) => [e['category_snapshot'] ?? 'Operating', e['description'], e['payee'], e['source'], e['amount_paisa'], e['created_at']]).toList()),
       section('Overall Financial Position & Safe Handover', ['Financial Item', 'Classification', 'Amount (paisa)', 'Audit Notes'], [
@@ -368,6 +368,10 @@ class ReportExportService {
         final ordersCount = (kpis['orders_count'] as num?)?.toInt() ?? 0;
         final wastagePaisa = (kpis['wastage_loss_paisa'] as num?)?.toInt() ?? 0;
         final expensePaisa = (kpis['total_expenses_paisa'] as num?)?.toInt() ?? 0;
+        final workedMins = (kpis['worked_minutes'] as num?)?.toDouble() ?? 0.0;
+        final laborHours = workedMins / 60.0;
+        final salesPerHour = laborHours > 0 ? money((netPaisa / laborHours).round()) : 'Rs. 0.00';
+        final ordersPerHour = laborHours > 0 ? (ordersCount / laborHours).toStringAsFixed(2) : '0';
 
         document.addPage(pw.MultiPage(
           pageFormat: PdfPageFormat.a4.landscape,
@@ -381,12 +385,12 @@ class ReportExportService {
               spacing: 8,
               runSpacing: 8,
               children: [
-                buildCard('GROSS / NET SALES', money(netPaisa), '$ordersCount Settled Orders | Avg: ${ordersCount > 0 ? money(netPaisa ~/ ordersCount) : "Rs. 0"}'),
+                buildCard('GROSS / NET SALES', money(netPaisa), '$ordersCount Orders | Gross: ${money(grossPaisa)}'),
                 buildCard('CASH IN TILL HANDOVER', money(countedPaisa), 'Physical Count in Drawers'),
                 buildCard('CASH DISCREPANCY', money(discPaisa), discPaisa == 0 ? 'STATUS: CLEAN (0.00 Variance)' : 'STATUS: REVIEW NEEDED', badgeColor: discPaisa == 0 ? PdfColor.fromHex('#15803D') : PdfColor.fromHex('#B91C1C')),
                 buildCard('OPERATIONAL OVERHEADS', money(expensePaisa), 'Total Day In-Drawer & Owner Expenses'),
                 buildCard('KITCHEN WASTAGE LOSS', money(wastagePaisa), 'Recorded Cooking / Spoilage Loss'),
-                buildCard('LOGGED LABOR HOURS', '${((kpis['worked_minutes'] as num?)?.toDouble() ?? 0) / 60.0} hrs', 'Verified Staff On-Shift Attendance'),
+                buildCard('LOGGED LABOR HOURS', '${laborHours.toStringAsFixed(1)} hrs', 'Verified Staff On-Shift Attendance'),
               ],
             ),
             pw.SizedBox(height: 12),
@@ -558,9 +562,9 @@ class ReportExportService {
                 child: pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
                   children: [
-                    pw.Text('Total Direct Labor: ${((kpis['worked_minutes'] as num?)?.toDouble() ?? 0) / 60.0} hrs', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: primaryDark)),
-                    pw.Text('Sales Productivity: ${((kpis['worked_minutes'] as num?)?.toInt() ?? 0) > 0 ? money(netPaisa ~/ (((kpis['worked_minutes'] as num?)!.toInt()) ~/ 60.0 == 0 ? 1 : ((kpis['worked_minutes'] as num!) / 60.0).round())) : "Rs. 0"}/hr', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
-                    pw.Text('Orders / Labor Hour: ${((kpis['worked_minutes'] as num?)?.toInt() ?? 0) > 0 ? (ordersCount / (((kpis['worked_minutes'] as num!) / 60.0))).toStringAsFixed(2) : "0"} orders/hr', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                    pw.Text('Total Direct Labor: ${laborHours.toStringAsFixed(1)} hrs', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: primaryDark)),
+                    pw.Text('Sales Productivity: $salesPerHour/hr', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                    pw.Text('Orders / Labor Hour: $ordersPerHour orders/hr', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
                   ],
                 ),
               ),
