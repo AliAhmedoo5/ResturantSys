@@ -35,7 +35,7 @@ void main() {
 
   group('Table Unavailable and Projection Drilldown Bug Repro', () {
     testWidgets('Chart source drill-down for BOM quantities shows name, unit and prunes irrelevant columns', (tester) async {
-      tester.view.physicalSize = const Size(1366, 1000);
+      tester.view.physicalSize = const Size(1366, 1200);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
@@ -115,11 +115,6 @@ void main() {
       // Find the chart point for BOM quantities
       final pointFinder = find.byKey(const ValueKey('chart_point_bom_g_0'));
       expect(pointFinder, findsOneWidget);
-      await tester.scrollUntilVisible(
-        pointFinder,
-        200,
-        scrollable: find.descendant(of: find.byKey(const ValueKey('analytics_body')), matching: find.byType(Scrollable)).first,
-      );
       await tester.tap(pointFinder);
       await tester.pumpAndSettle();
 
