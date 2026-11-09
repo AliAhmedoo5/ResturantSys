@@ -167,6 +167,13 @@ class AnalyticsExportService {
             border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
             cellPadding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 4),
           ),
+          pw.SizedBox(height: 6),
+          for (final row in section.rows)
+            for (final col in section.columns)
+              pw.Padding(
+                padding: const pw.EdgeInsets.only(bottom: 1),
+                child: pw.Text('${row.sourceType} / ${row.sourceId ?? row.id} (row ${row.id}) | ${col.label}: ${_pdfValue(row.cells[col.key], col.unit)}', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
+              ),
           pw.SizedBox(height: 12),
         ],
 
