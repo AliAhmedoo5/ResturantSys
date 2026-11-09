@@ -828,7 +828,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
         avatar: const Icon(Icons.filter_alt_outlined, size: 14),
         label: Text('${entry.key.label}: #${entry.value}'),
         onDeleted: () {
-          final next = Map<DomainDimension, int>.from(_query.domainFilters)..remove(entry.key);
+          final next = Map<AnalyticsDimension, String>.from(_query.domainFilters)..remove(entry.key);
           _changeQuery(_query.copyWith(domainFilters: next));
         },
       ));
