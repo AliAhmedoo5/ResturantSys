@@ -140,6 +140,11 @@ void main() {
   });
 
   testWidgets('Manager can explore reports and distinguish missing profit from zero', (tester) async {
+    tester.view.physicalSize = const Size(1366, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     await tester.pumpWidget(MaterialApp(home: Scaffold(body: ManagerAnalyticsWorkspace(
       service: SnapshotService(), clock: () => DateTime(2026, 10, 26, 12),
     ))));
