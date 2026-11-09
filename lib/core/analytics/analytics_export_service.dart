@@ -6,7 +6,6 @@ import 'package:pdf/widgets.dart' as pw;
 import 'openxml_workbook_builder.dart';
 
 import 'analytics_models.dart';
-import 'analytics_time.dart';
 
 enum AnalyticsExportFormat { csv, xlsx, pdf }
 
@@ -495,7 +494,7 @@ class AnalyticsExportService {
             padding: const pw.EdgeInsets.only(top: 3),
             child: pw.Text(
               'Showing first $maxRowsPerTable of ${groupRows.length} records. Complete dataset available in Excel (.xlsx) and CSV exports.',
-              style: const pw.TextStyle(fontSize: 7, fontStyle: pw.FontStyle.italic, color: PdfColors.grey600),
+              style: pw.TextStyle(fontSize: 7, fontStyle: pw.FontStyle.italic, color: PdfColors.grey600),
             ),
           ),
         pw.SizedBox(height: 12),
