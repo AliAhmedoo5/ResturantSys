@@ -884,16 +884,17 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
     return ChoiceChip(
       key: ValueKey(valueKey),
       label: Text(label),
-      avatar: Icon(icon, size: 14, color: isSelected ? StreetFoodMafiaColors.darkNavy : StreetFoodMafiaColors.secondaryText),
       selected: isSelected,
       selectedColor: StreetFoodMafiaColors.cartelYellow,
       backgroundColor: StreetFoodMafiaColors.cardSurface,
       labelStyle: TextStyle(
-        fontSize: 12,
+        fontSize: 11,
         fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
         color: isSelected ? StreetFoodMafiaColors.darkNavy : StreetFoodMafiaColors.offWhite,
       ),
       visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
       onSelected: (_) => _selectPreset(key),
     );
   }
@@ -1028,101 +1029,83 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Tier 1: View Navigation
-          Row(
+          Wrap(
+            spacing: 10,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Expanded(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      SegmentedButton<AnalyticsFamily>(
-                        key: const ValueKey('analytics_core_view_pills'),
-                        segments: const [
-                          ButtonSegment(
-                            value: AnalyticsFamily.overview,
-                            label: Text('Overview'),
-                            icon: Icon(Icons.dashboard_outlined, size: 16),
-                          ),
-                          ButtonSegment(
-                            value: AnalyticsFamily.sales,
-                            label: Text('Sales'),
-                            icon: Icon(Icons.point_of_sale_outlined, size: 16),
-                          ),
-                          ButtonSegment(
-                            value: AnalyticsFamily.cash,
-                            label: Text('Cash & shifts'),
-                            icon: Icon(Icons.account_balance_wallet_outlined, size: 16),
-                          ),
-                          ButtonSegment(
-                            value: AnalyticsFamily.orders,
-                            label: Text('Order operations'),
-                            icon: Icon(Icons.receipt_long_outlined, size: 16),
-                          ),
-                        ],
-                        selected: _coreFamilies.contains(_family) ? {_family} : <AnalyticsFamily>{},
-                        emptySelectionAllowed: true,
-                        showSelectedIcon: false,
-                        style: ButtonStyle(
-                          visualDensity: VisualDensity.compact,
-                          padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
-                          backgroundColor: WidgetStateProperty.resolveWith((states) {
-                            if (states.contains(WidgetState.selected)) {
-                              return StreetFoodMafiaColors.cartelYellow;
-                            }
-                            return StreetFoodMafiaColors.cardSurface;
-                          }),
-                          foregroundColor: WidgetStateProperty.resolveWith((states) {
-                            if (states.contains(WidgetState.selected)) {
-                              return StreetFoodMafiaColors.darkNavy;
-                            }
-                            return StreetFoodMafiaColors.offWhite;
-                          }),
-                        ),
-                        onSelectionChanged: (selected) {
-                          if (selected.isNotEmpty) {
-                            _selectReport(selected.first);
-                          }
-                        },
-                      ),
-                      const SizedBox(width: 10),
-                      SizedBox(
-                        width: 180,
-                        child: DropdownButtonFormField<AnalyticsFamily>(
-                          mouseCursor: WidgetStateMouseCursor.clickable,
-                          key: const ValueKey('analytics_family'),
-                          value: _family,
-                          isExpanded: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Report',
-                            isDense: true,
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          ),
-                          items: _familyLabels.entries
-                              .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value, overflow: TextOverflow.ellipsis)))
-                              .toList(),
-                          onChanged: (family) {
-                            if (family != null) _selectReport(family);
-                          },
-                        ),
-                      ),
-                    ],
+              SegmentedButton<AnalyticsFamily>(
+                key: const ValueKey('analytics_core_view_pills'),
+                segments: const [
+                  ButtonSegment(
+                    value: AnalyticsFamily.overview,
+                    label: Text('Overview'),
                   ),
+                  ButtonSegment(
+                    value: AnalyticsFamily.sales,
+                    label: Text('Sales'),
+                  ),
+                  ButtonSegment(
+                    value: AnalyticsFamily.cash,
+                    label: Text('Cash & shifts'),
+                  ),
+                  ButtonSegment(
+                    value: AnalyticsFamily.orders,
+                    label: Text('Order ops'),
+                  ),
+                ],
+                selected: _coreFamilies.contains(_family) ? {_family} : <AnalyticsFamily>{},
+                emptySelectionAllowed: true,
+                showSelectedIcon: false,
+                style: SegmentedButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  selectedBackgroundColor: StreetFoodMafiaColors.cartelYellow,
+                  selectedForegroundColor: StreetFoodMafiaColors.darkNavy,
+                  backgroundColor: StreetFoodMafiaColors.cardSurface,
+                  foregroundColor: StreetFoodMafiaColors.offWhite,
+                  textStyle: const TextStyle(fontSize: 12),
+                ),
+                onSelectionChanged: (selected) {
+                  if (selected.isNotEmpty) {
+                    _selectReport(selected.first);
+                  }
+                },
+              ),
+              SizedBox(
+                width: 170,
+                child: DropdownButtonFormField<AnalyticsFamily>(
+                  mouseCursor: WidgetStateMouseCursor.clickable,
+                  key: const ValueKey('analytics_family'),
+                  value: _family,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Report',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  ),
+                  items: _familyLabels.entries
+                      .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value, overflow: TextOverflow.ellipsis)))
+                      .toList(),
+                  onChanged: (family) {
+                    if (family != null) _selectReport(family);
+                  },
                 ),
               ),
-              const SizedBox(width: 8),
               IconButton.outlined(
                 key: const ValueKey('analytics_refresh'),
                 tooltip: 'Refresh analytics',
+                visualDensity: VisualDensity.compact,
                 onPressed: _busy ? null : _load,
                 icon: const Icon(Icons.refresh, size: 18),
               ),
-              const SizedBox(width: 6),
               TextButton.icon(
                 key: const ValueKey('analytics_presets_button'),
+                style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
                 onPressed: _showPresetsDialog,
-                icon: const Icon(Icons.bookmark_border_rounded, size: 18),
-                label: const Text('Presets'),
+                icon: const Icon(Icons.bookmark_border_rounded, size: 16),
+                label: const Text('Presets', style: TextStyle(fontSize: 12)),
               ),
             ],
           ),
@@ -1131,22 +1114,16 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
           const SizedBox(height: 10),
           // Tier 2: Date presets, Compact Period, Order Time Basis, Grouping, Comparison, Audit Pill, Filter Drawer Toggle
           Wrap(
-            spacing: 8,
-            runSpacing: 10,
+            spacing: 6,
+            runSpacing: 8,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  _presetChip('live', 'Live', Icons.bolt, 'preset_chip_live'),
-                  _presetChip('today', 'Today', Icons.today, 'preset_chip_today'),
-                  _presetChip('yesterday', 'Yesterday', Icons.history, 'preset_chip_yesterday'),
-                  _presetChip('week', 'Last 7 Days', Icons.date_range, 'preset_chip_week'),
-                  _presetChip('month_to_date', 'Month to date', Icons.calendar_month, 'preset_chip_month_to_date'),
-                  _presetChip('custom', 'Custom', Icons.edit_calendar, 'preset_chip_custom'),
-                ],
-              ),
+              _presetChip('live', 'Live', Icons.bolt, 'preset_chip_live'),
+              _presetChip('today', 'Today', Icons.today, 'preset_chip_today'),
+              _presetChip('yesterday', 'Yesterday', Icons.history, 'preset_chip_yesterday'),
+              _presetChip('week', 'Last 7 Days', Icons.date_range, 'preset_chip_week'),
+              _presetChip('month_to_date', 'Month to date', Icons.calendar_month, 'preset_chip_month_to_date'),
+              _presetChip('custom', 'Custom', Icons.edit_calendar, 'preset_chip_custom'),
               SizedBox(
                 width: 155,
                 child: DropdownButtonFormField<String>(
@@ -1160,7 +1137,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
                         : 'Calendar Order period',
                     isDense: true,
                     border: const OutlineInputBorder(),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                   ),
                   items: const [
                     DropdownMenuItem(value: 'live', child: Text('Active day')),
@@ -1175,7 +1152,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
                 ),
               ),
               SizedBox(
-                width: 150,
+                width: 145,
                 child: DropdownButtonFormField<AnalyticsTimeBasis>(
                   key: const ValueKey('analytics_time_basis'),
                   value: _query.timeBasis,
@@ -1184,7 +1161,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
                     labelText: 'Order time basis',
                     isDense: true,
                     border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                   ),
                   items: const [
                     DropdownMenuItem(value: AnalyticsTimeBasis.businessDay, child: Text('Business Day')),
@@ -1196,7 +1173,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
                 ),
               ),
               SizedBox(
-                width: 130,
+                width: 125,
                 child: DropdownButtonFormField<AnalyticsGrouping>(
                   key: const ValueKey('analytics_grouping'),
                   value: _query.grouping,
@@ -1205,7 +1182,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
                     labelText: 'Order grouping',
                     isDense: true,
                     border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                   ),
                   items: const [
                     DropdownMenuItem(value: AnalyticsGrouping.day, child: Text('Day')),
@@ -1222,7 +1199,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
                     ? 'Historical comparison is disabled for snapshot balance families: ${_familyLabels[_family]}. Current balances are not historical snapshots.'
                     : 'Historical period comparison',
                 child: SizedBox(
-                  width: 160,
+                  width: 155,
                   child: DropdownButtonFormField<AnalyticsComparisonMode>(
                     key: const ValueKey('analytics_comparison_mode'),
                     value: _query.comparisonMode,
@@ -1231,7 +1208,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
                       labelText: 'Comparison',
                       isDense: true,
                       border: const OutlineInputBorder(),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                       helperText: _snapshotBalanceFamilies.contains(_family) ? 'Disabled (balance)' : null,
                     ),
                     items: const [
@@ -1252,10 +1229,10 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
                 style: OutlinedButton.styleFrom(
                   visualDensity: VisualDensity.compact,
                   side: const BorderSide(color: StreetFoodMafiaColors.border),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 ),
                 onPressed: () => _showAuditProvenanceModal(snapshot),
-                icon: const Icon(Icons.verified_outlined, size: 16, color: StreetFoodMafiaColors.cartelYellow),
+                icon: const Icon(Icons.verified_outlined, size: 15, color: StreetFoodMafiaColors.cartelYellow),
                 label: Text(
                   'Karachi (UTC+05:00) • Schema v${snapshot?.sourceSchemaVersion ?? 28} • ${snapshot?.businessDayIds.length ?? 0} Business Days',
                   style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.offWhite),
@@ -1271,13 +1248,13 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
                   foregroundColor: _activeFilterCount > 0
                       ? StreetFoodMafiaColors.cartelYellow
                       : StreetFoodMafiaColors.offWhite,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 ),
                 onPressed: () => setState(() => _filtersExpanded = !_filtersExpanded),
-                icon: const Icon(Icons.bolt, size: 16, color: StreetFoodMafiaColors.cartelYellow),
+                icon: const Icon(Icons.bolt, size: 15, color: StreetFoodMafiaColors.cartelYellow),
                 label: Text(
                   _activeFilterCount > 0 ? '⚡ Filters ($_activeFilterCount)' : '⚡ Filters',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                 ),
               ),
             ],
@@ -1293,20 +1270,20 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
       child: Column(
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: const BoxDecoration(
               border: Border(bottom: BorderSide(color: StreetFoodMafiaColors.border)),
             ),
             child: Row(
               children: [
-                const Icon(Icons.bolt, color: StreetFoodMafiaColors.cartelYellow, size: 20),
-                const SizedBox(width: 8),
+                const Icon(Icons.bolt, color: StreetFoodMafiaColors.cartelYellow, size: 18),
+                const SizedBox(width: 6),
                 const Text(
-                  'Filter Drawer',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: StreetFoodMafiaColors.offWhite),
+                  'Filters',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: StreetFoodMafiaColors.offWhite),
                 ),
                 if (_activeFilterCount > 0) ...[
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
@@ -1320,18 +1297,28 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
                   ),
                 ],
                 const Spacer(),
-                TextButton.icon(
+                TextButton(
                   key: const ValueKey('analytics_drawer_reset_all'),
                   style: TextButton.styleFrom(
                     visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     foregroundColor: StreetFoodMafiaColors.statusCanceled,
                   ),
                   onPressed: _resetAllFilters,
-                  icon: const Icon(Icons.restart_alt, size: 16),
-                  label: const Text('Reset All'),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.restart_alt, size: 14),
+                      SizedBox(width: 4),
+                      Text('Reset All', style: TextStyle(fontSize: 12)),
+                    ],
+                  ),
                 ),
+                const SizedBox(width: 4),
                 IconButton(
-                  icon: const Icon(Icons.close, size: 20),
+                  icon: const Icon(Icons.close, size: 18),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                   tooltip: 'Close filter drawer',
                   onPressed: () => setState(() => _filtersExpanded = false),
                 ),
@@ -1490,6 +1477,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
             Positioned.fill(
               child: ListView(
                 key: const ValueKey('analytics_body'),
+                cacheExtent: 2000,
                 padding: EdgeInsets.only(
                   left: 20,
                   top: 20,
@@ -1544,6 +1532,11 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
                   const SizedBox(height: 18),
                   _buildTwoTierCommandBar(context, constraints, snapshot),
                   _activeFilterChips(),
+                  if (_error != null) Card(child: Padding(padding: const EdgeInsets.all(12), child: Wrap(
+                    spacing: 12, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                      Text(_error!, style: const TextStyle(color: StreetFoodMafiaColors.statusCanceled)),
+                      TextButton(onPressed: _load, child: const Text('Retry')),
+                    ]))),
                   const SizedBox(height: 12),
                   Text('${_query.live ? 'LIVE • refreshes every ${widget.refreshInterval.inSeconds}s' : 'Historical exploration'}'
                     ' • Asia/Karachi • ${_query.live ? 'Active Business Day' : '${DateFormat('dd MMM yyyy').format(_query.startDate)} to ${DateFormat('dd MMM yyyy').format(_query.endDateExclusive)} (end exclusive)'}'
@@ -1562,11 +1555,6 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
                     style: const TextStyle(fontSize: 12, color: StreetFoodMafiaColors.secondaryText)),
                   const SizedBox(height: 8),
                   if (_busy) const LinearProgressIndicator(minHeight: 2),
-                  if (_error != null) Card(child: Padding(padding: const EdgeInsets.all(12), child: Wrap(
-                    spacing: 12, crossAxisAlignment: WrapCrossAlignment.center, children: [
-                      Text(_error!, style: const TextStyle(color: StreetFoodMafiaColors.statusCanceled)),
-                      TextButton(onPressed: _load, child: const Text('Retry')),
-                    ]))),
                   if (snapshot == null && !_busy && _error == null) const Text('No analytics snapshot available.'),
                   if (snapshot != null) ...[
                     if (snapshot.businessDayIds.isEmpty) _note('No Business Days match this selection. Current-state datasets may still be available.'),
@@ -1610,23 +1598,22 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
                 bottom: 0,
                 right: 0,
                 width: drawerWidth,
-                child: Material(
-                  elevation: 16,
-                  color: StreetFoodMafiaColors.darkNavy,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: StreetFoodMafiaColors.darkNavy,
-                      border: const Border(
-                        left: BorderSide(color: StreetFoodMafiaColors.border, width: 1.5),
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.4),
-                          blurRadius: 16,
-                          offset: const Offset(-4, 0),
-                        ),
-                      ],
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: const Border(
+                      left: BorderSide(color: StreetFoodMafiaColors.border, width: 1.5),
                     ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.4),
+                        blurRadius: 16,
+                        offset: const Offset(-4, 0),
+                      ),
+                    ],
+                  ),
+                  child: Material(
+                    elevation: 0,
+                    color: StreetFoodMafiaColors.darkNavy,
                     child: _filterDrawer(),
                   ),
                 ),

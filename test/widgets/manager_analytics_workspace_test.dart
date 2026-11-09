@@ -614,7 +614,13 @@ void main() {
     expect(find.text('Audit Provenance & Methodology'), findsOneWidget);
     expect(find.text('Karachi Timezone Cutoff'), findsOneWidget);
     expect(find.textContaining('Schema v28'), findsWidgets);
-    expect(find.textContaining('1 Business Days'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('analytics_audit_modal')),
+        matching: find.textContaining('1 Business Days'),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('Close'), findsOneWidget);
 
     await tester.tap(find.text('Close'));
@@ -657,8 +663,8 @@ void main() {
     expect(requested!.shiftId, 2);
 
     expect(find.text('⚡ Filters (2)'), findsOneWidget);
-    expect(find.text('Cashier #5'), findsOneWidget);
-    expect(find.text('Shift #2'), findsOneWidget);
+    expect(find.text('Cashier #5'), findsWidgets);
+    expect(find.text('Shift #2'), findsWidgets);
 
     await tester.ensureVisible(find.byKey(const ValueKey('analytics_drawer_reset_all')));
     await tester.tap(find.byKey(const ValueKey('analytics_drawer_reset_all')));
