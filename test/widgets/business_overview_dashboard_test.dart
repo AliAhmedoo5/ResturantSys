@@ -75,6 +75,9 @@ void main() {
     final icons = FontLoader('MaterialIcons')
       ..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'));
     await icons.load();
+    final brand = FontLoader(WarmCounterTypography.brandFontFamily);
+    brand.addFont(rootBundle.load('assets/fonts/knewave/Knewave-Regular.ttf'));
+    await brand.load();
   });
 
   for (final width in [1366.0, 1024.0, 390.0]) {
@@ -123,6 +126,8 @@ void main() {
         return overviewFixture(query);
       }), clock: () => DateTime(2026, 10, 26)))));
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('analytics_filters_toggle')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('analytics_cashier_picker')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Ayesha').last);
@@ -143,6 +148,9 @@ void main() {
     await tester.tap(find.text('Cash').last);
     await tester.pumpAndSettle();
     expect(requested!.paymentMethod, 'CASH');
+    await tester.tap(find.byKey(const ValueKey('analytics_filters_toggle')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Review shifts'));
     await tester.tap(find.text('Review shifts'));
     await tester.pumpAndSettle();
     expect(find.text('Cash and shifts'), findsOneWidget);
@@ -151,6 +159,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Overview').last);
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Change period'));
     await tester.tap(find.text('Change period'));
     await tester.pumpAndSettle();
     expect(requested!.live, isFalse);

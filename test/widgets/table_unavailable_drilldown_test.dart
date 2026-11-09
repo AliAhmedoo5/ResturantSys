@@ -35,7 +35,7 @@ void main() {
 
   group('Table Unavailable and Projection Drilldown Bug Repro', () {
     testWidgets('Chart source drill-down for BOM quantities shows name, unit and prunes irrelevant columns', (tester) async {
-      tester.view.physicalSize = const Size(1366, 1000);
+      tester.view.physicalSize = const Size(1366, 1200);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);

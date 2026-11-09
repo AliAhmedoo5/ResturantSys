@@ -216,6 +216,18 @@ _Avoid_: Admin panel, backend, supervisor portal
 The primary business-facing presentation layer of a report featuring key performance indicators (KPIs), sales totals, order counts, and cash variances without technical provenance.
 _Avoid_: Raw report dump, debug sheet, technical summary
 
+**Executive Intelligence Cockpit**:
+The synthesized, business-owner-facing overview presenting high-level processed KPIs, menu contribution margins, fulfillment bottlenecks, and financial risk radar without operational ledger noise.
+_Avoid_: Admin overview, metric cluster, raw analytics dump
+
+**Rush Heatmap Matrix**:
+A 7×24 density grid visualizing order volume and peak kitchen workload by weekday and clock hour in Asia/Karachi operational time.
+_Avoid_: Peak hour table, hourly sales grid, 24-column report
+
+**Command Bar**:
+The streamlined two-tier horizontal navigation bar featuring high-frequency view pills, date preset chips, and a slide-over secondary filter drawer.
+_Avoid_: Top filter toolbar, query header, dropdown stack
+
 **Audit Metadata**:
 Immutable technical provenance, UTC timestamps, schema versions, and query parameters preserved in a dedicated trailing section or separate sheet rather than the primary report body.
 _Avoid_: Header logs, debug dump, preamble
