@@ -344,8 +344,8 @@ class AnalyticsExportService {
   }) {
     if (isCancelled?.call() == true) throw const ExportCancelledException();
     final sheets = <String, List<List<Object?>>>{
-      for (final section in snapshot.sections) section.family.name: _sectionRows(section),
       'Metadata': _metadata(snapshot, 'all snapshot families'),
+      for (final section in snapshot.sections) section.family.name: _sectionRows(section),
     };
 
     final totalSheets = sheets.length;
