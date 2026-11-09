@@ -224,6 +224,14 @@ _Avoid_: Header logs, debug dump, preamble
 A prominent standardized grid of six headline performance metrics (Net Sales, Order Count/AOV, Cash vs Digital, Gross Profit/Margin, Food Cost %, and Discrepancy/Wastage) anchoring the first page or sheet of an operational report.
 _Avoid_: Header tiles, metric cluster, KPI dump
 
+**Eight-Domain Z-Report Standard**:
+The canonical end-of-day reporting layout structuring daily business close data into eight dedicated domains: Executive Dashboard, Cashier Shift Reconciliation, Sales Channel & Tender Split, Delivery & Rider Fulfillment, Labor & Attendance Productivity, Kitchen Wastage & Inventory Movement, Overheads & Vendor Khata Ledger, and Master Safe Handover.
+_Avoid_: Flat report dump, unsectioned cashout, raw ledger export
+
+**Zero-Activity Audit Badge**:
+An explicit report element confirming that a specific operational domain (such as delivery trips or kitchen wastage) was audited and had exactly zero recorded events, preventing ambiguous assumptions of missing data.
+_Avoid_: Missing section, blank page, hidden zero row
+
 **Clean CSV Standard**:
 A tabular data export structure starting strictly on Row 1 with human-readable column headers, omitting multi-row metadata preambles to ensure instant spreadsheet usability.
 _Avoid_: Raw CSV dump, metadata-prefixed CSV

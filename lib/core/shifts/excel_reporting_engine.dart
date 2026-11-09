@@ -322,7 +322,7 @@ class ExcelReportingEngine {
         }
         if (section['detail_rows'] != null) {
           builder.addEmptyRow();
-          builder.addSectionHeader('Recorded inventory movements');
+          builder.addSectionHeader(section['detail_title'] as String? ?? 'Recorded details');
           builder.addTableHeaders(List<String>.from(section['detail_headers'] as List));
           for (final row in section['detail_rows'] as List) {
             builder.addRow(List<dynamic>.from(row as List));
@@ -330,7 +330,12 @@ class ExcelReportingEngine {
         }
         return builder.build();
       }).toList(),
-      sheetNames: sections.map((section) => section['title'] as String).toList(),
+      sheetNames: sections.map((section) {
+        final rawTitle = (section['title'] as String)
+            .replaceAll(RegExp(r'[/\\?*\[\]:]'), ' ')
+            .trim();
+        return rawTitle.length > 31 ? rawTitle.substring(0, 31).trim() : rawTitle;
+      }).toList(),
     );
   }
 
