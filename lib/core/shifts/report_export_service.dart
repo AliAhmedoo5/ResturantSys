@@ -360,7 +360,7 @@ class ReportExportService {
           );
         }
 
-        // PAGE 1: Executive Dashboard & Shift Handover Reconciliation
+        // PAGE 1: Executive Dashboard, Financial Summary & Item Sales
         final grossPaisa = (kpis['gross_sales_paisa'] as num?)?.toInt() ?? 0;
         final netPaisa = (kpis['net_sales_paisa'] as num?)?.toInt() ?? 0;
         final countedPaisa = (kpis['counted_cash_paisa'] as num?)?.toInt() ?? 0;
@@ -373,11 +373,17 @@ class ReportExportService {
         final salesPerHour = laborHours > 0 ? money((netPaisa / laborHours).round()) : 'Rs. 0.00';
         final ordersPerHour = laborHours > 0 ? (ordersCount / laborHours).toStringAsFixed(2) : '0';
 
+        final monetarySummaryLabels = {
+          'Gross sales', 'Discounts', 'Tax carve-out', 'Net sales incl. Collection Due',
+          'Cash rounding', 'Collection Due', 'Total cash counted', 'Net cash discrepancy',
+          'Total operating expenses', 'Total wastage loss',
+        };
+
         document.addPage(pw.MultiPage(
           pageFormat: PdfPageFormat.a4.landscape,
           maxPages: 1000,
           margin: const pw.EdgeInsets.all(24),
-          header: (context) => buildBrandHeader(context, 'Executive Dashboard & Shift Audits'),
+          header: (context) => buildBrandHeader(context, 'Executive Dashboard & Item Sales'),
           footer: (context) => pw.Text('Snapshot: $contentHash | Immutable Z-Close Document', style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.grey600)),
           build: (context) => [
             // KPI Scorecard Grid
@@ -395,6 +401,92 @@ class ReportExportService {
             ),
             pw.SizedBox(height: 12),
 
+            // Executive Summary & Tenders Table
+            pw.Row(
+              children: [
+                pw.Container(width: 3.5, height: 11, color: accentAmber),
+                pw.SizedBox(width: 5),
+                pw.Text('Executive Financial Summary & Tender Collections', style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: primaryDark)),
+              ],
+            ),
+            pw.SizedBox(height: 4),
+            pw.TableHelper.fromTextArray(
+              headers: ['Financial Measure', 'Recorded Value'],
+              data: (sections[0]['rows'] as List).map((row) {
+                final r = List<dynamic>.from(row as List);
+                final label = r[0].toString();
+                final val = r[1];
+                final isMoney = val is num && (monetarySummaryLabels.contains(label) || label.startsWith('Tender '));
+                return [label, isMoney ? money(val) : val.toString()];
+              }).toList(),
+              headerDecoration: pw.BoxDecoration(color: primaryDark),
+              headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+              cellStyle: const pw.TextStyle(fontSize: 7.5),
+              oddRowDecoration: pw.BoxDecoration(color: cardBg),
+              border: pw.TableBorder.all(color: borderGrey, width: 0.5),
+              cellPadding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 3.5),
+            ),
+            pw.SizedBox(height: 12),
+
+            // Sales by Item Table
+            pw.Row(
+              children: [
+                pw.Container(width: 3.5, height: 11, color: accentAmber),
+                pw.SizedBox(width: 5),
+                pw.Text('Sales by Item & Order Status', style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: primaryDark)),
+              ],
+            ),
+            pw.SizedBox(height: 4),
+            pw.TableHelper.fromTextArray(
+              headers: ['Token', 'Item Name', 'Quantity', 'Amount', 'Payment Status'],
+              data: (sections[1]['rows'] as List).map((row) {
+                final r = List<dynamic>.from(row as List);
+                return [r[0].toString(), r[1].toString(), r[2].toString(), money(r[3] as num?), r[4].toString()];
+              }).toList(),
+              headerDecoration: pw.BoxDecoration(color: primaryDark),
+              headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+              cellStyle: const pw.TextStyle(fontSize: 7.5),
+              oddRowDecoration: pw.BoxDecoration(color: cardBg),
+              border: pw.TableBorder.all(color: borderGrey, width: 0.5),
+              cellPadding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 3.5),
+            ),
+            pw.SizedBox(height: 12),
+
+            // Sales Channels Breakdown
+            if (sections[1]['channel_rows'] != null && (sections[1]['channel_rows'] as List).isNotEmpty) ...[
+              pw.Row(
+                children: [
+                  pw.Container(width: 3.5, height: 11, color: accentAmber),
+                  pw.SizedBox(width: 5),
+                  pw.Text('Sales by Dining Channel (Dine-In, Takeaway, Delivery)', style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: primaryDark)),
+                ],
+              ),
+              pw.SizedBox(height: 4),
+              pw.TableHelper.fromTextArray(
+                headers: ['Dining Channel', 'Orders', 'Food Sales', 'Delivery Fees', 'Channel Total'],
+                data: (sections[1]['channel_rows'] as List).map((row) {
+                  final r = List<dynamic>.from(row as List);
+                  return [r[0].toString(), r[1].toString(), money(r[2] as num?), money(r[3] as num?), money(r[4] as num?)];
+                }).toList(),
+                headerDecoration: pw.BoxDecoration(color: primaryDark),
+                headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+                cellStyle: const pw.TextStyle(fontSize: 7.5),
+                oddRowDecoration: pw.BoxDecoration(color: cardBg),
+                border: pw.TableBorder.all(color: borderGrey, width: 0.5),
+                cellPadding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 3.5),
+              ),
+            ],
+          ],
+        ));
+
+        // PAGE 2: Shift Handover Audits, Fulfillment & Labor Productivity
+        document.addPage(pw.MultiPage(
+          pageFormat: PdfPageFormat.a4.landscape,
+          maxPages: 1000,
+          margin: const pw.EdgeInsets.all(24),
+          header: (context) => buildBrandHeader(context, 'Shift Audits, Delivery & Labor Productivity'),
+          footer: (context) => pw.Text('Snapshot: $contentHash | Page ${context.pageNumber}', style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.grey600)),
+          build: (context) => [
             // Shift Handover Audit Table
             pw.Row(
               children: [
@@ -444,42 +536,6 @@ class ReportExportService {
               ),
             ],
             pw.SizedBox(height: 12),
-
-            // Sales Channels Breakdown
-            if (sections[1]['channel_rows'] != null && (sections[1]['channel_rows'] as List).isNotEmpty) ...[
-              pw.Row(
-                children: [
-                  pw.Container(width: 3.5, height: 11, color: accentAmber),
-                  pw.SizedBox(width: 5),
-                  pw.Text('Sales by Dining Channel (Dine-In, Takeaway, Delivery)', style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: primaryDark)),
-                ],
-              ),
-              pw.SizedBox(height: 4),
-              pw.TableHelper.fromTextArray(
-                headers: ['Dining Channel', 'Orders', 'Food Sales', 'Delivery Fees', 'Channel Total'],
-                data: (sections[1]['channel_rows'] as List).map((row) {
-                  final r = List<dynamic>.from(row as List);
-                  return [r[0].toString(), r[1].toString(), money(r[2] as num?), money(r[3] as num?), money(r[4] as num?)];
-                }).toList(),
-                headerDecoration: pw.BoxDecoration(color: primaryDark),
-                headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
-                cellStyle: const pw.TextStyle(fontSize: 7.5),
-                oddRowDecoration: pw.BoxDecoration(color: cardBg),
-                border: pw.TableBorder.all(color: borderGrey, width: 0.5),
-                cellPadding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 3.5),
-              ),
-            ],
-          ],
-        ));
-
-        // PAGE 2: Operations, Fulfillment & Labor Productivity
-        document.addPage(pw.MultiPage(
-          pageFormat: PdfPageFormat.a4.landscape,
-          maxPages: 1000,
-          margin: const pw.EdgeInsets.all(24),
-          header: (context) => buildBrandHeader(context, 'Fulfillment & Labor Productivity'),
-          footer: (context) => pw.Text('Snapshot: $contentHash | Page ${context.pageNumber}', style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.grey600)),
-          build: (context) => [
             // Delivery & Rider Trips
             pw.Row(
               children: [

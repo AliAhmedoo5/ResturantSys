@@ -209,38 +209,53 @@ class _CreditDeliveryDialogState extends State<CreditDeliveryDialog> {
                 TextFormField(
                   key: const Key('credit_due_date_field'),
                   controller: _dueController,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   decoration: InputDecoration(
                     labelText: 'Invoice due date (YYYY-MM-DD, optional)',
                     border: const OutlineInputBorder(),
-                    suffixIcon: IconButton(
-                      icon: const Icon(Icons.calendar_today_rounded),
-                      tooltip: 'Select due date',
-                      onPressed: () async {
-                        final now = DateTime.now();
-                        DateTime initial = now;
-                        final current = DateTime.tryParse(_dueController.text.trim());
-                        if (current != null && !current.isBefore(DateTime(now.year, now.month, now.day))) {
-                          initial = current;
-                        }
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: initial,
-                          firstDate: DateTime(now.year, now.month, now.day),
-                          lastDate: now.add(const Duration(days: 365 * 5)),
-                        );
-                        if (picked != null) {
-                          _dueController.text =
-                              '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
-                        }
-                      },
+                    suffixIcon: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_dueController.text.isNotEmpty)
+                          IconButton(
+                            icon: const Icon(Icons.clear_rounded, size: 18),
+                            tooltip: 'Clear',
+                            onPressed: () => setState(() => _dueController.clear()),
+                          ),
+                        IconButton(
+                          icon: const Icon(Icons.calendar_today_rounded),
+                          tooltip: 'Select due date',
+                          onPressed: () async {
+                            final now = DateTime.now();
+                            DateTime initial = now;
+                            final current = DateTime.tryParse(_dueController.text.trim());
+                            if (current != null) {
+                              initial = current;
+                            }
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: initial,
+                              firstDate: DateTime(2020),
+                              lastDate: DateTime(2040),
+                            );
+                            if (picked != null) {
+                              setState(() {
+                                _dueController.text =
+                                    '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+                              });
+                            }
+                          },
+                        ),
+                      ],
                     ),
                   ),
                   validator: (v) {
                     if (v == null || v.trim().isEmpty) return null;
-                    final date = DateTime.tryParse(v.trim());
-                    if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(v.trim()) || date == null || date.toIso8601String().substring(0,10) != v.trim()) return 'Enter a valid date as YYYY-MM-DD';
-                    final now=DateTime.now();
-                    if (date.isBefore(DateTime(now.year,now.month,now.day))) return 'Due date cannot precede invoice date';
+                    final trimmed = v.trim();
+                    final date = DateTime.tryParse(trimmed);
+                    if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(trimmed) || date == null) {
+                      return 'Enter a valid date as YYYY-MM-DD';
+                    }
                     return null;
                   },
                 ),

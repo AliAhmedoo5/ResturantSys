@@ -62,96 +62,148 @@ class _OperationFormState extends State<_OperationForm> {
 
   Widget? _buildSuffixIcon(OperationField f) {
     if (f.isDate || f.name == 'work_date') {
-      return IconButton(
-        icon: const Icon(Icons.calendar_today_rounded),
-        tooltip: 'Select date',
-        onPressed: _saving ? null : () async {
-          final current = DateTime.tryParse(_controllers[f.name]!.text.trim()) ?? DateTime.now();
-          final picked = await showDatePicker(
-            context: context,
-            initialDate: current,
-            firstDate: DateTime(2020),
-            lastDate: DateTime(2040),
-          );
-          if (picked != null) {
-            _controllers[f.name]!.text =
-                '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
-          }
-        },
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_controllers[f.name]!.text.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.clear_rounded, size: 18),
+              tooltip: 'Clear date',
+              onPressed: _saving ? null : () => setState(() => _controllers[f.name]!.clear()),
+            ),
+          IconButton(
+            icon: const Icon(Icons.calendar_today_rounded),
+            tooltip: 'Select date',
+            onPressed: _saving ? null : () async {
+              final current = DateTime.tryParse(_controllers[f.name]!.text.trim()) ?? DateTime.now();
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: current,
+                firstDate: DateTime(2020),
+                lastDate: DateTime(2040),
+              );
+              if (picked != null) {
+                setState(() {
+                  _controllers[f.name]!.text =
+                      '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+                });
+              }
+            },
+          ),
+        ],
       );
     }
     if (f.isTime || f.name == 'clock_in' || f.name == 'clock_out') {
-      return IconButton(
-        icon: const Icon(Icons.access_time_rounded),
-        tooltip: 'Select time',
-        onPressed: _saving ? null : () async {
-          TimeOfDay initial = const TimeOfDay(hour: 12, minute: 0);
-          final text = _controllers[f.name]!.text.trim();
-          if (text.isNotEmpty) {
-            final parts = text.contains(' ') ? text.split(' ').last.split(':') : text.split(':');
-            if (parts.length >= 2) {
-              final h = int.tryParse(parts[0]);
-              final m = int.tryParse(parts[1]);
-              if (h != null && m != null) initial = TimeOfDay(hour: h, minute: m);
-            }
-          }
-          final picked = await showTimePicker(
-            context: context,
-            initialTime: initial,
-          );
-          if (picked != null) {
-            _controllers[f.name]!.text =
-                '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
-          }
-        },
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_controllers[f.name]!.text.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.clear_rounded, size: 18),
+              tooltip: 'Clear time',
+              onPressed: _saving ? null : () => setState(() => _controllers[f.name]!.clear()),
+            ),
+          IconButton(
+            icon: const Icon(Icons.access_time_rounded),
+            tooltip: 'Select time',
+            onPressed: _saving ? null : () async {
+              TimeOfDay initial = const TimeOfDay(hour: 12, minute: 0);
+              final text = _controllers[f.name]!.text.trim();
+              if (text.isNotEmpty) {
+                final parts = text.contains(' ') ? text.split(' ').last.split(':') : text.split(':');
+                if (parts.length >= 2) {
+                  final h = int.tryParse(parts[0]);
+                  final m = int.tryParse(parts[1]);
+                  if (h != null && m != null) initial = TimeOfDay(hour: h, minute: m);
+                }
+              }
+              final picked = await showTimePicker(
+                context: context,
+                initialTime: initial,
+              );
+              if (picked != null) {
+                setState(() {
+                  _controllers[f.name]!.text =
+                      '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+                });
+              }
+            },
+          ),
+        ],
       );
     }
     if (f.isDateTime || f.name == 'actual') {
-      return IconButton(
-        icon: const Icon(Icons.calendar_month_rounded),
-        tooltip: 'Select date & time',
-        onPressed: _saving ? null : () async {
-          final now = DateTime.now();
-          final pickedDate = await showDatePicker(
-            context: context,
-            initialDate: now,
-            firstDate: DateTime(2020),
-            lastDate: DateTime(2040),
-          );
-          if (pickedDate != null && mounted) {
-            final pickedTime = await showTimePicker(
-              context: context,
-              initialTime: TimeOfDay(hour: now.hour, minute: now.minute),
-            );
-            if (pickedTime != null) {
-              final dStr =
-                  '${pickedDate.year.toString().padLeft(4, '0')}-${pickedDate.month.toString().padLeft(2, '0')}-${pickedDate.day.toString().padLeft(2, '0')}';
-              final tStr =
-                  '${pickedTime.hour.toString().padLeft(2, '0')}:${pickedTime.minute.toString().padLeft(2, '0')}';
-              _controllers[f.name]!.text = '$dStr $tStr';
-            }
-          }
-        },
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_controllers[f.name]!.text.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.clear_rounded, size: 18),
+              tooltip: 'Clear date & time',
+              onPressed: _saving ? null : () => setState(() => _controllers[f.name]!.clear()),
+            ),
+          IconButton(
+            icon: const Icon(Icons.calendar_month_rounded),
+            tooltip: 'Select date & time',
+            onPressed: _saving ? null : () async {
+              final now = DateTime.now();
+              final pickedDate = await showDatePicker(
+                context: context,
+                initialDate: now,
+                firstDate: DateTime(2020),
+                lastDate: DateTime(2040),
+              );
+              if (pickedDate != null && mounted) {
+                final pickedTime = await showTimePicker(
+                  context: context,
+                  initialTime: TimeOfDay(hour: now.hour, minute: now.minute),
+                );
+                if (pickedTime != null) {
+                  final dStr =
+                      '${pickedDate.year.toString().padLeft(4, '0')}-${pickedDate.month.toString().padLeft(2, '0')}-${pickedDate.day.toString().padLeft(2, '0')}';
+                  final tStr =
+                      '${pickedTime.hour.toString().padLeft(2, '0')}:${pickedTime.minute.toString().padLeft(2, '0')}';
+                  setState(() {
+                    _controllers[f.name]!.text = '$dStr $tStr';
+                  });
+                }
+              }
+            },
+          ),
+        ],
       );
     }
     if (f.isMonthYear || f.name == 'period') {
-      return IconButton(
-        icon: const Icon(Icons.date_range_rounded),
-        tooltip: 'Select year & month',
-        onPressed: _saving ? null : () async {
-          final now = DateTime.now();
-          final picked = await showDatePicker(
-            context: context,
-            initialDate: now,
-            firstDate: DateTime(2020),
-            lastDate: DateTime(2040),
-            initialDatePickerMode: DatePickerMode.year,
-          );
-          if (picked != null) {
-            _controllers[f.name]!.text =
-                '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}';
-          }
-        },
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_controllers[f.name]!.text.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.clear_rounded, size: 18),
+              tooltip: 'Clear period',
+              onPressed: _saving ? null : () => setState(() => _controllers[f.name]!.clear()),
+            ),
+          IconButton(
+            icon: const Icon(Icons.date_range_rounded),
+            tooltip: 'Select year & month',
+            onPressed: _saving ? null : () async {
+              final now = DateTime.now();
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: now,
+                firstDate: DateTime(2020),
+                lastDate: DateTime(2040),
+                initialDatePickerMode: DatePickerMode.year,
+              );
+              if (picked != null) {
+                setState(() {
+                  _controllers[f.name]!.text =
+                      '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}';
+                });
+              }
+            },
+          ),
+        ],
       );
     }
     return null;
