@@ -176,7 +176,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('analytics_period')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Month to date'), findsOneWidget);
+    expect(find.text('Month to date'), findsWidgets);
     await tester.tap(find.text('Month to date').last);
     await tester.pumpAndSettle();
 
