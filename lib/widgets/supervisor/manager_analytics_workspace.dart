@@ -1051,7 +1051,7 @@ class _ManagerAnalyticsWorkspaceState extends State<ManagerAnalyticsWorkspace>
                   ),
                   ButtonSegment(
                     value: AnalyticsFamily.orders,
-                    label: Text('Order ops'),
+                    label: Text('Order operations'),
                   ),
                 ],
                 selected: _coreFamilies.contains(_family) ? {_family} : <AnalyticsFamily>{},

@@ -180,6 +180,8 @@ void main() {
     first.complete(SnapshotService.fixture(original!, marker: 'Stale live cohort'));
     await tester.pumpAndSettle();
     expect(find.text('Stale live cohort'), findsNothing);
+    await tester.scrollUntilVisible(find.text('New historical cohort'), 250,
+      scrollable: find.descendant(of: find.byKey(const ValueKey('analytics_body')), matching: find.byType(Scrollable)).first);
     expect(find.text('New historical cohort'), findsOneWidget);
     expect(find.textContaining('25 Oct 2026 to 26 Oct 2026'), findsOneWidget);
   });

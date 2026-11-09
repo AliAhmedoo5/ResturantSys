@@ -145,6 +145,7 @@ void main() {
     await tester.tap(find.text('Cash').last);
     await tester.pumpAndSettle();
     expect(requested!.paymentMethod, 'CASH');
+    await tester.ensureVisible(find.text('Review shifts'));
     await tester.tap(find.text('Review shifts'));
     await tester.pumpAndSettle();
     expect(find.text('Cash and shifts'), findsOneWidget);
@@ -153,6 +154,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Overview').last);
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Change period'));
     await tester.tap(find.text('Change period'));
     await tester.pumpAndSettle();
     expect(requested!.live, isFalse);
