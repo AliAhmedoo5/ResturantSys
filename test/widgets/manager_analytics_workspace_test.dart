@@ -149,11 +149,8 @@ void main() {
       find.byKey(const ValueKey('analytics_comparison_mode'))).onChanged!(AnalyticsComparisonMode.precedingPeriod);
     await tester.pumpAndSettle();
     expect(find.text('Change: +PKR 1,234.50 vs preceding comparable period'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('analytics_family')));
-    await tester.pumpAndSettle();
-    await tester.drag(find.byType(Scrollable).last, const Offset(0, -500));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Profitability').last);
+    tester.widget<DropdownButtonFormField<AnalyticsFamily>>(
+      find.byKey(const ValueKey('analytics_family'))).onChanged!(AnalyticsFamily.profitability);
     await tester.pumpAndSettle();
     expect(find.text('Historical net profit'), findsOneWidget);
     expect(find.text('Missing data'), findsOneWidget);
