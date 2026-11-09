@@ -174,7 +174,7 @@ void main() {
     final scrollable = find.descendant(of: find.byKey(const ValueKey('analytics_body')),
       matching: find.byType(Scrollable)).first;
     await tester.scrollUntilVisible(find.text('business_days #4'), 180, scrollable: scrollable);
-    expect(find.text('26 Oct, 12:01'), findsOneWidget);
+    expect(find.text('Mon, 26 Oct 2026 • 12:01 PM'), findsOneWidget);
     final sourceButton = find.text('business_days #4');
     for (var attempt = 0; attempt < 12 && sourceButton.hitTestable().evaluate().isEmpty; attempt++) {
       await tester.drag(scrollable, const Offset(0, -140));
