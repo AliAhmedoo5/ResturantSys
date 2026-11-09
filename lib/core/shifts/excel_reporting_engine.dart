@@ -322,7 +322,7 @@ class ExcelReportingEngine {
         }
         if (section['detail_rows'] != null) {
           builder.addEmptyRow();
-          builder.addSectionHeader(section['detail_title'] as String? ?? 'Recorded details');
+          builder.addSectionHeader(section['detail_title'] as String? ?? 'Recorded inventory movements');
           builder.addTableHeaders(List<String>.from(section['detail_headers'] as List));
           for (final row in section['detail_rows'] as List) {
             builder.addRow(List<dynamic>.from(row as List));
