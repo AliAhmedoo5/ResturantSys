@@ -1451,6 +1451,7 @@ class _SourceTableState extends State<_SourceTable> {
       LayoutBuilder(builder: (context, constraints) =>
       SingleChildScrollView(scrollDirection: Axis.horizontal,
         child: ConstrainedBox(constraints: BoxConstraints(minWidth: constraints.maxWidth), child: DataTable(
+        dataRowMinHeight: 48, dataRowMaxHeight: 56,
         sortColumnIndex: _sortColumn != null && _sortColumn! < columns.length ? _sortColumn : null, sortAscending: _ascending,
         columns: [for (var i = 0; i < columns.length; i++) DataColumn(
           label: Text(columns[i].label), numeric: columns[i].unit != null,
@@ -1515,7 +1516,7 @@ class _SourceTableState extends State<_SourceTable> {
         return Tooltip(
           message: 'Exact Recorded: $rawSource\nTimezone: Asia/Karachi (UTC+05:00)\nReal Day: ${ts.realDay}',
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
+            padding: const EdgeInsets.symmetric(vertical: 1),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
@@ -1531,15 +1532,16 @@ class _SourceTableState extends State<_SourceTable> {
                       style: const TextStyle(
                         fontWeight: FontWeight.w600,
                         fontSize: 12,
+                        height: 1.15,
                         color: StreetFoodMafiaColors.offWhite,
                       ),
                     ),
                   ],
                 ),
                 if (ts.businessDayLabel != null) ...[
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 2),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                     decoration: BoxDecoration(
                       color: StreetFoodMafiaColors.cardSurface,
                       borderRadius: BorderRadius.circular(4),
@@ -1549,6 +1551,7 @@ class _SourceTableState extends State<_SourceTable> {
                       ts.businessDayLabel!,
                       style: const TextStyle(
                         fontSize: 10,
+                        height: 1.1,
                         fontWeight: FontWeight.w500,
                         color: StreetFoodMafiaColors.cartelYellow,
                       ),

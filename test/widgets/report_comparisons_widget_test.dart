@@ -20,6 +20,11 @@ class _FakeAnalyticsService implements AnalyticsService {
 
 void main() {
   testWidgets('Manager can choose comparison mode and inspect comparator details', (tester) async {
+    tester.view.physicalSize = const Size(1366, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     AnalyticsQuery? lastQuery;
     final fakeService = _FakeAnalyticsService(
       snapshotBuilder: (query) {
