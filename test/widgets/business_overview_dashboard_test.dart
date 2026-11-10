@@ -251,6 +251,7 @@ void main() {
     expect(find.text('Negative Stock Items'), findsOneWidget);
 
     // One-tap navigation from Bottlenecks to Order operations
+    await tester.ensureVisible(find.text('Inspect peak orders'));
     await tester.tap(find.text('Inspect peak orders'));
     await tester.pumpAndSettle();
     expect(find.text('Order operations'), findsOneWidget);
@@ -380,10 +381,10 @@ AnalyticsSnapshot richCockpitFixture(AnalyticsQuery query) => AnalyticsSnapshot(
           'kind': 'Item/deal aggregate',
           'name': 'Crispy Zinger',
           'quantity': 12,
-          'net_sales_paisa': 180000,
-          'bom_recipe_cost_paisa': 80000,
-          'margin_paisa': 100000,
-          'margin_rate': 55.5,
+          'net_sales_paisa': 260000,
+          'bom_recipe_cost_paisa': 60000,
+          'margin_paisa': 200000,
+          'margin_rate': 76.9,
         }),
         AnalyticsRow(id: 'menu-item:4', sourceType: 'order_items', sourceId: '4', cells: {
           'kind': 'Item/deal aggregate',
@@ -391,8 +392,8 @@ AnalyticsSnapshot richCockpitFixture(AnalyticsQuery query) => AnalyticsSnapshot(
           'quantity': 40,
           'net_sales_paisa': 300000,
           'bom_recipe_cost_paisa': 180000,
-          'margin_paisa': 120000,
-          'margin_rate': 40.0,
+          'margin_paisa': 50000,
+          'margin_rate': 16.7,
         }),
         AnalyticsRow(id: 'menu-item:5', sourceType: 'order_items', sourceId: '5', cells: {
           'kind': 'Item/deal aggregate',

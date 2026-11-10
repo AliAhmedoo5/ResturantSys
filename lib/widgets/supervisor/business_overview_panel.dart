@@ -47,11 +47,11 @@ class BusinessOverviewPanel extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         metricGrid(primary, 4),
-        const SizedBox(height: 24),
+        const SizedBox(height: 20),
 
         // Responsive Middle Section: Pillars 2, 3, 4 + Sales Chart
         LayoutBuilder(builder: (context, constraints) {
-          final isWide = constraints.maxWidth >= 1000;
+          final isWide = constraints.maxWidth >= 920;
 
           final menuMarginCard = _menuMarginCard(context, data.menuMargin);
           final bottlenecksCard = _bottlenecksCard(context, data.bottlenecks);
@@ -61,49 +61,43 @@ class BusinessOverviewPanel extends StatelessWidget {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                menuMarginCard,
-                const SizedBox(height: 16),
                 salesChart,
                 const SizedBox(height: 16),
-                bottlenecksCard,
-                const SizedBox(height: 16),
                 riskRadarCard,
+                const SizedBox(height: 16),
+                menuMarginCard,
+                const SizedBox(height: 16),
+                bottlenecksCard,
               ],
             );
           }
 
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                flex: 5,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    menuMarginCard,
-                    const SizedBox(height: 16),
-                    salesChart,
-                  ],
-                ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(flex: 5, child: salesChart),
+                  const SizedBox(width: 16),
+                  Expanded(flex: 3, child: riskRadarCard),
+                ],
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                flex: 4,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    bottlenecksCard,
-                    const SizedBox(height: 16),
-                    riskRadarCard,
-                  ],
-                ),
+              const SizedBox(height: 16),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(flex: 5, child: menuMarginCard),
+                  const SizedBox(width: 16),
+                  Expanded(flex: 3, child: bottlenecksCard),
+                ],
               ),
             ],
           );
         }),
 
         if (position.isNotEmpty) ...[
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
           _sectionHeader(
             icon: Icons.inventory_2_outlined,
             title: 'Cash & inventory',
@@ -112,7 +106,7 @@ class BusinessOverviewPanel extends StatelessWidget {
           metricGrid(position, 3),
         ],
 
-        const SizedBox(height: 24),
+        const SizedBox(height: 20),
         dayDetails,
 
         if (additional.isNotEmpty) ...[
@@ -136,9 +130,13 @@ class BusinessOverviewPanel extends StatelessWidget {
         children: [
           Icon(icon, color: StreetFoodMafiaColors.cartelYellow, size: 21),
           const SizedBox(width: 10),
-          Text(
-            title,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           if (badgeText != null) ...[
             const SizedBox(width: 10),
@@ -173,31 +171,50 @@ class BusinessOverviewPanel extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                const Icon(
-                  Icons.restaurant_menu_rounded,
-                  color: StreetFoodMafiaColors.cartelYellow,
-                  size: 22,
-                ),
-                const SizedBox(width: 10),
-                const Expanded(
-                  child: Text(
-                    'Menu Margin Intelligence',
-                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+            LayoutBuilder(builder: (context, constraints) {
+              if (constraints.maxWidth < 360) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.restaurant_menu_rounded, color: StreetFoodMafiaColors.cartelYellow, size: 22),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text('Menu Margin Intelligence',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    TextButton(
+                      onPressed: () => onReport(AnalyticsFamily.menu),
+                      style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 30),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                      child: const Text('View menu report'),
+                    ),
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  const Icon(Icons.restaurant_menu_rounded, color: StreetFoodMafiaColors.cartelYellow, size: 22),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text('Menu Margin Intelligence',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
                   ),
-                ),
-                TextButton(
-                  onPressed: () => onReport(AnalyticsFamily.menu),
-                  style: TextButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    minimumSize: const Size(0, 32),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  TextButton(
+                    onPressed: () => onReport(AnalyticsFamily.menu),
+                    style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 30),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                    child: const Text('View menu report'),
                   ),
-                  child: const Text('View menu report'),
-                ),
-              ],
-            ),
+                ],
+              );
+            }),
             const SizedBox(height: 14),
 
             if (!menuMargin.hasData)
@@ -220,6 +237,7 @@ class BusinessOverviewPanel extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Icon(Icons.warning_amber_rounded, color: Color(0xFFEF4444), size: 20),
                       const SizedBox(width: 8),
@@ -227,7 +245,9 @@ class BusinessOverviewPanel extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Row(
+                            const Wrap(
+                              spacing: 6,
+                              crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
                                 Text(
                                   'Missing Recipe BOM',
@@ -237,7 +257,6 @@ class BusinessOverviewPanel extends StatelessWidget {
                                     color: Color(0xFFEF4444),
                                   ),
                                 ),
-                                SizedBox(width: 6),
                                 Text(
                                   '· Cost evidence absent',
                                   style: TextStyle(
@@ -321,10 +340,14 @@ class BusinessOverviewPanel extends StatelessWidget {
             title,
             style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
           ),
-          const SizedBox(width: 8),
-          Text(
-            '· $subtitle',
-            style: const TextStyle(fontSize: 11, color: StreetFoodMafiaColors.secondaryText),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              '· $subtitle',
+              style: const TextStyle(fontSize: 11, color: StreetFoodMafiaColors.secondaryText),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       );
@@ -368,10 +391,13 @@ class BusinessOverviewPanel extends StatelessWidget {
                   Text(
                     subtitle,
                     style: const TextStyle(fontSize: 11, color: StreetFoodMafiaColors.secondaryText),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
             ),
+            const SizedBox(width: 8),
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -405,32 +431,58 @@ class BusinessOverviewPanel extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                const Icon(
-                  Icons.kitchen_rounded,
-                  color: StreetFoodMafiaColors.cartelYellow,
-                  size: 22,
-                ),
-                const SizedBox(width: 10),
-                const Expanded(
-                  child: Text(
-                    'Kitchen & Fulfillment Bottlenecks',
-                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+            LayoutBuilder(builder: (context, constraints) {
+              if (constraints.maxWidth < 360) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.kitchen_rounded, color: StreetFoodMafiaColors.cartelYellow, size: 22),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text('Kitchen & Fulfillment Bottlenecks',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    TextButton.icon(
+                      onPressed: () => onReport(AnalyticsFamily.orders),
+                      icon: const Icon(Icons.arrow_forward_rounded, size: 14),
+                      label: const Text('Inspect peak orders'),
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(0, 30),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  const Icon(Icons.kitchen_rounded, color: StreetFoodMafiaColors.cartelYellow, size: 22),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text('Kitchen & Fulfillment Bottlenecks',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
                   ),
-                ),
-                TextButton.icon(
-                  onPressed: () => onReport(AnalyticsFamily.orders),
-                  icon: const Icon(Icons.arrow_forward_rounded, size: 14),
-                  label: const Text('Inspect peak orders'),
-                  style: TextButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    minimumSize: const Size(0, 32),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  TextButton.icon(
+                    onPressed: () => onReport(AnalyticsFamily.orders),
+                    icon: const Icon(Icons.arrow_forward_rounded, size: 14),
+                    label: const Text('Inspect peak orders'),
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 30),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              );
+            }),
             const SizedBox(height: 14),
 
             // Metrics row: p50 prep, p90 prep, Target ETA
@@ -526,7 +578,7 @@ class BusinessOverviewPanel extends StatelessWidget {
     required Color color,
   }) =>
       Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: StreetFoodMafiaColors.cardSurface,
           borderRadius: BorderRadius.circular(8),
@@ -536,9 +588,9 @@ class BusinessOverviewPanel extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(label, style: const TextStyle(fontSize: 11, color: StreetFoodMafiaColors.secondaryText)),
-            const SizedBox(height: 4),
-            Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: color)),
+            Text(label, style: const TextStyle(fontSize: 10, color: StreetFoodMafiaColors.secondaryText)),
+            const SizedBox(height: 3),
+            Text(value, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: color)),
             const SizedBox(height: 2),
             Text(subtext, style: const TextStyle(fontSize: 10, color: StreetFoodMafiaColors.secondaryText)),
           ],
@@ -571,6 +623,8 @@ class BusinessOverviewPanel extends StatelessWidget {
                 child: Text(
                   'Risk & Leakage Radar',
                   style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               Container(
@@ -594,8 +648,8 @@ class BusinessOverviewPanel extends StatelessWidget {
 
           // Actionable risk counters grid
           Wrap(
-            spacing: 10,
-            runSpacing: 10,
+            spacing: 8,
+            runSpacing: 8,
             children: [
               _radarCounterChip(
                 label: 'Unsettled COD > 24h',
