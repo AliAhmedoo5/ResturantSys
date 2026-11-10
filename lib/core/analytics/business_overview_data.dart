@@ -127,7 +127,7 @@ class BusinessOverviewData {
       for (final row in salesSection.rows) {
         if (row.cells['kind'] == 'Tender breakdown') {
           final dim = row.cells['dimension_value']?.toString().toUpperCase();
-          final collected = (row.cells['collected_paisa'] as num?)?.toInt() ?? 0;
+          final collected = _asInt(row.cells['collected_paisa']) ?? 0;
           if (dim == 'CASH') {
             cashCollectionsPaisa = (cashCollectionsPaisa ?? 0) + collected;
           } else {
@@ -193,11 +193,11 @@ class BusinessOverviewData {
       for (final row in menuSection.rows) {
         if (row.cells['kind'] == 'Item/deal aggregate') {
           final name = row.cells['name']?.toString() ?? 'Unnamed item';
-          final quantity = (row.cells['quantity'] as num?)?.toInt() ?? 0;
-          final netSalesPaisa = (row.cells['net_sales_paisa'] as num?)?.toInt() ?? 0;
-          final bomCost = (row.cells['bom_recipe_cost_paisa'] as num?)?.toInt();
-          final marginPaisa = (row.cells['margin_paisa'] as num?)?.toInt();
-          final marginRate = (row.cells['margin_rate'] as num?)?.toDouble();
+          final quantity = _asInt(row.cells['quantity']) ?? 0;
+          final netSalesPaisa = _asInt(row.cells['net_sales_paisa']) ?? 0;
+          final bomCost = _asInt(row.cells['bom_recipe_cost_paisa']);
+          final marginPaisa = _asInt(row.cells['margin_paisa']);
+          final marginRate = _asDouble(row.cells['margin_rate']);
           final hasBom = bomCost != null;
           final foodCostRate = (hasBom && netSalesPaisa > 0) ? (bomCost / netSalesPaisa * 100) : null;
 
@@ -243,11 +243,11 @@ class BusinessOverviewData {
     if (salesSection != null) {
       for (final row in salesSection.rows) {
         if (row.cells['kind'] == 'Hourly breakdown') {
-          final orders = (row.cells['orders'] as num?)?.toInt() ?? 0;
+          final orders = _asInt(row.cells['orders']) ?? 0;
           if (orders > peakHourOrders) {
             peakHourOrders = orders;
-            peakHour = (row.cells['dimension_value'] as num?)?.toInt();
-            peakHourSales = (row.cells['recorded_value_paisa'] as num?)?.toInt() ?? 0;
+            peakHour = _asInt(row.cells['dimension_value']);
+            peakHourSales = _asInt(row.cells['recorded_value_paisa']) ?? 0;
           }
         }
       }
@@ -352,3 +352,21 @@ class BusinessOverviewData {
     return null;
   }
 }
+
+int? _asInt(Object? val) {
+  if (val == null) return null;
+  if (val is num) return val.toInt();
+  if (val is String) {
+    final clean = val.contains(':') ? val.split(':').first : val;
+    return int.tryParse(clean.trim());
+  }
+  return null;
+}
+
+double? _asDouble(Object? val) {
+  if (val == null) return null;
+  if (val is num) return val.toDouble();
+  if (val is String) return double.tryParse(val.trim());
+  return null;
+}
+
