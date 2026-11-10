@@ -164,7 +164,6 @@ class _WeekdayPeakTables extends StatelessWidget {
   const _WeekdayPeakTables({required this.section, required this.onInspect});
   final AnalyticsSection section;
   final void Function(String title, List<AnalyticsRow> rows) onInspect;
-  static const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
   @override
   Widget build(BuildContext context) {
@@ -194,26 +193,426 @@ class _WeekdayPeakTables extends StatelessWidget {
         const SizedBox(height: 18),
       ],
       if (hours.isNotEmpty) ...[
-        const Text('Weekday by hour · confirmed Orders', style: TextStyle(fontWeight: FontWeight.w700)),
-        Text('${hours.values.first.cells['weekday_basis']} · Asia/Karachi · actual clock hour'),
-        const Text('0 = observed zero; Unavailable = unobserved or missing evidence. Open Business Day cells show partial activity at cutoff. Select a cell for coverage and source IDs.'),
-        SingleChildScrollView(scrollDirection: Axis.horizontal, child: DataTable(columnSpacing: 16, columns: [
-          const DataColumn(label: Text('Weekday')),
-          for (var h = 0; h < 24; h++) DataColumn(label: Text('${h.toString().padLeft(2, '0')}:00'), numeric: true),
-        ], rows: [for (var weekday = 1; weekday <= 7; weekday++) DataRow(cells: [
-          DataCell(Text(weekdays[weekday - 1])),
-          for (var hour = 0; hour < 24; hour++) _hourCell(hours['${weekday}_$hour'], weekday, hour),
-        ])])),
+        _RushHeatmapMatrix(
+          key: const ValueKey('rush_heatmap_matrix'),
+          section: section,
+          hours: hours,
+          onInspect: onInspect,
+        ),
         const SizedBox(height: 18),
       ],
     ]);
   }
+}
 
-  DataCell _hourCell(AnalyticsRow? row, int weekday, int hour) {
+class _RushHeatmapMatrix extends StatelessWidget {
+  const _RushHeatmapMatrix({
+    super.key,
+    required this.section,
+    required this.hours,
+    required this.onInspect,
+  });
+
+  final AnalyticsSection section;
+  final Map<String, AnalyticsRow> hours;
+  final void Function(String title, List<AnalyticsRow> rows) onInspect;
+
+  static const weekdays = [
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final firstRow = hours.values.first;
+    var maxCount = 0;
+    for (final row in hours.values) {
+      final count = row.cells['confirmed_orders'];
+      if (count is num && count > maxCount) {
+        maxCount = count.toInt();
+      }
+    }
+
+    return Material(
+      color: StreetFoodMafiaColors.darkNavy,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: StreetFoodMafiaColors.border),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isCompact = constraints.maxWidth < 640;
+                final headerInfo = Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.local_fire_department_rounded,
+                            size: 20, color: StreetFoodMafiaColors.cartelYellow),
+                        SizedBox(width: 8),
+                        Text(
+                          'Weekday by hour · confirmed Orders',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: StreetFoodMafiaColors.offWhite,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${firstRow.cells['weekday_basis']} · Asia/Karachi · actual clock hour',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        height: 1.5,
+                        color: StreetFoodMafiaColors.secondaryText,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      '0 = observed zero; Unavailable = unobserved or missing evidence. Open Business Day cells show partial activity at cutoff. Select a cell for coverage and source IDs.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        height: 1.4,
+                        color: StreetFoodMafiaColors.secondaryText,
+                      ),
+                    ),
+                  ],
+                );
+
+                final legend = _RushHeatmapLegend(
+                  key: const ValueKey('rush_heatmap_legend'),
+                  maxCount: maxCount,
+                );
+
+                if (isCompact) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      headerInfo,
+                      const SizedBox(height: 12),
+                      legend,
+                    ],
+                  );
+                }
+
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: headerInfo),
+                    const SizedBox(width: 16),
+                    legend,
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: _buildGrid(context, maxCount),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGrid(BuildContext context, int maxCount) {
+    const weekdayColWidth = 84.0;
+    const hourColWidth = 44.0;
+    const rowHeight = 36.0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(
+              width: weekdayColWidth,
+              height: 28,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Day',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: StreetFoodMafiaColors.secondaryText,
+                  ),
+                ),
+              ),
+            ),
+            for (var h = 0; h < 24; h++)
+              SizedBox(
+                width: hourColWidth,
+                height: 28,
+                child: Center(
+                  child: Text(
+                    '${h.toString().padLeft(2, '0')}:00',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: StreetFoodMafiaColors.secondaryText,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        for (var weekday = 1; weekday <= 7; weekday++)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: weekdayColWidth,
+                  height: rowHeight,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      weekdays[weekday - 1],
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: StreetFoodMafiaColors.offWhite,
+                      ),
+                    ),
+                  ),
+                ),
+                for (var hour = 0; hour < 24; hour++)
+                  _buildCell(
+                    weekday: weekday,
+                    hour: hour,
+                    row: hours['${weekday}_$hour'],
+                    maxCount: maxCount,
+                    width: hourColWidth,
+                    height: rowHeight,
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildCell({
+    required int weekday,
+    required int hour,
+    required AnalyticsRow? row,
+    required int maxCount,
+    required double width,
+    required double height,
+  }) {
     final value = row?.cells['confirmed_orders'];
-    final text = value == null ? 'Unavailable' : '$value';
-    return DataCell(Tooltip(message: '${weekdays[weekday - 1]} ${hour.toString().padLeft(2, '0')}:00: $text · ${row?.cells['coverage'] ?? 'Unavailable coverage'}',
-      child: Text(text, key: ValueKey('weekday_hour_${weekday}_$hour'))),
-      onTap: row == null ? null : () => onInspect('Weekday/hour coverage', [row]));
+    final count = value is num ? value.toInt() : null;
+
+    final cellColor = _cellColor(count, maxCount);
+    final textColor = _cellTextColor(count, maxCount);
+    final text = count == null ? 'Unavailable' : '$count';
+
+    final tooltipMsg = _tooltipMessage(
+      weekdayName: weekdays[weekday - 1],
+      hour: hour,
+      row: row,
+    );
+
+    return Container(
+      width: width,
+      height: height,
+      padding: const EdgeInsets.all(2),
+      child: Material(
+        key: ValueKey('weekday_hour_cell_${weekday}_$hour'),
+        color: cellColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(4),
+          side: BorderSide(
+            color: count == null
+                ? StreetFoodMafiaColors.borderSubtle
+                : (count == 0
+                    ? StreetFoodMafiaColors.border
+                    : StreetFoodMafiaColors.cartelYellow.withValues(alpha: 0.3)),
+            width: 1,
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          key: ValueKey('weekday_hour_${weekday}_$hour'),
+          mouseCursor: WidgetStateMouseCursor.clickable,
+          onTap: row == null ? null : () => _handleInspect(row, weekday, hour),
+          child: Tooltip(
+            key: ValueKey('weekday_hour_tooltip_${weekday}_$hour'),
+            message: tooltipMsg,
+            child: Center(
+              child: Text(
+                text,
+                style: TextStyle(
+                  fontSize: count == null ? 8 : 11,
+                  fontWeight: count != null && count > 0 ? FontWeight.w700 : FontWeight.w500,
+                  color: textColor,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Color _cellColor(int? count, int maxCount) {
+    if (count == null) {
+      return StreetFoodMafiaColors.cardSurface.withValues(alpha: 0.35);
+    }
+    if (count == 0 || maxCount == 0) {
+      return StreetFoodMafiaColors.cardSurface;
+    }
+    final intensity = (count / maxCount).clamp(0.0, 1.0);
+    return Color.lerp(
+      StreetFoodMafiaColors.cardSurface,
+      StreetFoodMafiaColors.cartelYellow,
+      intensity,
+    )!;
+  }
+
+  Color _cellTextColor(int? count, int maxCount) {
+    if (count == null || count == 0) {
+      return StreetFoodMafiaColors.secondaryText;
+    }
+    if (maxCount > 0) {
+      final intensity = (count / maxCount).clamp(0.0, 1.0);
+      if (intensity > 0.5) {
+        return StreetFoodMafiaColors.textOnPrimary;
+      }
+    }
+    return StreetFoodMafiaColors.offWhite;
+  }
+
+  String _tooltipMessage({
+    required String weekdayName,
+    required int hour,
+    required AnalyticsRow? row,
+  }) {
+    final count = row?.cells['confirmed_orders'];
+    final hourFormatted = '${hour.toString().padLeft(2, '0')}:00';
+    final nextHourFormatted = '${((hour + 1) % 24).toString().padLeft(2, '0')}:00';
+    final timeRange = '$hourFormatted–$nextHourFormatted';
+    final countText = count == null ? 'Unavailable' : '$count ${count == 1 ? 'order' : 'orders'}';
+    final coverage = row?.cells['coverage'] ?? 'Unavailable coverage';
+
+    final netSales = row?.cells['net_sales_paisa'] ?? row?.cells['recorded_value_paisa'];
+    final salesText = (netSales is num && netSales > 0)
+        ? ' · PKR ${NumberFormat('#,##0.00').format(netSales / 100)}'
+        : '';
+
+    return '$weekdayName $timeRange: $countText$salesText · $coverage';
+  }
+
+  void _handleInspect(AnalyticsRow row, int weekday, int hour) {
+    final weekdayName = weekdays[weekday - 1];
+    final hourFormatted = '${hour.toString().padLeft(2, '0')}:00';
+    final title = '$weekdayName $hourFormatted';
+
+    final orderIdsRaw = row.cells['order_ids']?.toString() ?? row.sourceId;
+    final orderIdSet = orderIdsRaw
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toSet();
+
+    final contributingOrders = section.rows.where((r) {
+      if (r.sourceType == 'orders') {
+        final orderId = r.cells['order_id']?.toString() ?? r.sourceId;
+        return orderIdSet.contains(orderId);
+      }
+      return false;
+    }).toList();
+
+    if (contributingOrders.isNotEmpty) {
+      onInspect(title, contributingOrders);
+    } else {
+      onInspect(title, [row]);
+    }
+  }
+}
+
+class _RushHeatmapLegend extends StatelessWidget {
+  const _RushHeatmapLegend({super.key, required this.maxCount});
+  final int maxCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: StreetFoodMafiaColors.cardSurface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: StreetFoodMafiaColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'RUSH INTENSITY',
+            style: TextStyle(
+              fontSize: 9,
+              letterSpacing: 0.8,
+              fontWeight: FontWeight.w700,
+              color: StreetFoodMafiaColors.secondaryText,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                '0 orders',
+                style: TextStyle(fontSize: 10, color: StreetFoodMafiaColors.secondaryText),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                width: 90,
+                height: 10,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(3),
+                  gradient: const LinearGradient(
+                    colors: [
+                      StreetFoodMafiaColors.cardSurface,
+                      StreetFoodMafiaColors.cartelYellow,
+                    ],
+                  ),
+                  border: Border.all(color: StreetFoodMafiaColors.border, width: 0.5),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '$maxCount orders${maxCount > 0 ? ' (peak)' : ''}',
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: StreetFoodMafiaColors.cartelYellow,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
