@@ -260,12 +260,14 @@ class _RushHeatmapMatrix extends StatelessWidget {
                         Icon(Icons.local_fire_department_rounded,
                             size: 20, color: StreetFoodMafiaColors.cartelYellow),
                         SizedBox(width: 8),
-                        Text(
-                          'Weekday by hour · confirmed Orders',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: StreetFoodMafiaColors.offWhite,
+                        Expanded(
+                          child: Text(
+                            'Weekday by hour · confirmed Orders',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: StreetFoodMafiaColors.offWhite,
+                            ),
                           ),
                         ),
                       ],
@@ -578,14 +580,15 @@ class _RushHeatmapLegend extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          Row(
-            mainAxisSize: MainAxisSize.min,
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 4,
             children: [
               const Text(
                 '0 orders',
                 style: TextStyle(fontSize: 10, color: StreetFoodMafiaColors.secondaryText),
               ),
-              const SizedBox(width: 8),
               Container(
                 width: 90,
                 height: 10,
@@ -600,7 +603,6 @@ class _RushHeatmapLegend extends StatelessWidget {
                   border: Border.all(color: StreetFoodMafiaColors.border, width: 0.5),
                 ),
               ),
-              const SizedBox(width: 8),
               Text(
                 '$maxCount orders${maxCount > 0 ? ' (peak)' : ''}',
                 style: const TextStyle(
