@@ -251,18 +251,12 @@ void main() {
     expect(find.text('Negative Stock Items'), findsOneWidget);
 
     // One-tap navigation from Bottlenecks to Order operations
-    final scrollable = find.descendant(
-      of: find.byKey(const ValueKey('analytics_body')),
-      matching: find.byType(Scrollable),
-    ).first;
-    await tester.scrollUntilVisible(
-      find.text('Inspect peak orders'),
-      200,
-      scrollable: scrollable,
-    );
+    await tester.ensureVisible(find.text('Inspect peak orders'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Inspect peak orders'));
     await tester.pumpAndSettle();
-    expect(find.text('Order operations'), findsOneWidget);
+    expect(find.text('Order operations'), findsWidgets);
+    expect(find.text('Kitchen rework cycles'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox());
   });
