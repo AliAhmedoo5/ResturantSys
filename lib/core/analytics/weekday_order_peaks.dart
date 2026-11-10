@@ -158,12 +158,16 @@ class _WeekdayOrderPeaks {
         weekdayOrders.addAll(records); weekdayDays.addAll(ids);
         final available = sourceAvailable && ids.isNotEmpty && unknownTime == 0 && unknownDay == 0;
         final complete = available && ids.every((id) => dayMap[id] != null && completed(dayMap[id]!));
+        final validRecords = records.where(_valid);
+        final recordedValue = available ? _sum(validRecords, 'grand_total') : null;
+        final taxCarveOut = available ? _sum(validRecords, 'tax_amount') : null;
+        final netSales = available ? (recordedValue! - taxCarveOut!) : null;
         result.add(row('weekday-hour-$weekday-$hour', {
           'kind': 'Weekday/hour workload', 'period': '${names[weekday - 1]} ${hour.toString().padLeft(2, '0')}:00',
           'weekday': weekday, 'hour': hour, 'confirmed_orders': available ? records.length : null,
           'observed_confirmed_orders': sourceAvailable ? records.length : null,
-          'recorded_value_paisa': available ? _sum(records.where(_valid), 'grand_total') : null,
-          'net_sales_paisa': available ? _sum(records.where(_valid), 'grand_total') : null,
+          'recorded_value_paisa': recordedValue,
+          'net_sales_paisa': netSales,
           'period_complete': complete,
           'coverage': !available ? 'Unavailable coverage' : complete ? 'Observed completed Business Days' : 'Observed to cutoff; incomplete Business Days',
         }, records, ids));

@@ -119,6 +119,7 @@ void main() {
     expect(tooltip.message, contains('14:00–15:00'));
     expect(tooltip.message, contains('4 orders'));
     expect(tooltip.message, contains('PKR 3,500.00'));
+    expect(tooltip.message, contains('AOV: PKR 875.00'));
     expect(tooltip.message, contains('Observed completed Business Days'));
   });
 

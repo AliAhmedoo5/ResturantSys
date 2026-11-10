@@ -518,11 +518,20 @@ class _RushHeatmapMatrix extends StatelessWidget {
     final coverage = row?.cells['coverage'] ?? 'Unavailable coverage';
 
     final netSales = row?.cells['net_sales_paisa'] ?? row?.cells['recorded_value_paisa'];
-    final salesText = (netSales is num && netSales > 0)
-        ? ' · PKR ${NumberFormat('#,##0.00').format(netSales / 100)}'
-        : '';
+    final buffer = StringBuffer('$weekdayName $timeRange: $countText');
 
-    return '$weekdayName $timeRange: $countText$salesText · $coverage';
+    if (count is num && netSales is num) {
+      buffer.write(' · PKR ${NumberFormat('#,##0.00').format(netSales / 100)}');
+      if (count > 0) {
+        final aovPaisa = netSales / count;
+        buffer.write(' · AOV: PKR ${NumberFormat('#,##0.00').format(aovPaisa / 100)}');
+      }
+    } else if (netSales is num && netSales > 0) {
+      buffer.write(' · PKR ${NumberFormat('#,##0.00').format(netSales / 100)}');
+    }
+
+    buffer.write(' · $coverage');
+    return buffer.toString();
   }
 
   void _handleInspect(AnalyticsRow row, int weekday, int hour) {
