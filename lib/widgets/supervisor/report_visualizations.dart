@@ -528,7 +528,7 @@ class _RushHeatmapMatrix extends StatelessWidget {
     final hourFormatted = '${hour.toString().padLeft(2, '0')}:00';
     final title = '$weekdayName $hourFormatted';
 
-    final orderIdsRaw = row.cells['order_ids']?.toString() ?? row.sourceId;
+    final orderIdsRaw = row.cells['order_ids']?.toString() ?? row.sourceId ?? '';
     final orderIdSet = orderIdsRaw
         .split(',')
         .map((s) => s.trim())
