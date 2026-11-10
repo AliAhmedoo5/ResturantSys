@@ -644,36 +644,36 @@ class BusinessOverviewPanel extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 14),
-
-          // Actionable risk counters grid
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _radarCounterChip(
-                label: 'Unsettled COD > 24h',
-                value: riskRadar.unsettledCodOver24hPaisa > 0
-                    ? _formatPaisa(riskRadar.unsettledCodOver24hPaisa)
-                    : 'PKR 0.00',
-                isRisk: riskRadar.unsettledCodOver24hPaisa > 0,
-                onTap: () => onReport(AnalyticsFamily.delivery),
-              ),
-              _radarCounterChip(
-                label: 'Unresolved Drawer Variances',
-                value: '${riskRadar.unresolvedDrawerVariances} shifts',
-                isRisk: riskRadar.unresolvedDrawerVariances > 0,
-                onTap: () => onReport(AnalyticsFamily.cash),
-              ),
-              _radarCounterChip(
-                label: 'Negative Stock Items',
-                value: '${riskRadar.negativeStockCount} items',
-                isRisk: riskRadar.negativeStockCount > 0,
-                onTap: () => onReport(AnalyticsFamily.inventory),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
+          if (riskRadar.hasActiveRisks) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _radarCounterChip(
+                  label: 'Unsettled COD > 24h',
+                  value: riskRadar.unsettledCodOver24hPaisa > 0
+                      ? _formatPaisa(riskRadar.unsettledCodOver24hPaisa)
+                      : 'PKR 0.00',
+                  isRisk: riskRadar.unsettledCodOver24hPaisa > 0,
+                  onTap: () => onReport(AnalyticsFamily.delivery),
+                ),
+                _radarCounterChip(
+                  label: 'Unresolved Drawer Variances',
+                  value: '${riskRadar.unresolvedDrawerVariances} shifts',
+                  isRisk: riskRadar.unresolvedDrawerVariances > 0,
+                  onTap: () => onReport(AnalyticsFamily.cash),
+                ),
+                _radarCounterChip(
+                  label: 'Negative Stock Items',
+                  value: '${riskRadar.negativeStockCount} items',
+                  isRisk: riskRadar.negativeStockCount > 0,
+                  onTap: () => onReport(AnalyticsFamily.inventory),
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 10),
 
           if (alerts.isEmpty)
             const Padding(

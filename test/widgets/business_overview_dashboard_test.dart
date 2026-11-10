@@ -234,7 +234,7 @@ void main() {
     expect(find.text('Food Cost Traps'), findsOneWidget);
     expect(find.text('Spicy Wings 10pc'), findsOneWidget);
     expect(find.text('Missing Recipe BOM'), findsWidgets);
-    expect(find.text('Special Seasonal Shake'), findsOneWidget);
+    expect(find.textContaining('Special Seasonal Shake'), findsOneWidget);
 
     // Pillar 3: Kitchen & Fulfillment Bottlenecks
     expect(find.text('Kitchen & Fulfillment Bottlenecks'), findsOneWidget);

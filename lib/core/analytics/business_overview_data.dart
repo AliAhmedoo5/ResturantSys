@@ -87,7 +87,8 @@ class RiskRadarData {
   final int negativeStockCount;
   final List<OverviewAttention> alerts;
 
-  bool get hasAlerts => alerts.isNotEmpty || unsettledCodOver24hPaisa > 0 || unresolvedDrawerVariances > 0 || negativeStockCount > 0;
+  bool get hasAlerts => alerts.isNotEmpty || hasActiveRisks;
+  bool get hasActiveRisks => unsettledCodOver24hPaisa > 0 || unresolvedDrawerVariances > 0 || negativeStockCount > 0;
 }
 
 /// Meaning and report destinations for the Business overview, without widgets.
@@ -103,11 +104,18 @@ class BusinessOverviewData {
     final displayed = {...primary.map((m) => m.id), ...position.map((m) => m.id)};
     final additional = overview?.metrics.where((m) => !displayed.contains(m.id)).toList() ?? [];
 
-    // Synthesize Executive KPI Scorecard
-    final scorecard = <AnalyticsMetric>[...primary];
+    // Synthesize Executive KPI Scorecard (standardized 4 core headline metrics in primary)
     final grossProfit = _metric(AnalyticsFamily.overview, 'gross_profit') ??
       _metric(AnalyticsFamily.profitability, 'gross_profit');
-    if (grossProfit != null && !scorecard.any((m) => m.id == 'gross_profit')) {
+    final scorecard = <AnalyticsMetric>[];
+    for (final m in primary) {
+      if (m.id == 'collection_due' && grossProfit != null && grossProfit.quality == AnalyticsQuality.complete) {
+        scorecard.add(grossProfit);
+      } else {
+        scorecard.add(m);
+      }
+    }
+    if (scorecard.length < 4 && grossProfit != null && !scorecard.any((m) => m.id == 'gross_profit')) {
       scorecard.add(grossProfit);
     }
 
