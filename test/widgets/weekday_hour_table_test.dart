@@ -1,10 +1,25 @@
+import 'dart:io';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:resturant_sys/core/analytics/analytics_models.dart';
 import 'package:resturant_sys/core/theme/theme.dart';
 import 'package:resturant_sys/widgets/supervisor/report_visualizations.dart';
 
 void main() {
+  setUpAll(() async {
+    if (Platform.environment['CAPTURE_DESKTOP'] != 'true') return;
+    final file = File('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf');
+    if (!await file.exists()) return;
+    final font = FontLoader(WarmCounterTypography.fontFamily)
+      ..addFont(Future.value(ByteData.sublistView(await file.readAsBytes())));
+    await font.load();
+    final icons = FontLoader('MaterialIcons')..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'));
+    await icons.load();
+  });
   testWidgets('weekday hour table labels operational basis, zeros, unavailable cells and source drill-down', (tester) async {
     final rows = [for (var weekday = 1; weekday <= 7; weekday++)
       for (var hour = 0; hour < 24; hour++) AnalyticsRow(id: '$weekday-$hour', sourceType: 'weekday_order_peaks',
@@ -217,10 +232,14 @@ void main() {
       await tester.pumpWidget(MaterialApp(
         theme: WarmCounterTheme.darkTheme,
         home: Scaffold(
-          body: SingleChildScrollView(
-            child: ReportVisualizations(
-              section: AnalyticsSection(family: AnalyticsFamily.orders, title: 'Orders', rows: rows),
-              onInspect: (_, __) {},
+          body: RepaintBoundary(
+            key: ValueKey('rush_preview_${width.toInt()}'),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: ReportVisualizations(
+                section: AnalyticsSection(family: AnalyticsFamily.orders, title: 'Orders', rows: rows),
+                onInspect: (_, __) {},
+              ),
             ),
           ),
         ),
@@ -230,6 +249,17 @@ void main() {
       expect(find.text('Weekday by hour · confirmed Orders'), findsOneWidget);
       expect(find.byKey(const ValueKey('rush_heatmap_matrix')), findsOneWidget);
       expect(tester.takeException(), isNull);
+
+      if (Platform.environment['CAPTURE_DESKTOP'] == 'true') {
+        final boundary = tester.renderObject<RenderRepaintBoundary>(find.byKey(ValueKey('rush_preview_${width.toInt()}')));
+        await tester.runAsync(() async {
+          final image = await boundary.toImage();
+          final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+          final directory = await Directory('build/desktop-previews').create(recursive: true);
+          await File('${directory.path}/weekday-hour-heatmap-${width.toInt()}.png').writeAsBytes(bytes!.buffer.asUint8List());
+          image.dispose();
+        });
+      }
     });
   }
 }
